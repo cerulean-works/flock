@@ -18,6 +18,8 @@ from app.api.src.core.errors import BadGateway, Conflict, Forbidden, Invalid, No
 from app.api.src.core.hf_imports import Hub, HubError
 
 if TYPE_CHECKING:
+    import asyncpg
+
     from app.api.src.core.accounts import User
     from app.api.src.core.store import Org, Store
 
@@ -75,6 +77,10 @@ class EvalLaunch:
         }
 
 
+class Refused(Exception):
+    """Modal refused to start a call (no such app, a bad token): it surely isn't running."""
+
+
 class Modal:
     """The deployed worker's functions, called with the app's own Modal token (D191). Tests put
     a fake with the same methods in ``store.eval_launches.modal``."""
@@ -103,17 +109,30 @@ class Modal:
 
     async def spawn(self, timeout: int, env: dict[str, str | None], **kwargs: Any) -> str:
         """Start ``run_eval`` with ``kwargs``, ``env`` in its environment and at most
-        ``timeout`` seconds to run; returns the call's id."""
+        ``timeout`` seconds to run; returns the call's id. Raises ``Refused`` when Modal surely
+        made no call, and anything else when it may have."""
         import modal
 
         client = await self._client_once()
         function = modal.Function.from_name(self.APP, "run_eval", client=client)
-        call = await function.with_options(timeout=timeout, env=env).spawn.aio(**kwargs)
+        # A container idles 2 s after its call, not Modal's default minute: each launch has
+        # containers of its own (its environment differs), and idling is billed.
+        options = function.with_options(timeout=timeout, env=env, scaledown_window=2)
+        try:
+            call = await options.spawn.aio(**kwargs)
+        except (
+            modal.exception.NotFoundError,
+            modal.exception.AuthError,
+            modal.exception.PermissionDeniedError,
+            modal.exception.InvalidError,
+        ) as e:
+            raise Refused(str(e)) from e
         return call.object_id
 
     async def wait(self, call_id: str, timeout: float) -> str | None:
         """The call's result (the flock commit that scored), or None if it's still running after
-        ``timeout`` seconds or Modal can't be reached now. Raises what the call raised."""
+        ``timeout`` seconds or Modal can't answer now. Raises what the call raised."""
+        import grpclib
         import modal
 
         call = modal.FunctionCall.from_id(call_id, client=await self._client_once())
@@ -121,14 +140,11 @@ class Modal:
             return await call.get.aio(timeout=timeout)
         except TimeoutError:  # Python's own: the poll's deadline, not the call's time limit
             return None
-        except (
-            modal.exception.ConnectionError,
-            modal.exception.ServiceError,
-            modal.exception.InternalError,
-        ):
-            # Modal's own trouble, not the call's failure: it goes on running, so ask again at
-            # the next heartbeat.
-            log.warning(f"Modal couldn't be reached about call {call_id}")
+        except (modal.exception.ConnectionError, grpclib.GRPCError) as e:
+            # The question failed, not the call (Modal's RPC errors are GRPCErrors): it goes on
+            # running, so ask again at the next heartbeat. A launch past its longest life is
+            # ended by the sweep, so this can't go on for ever.
+            log.warning(f"Modal couldn't answer about call {call_id}: {e!r}")
             await asyncio.sleep(timeout)
             return None
 
@@ -149,14 +165,18 @@ class EvalLaunches:
     LIST_DAYS: ClassVar[int] = 30
     # Modal's longest function timeout.
     MAX_SECONDS: ClassVar[int] = 24 * 3600
+    # Billed container time outside the call's own limit (starting, stopping), kept out of each
+    # launch's time limit and counted on each ended launch.
+    OVERHEAD_SECONDS: ClassVar[int] = 600
     # What this month's launches may cost, in US dollars, over every org (one Modal workspace):
-    # a running launch at its cap, whenever it started, and an ended one that ran into this
-    # month at its whole time from start to end, which includes any wait for a GPU. A launch
-    # across the month's start counts in both months, so it never undercounts (D188).
+    # a running launch at its cap, whenever it started, and so one whose call may have started
+    # unseen (`unconfirmed`); an ended one that ran into this month at its time from start to
+    # end, which includes any wait for a GPU, plus the overhead. A launch across the month's
+    # start counts in both months, so it never undercounts (D188).
     SPENT: ClassVar[str] = (
-        "SELECT coalesce(sum(CASE WHEN state = 'running' THEN cap_usd ELSE least(cap_usd, "
-        "extract(epoch FROM finished_at - started_at) / 3600 * usd_per_hour) END), 0) "
-        "FROM eval_launches WHERE state = 'running' "
+        "SELECT coalesce(sum(CASE WHEN state = 'running' OR unconfirmed THEN cap_usd "
+        "ELSE least(cap_usd, (extract(epoch FROM finished_at - started_at) + $1) / 3600 "
+        "* usd_per_hour) END), 0) FROM eval_launches WHERE state = 'running' "
         "OR finished_at >= date_trunc('month', now())"
     )
 
@@ -182,8 +202,19 @@ class EvalLaunches:
     # ------------------------------------------------------------------ lifecycle
 
     async def sweep(self) -> None:
-        """Take over the launches whose replica stopped heartbeating (a deploy, a crash): their
-        calls are still running on Modal."""
+        """End the launches past their longest life, whose calls can't be running any more, and
+        take over those whose replica stopped heartbeating (a deploy, a crash): their calls are
+        still running on Modal."""
+        # Even on a server that no longer launches: their keys must go.
+        records = await self.store.db.fetch(
+            f"SELECT {COLUMNS} FROM eval_launches WHERE state = 'running' AND started_at + "
+            "make_interval(secs => cap_usd / usd_per_hour * 3600 + $1) < now()",
+            self.OVERHEAD_SECONDS + self.STALE_AFTER,
+        )
+        for record in records:
+            job = EvalLaunch(*record)
+            if job.pk not in self.jobs:
+                await self._end(job, "failed", error="The launch outlived its time limit unseen.")
         if self.modal is None:
             return
         records = await self.store.db.fetch(
@@ -230,6 +261,24 @@ class EvalLaunches:
             project,
         )
         return [EvalLaunch(*r) for r in records]
+
+    async def refuse_project(
+        self, conn: asyncpg.Connection, org: Org, project: str, action: str
+    ) -> None:
+        """Raise ``Conflict`` while an eval launched into ``project`` runs: its worker logs to the
+        project by name when it finishes, so a rename or a delete would send the run elsewhere
+        or bring the project back."""
+        running = await conn.fetchval(
+            "SELECT count(*) FROM eval_launches WHERE org_pk = $1 AND project = $2 "
+            "AND state = 'running'",
+            org.pk,
+            project,
+        )
+        if running:
+            raise Conflict(
+                f"cannot {action} a project while {running} eval launch(es) into it run: "
+                "cancel them or wait for them to end"
+            )
 
     async def catalogue(self) -> dict[str, list[str]]:
         """The suites and tasks a launch may run, from the deployed worker, kept for an hour:
@@ -282,7 +331,7 @@ class EvalLaunches:
         cap = s.eval_launch_max_usd
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             await conn.execute("SELECT pg_advisory_xact_lock(hashtext('eval_launches'))")
-            spent = await conn.fetchval(self.SPENT)
+            spent = await conn.fetchval(self.SPENT, self.OVERHEAD_SECONDS)
             if spent + cap > s.eval_launch_monthly_usd:
                 raise Conflict(
                     f"This month's launches may cost up to ${spent:.2f} of "
@@ -293,8 +342,7 @@ class EvalLaunches:
                 "INSERT INTO eval_launches (org_pk, project, model, revision, sha, suites, "
                 "tasks, add_bos, run, state, cap_usd, usd_per_hour, started_by, started_at, "
                 "heartbeat_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '', 'running', $9, $10, "
-                "$11, now(), now()) "
-                "RETURNING pk",
+                "$11, now(), now()) RETURNING pk",
                 org.pk,
                 project,
                 model,
@@ -307,25 +355,29 @@ class EvalLaunches:
                 s.eval_launch_usd_per_hour,
                 user.pk,
             )
-        pk = record[0]
-
-        # The run is named now, so the launch links to it before the worker starts.
-        api_key, key = await self.store.accounts.create_api_key(user, f"eval launch {pk}")
-        await self.store.db.execute(
-            "UPDATE eval_launches SET run = $2, api_key_pk = $3 WHERE pk = $1",
-            pk,
-            f"eval-launch-{pk}",
-            api_key.pk,
-        )
+            pk = record[0]
+            # The key is made with the row that names it, so whoever ends the launch deletes
+            # it. The run is named now, so the launch links to it before the worker starts.
+            api_key, key = await self.store.accounts.create_api_key(user, f"eval launch {pk}", conn)
+            await conn.execute(
+                "UPDATE eval_launches SET run = $2, api_key_pk = $3 WHERE pk = $1",
+                pk,
+                f"eval-launch-{pk}",
+                api_key.pk,
+            )
         job = await self.get(org, pk)
         env: dict[str, str | None] = {
             "WANDB_API_KEY": key,
             "WANDB_BASE_URL": s.api_public_url,
             "WANDB_ENTITY": org.name,
             "WANDB_RUN_ID": job.run,
+            # The Hub the model was checked on above.
+            "HF_ENDPOINT": s.hf_endpoint,
         }
-        # The cap is the timeout: a launch can't run past what it may cost.
-        timeout = min(int(cap / s.eval_launch_usd_per_hour * 3600), self.MAX_SECONDS)
+        # The cap is the time limit, less what starting and stopping the container may take:
+        # a launch can't run past what it may cost.
+        seconds = int(cap / s.eval_launch_usd_per_hour * 3600) - self.OVERHEAD_SECONDS
+        timeout = min(max(seconds, 60), self.MAX_SECONDS)
         try:
             job.call_id = await modal.spawn(
                 timeout,
@@ -336,9 +388,14 @@ class EvalLaunches:
                 add_bos=add_bos,
                 project=project,
             )
-        except Exception as e:
+        except Refused as e:
             await self._end(job, "failed", error=f"Modal refused the launch: {e}")
             raise BadGateway(f"Modal refused the launch: {e}") from e
+        except Exception as e:
+            # The call may have started all the same, so the launch keeps its whole cap.
+            error = f"Modal's answer to the launch was lost: {e}"
+            await self._end(job, "failed", error=error, unconfirmed=True)
+            raise BadGateway(error) from e
         # Taken over while the call was being made (a spawn slower than STALE_AFTER): the row
         # ended without it, so the call is stopped.
         attached = await self.store.db.fetchval(
@@ -376,31 +433,38 @@ class EvalLaunches:
     # ------------------------------------------------------------------ running
 
     async def _end(
-        self, job: EvalLaunch, state: str, error: str | None = None, commit: str | None = None
+        self,
+        job: EvalLaunch,
+        state: str,
+        error: str | None = None,
+        commit: str | None = None,
+        unconfirmed: bool = False,
     ) -> None:
-        """Record how ``job`` ended, unless another replica already did, and delete its key."""
+        """Record how ``job`` ended, unless another replica already did, and delete its key.
+        ``unconfirmed``: its call may be running unseen, so it keeps its whole cap (D188)."""
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             await conn.execute(
                 "UPDATE eval_launches SET state = $2, error = $3, flock_commit = $4, "
-                "finished_at = now() WHERE pk = $1 AND state = 'running'",
+                "unconfirmed = $5, finished_at = now() WHERE pk = $1 AND state = 'running'",
                 job.pk,
                 state,
                 error,
                 commit,
+                unconfirmed,
             )
-            # Whoever ended it, the key goes: the worker is done with it. By name too, for a
-            # key made just before its replica stopped, before the row named it.
+            # Whoever ended it, the key goes: the worker is done with it.
             await conn.execute(
-                "DELETE FROM api_keys k USING eval_launches l WHERE l.pk = $1 "
-                "AND (k.pk = l.api_key_pk OR (k.user_pk = l.started_by "
-                "AND k.name = 'eval launch ' || l.pk))",
+                "DELETE FROM api_keys WHERE pk = (SELECT api_key_pk FROM eval_launches "
+                "WHERE pk = $1)",
                 job.pk,
             )
 
     async def _watch(self, job: EvalLaunch) -> None:
         try:
             if job.call_id is None:  # its replica stopped between the insert and the spawn
-                await self._end(job, "failed", error="The launch was cut short before it started.")
+                # Its call may have started unseen, so the launch keeps its whole cap.
+                error = "The launch was cut short while its call was being made."
+                await self._end(job, "failed", error=error, unconfirmed=True)
                 return
             while True:
                 try:

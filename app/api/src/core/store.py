@@ -1494,6 +1494,8 @@ class Store:
                 if active:
                     # Their clients address them by the old name in every request.
                     raise Conflict("cannot rename a project with active runs", active)
+                # Its eval launches log by name when they finish, as their own run's clients do.
+                await self.eval_launches.refuse_project(conn, project.org, row["name"], "rename")
             try:
                 await conn.execute(
                     "UPDATE projects SET name = $2, description = $3, visibility = $5, "
@@ -1549,6 +1551,7 @@ class Store:
             await self._lock_org(conn, project.org)
             await self._lock_projects(conn, [project], update=True)
             await self.forks.refuse_project(conn, project.org, Scope(project.pk).root)
+            await self.eval_launches.refuse_project(conn, project.org, project.name, "delete")
             await self._delete_projects(conn, [project], force, now)
         self._work_wanted.set()
 

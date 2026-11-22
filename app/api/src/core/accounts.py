@@ -670,13 +670,16 @@ class Accounts:
         )
         return [ApiKey(*record) for record in records]
 
-    async def create_api_key(self, user: User, name: str) -> tuple[ApiKey, str]:
-        """A new wandb key for ``user`` (D71); the key itself is returned only here."""
+    async def create_api_key(
+        self, user: User, name: str, conn: asyncpg.Connection | None = None
+    ) -> tuple[ApiKey, str]:
+        """A new wandb key for ``user`` (D71); the key itself is returned only here. With
+        ``conn``, in its transaction."""
         # The wandb SDK wants 40+ word characters after a key's first "-" (older SDKs: exactly
         # 40 after its last), so 40 random letters and digits follow the prefix.
         alphabet = string.ascii_letters + string.digits
         key = self.WANDB_KEY_PREFIX + "".join(secrets.choice(alphabet) for _ in range(40))
-        record = await self.store.db.fetchrow(
+        record = await (conn or self.store.db).fetchrow(
             "INSERT INTO api_keys (user_pk, name, prefix, hash, created_at) "
             "VALUES ($1, $2, $3, $4, now()) RETURNING pk, extract(epoch FROM created_at)::float8",
             user.pk,
