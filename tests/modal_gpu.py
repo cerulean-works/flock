@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+import tomllib
 from pathlib import Path
 
 import modal
 
 ROOT = Path(__file__).parent.parent
-MEMBERS = ["flock/cli", "flock/eval", "flock/hub", "flock/training", "app/api", "tests"]
+# The workspace members, whose pyproject files `uv sync` needs next to the lockfile.
+MEMBERS = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["uv"]["workspace"]["members"]
 REPO = "/repo"
 
 # Dependencies go in their own layer, keyed on the lockfile and the workspace's pyproject files,
