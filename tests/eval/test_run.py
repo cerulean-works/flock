@@ -215,6 +215,30 @@ def toy_suites(offline_model: None, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setitem(run.SUITES, suite.name, suite)
 
 
+def test_a_local_folder_scores_under_the_id_digest_prints(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    lm: LlamaForCausalLM,
+    tokenizer: PreTrainedTokenizerFast,
+) -> None:
+    monkeypatch.setitem(run.TASKS, TASK.name, TASK)
+    lm.save_pretrained(tmp_path / "export")
+    tokenizer.save_pretrained(tmp_path / "export")
+
+    printed = CliRunner().invoke(cli.main, ["digest", str(tmp_path / "export")])
+    assert printed.exit_code == 0, printed.output
+    model_id = printed.output.strip()
+    digest = model_id.rpartition("@")[2]
+    for out in ("first", "second"):
+        evaluate(EvalConfig(model=model_id, tasks=("toy",), out=tmp_path / out, device="cpu"))
+
+    first, second = (
+        json.loads((tmp_path / out / "results.json").read_text()) for out in ("first", "second")
+    )
+    assert first["provenance"]["model"] == second["provenance"]["model"] == f"local:{digest}"
+    assert first["provenance"]["model_digest"] == digest
+
+
 def test_evaluate_scores_suites_and_each_task_once(toy_suites: None, tmp_path: Path) -> None:
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), suites=("toys",), out=tmp_path))
 
