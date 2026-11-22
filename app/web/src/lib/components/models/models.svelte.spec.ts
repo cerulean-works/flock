@@ -573,7 +573,7 @@ describe('ModelView', () => {
 				.getByRole('cell')
 				.all()
 				.map((c) => c.element().textContent!.trim())
-		).toEqual(['0.5', '0.625', '–']);
+		).toEqual(['0.5000', '0.6250', '–']);
 		expect(calls[0].url).toBe(`${API}/olmo2-1b/-/versions/12/evals`);
 
 		// Two checked runs give the comparison's link; a third can't be checked.
