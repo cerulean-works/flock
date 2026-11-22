@@ -969,7 +969,7 @@ describe('RunModels', () => {
 			org: 'acme',
 			project: 'pretrain'
 		};
-		render(RunModels, { versions: [version(7, project)] });
+		render(RunModels, { title: 'Checkpoints', versions: [version(7, project)] });
 		const link = screen.getByRole('link', { name: 'pretrain:sweeps/lr-3e-4@7' });
 		expect(link.element().getAttribute('href')).toBe(
 			'/acme/pretrain/models/sweeps/lr-3e-4?version=7'

@@ -143,7 +143,7 @@ def test_built_web_enforces_caller_identity_across_pages_data_and_relays(
                 assert "private-run-146" not in response.text
                 assert "row 1946" not in response.text
         for path in (
-            "/api/models/flock/private-model/versions",
+            "/api/models/flock/private-model/-/versions",
             "/api/imports/flock/hf",
             "/api/storage/flock/flock-datasets",
         ):
@@ -188,7 +188,13 @@ def test_eval_results_comparisons_and_model_evals_follow_the_projects_access(
     api = flock.client()
     version = Pusher(flock).push("m")
     scored = {"model": "flock:flock/m@1", "model_digest": version["digest"]}
-    scorer = dataclasses.replace(PROVENANCE, model=scored["model"], model_digest=version["digest"])
+    scorer = dataclasses.replace(
+        PROVENANCE,
+        model=scored["model"],
+        model_digest=version["digest"],
+        model_org="flock",
+        model_path="m",
+    )
     a = write_run(tmp_path / "a", {"secret_task": ("h", [True, False])}, scorer)
     b = write_run(tmp_path / "b", {"secret_task": ("h", [False, True])}, scorer)
     log_run(api, "p", "a", a)

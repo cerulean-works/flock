@@ -627,14 +627,15 @@ def test_schema_10_configs_link_a_projects_model_by_org_project_and_path(
     ``model_path`` beside ``model`` (025, D182)."""
     api = flock.client()
     project(flock)
-    # The same path and bytes in the org's global scope and in the project's.
+    # The same bytes in the project and in the org's global scope (a path is taken in one scope
+    # only).
     ours = ScopedPusher(flock, "pretrain").push("sweeps/lr")
-    other = ScopedPusher(flock).push("sweeps/lr")
+    other = ScopedPusher(flock).push("eval/lr")
     assert ours["digest"] == other["digest"]
     fields = {"model_org": "flock", "model_project": "pretrain", "model_path": "sweeps/lr"}
     named = {"model": "flock:pretrain:sweeps/lr@1", "model_digest": ours["digest"], **fields}
     refused = [
-        {**named, "model_project": "nope"},  # no such project: not the global model either
+        {**named, "model_project": "nope"},  # no such project
         {**named, "model_project": None},  # the fields and `model` disagree
         {**named, "model_path": "sweeps/other"},
         {**named, "model_org": "lab"},
@@ -646,7 +647,7 @@ def test_schema_10_configs_link_a_projects_model_by_org_project_and_path(
     for i, config in enumerate(refused):
         assert api.create_run("evals", f"r{i}", config=config)["inserted"], config
     api.create_run("evals", "scoped", config=named)
-    unscoped = {"model": "flock:flock/sweeps/lr@1", "model_project": None}
+    unscoped = {"model": "flock:flock/eval/lr@1", "model_project": None, "model_path": "eval/lr"}
     api.create_run("evals", "global", config={**named, **unscoped})
 
     linked = sql(

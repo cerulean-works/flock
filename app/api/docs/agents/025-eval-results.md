@@ -5,7 +5,7 @@
 | Status | implemented, pending review |
 | Date | 2026-11-21, rebased on 022 and 023 on 2026-11-22 |
 | Builds on | [014](014-model-registry.md) (D106, D108, D109 and section 7.5), [015](015-public-projects.md) (D110 to D116), [021](021-public-access-checks.md), [022](022-folders-and-project-scopes.md) (D159, D162, D169); eval's stage 041 (`flock/eval/docs/agents/041-result-files.md`: `results.json` and `predictions/<task>.jsonl` on the run, `correct`, `flock eval diff`) |
-| Amends | D106 (eval links come back, matched by number and digest), D109 (retention keeps a version with live eval runs again), D108 (the model page gets its Evals tab back, the run page its **Models scored**) |
+| Amends | D106 (eval links come back, matched by path, number and digest), D109 (retention keeps a version with live eval runs again), D108 (the model page gets its Evals tab back, the run page its **Models scored**) |
 | Keeps | D97 to D105, D107, D110 to D118, D130 to D135, D151 to D180 |
 
 ## 1. Goal
@@ -184,7 +184,7 @@ merged, then rebased on `main` after 022 and 023.
   `read_results` over the same folder.
 - `tests/app/test_models.py`: links from configs (number and digest match; a tag, another org,
   a wrong digest, a deleted version link nothing; a project's model by schema 10's fields, and
-  not the global model of the same path and bytes), `evals`, `eval_runs`, `scored`, retention.
+  not a global model with the same bytes), `evals`, `eval_runs`, `scored`, retention.
 - `tests/app/test_evals.py`: the diff route against `flock eval diff` on the same files; 404 for
   an unknown run, for an anonymous caller on a private project (either side), and for a run with
   no `results.json`; 409 for another instrument.
