@@ -54,6 +54,7 @@ jobs:
         run: uv sync --all-extras --all-packages --dev --no-group gpu --group cpu-tests --frozen
 
       - name: Run tests
+        timeout-minutes: 10
         run: uv run --no-sync python -m pytest -q tests -n 6
 
   Snapshot:
