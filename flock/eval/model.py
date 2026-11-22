@@ -1,5 +1,6 @@
 """Batched loglikelihood scoring with a causal language model, kept on the model's device."""
 
+import dataclasses
 import hashlib
 import itertools
 import logging
@@ -533,7 +534,12 @@ class ScoringModel:
 
     @torch.no_grad()  # As in `loglikelihood`.
     def rolling_loglikelihood(
-        self, texts: Sequence[str], window: int, token_ids: Sequence[list[int]] | None = None
+        self,
+        texts: Sequence[str],
+        window: int,
+        token_ids: Sequence[list[int]] | None = None,
+        *,
+        tokens: bool = False,
     ) -> Scores:
         """
         Scores each text whole, in disjoint windows of at most `window` tokens, as lm-evaluation-harness's `loglikelihood_rolling` does.
@@ -547,6 +553,8 @@ class ScoringModel:
                 The most tokens in one model input.
             token_ids (`Sequence[list[int]]`, *optional*):
                 The texts' token ids from [`tokenize`] with this model's tokenizer, to skip tokenizing them again. Tokenized here if not given.
+            tokens (`bool`, *optional*, defaults to `False`):
+                Also return each text's per-token values, one sequence per text, as the scores' `continuation_tokens`. Every token is predicted once, so a text's sequence is its tokens in order.
 
         Returns:
             `Scores`: per text, the FP64 sum of its windows' log-probabilities, its token count, `tokens_cut` all 0, since no token is cut, and whether every token is the greedy one.
@@ -588,7 +596,7 @@ class ScoringModel:
             rows.to(self.device, non_blocking=True),
             columns.to(self.device, non_blocking=True),
         )
-        window_logprob, window_is_greedy, _ = self._logprobs(windows)
+        window_logprob, window_is_greedy, window_values = self._logprobs(windows, tokens)
         by_window[cells] = window_logprob.double()
         logprob = by_window.sum(-1)
         # Cells a text doesn't fill count as greedy, so a text is greedy if all its windows are.
@@ -596,11 +604,18 @@ class ScoringModel:
         greedy_by_window[cells] = window_is_greedy
 
         num_tokens = torch.tensor([len(ids) for ids in token_ids], dtype=torch.int64)
+        # A text's windows follow each other and predict its tokens in order, so the windows'
+        # values are the texts' values, counted per text.
+        values = None
+        if window_values is not None:
+            lengths = tuple(len(ids) for ids in token_ids)
+            values = dataclasses.replace(window_values, lengths=lengths)
         return Scores(
             logprob,
             num_tokens.to(self.device, non_blocking=True),
             torch.zeros(len(token_ids), dtype=torch.int64, device=self.device),
             greedy_by_window.all(-1),
+            values,
         )
 
     @torch.no_grad()  # As in `loglikelihood`.
@@ -810,6 +825,32 @@ class ScoringModel:
             return []
 
         return self.tokenizer(texts, add_special_tokens=False)["input_ids"]
+
+    def byte_ends(self, texts: list[str]) -> list[list[int]]:
+        """
+        Where each token of each text ends, in UTF-8 bytes from the text's start, as [`tokenize`] splits it and as far as the tokenizer places its tokens: a token's bytes are those after the previous token's end. A token that holds only part of a character (a byte-level or byte-fallback piece) may end where the character ends, or where it starts, so some tokens span no bytes.
+
+        Raises:
+            `ValueError`: if the tokenizer splits a text into other tokens than [`tokenize`] does.
+        """
+        if isinstance(self.tokenizer, SentencePieceTokenizer):
+            # SentencePiece places each piece in bytes of the text as given.
+            spans = self.tokenizer.processor.encode(texts, out_type="proto")
+            ends = [[piece.end for piece in text.pieces] for text in spans]
+            ids = [[piece.id for piece in text.pieces] for text in spans]
+        else:
+            encoded = self.tokenizer(texts, add_special_tokens=False, return_offsets_mapping=True)
+            ids = encoded["input_ids"]
+            ends = []
+            # Tokenizers place tokens in characters, so each end goes to its character's bytes.
+            for text, offsets in zip(texts, encoded["offset_mapping"], strict=True):
+                in_bytes = [0, *itertools.accumulate(len(c.encode()) for c in text)]
+                ends.append([in_bytes[end] for _, end in offsets])
+        if ids != self.tokenize(texts):
+            raise ValueError("the tokenizer placed other tokens than it scores")
+
+        # Never before the previous end: merged bytes can place a token's end inside another's.
+        return [list(itertools.accumulate(text_ends, max)) for text_ends in ends]
 
     def _prefix_token(self) -> int:
         """The token an empty context, or one with no ids, becomes, and a rolling text's first window starts from: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`. It isn't padding: the first scored token needs one real token to be predicted from."""
