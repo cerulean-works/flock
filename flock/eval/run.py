@@ -77,7 +77,7 @@ class EvalConfig:
         add_bos (`bool`, *optional*, defaults to `False`):
             Passed to [`~eval.model.ScoringModel`]. Set it for Gemma models, as OLMES does.
         tokens (`bool`, *optional*, defaults to `True`):
-            With `out`, write each multiple-choice task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each choice's tokens with their values (see [`~eval.results.write_tokens`]).
+            With `out`, write each multiple-choice task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each choice's tokens with their values (see [Per-token values](results#per-token-values)).
         context_tokens (`bool`, *optional*, defaults to `False`):
             Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. It needs `tokens`. They are read from each distinct context once, in a pass apart from scoring that keeps the logits of every position.
         greedy_tokens (`bool`, *optional*, defaults to `False`):
