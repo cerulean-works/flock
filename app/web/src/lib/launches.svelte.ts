@@ -46,8 +46,10 @@ export class LaunchList {
 		if (this.#timer) clearTimeout(this.#timer);
 		this.#timer = null;
 		try {
-			const { launches } = await datasetCall<{ launches: EvalLaunch[] }>(launchesApi(this.#org));
-			this.launches = launches.filter((l) => l.project === this.#project);
+			// Filtered by Flock before its limit, so other projects' launches never crowd these out.
+			const url = `${launchesApi(this.#org)}?project=${encodeURIComponent(this.#project)}`;
+			const { launches } = await datasetCall<{ launches: EvalLaunch[] }>(url);
+			this.launches = launches;
 		} catch {
 			// Asked again on the next round.
 		}

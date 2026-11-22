@@ -30,11 +30,11 @@ Running launches show as rows on the project page. A row says what is scored, wh
 | `failed` | The row shows why. A failed launch logs nothing, or a run cut short. |
 | `cancelled` | Someone cancelled it. What it logged so far stays. |
 
-Click **Cancel** to stop a running launch. Only whoever launched it, or an admin, can cancel it. Its GPU stops at once.
+Click **Cancel** to stop a running launch. Only whoever launched it, or an admin, can cancel it. Its GPU stops at once. Deleting the organization stops its running launches too.
 
 ## Costs and caps
 
-Each launch has a cap (US$25 by default). The server turns it into a time limit at the GPU price, so a launch stops before it costs more. The month's launches share a second cap (US$300 by default), counted over the whole server. A running launch counts at its full cap until it ends, and an ended one at its time from launch to end. When a new launch wouldn't fit under the monthly cap, the server refuses it.
+Each launch has a cap (US$25 by default). The server turns it into a time limit at the GPU price, so a launch stops before it costs more. The month's launches share a second cap (US$300 by default), counted over the whole server. A running launch counts at its full cap until it ends, and an ended one at its time from launch to end, in every month it ran in. Launches of a deleted organization still count. When a new launch wouldn't fit under the monthly cap, the server refuses it.
 
 ## Comparing launched runs
 

@@ -55,8 +55,7 @@
 
 	async function launch() {
 		const target = model.trim();
-		error =
-			repoError(target) ?? (suites.length || tasks.length ? null : 'Pick a suite or a task');
+		error = repoError(target) ?? (suites.length || tasks.length ? null : 'Pick a suite or a task');
 		if (error) return;
 		pending = true;
 		try {
@@ -181,18 +180,12 @@
 					<Label for="launch-bos" class="font-normal">Add BOS (Gemma)</Label>
 				</div>
 				<p class="text-[12.5px] text-muted-foreground">
-					Scored in BF16 on a Modal H100, at most {money(catalogue.max_usd, 'USD')} per launch.
-					The results are labelled as H100 runs: they aren’t comparable with the H200 bank until a
-					parity check passes.
+					Scored in BF16 on a Modal H100, at most {money(catalogue.max_usd, 'USD')} per launch. The results
+					are labelled as H100 runs: they aren’t comparable with the H200 bank until a parity check passes.
 				</p>
 				<FormError {error} />
 				<Dialog.Footer>
-					<Button
-						type="button"
-						variant="outline"
-						disabled={pending}
-						onclick={() => (open = false)}
-					>
+					<Button type="button" variant="outline" disabled={pending} onclick={() => (open = false)}>
 						Cancel
 					</Button>
 					<Button type="submit" disabled={pending}>

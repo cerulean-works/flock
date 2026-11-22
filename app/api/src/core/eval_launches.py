@@ -33,7 +33,7 @@ COLUMNS = (
 @dataclass(eq=False)
 class EvalLaunch:
     pk: int
-    org_pk: int
+    org_pk: int | None  # None once its org is purged: the row stays for the month's count
     project: str
     model: str
     revision: str
@@ -119,10 +119,15 @@ class Modal:
         call = modal.FunctionCall.from_id(call_id, client=await self._client_once())
         try:
             return await call.get.aio(timeout=timeout)
-        except modal.exception.TimeoutError:
+        except TimeoutError:  # Python's own: the poll's deadline, not the call's time limit
             return None
-        except modal.exception.ConnectionError:
-            # Not the call's failure: it goes on running, so ask again at the next heartbeat.
+        except (
+            modal.exception.ConnectionError,
+            modal.exception.ServiceError,
+            modal.exception.InternalError,
+        ):
+            # Modal's own trouble, not the call's failure: it goes on running, so ask again at
+            # the next heartbeat.
             log.warning(f"Modal couldn't be reached about call {call_id}")
             await asyncio.sleep(timeout)
             return None
@@ -145,22 +150,25 @@ class EvalLaunches:
     # Modal's longest function timeout.
     MAX_SECONDS: ClassVar[int] = 24 * 3600
     # What this month's launches may cost, in US dollars, over every org (one Modal workspace):
-    # a running launch at its cap, an ended one at its time from start to end, which includes
-    # any wait for a GPU, so it never undercounts (D188).
+    # a running launch at its cap, whenever it started, and an ended one that ran into this
+    # month at its whole time from start to end, which includes any wait for a GPU. A launch
+    # across the month's start counts in both months, so it never undercounts (D188).
     SPENT: ClassVar[str] = (
         "SELECT coalesce(sum(CASE WHEN state = 'running' THEN cap_usd ELSE least(cap_usd, "
         "extract(epoch FROM finished_at - started_at) / 3600 * usd_per_hour) END), 0) "
-        "FROM eval_launches WHERE started_at >= date_trunc('month', now())"
+        "FROM eval_launches WHERE state = 'running' "
+        "OR finished_at >= date_trunc('month', now())"
     )
 
     def __init__(self, store: Store) -> None:
         self.store = store
         self.jobs: dict[int, EvalLaunch] = {}  # the launches this replica watches, by pk
         s = store.settings
+        self.modal: Any = None
         # Without the public API URL the worker's wandb SDK would send the key to W&B itself.
-        on = s.modal_token_id and s.modal_token_secret and s.api_public_url
-        on = on and s.eval_launch_usd_per_hour > 0
-        self.modal: Any = Modal(s.modal_token_id, s.modal_token_secret) if on else None
+        token_id, secret = s.modal_token_id, s.modal_token_secret
+        if token_id and secret and s.api_public_url and s.eval_launch_usd_per_hour > 0:
+            self.modal = Modal(token_id, secret)
         self._catalogue: tuple[float, dict[str, list[str]]] | None = None
         # Stands in for the Hub in tests.
         self.transport: Any = None
@@ -209,14 +217,17 @@ class EvalLaunches:
             raise NotFound(f"eval launch {pk} not found")
         return EvalLaunch(*record)
 
-    async def recent(self, org: Org) -> list[EvalLaunch]:
-        """The org's launches of the last month, newest first."""
+    async def recent(self, org: Org, project: str | None = None) -> list[EvalLaunch]:
+        """The org's running launches and those of the last month, of ``project`` if given,
+        newest first."""
         records = await self.store.db.fetch(
             f"SELECT {COLUMNS} FROM eval_launches WHERE org_pk = $1 "
-            "AND started_at > now() - make_interval(days => $2) ORDER BY pk DESC LIMIT $3",
+            "AND ($4::text IS NULL OR project = $4) AND (state = 'running' "
+            "OR started_at > now() - make_interval(days => $2)) ORDER BY pk DESC LIMIT $3",
             org.pk,
             self.LIST_DAYS,
             self.LIST_LIMIT,
+            project,
         )
         return [EvalLaunch(*r) for r in records]
 
@@ -328,9 +339,17 @@ class EvalLaunches:
         except Exception as e:
             await self._end(job, "failed", error=f"Modal refused the launch: {e}")
             raise BadGateway(f"Modal refused the launch: {e}") from e
-        await self.store.db.execute(
-            "UPDATE eval_launches SET call_id = $2 WHERE pk = $1", pk, job.call_id
+        # Taken over while the call was being made (a spawn slower than STALE_AFTER): the row
+        # ended without it, so the call is stopped.
+        attached = await self.store.db.fetchval(
+            "UPDATE eval_launches SET call_id = $2 WHERE pk = $1 AND state = 'running' "
+            "RETURNING pk",
+            pk,
+            job.call_id,
         )
+        if attached is None:
+            await modal.cancel(job.call_id)
+            return await self.get(org, pk)
         self.jobs[pk] = job
         job.task = asyncio.get_running_loop().create_task(self._watch(job))
         return job
@@ -344,26 +363,15 @@ class EvalLaunches:
             raise Forbidden("Only who launched an eval, or an admin, can cancel it.")
         if job.state != "running":
             return job
-        if job.call_id is not None:
-            try:
-                await self.require().cancel(job.call_id)
-            except Exception as e:
-                raise BadGateway(f"Modal couldn't cancel the launch: {e}") from e
+        # Its call is still being made: ending the row now would leave the call unwatched.
+        if job.call_id is None:
+            raise Conflict("The launch is still starting. Cancel it again in a moment.")
+        try:
+            await self.require().cancel(job.call_id)
+        except Exception as e:
+            raise BadGateway(f"Modal couldn't cancel the launch: {e}") from e
         await self._end(job, "cancelled")
         return await self.get(org, pk)
-
-    async def cancel_org(self, org: Org) -> None:
-        """Stop the org's launches (when it's deleted)."""
-        records = await self.store.db.fetch(
-            f"SELECT {COLUMNS} FROM eval_launches WHERE org_pk = $1 AND state = 'running'", org.pk
-        )
-        for job in (EvalLaunch(*r) for r in records):
-            if job.call_id is not None and self.modal is not None:
-                try:
-                    await self.modal.cancel(job.call_id)
-                except Exception:
-                    log.exception("could not cancel eval launch %d on Modal", job.pk)
-            await self._end(job, "cancelled")
 
     # ------------------------------------------------------------------ running
 
@@ -380,10 +388,12 @@ class EvalLaunches:
                 error,
                 commit,
             )
-            # Whoever ended it, the key goes: the worker is done with it.
+            # Whoever ended it, the key goes: the worker is done with it. By name too, for a
+            # key made just before its replica stopped, before the row named it.
             await conn.execute(
-                "DELETE FROM api_keys WHERE pk = (SELECT api_key_pk FROM eval_launches "
-                "WHERE pk = $1)",
+                "DELETE FROM api_keys k USING eval_launches l WHERE l.pk = $1 "
+                "AND (k.pk = l.api_key_pk OR (k.user_pk = l.started_by "
+                "AND k.name = 'eval launch ' || l.pk))",
                 job.pk,
             )
 
@@ -404,12 +414,23 @@ class EvalLaunches:
                     await self._end(job, "finished", commit=commit)
                     return
                 # Still running. A launch cancelled or ended elsewhere isn't watched any more.
-                beat = await self.store.db.fetchval(
-                    "UPDATE eval_launches SET heartbeat_at = now() "
-                    "WHERE pk = $1 AND state = 'running' RETURNING pk",
+                beat = await self.store.db.fetchrow(
+                    "UPDATE eval_launches l SET heartbeat_at = now() "
+                    "WHERE pk = $1 AND state = 'running' RETURNING coalesce("
+                    "(SELECT deleted_at IS NOT NULL FROM orgs WHERE pk = l.org_pk), true)",
                     job.pk,
                 )
                 if beat is None:
+                    return
+                # Its org was deleted: the call stops, retried every heartbeat until Modal
+                # confirms, so a deletion never leaves a GPU running unwatched.
+                if beat[0]:
+                    try:
+                        await self.modal.cancel(job.call_id)
+                    except Exception:
+                        log.exception(f"could not cancel eval launch {job.pk} of a deleted org")
+                        continue
+                    await self._end(job, "cancelled")
                     return
         except asyncio.CancelledError:
             raise  # this replica is stopping: the launch goes on, and another takes it over
