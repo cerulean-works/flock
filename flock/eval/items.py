@@ -15,16 +15,6 @@ ONE_RUN = ("wrong", "right", "all")
 CELLS = ("only_a", "only_b", "both_wrong", "both_right")
 # The accuracies that rank choices, each by its score in `metrics.ranking_scores`.
 RANKED = ("acc_raw", "acc_per_token", "acc_per_char", "acc_per_byte", "acc_uncond")
-# The fields a row has from schema 12 on that say where its doc comes from.
-SOURCE_FIELDS = (
-    "split",
-    "source_index",
-    "native_id",
-    "subject",
-    "meta",
-    "doc_hash",
-    "prompt_hash",
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,7 +297,20 @@ def items(
                     choices=choices,
                     gold=gold,
                     runs=answers,
-                    source={key: row[key] for key in SOURCE_FIELDS if key in row},
+                    # The fields a row has from schema 12 on that say where its doc comes from.
+                    source={
+                        key: row[key]
+                        for key in (
+                            "split",
+                            "source_index",
+                            "native_id",
+                            "subject",
+                            "meta",
+                            "doc_hash",
+                            "prompt_hash",
+                        )
+                        if key in row
+                    },
                 )
             )
 
