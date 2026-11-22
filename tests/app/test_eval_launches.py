@@ -40,6 +40,7 @@ class FakeModal:
     refuse: bool = False
     lose: bool = False  # the spawn's answer is lost: the call may have started
     down: bool = False  # cancelling fails, as when Modal can't be reached
+    end_on_cancel: bool = False  # a cancel ends the call at once, as Modal reports it
     # A spawn waits for this, when set.
     gate: threading.Event | None = None
 
@@ -69,6 +70,9 @@ class FakeModal:
         if self.down:
             raise RuntimeError("Modal is down")
         self.cancelled.append(call_id)
+        if self.end_on_cancel:
+            self.outcomes[call_id] = RuntimeError("the call was cancelled")
+            await asyncio.sleep(0.2)  # the watcher sees it end first
 
 
 def hub_transport() -> httpx.MockTransport:
@@ -294,6 +298,48 @@ def test_a_failed_launch_says_why_and_its_key_is_deleted(
     rows = sql(server, "SELECT state, api_key_pk, unconfirmed FROM eval_launches ORDER BY pk")
     assert [tuple(r) for r in rows[1:]] == [("failed", None, False), ("failed", None, True)]
     assert sql(server, "SELECT count(*) FROM api_keys WHERE name LIKE 'eval launch%'")[0][0] == 0
+    # The refused one costs nothing; the lost one keeps its cap; the first ran for minutes.
+    spent = server.call(
+        server.store.db.fetchval(EvalLaunches.SPENT, EvalLaunches.OVERHEAD_SECONDS, 10**6)
+    )
+    assert 25 < spent < 25 + 2 * (600 + 60) / 3600 + 0.01
+
+
+def test_a_cap_that_buys_less_than_a_minute_is_refused(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+) -> None:
+    server, modal = make_server(eval_launch_max_usd=0.3)  # ten minutes at $2 is $0.33
+    refused = server.client().post(LAUNCHES, body())
+    assert refused.status == 422 and "FLOCK_EVAL_LAUNCH_MAX_USD" in refused.json()["error"]
+    assert modal.spawned == []
+    assert sql(server, "SELECT count(*) FROM eval_launches")[0][0] == 0
+
+
+def test_a_cancelled_launch_reads_cancelled_whoever_sees_its_end(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
+) -> None:
+    server, modal = make_server()
+    api = server.client()
+    pk = api.post(LAUNCHES, body()).json()["id"]
+    # Modal ends the call at once, so the watcher may see it fail before the cancel records.
+    modal.end_on_cancel = True
+    assert api.delete(f"{LAUNCHES}/{pk}").json()["state"] == "cancelled"
+    wait_for(lambda: not server.store.eval_launches.jobs)
+    assert api.get(f"{LAUNCHES}/{pk}").json()["state"] == "cancelled"
+
+
+def test_ended_launches_follow_their_project_when_it_is_renamed(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
+) -> None:
+    server, modal = make_server()
+    api = server.client()
+    assert api.post("/api/v1/projects", {"entity": "flock", "name": "evals"}).status == 201
+    pk = api.post(LAUNCHES, body()).json()["id"]
+    modal.outcomes["fc-0"] = "abc1234"
+    wait_for(lambda: api.get(f"{LAUNCHES}/{pk}").json()["state"] == "finished")
+    assert api.patch("/api/v1/projects/flock/evals", {"name": "renamed"}).status == 200
+    listed = api.get(LAUNCHES, project="renamed").json()["launches"]
+    assert [j["id"] for j in listed] == [pk]
 
 
 def test_a_launch_goes_on_through_a_restart_and_another_replica_takes_it_over(
@@ -457,7 +503,11 @@ def test_a_launch_past_its_longest_life_ends_even_where_launches_are_off(
     # Restarted without Modal: no new launch, but the old one's key can't live on.
     restarted, _ = make_server(reuse=server, modal_token_secret=None)
     assert restarted.client().get(f"{LAUNCHES}/{pk}").json()["state"] == "running"
+    # Not yet: Modal may have held the call in its queue for up to a day.
     sql(restarted, "UPDATE eval_launches SET started_at = now() - interval '13 hours'")
+    restarted.call(restarted.store.eval_launches.sweep())
+    assert restarted.client().get(f"{LAUNCHES}/{pk}").json()["state"] == "running"
+    sql(restarted, "UPDATE eval_launches SET started_at = now() - interval '40 hours'")
     restarted.call(restarted.store.eval_launches.sweep())
     job = restarted.client().get(f"{LAUNCHES}/{pk}").json()
     assert job["state"] == "failed" and "time limit" in job["error"]

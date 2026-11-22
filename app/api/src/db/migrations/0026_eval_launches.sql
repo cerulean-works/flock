@@ -28,6 +28,7 @@ CREATE TABLE eval_launches (
     usd_per_hour float8 NOT NULL,
     flock_commit text,
     unconfirmed boolean NOT NULL DEFAULT false,
+    cancel_requested boolean NOT NULL DEFAULT false,
     error text,
     started_by bigint REFERENCES users ON DELETE SET NULL,
     started_at timestamptz NOT NULL,

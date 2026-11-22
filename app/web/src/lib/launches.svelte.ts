@@ -45,15 +45,16 @@ export class LaunchList {
 	async refresh() {
 		if (this.#timer) clearTimeout(this.#timer);
 		this.#timer = null;
+		let failed = false;
 		try {
 			// Filtered by Flock before its limit, so other projects' launches never crowd these out.
 			const url = `${launchesApi(this.#org)}?project=${encodeURIComponent(this.#project)}`;
 			const { launches } = await datasetCall<{ launches: EvalLaunch[] }>(url);
 			this.launches = launches;
 		} catch {
-			// Asked again on the next round.
+			failed = true; // asked again on the next round, even before any launch is known
 		}
-		this.#schedule();
+		this.#schedule(failed);
 	}
 
 	/** A launch just started here, shown before the next round. */
@@ -69,9 +70,9 @@ export class LaunchList {
 		this.launches = this.launches.map((l) => (l.id === id ? job : l));
 	}
 
-	#schedule() {
+	#schedule(retry = false) {
 		if (this.#stopped || this.#timer) return;
-		if (!this.launches.some((l) => l.state === 'running')) return;
+		if (!retry && !this.launches.some((l) => l.state === 'running')) return;
 		this.#timer = setTimeout(() => {
 			this.#timer = null;
 			void this.refresh();

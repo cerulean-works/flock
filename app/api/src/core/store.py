@@ -1496,6 +1496,13 @@ class Store:
                     raise Conflict("cannot rename a project with active runs", active)
                 # Its eval launches log by name when they finish, as their own run's clients do.
                 await self.eval_launches.refuse_project(conn, project.org, row["name"], "rename")
+                # Its ended launches follow it, so its page still lists them.
+                await conn.execute(
+                    "UPDATE eval_launches SET project = $3 WHERE org_pk = $1 AND project = $2",
+                    project.org.pk,
+                    row["name"],
+                    name,
+                )
             try:
                 await conn.execute(
                     "UPDATE projects SET name = $2, description = $3, visibility = $5, "

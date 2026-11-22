@@ -168,16 +168,23 @@ class EvalLaunches:
     # Billed container time outside the call's own limit (starting, stopping), kept out of each
     # launch's time limit and counted on each ended launch.
     OVERHEAD_SECONDS: ClassVar[int] = 600
+    # Modal may hold a call in its queue before it runs; its time limit starts only then.
+    QUEUE_SECONDS: ClassVar[int] = 24 * 3600
     # What this month's launches may cost, in US dollars, over every org (one Modal workspace):
-    # a running launch at its cap, whenever it started, and so one whose call may have started
-    # unseen (`unconfirmed`); an ended one that ran into this month at its time from start to
-    # end, which includes any wait for a GPU, plus the overhead. A launch across the month's
-    # start counts in both months, so it never undercounts (D188).
+    # - a running launch at its cap, whenever it started;
+    # - one whose call may have started unseen (`unconfirmed`) at its cap too, in every month
+    #   until that call can't be running ($2: queue, time limit and overhead at most);
+    # - one Modal surely refused (no call) at nothing;
+    # - any other that ran into this month at its time from start to end plus the overhead,
+    #   which includes any wait for a GPU.
+    # A launch across the month's start counts in both months, so it never undercounts (D188).
     SPENT: ClassVar[str] = (
         "SELECT coalesce(sum(CASE WHEN state = 'running' OR unconfirmed THEN cap_usd "
+        "WHEN call_id IS NULL THEN 0 "
         "ELSE least(cap_usd, (extract(epoch FROM finished_at - started_at) + $1) / 3600 "
         "* usd_per_hour) END), 0) FROM eval_launches WHERE state = 'running' "
-        "OR finished_at >= date_trunc('month', now())"
+        "OR finished_at >= date_trunc('month', now()) OR (unconfirmed AND started_at "
+        "+ make_interval(secs => $2) >= date_trunc('month', now()))"
     )
 
     def __init__(self, store: Store) -> None:
@@ -202,20 +209,19 @@ class EvalLaunches:
     # ------------------------------------------------------------------ lifecycle
 
     async def sweep(self) -> None:
-        """End the launches past their longest life, whose calls can't be running any more, and
-        take over those whose replica stopped heartbeating (a deploy, a crash): their calls are
-        still running on Modal."""
-        # Even on a server that no longer launches: their keys must go.
-        records = await self.store.db.fetch(
-            f"SELECT {COLUMNS} FROM eval_launches WHERE state = 'running' AND started_at + "
-            "make_interval(secs => cap_usd / usd_per_hour * 3600 + $1) < now()",
-            self.OVERHEAD_SECONDS + self.STALE_AFTER,
-        )
-        for record in records:
-            job = EvalLaunch(*record)
-            if job.pk not in self.jobs:
-                await self._end(job, "failed", error="The launch outlived its time limit unseen.")
+        """Take over the launches whose replica stopped heartbeating (a deploy, a crash): their
+        calls are still running on Modal. A server that no longer launches can't ask Modal, so
+        it ends those past their longest life (a day in Modal's queue, their time limit and the
+        overhead), whose calls can't be running any more, and their keys go."""
         if self.modal is None:
+            records = await self.store.db.fetch(
+                f"SELECT {COLUMNS} FROM eval_launches WHERE state = 'running' AND started_at + "
+                "make_interval(secs => cap_usd / usd_per_hour * 3600 + $1) < now()",
+                self.QUEUE_SECONDS + self.OVERHEAD_SECONDS,
+            )
+            for record in records:
+                error = "The launch outlived its time limit while no server could watch it."
+                await self._end(EvalLaunch(*record), "failed", error=error)
             return
         records = await self.store.db.fetch(
             "UPDATE eval_launches SET heartbeat_at = now() WHERE pk IN ("
@@ -326,12 +332,32 @@ class EvalLaunches:
         if info.get("gated") or info.get("private"):
             raise HubError(f"{model} is gated or private. Only public models are launched.", 403)
 
+        # The cap is the time limit, less what starting and stopping the container may take:
+        # a launch can't run past what it may cost.
+        cap = s.eval_launch_max_usd
+        seconds = int(cap / s.eval_launch_usd_per_hour * 3600) - self.OVERHEAD_SECONDS
+        if seconds < 60:
+            raise Invalid(
+                f"A ${cap:.2f} cap buys less than a minute of scoring at "
+                f"${s.eval_launch_usd_per_hour:.2f} an hour: raise FLOCK_EVAL_LAUNCH_MAX_USD."
+            )
+        timeout = min(seconds, self.MAX_SECONDS)
+
         # One launch at a time over the server, so two can't both fit under the cap's last
         # dollars. A running launch counts at its cap until it ends.
-        cap = s.eval_launch_max_usd
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             await conn.execute("SELECT pg_advisory_xact_lock(hashtext('eval_launches'))")
-            spent = await conn.fetchval(self.SPENT, self.OVERHEAD_SECONDS)
+            # Its project's row, if it exists, is held until the launch is in, so a rename or a
+            # delete either sees the launch and refuses, or happened first (then the run makes a
+            # new project of this name).
+            await conn.execute(
+                "SELECT FROM projects WHERE org_pk = $1 AND name = $2 AND deleted_at IS NULL "
+                "FOR SHARE",
+                org.pk,
+                project,
+            )
+            longest = self.QUEUE_SECONDS + self.MAX_SECONDS + self.OVERHEAD_SECONDS
+            spent = await conn.fetchval(self.SPENT, self.OVERHEAD_SECONDS, longest)
             if spent + cap > s.eval_launch_monthly_usd:
                 raise Conflict(
                     f"This month's launches may cost up to ${spent:.2f} of "
@@ -374,10 +400,6 @@ class EvalLaunches:
             # The Hub the model was checked on above.
             "HF_ENDPOINT": s.hf_endpoint,
         }
-        # The cap is the time limit, less what starting and stopping the container may take:
-        # a launch can't run past what it may cost.
-        seconds = int(cap / s.eval_launch_usd_per_hour * 3600) - self.OVERHEAD_SECONDS
-        timeout = min(max(seconds, 60), self.MAX_SECONDS)
         try:
             job.call_id = await modal.spawn(
                 timeout,
@@ -423,6 +445,11 @@ class EvalLaunches:
         # Its call is still being made: ending the row now would leave the call unwatched.
         if job.call_id is None:
             raise Conflict("The launch is still starting. Cancel it again in a moment.")
+        # Recorded first, so a watcher that sees the call end because of it records the launch
+        # cancelled, not failed.
+        await self.store.db.execute(
+            "UPDATE eval_launches SET cancel_requested = true WHERE pk = $1", pk
+        )
         try:
             await self.require().cancel(job.call_id)
         except Exception as e:
@@ -444,8 +471,9 @@ class EvalLaunches:
         ``unconfirmed``: its call may be running unseen, so it keeps its whole cap (D188)."""
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             await conn.execute(
-                "UPDATE eval_launches SET state = $2, error = $3, flock_commit = $4, "
-                "unconfirmed = $5, finished_at = now() WHERE pk = $1 AND state = 'running'",
+                "UPDATE eval_launches SET state = CASE WHEN cancel_requested AND $2 = 'failed' "
+                "THEN 'cancelled' ELSE $2 END, error = $3, flock_commit = $4, unconfirmed = $5, "
+                "finished_at = now() WHERE pk = $1 AND state = 'running'",
                 job.pk,
                 state,
                 error,
