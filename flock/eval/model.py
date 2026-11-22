@@ -11,7 +11,7 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Literal, NamedTuple
+from typing import Any, ClassVar, Literal, NamedTuple
 
 import torch
 from huggingface_hub import (
@@ -25,7 +25,7 @@ from huggingface_hub.errors import LocalEntryNotFoundError, RemoteEntryNotFoundE
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
-from flock.eval.requests import Request, Scores
+from flock.eval.requests import ContextScores, Request, Scores, TokenValues
 from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
 DEFAULT_BATCH_TOKENS = 32768
@@ -590,18 +590,24 @@ class ScoringModel:
 
     @torch.no_grad()  # Not inference_mode: buffers rebuilt here must stay usable in training.
     def loglikelihood(
-        self, requests: Sequence[Request], encoded: Sequence[Encoded] | None = None
+        self,
+        requests: Sequence[Request],
+        encoded: Sequence[Encoded] | None = None,
+        *,
+        tokens: bool = False,
     ) -> Scores:
         """
         Scores every request, in order, and counts the context tokens each lost to left truncation.
 
-        The model runs in eval mode, and each module is put back in the mode it was in. The scores stay on the model's device: nothing here waits for the GPU.
+        The model runs in eval mode, and each module is put back in the mode it was in. The scores stay on the model's device: nothing here waits for the GPU. Per-token values never change the scores.
 
         Args:
             requests (`Sequence[Request]`):
                 The requests to score.
             encoded (`Sequence[Encoded]`, *optional*):
                 The requests' token ids from [`encode_requests`] with this model's tokenizer and `add_bos`, to skip tokenizing them again. Tokenized here if not given.
+            tokens (`bool`, *optional*, defaults to `False`):
+                Also return each continuation's per-token values as the scores' `continuation_tokens`. They read only the distributions the scores read, so the model runs as it does without them. A context's values come from [`score_contexts`].
 
         Raises:
             `ValueError`: if a continuation has no tokens or is longer than `max_length` on its own, or, when `encoded` isn't given, [`encode_requests`] raises.
@@ -634,12 +640,13 @@ class ScoringModel:
         num_tokens = torch.tensor(
             [len(continuation) for _, continuation in encoded], dtype=torch.int64
         )
-        logprob, is_greedy = self._logprobs(encoded)
+        logprob, is_greedy, continuation_tokens = self._logprobs(encoded, tokens)
         return Scores(
             logprob,
             num_tokens.to(self.device, non_blocking=True),
             torch.tensor(tokens_cut, dtype=torch.int64).to(self.device, non_blocking=True),
             is_greedy,
+            continuation_tokens,
         )
 
     @torch.no_grad()  # As in `loglikelihood`.
@@ -699,7 +706,7 @@ class ScoringModel:
             rows.to(self.device, non_blocking=True),
             columns.to(self.device, non_blocking=True),
         )
-        window_logprob, window_is_greedy = self._logprobs(windows)
+        window_logprob, window_is_greedy, _ = self._logprobs(windows)
         by_window[cells] = window_logprob.double()
         logprob = by_window.sum(-1)
         # Cells a text doesn't fill count as greedy, so a text is greedy if all its windows are.
@@ -714,8 +721,96 @@ class ScoringModel:
             greedy_by_window.all(-1),
         )
 
-    def _logprobs(self, encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
-        """Each encoded request's summed continuation log-probability (FP32) and whether its continuation is the greedy one, in order on the model's device, scored longest first in batches of at most `batch_tokens` padded tokens."""
+    @torch.no_grad()  # As in `loglikelihood`.
+    def score_contexts(
+        self, contexts: Sequence[list[int]], num_tokens: int = 32, values: bool = False
+    ) -> ContextScores:
+        """
+        Reads each context alone: the first `num_tokens` tokens greedy decoding writes after it, and with `values` the per-token values of its tokens. A context is read once however many choices share it, apart from the scoring of requests, so neither changes a score.
+
+        Decoding has no stop: end-of-sequence tokens are written like any other. A model whose `max_length` isn't above `num_tokens` writes `max_length - 1`. A context longer than `max_length` less the tokens written loses tokens from the left, as scoring cuts one, and its values cover what is left but its first token, which nothing predicts. Batched as scoring is, longest first, under the same kernel pin. The values come from the first forward pass of decoding, which keeps every position's logits only when they are asked for.
+
+        A [`FlockCausalLM`] keeps no key-value cache to decode with, and decoding without one would read each context `num_tokens` times over: it writes no greedy tokens, and its values take one forward pass.
+
+        Args:
+            contexts (`Sequence[list[int]]`):
+                Token ids, as [`encode_requests`] gives a request's context.
+            num_tokens (`int`, *optional*, defaults to 32):
+                How many tokens to decode.
+            values (`bool`, *optional*, defaults to `False`):
+                Also return each context's per-token values.
+
+        Raises:
+            `ValueError`: if `num_tokens` is below 1, or `max_length` is 1, which leaves no room for a context.
+        """
+        if num_tokens < 1 or self.max_length < 2:
+            raise ValueError(f"no tokens to decode: {num_tokens} after up to {self.max_length}")
+        decodes = isinstance(self.model, PreTrainedModel)
+        num_tokens = min(num_tokens, self.max_length - 1)
+
+        kept = [context[-(self.max_length - num_tokens) :] for context in contexts]
+        lengths = [len(context) + num_tokens for context in kept]
+        order = sorted(range(len(kept)), key=lambda i: -lengths[i])
+        greedy = torch.zeros(len(kept), num_tokens, dtype=torch.int64, device=self.device)
+        # Each context token but the first is predicted from the ones before it.
+        buffer = _TokenBuffer([context[1:] for context in kept], self.device) if values else None
+        backend = self.sdpa_backend
+        pin = sdpa_kernel(getattr(SDPBackend, backend)) if backend else nullcontext()
+        with _eval_mode(self.model), pin:
+            for batch in self._batches(order, lengths):
+                # Left-padded, so every row's next token comes from its last position.
+                width = max(len(kept[i]) for i in batch)
+                padding = [width - len(kept[i]) for i in batch]
+                input_ids = [[0] * pad + kept[i] for pad, i in zip(padding, batch, strict=True)]
+                mask = torch.tensor([[0] * pad + [1] * (width - pad) for pad in padding])
+                positions = (mask.cumsum(-1) - 1).clamp(min=0)
+                mask, positions = mask.to(self.device), positions.to(self.device)
+                index = torch.tensor(batch).to(self.device, non_blocking=True)
+                step_ids = torch.tensor(input_ids).to(self.device)
+                output = self.model(
+                    input_ids=step_ids,
+                    attention_mask=mask,
+                    position_ids=positions,
+                    use_cache=decodes,
+                    logits_to_keep=0 if values else 1,
+                )
+                # Every position but the last predicts the context's next token, so a batch of
+                # one-token contexts has no values.
+                if buffer is not None and width > 1:
+                    targets = step_ids[:, 1:].to(output.logits.device)
+                    logprob, _, stats = _target_logprobs(output.logits[:, :-1], targets, True)
+                    assert stats is not None  # asked for
+                    stats["logprob"] = logprob
+                    buffer.write(batch, [width - 1] * len(batch), stats)
+                if not decodes:
+                    continue
+
+                for step in range(num_tokens):
+                    step_ids = output.logits[:, -1].argmax(-1, keepdim=True)
+                    greedy[index, step] = step_ids[:, 0].to(self.device)
+                    if step == num_tokens - 1:
+                        break
+                    # The next input is the token just written, one position on.
+                    mask = torch.cat([mask, mask.new_ones(len(batch), 1)], dim=-1)
+                    positions = positions[:, -1:] + 1
+                    output = self.model(
+                        input_ids=step_ids,
+                        attention_mask=mask,
+                        position_ids=positions,
+                        past_key_values=output.past_key_values,
+                        use_cache=True,
+                        logits_to_keep=1,
+                    )
+
+        return ContextScores(
+            greedy=greedy if decodes else None,
+            values=buffer.values() if buffer is not None else None,
+        )
+
+    def _logprobs(
+        self, encoded: Sequence[Encoded], tokens: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor, TokenValues | None]:
+        """Each encoded request's summed continuation log-probability (FP32) and whether its continuation is the greedy one, in order on the model's device, scored longest first in batches of at most `batch_tokens` padded tokens, and with `tokens` each continuation's per-token values."""
         # The model's input is the window without its last token, the window being at most
         # `max_length + 1` tokens (see `loglikelihood`).
         input_lengths = [
@@ -728,6 +823,10 @@ class ScoringModel:
 
         logprob = torch.zeros(len(encoded), dtype=torch.float32, device=self.device)
         is_greedy = torch.zeros(len(encoded), dtype=torch.bool, device=self.device)
+        # A continuation is never cut, so its tokens are its own.
+        values = None
+        if tokens:
+            values = _TokenBuffer([continuation for _, continuation in encoded], self.device)
         # Pinned to one kernel so BF16 scores repeat run to run: left to choose, PyTorch runs
         # cuDNN attention on some padded batches, and its results vary (023.D1, 023.D2). No
         # fallback: a model the kernel can't run fails here rather than mix kernels.
@@ -739,9 +838,14 @@ class ScoringModel:
                 # `non_blocking` on these small CPU tensors: the copy is staged at once and the
                 # host never waits for GPU work already queued.
                 index = torch.tensor(batch).to(self.device, non_blocking=True)
-                logprob[index], is_greedy[index] = self._score([encoded[i] for i in batch])
+                scored = self._score([encoded[i] for i in batch], tokens)
+                logprob[index], is_greedy[index] = scored.logprob, scored.is_greedy
+                if values is not None and scored.values is not None:
+                    # Right-aligned like the kept logits: a continuation fills its last columns.
+                    width = scored.values["logprob"].shape[1]
+                    values.write(batch, [width] * len(batch), scored.values)
 
-        return logprob, is_greedy
+        return logprob, is_greedy, values.values() if values is not None else None
 
     def encode_requests(self, requests: Sequence[Request]) -> list[Encoded]:
         """
@@ -825,8 +929,8 @@ class ScoringModel:
         if batch:
             yield batch
 
-    def _score(self, encoded: list[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
-        """One batch's summed continuation log-probabilities, and whether each continuation is the greedy one."""
+    def _score(self, encoded: list[Encoded], values: bool = False) -> _BatchScores:
+        """One batch's summed continuation log-probabilities, whether each continuation is the greedy one, and with `values` the per-token values at every kept position."""
         batch = _pad_batch(encoded, self.max_length)
         device = self.device
 
@@ -849,15 +953,77 @@ class ScoringModel:
         # With weights on several devices, the logits come out on the last one.
         targets = batch.targets.to(logits.device, non_blocking=True)
         scored = batch.scored.to(logits.device, non_blocking=True)
-        token_logprob, token_is_argmax = _target_logprobs(logits, targets)
+        token_logprob, token_is_argmax, stats = _target_logprobs(logits, targets, values)
 
         # `where`, not a product: logits at padding positions may not be finite.
         logprob = token_logprob.where(scored, 0.0).sum(-1)
         # Greedy only if every continuation token is the argmax, as OLMES's `is_greedy`
         # (`oe_eval/models/eleuther_huggingface.py`). Positions before the continuation don't count.
         is_greedy = (token_is_argmax | ~scored).all(-1)
+        if stats is not None:
+            stats = {name: value.to(device, non_blocking=True) for name, value in stats.items()}
+            stats["logprob"] = token_logprob.to(device, non_blocking=True)
 
-        return logprob.to(device, non_blocking=True), is_greedy.to(device, non_blocking=True)
+        return _BatchScores(
+            logprob.to(device, non_blocking=True), is_greedy.to(device, non_blocking=True), stats
+        )
+
+
+class _BatchScores(NamedTuple):
+    """What `ScoringModel._score` returns for one batch, on the model's device."""
+
+    # float32 `[rows]`: each continuation's summed log-probability.
+    logprob: torch.Tensor
+    # bool `[rows]`: whether each continuation is the greedy one.
+    is_greedy: torch.Tensor
+    # Each per-token value of `TokenValues` but the ids, `[rows, kept positions]`, if asked for.
+    values: dict[str, torch.Tensor] | None
+
+
+class _TokenBuffer:
+    """Per-token values of many token sequences, filled batch by batch into flat arrays on the device, a sequence's tokens one after another. One slot past the end takes what the columns of other tokens write, so placing a batch's values never waits for the GPU."""
+
+    DTYPES: ClassVar[dict[str, torch.dtype]] = {
+        "logprob": torch.float32,
+        "rank": torch.int64,
+        "entropy": torch.float32,
+        "top1_logprob": torch.float32,
+        "logprob_std": torch.float32,
+    }
+
+    def __init__(self, token_ids: list[list[int]], device: torch.device) -> None:
+        self.lengths = [len(ids) for ids in token_ids]
+        self.starts = [0, *itertools.accumulate(self.lengths)]
+        self.token_ids = torch.tensor(
+            list(itertools.chain.from_iterable(token_ids)), dtype=torch.int64
+        )
+        self.arrays = {
+            name: torch.zeros(self.starts[-1] + 1, dtype=dtype, device=device)
+            for name, dtype in self.DTYPES.items()
+        }
+
+    def write(self, batch: list[int], ends: list[int], values: dict[str, torch.Tensor]) -> None:
+        """Copies each sequence of `batch` from its row of `values`, the columns that end at `ends[row]`."""
+        if not any(self.lengths[i] for i in batch):
+            return
+        width = values["logprob"].shape[1]
+        spare = self.starts[-1]
+        index = []
+        for i, end in zip(batch, ends, strict=True):
+            columns = [spare] * width
+            columns[end - self.lengths[i] : end] = range(self.starts[i], self.starts[i + 1])
+            index.append(columns)
+        index = torch.tensor(index).to(values["logprob"].device, non_blocking=True)
+        for name, array in self.arrays.items():
+            array[index] = values[name]
+
+    def values(self) -> TokenValues:
+        """The filled values, without the spare slot."""
+        return TokenValues(
+            lengths=tuple(self.lengths),
+            token_ids=self.token_ids,
+            **{name: array[:-1] for name, array in self.arrays.items()},
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -916,25 +1082,47 @@ def _pad_batch(encoded: list[Encoded], max_length: int) -> _PaddedBatch:
 
 
 def _target_logprobs(
-    logits: torch.Tensor, targets: torch.Tensor, chunk_positions: int = 4096
-) -> tuple[torch.Tensor, torch.Tensor]:
+    logits: torch.Tensor, targets: torch.Tensor, values: bool = False, chunk_positions: int = 4096
+) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor] | None]:
     """
-    The FP32 log-softmax of `logits` `[rows, positions, vocab]`, in any dtype, at the int64 `targets` `[rows, positions]`, and whether each target is its position's argmax, the first on a tie.
+    The FP32 log-softmax of `logits` `[rows, positions, vocab]`, in any dtype, at the int64 `targets` `[rows, positions]`, and whether each target is its position's argmax, the first on a tie. With `values`, also each target's rank and each position's entropy, top-1 log-probability and standard deviation of the log-probability, by name.
 
-    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). FP32 here is our choice, so BF16 rounding of the normalizer doesn't move scores, and the argmax is taken over the FP32 logits, which the normalizer doesn't reorder; in BF16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so an FP32 copy of all of it would double peak memory: rows are converted a few at a time, at most `chunk_positions` positions (rows times positions per row) and at least one row, about 1.6 GB in FP32 for a 100k vocabulary.
+    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). FP32 here is our choice, so BF16 rounding of the normalizer doesn't move scores, and the argmax is taken over the FP32 logits, which the normalizer doesn't reorder; in BF16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so an FP32 copy of all of it would double peak memory: rows are converted a few at a time, at most `chunk_positions` positions (rows times positions per row) and at least one row, about 1.6 GB in FP32 for a 100k vocabulary. The values take about four more such copies at a time. The chunks are the same with or without them, so asking for them can't change a reduction's order, and with it a score's last bit.
     """
     rows_per_chunk = max(1, chunk_positions // logits.shape[1])
     token_logprob = torch.empty(targets.shape, dtype=torch.float32, device=logits.device)
     token_is_argmax = torch.empty(targets.shape, dtype=torch.bool, device=logits.device)
+    stats = None
+    if values:
+        stats = {
+            name: torch.empty(targets.shape, dtype=dtype, device=logits.device)
+            for name, dtype in _TokenBuffer.DTYPES.items()
+            if name != "logprob"
+        }
 
     for start in range(0, len(logits), rows_per_chunk):
         rows = slice(start, start + rows_per_chunk)
         chunk = logits[rows].float()
         target_logits = chunk.gather(-1, targets[rows, :, None]).squeeze(-1)
-        token_logprob[rows] = target_logits - chunk.logsumexp(-1)
+        normalizer = chunk.logsumexp(-1)
+        token_logprob[rows] = target_logits - normalizer
         token_is_argmax[rows] = chunk.argmax(-1) == targets[rows]
+        if stats is None:
+            continue
 
-    return token_logprob, token_is_argmax
+        # Min-K%++'s mu and sigma are the mean and standard deviation of log p under p itself
+        # (Zhang et al. 2024, arXiv 2404.02936, eq. 2); mu is minus the entropy. A token of
+        # probability 0 adds nothing, where `0 * -inf` would be NaN.
+        logprobs = chunk - normalizer[..., None]
+        probs = logprobs.exp()
+        entropy = -torch.where(probs > 0, probs * logprobs, 0.0).sum(-1)
+        deviation = (logprobs + entropy[..., None]).square()
+        stats["entropy"][rows] = entropy
+        stats["logprob_std"][rows] = torch.where(probs > 0, probs * deviation, 0.0).sum(-1).sqrt()
+        stats["top1_logprob"][rows] = chunk.amax(-1) - normalizer
+        stats["rank"][rows] = (chunk > target_logits[..., None]).sum(-1) + 1
+
+    return token_logprob, token_is_argmax, stats
 
 
 @contextmanager

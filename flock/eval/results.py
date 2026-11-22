@@ -2,11 +2,12 @@
 
 import dataclasses
 import hashlib
+import itertools
 import json
 import math
 import os
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     import torch
 
     from flock.eval.metrics import ChoiceScores
-    from flock.eval.requests import Scores
+    from flock.eval.requests import ContextScores, Scores
     from flock.eval.tasks.base import MCRequests
     from flock.eval.tasks.perplexity import TextDoc
 
@@ -200,6 +201,102 @@ def write_predictions(
     # Built before the file is created, so a failed check leaves no empty file to block a rerun.
     rows = [{"prompt": prompt}, *prediction_rows(requests, scores, correct, pick)]
     _write_rows(path, rows, mode=0o600 if private else 0o666)
+
+
+def write_tokens(
+    path: Path,
+    requests: MCRequests,
+    scores: Scores,
+    contexts: ContextScores | None = None,
+    private: bool = False,
+) -> None:
+    """
+    Writes a multiple-choice task's per-token values to `path`, a Parquet file beside its predictions, creating its directory if needed. With `private`, the file is readable by its owner only: token ids of a private dataset are its text.
+
+    Each row is one token sequence of one doc: its `id`, the `choice` it belongs to, its `part` and `token_ids`, and per token its `logprob`, `rank`, `entropy`, `top1_logprob` and `logprob_std` (see [`~eval.requests.TokenValues`]). Every doc has one `continuation` row per choice, from `scores.continuation_tokens`. From `contexts`, each of a doc's distinct contexts has, under its first choice, a `greedy` row with the tokens greedy decoding writes after it and no values, where the model decodes, and a `context` row with its tokens' values, where they were asked for. The rows of each part follow doc order.
+
+    Args:
+        path (`Path`):
+            The file to write.
+        requests (`MCRequests`):
+            The scored docs and their requests.
+        scores (`Scores`):
+            The requests' scores, with `continuation_tokens`.
+        contexts (`ContextScores`, *optional*):
+            What [`~eval.model.ScoringModel.score_contexts`] read from the contexts of `requests.context_requests`, in that order.
+        private (`bool`, *optional*, defaults to `False`):
+            Whether the task's dataset is private.
+
+    Raises:
+        `ValueError`: if `scores` has no `continuation_tokens`.
+        `FileExistsError`: if `path` exists, so two runs never write one file.
+    """
+    # Imported here: only writing or reading per-token values needs it.
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if scores.continuation_tokens is None:
+        raise ValueError("the scores have no continuation_tokens to write")
+    # Each conditional request's doc and choice; the unconditional ones aren't written.
+    doc_of, choice_of = [], []
+    for doc in requests.docs:
+        for choice in range(len(doc.choices)):
+            doc_of.append(doc.id)
+            choice_of.append(choice)
+    firsts = requests.context_requests
+    value_names = ("logprob", "rank", "entropy", "top1_logprob", "logprob_std")
+    schema = pa.schema(
+        [
+            ("id", pa.string()),
+            ("choice", pa.int32()),
+            ("part", pa.string()),
+            ("token_ids", pa.list_(pa.int32())),
+            ("logprob", pa.list_(pa.float32())),
+            # Token ids and ranks fit 32 bits, as a vocabulary's size does.
+            ("rank", pa.list_(pa.int32())),
+            ("entropy", pa.list_(pa.float32())),
+            ("top1_logprob", pa.list_(pa.float32())),
+            ("logprob_std", pa.list_(pa.float32())),
+        ]
+    )
+
+    # The conditional requests come first, so their tokens are the arrays' first ones; a
+    # context's sequences follow `firsts`.
+    parts = [("continuation", range(len(doc_of)), scores.continuation_tokens)]
+    if contexts is not None and contexts.values is not None:
+        parts.append(("context", firsts, contexts.values))
+    tables = []
+    for part, selected, values in parts:
+        offsets = pa.array([0, *itertools.accumulate(values.lengths[: len(selected)])], pa.int32())
+        size = offsets[-1].as_py()
+        columns = {}
+        # One host copy per array.
+        for name in ("token_ids", *value_names):
+            flat = getattr(values, name)[:size].cpu().numpy()
+            columns[name] = pa.ListArray.from_arrays(
+                offsets, pa.array(flat, schema.field(name).type.value_type)
+            )
+        rows = {"id": [doc_of[i] for i in selected], "choice": [choice_of[i] for i in selected]}
+        tables.append(pa.table({**rows, "part": [part] * len(selected), **columns}, schema=schema))
+    if contexts is not None and contexts.greedy is not None:
+        written = contexts.greedy.cpu().numpy()
+        offsets = pa.array(range(0, written.size + 1, written.shape[1]), pa.int32())
+        greedy = {
+            "id": [doc_of[i] for i in firsts],
+            "choice": [choice_of[i] for i in firsts],
+            "part": ["greedy"] * len(firsts),
+            "token_ids": pa.ListArray.from_arrays(offsets, pa.array(written.ravel(), pa.int32())),
+        }
+        # Decoded tokens have no values of their own here.
+        for name in value_names:
+            greedy[name] = pa.nulls(len(firsts), schema.field(name).type)
+        tables.append(pa.table(greedy, schema=schema))
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Created with its mode, as the predictions file is.
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if private else 0o666)
+    with open(descriptor, "wb") as f:
+        pq.write_table(pa.concat_tables(tables), f, compression="zstd")
 
 
 def write_perplexity_predictions(
@@ -384,6 +481,8 @@ class WrittenResults:
             Each suite's score.
         read_file (`Callable[[str], str | None]`):
             Reads one of the run's files by its name in the folder or on the run, such as `predictions/arc_easy.jsonl`, or returns `None` if there is no such file.
+        read_bytes (`Callable[[str], bytes | None]`, *optional*):
+            Reads a file as `read_file` does, as bytes, for the per-token values. Without it, [`tokens`] reads none.
     """
 
     source: str
@@ -392,6 +491,28 @@ class WrittenResults:
     tasks: list[TaskResult]
     suites: list[SuiteResult]
     read_file: Callable[[str], str | None]
+    read_bytes: Callable[[str], bytes | None] | None = None
+
+    def tokens(self, task: str, ids: Collection[str] | None = None) -> list[dict[str, Any]] | None:
+        """
+        Returns the per-token rows of `task`'s docs, or of those in `ids`, as [`write_tokens`] wrote them, or `None` if the run has none for the task: it was scored before schema 12, without them, or this reader has no `read_bytes`. Read on demand, one task at a time, as a page shows one doc. On a tracker run, a task on a private dataset is read from under `private/`.
+
+        Raises:
+            `ValueError`: if `task` isn't a single file name.
+        """
+        # Imported here: a results file reads without it.
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        name = tokens_name(task)
+        on_run = self.source.startswith("run:")
+        if on_run and any(t.task == task and t.dataset.private for t in self.tasks):
+            name = f"private/{name}"
+        data = self.read_bytes(name) if self.read_bytes is not None else None
+        if data is None:
+            return None
+        chosen = [("id", "in", sorted(ids))] if ids is not None else None
+        return pq.read_table(pa.BufferReader(data), filters=chosen).to_pylist()
 
     def predictions(self, task: str) -> list[dict[str, Any]] | None:
         """
@@ -420,9 +541,14 @@ class WrittenResults:
         return rows
 
     @classmethod
-    def read(cls, source: str, read_file: Callable[[str], str | None]) -> WrittenResults:
+    def read(
+        cls,
+        source: str,
+        read_file: Callable[[str], str | None],
+        read_bytes: Callable[[str], bytes | None] | None = None,
+    ) -> WrittenResults:
         """
-        Reads a written run's `results.json` with `read_file`, which reads one of the run's files by name. [`read_results`] calls it for a folder or a tracker run; the Flock app calls it with its own store of run files.
+        Reads a written run's `results.json` with `read_file`, which reads one of the run's files by name, keeping `read_bytes` to read its per-token values. [`read_results`] calls it for a folder or a tracker run; the Flock app calls it with its own store of run files.
 
         Raises:
             `FileNotFoundError`: if `read_file` finds no `results.json`.
@@ -468,6 +594,7 @@ class WrittenResults:
                 tasks=tasks,
                 suites=[SuiteResult(**entry) for entry in data["suites"]],
                 read_file=read_file,
+                read_bytes=read_bytes,
             )
         # Not JSON, a missing key, a field these types don't have, or a value of the wrong type.
         except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
@@ -490,16 +617,21 @@ def read_results(source: str) -> WrittenResults:
     if source.startswith("run:"):
         # Imported here so reading a folder doesn't import wandb.
         from flock.cli import credentials
-        from flock.eval.tracking import read_run_file
+        from flock.eval.tracking import read_run_bytes, read_run_file
 
         # Resolved once, so every file of the run comes from the server its results came from.
-        read_file = partial(
-            read_run_file, source.removeprefix("run:"), credential=credentials.resolve()
-        )
+        credential = credentials.resolve()
+        run = source.removeprefix("run:")
+        read_file = partial(read_run_file, run, credential=credential)
+        read_bytes = partial(read_run_bytes, run, credential=credential)
     else:
-        read_file = partial(_read_folder_file, Path(source))
+        read_bytes = partial(_read_folder_bytes, Path(source))
 
-    return WrittenResults.read(source, read_file)
+        def read_file(name: str) -> str | None:
+            data = read_bytes(name)
+            return data.decode() if data is not None else None
+
+    return WrittenResults.read(source, read_file, read_bytes)
 
 
 def _read_task(entry: dict[str, Any], schema_version: int) -> TaskResult:
@@ -558,7 +690,17 @@ def predictions_name(task: str) -> str:
     return f"predictions/{task}.jsonl"
 
 
-def _read_folder_file(folder: Path, name: str) -> str | None:
+def tokens_name(task: str) -> str:
+    """
+    Returns the name of `task`'s per-token values in a run's folder and on its tracker run, `predictions/<task>.tokens.parquet`, beside its predictions.
+
+    Raises:
+        `ValueError`: as [`predictions_name`].
+    """
+    return predictions_name(task).removesuffix(".jsonl") + ".tokens.parquet"
+
+
+def _read_folder_bytes(folder: Path, name: str) -> bytes | None:
     """Reads `folder/name`, or returns `None` if it doesn't exist. A name that leaves the folder, and a link on the way, are refused, so a run's files come from its own folder."""
     if not stays_inside(name):
         raise ValueError(f"{name!r} isn't a file name inside {folder}")
@@ -567,4 +709,4 @@ def _read_folder_file(folder: Path, name: str) -> str | None:
         path = path / part
         if path.is_symlink():
             raise ValueError(f"{path} is a link; a run's files must be in its folder")
-    return path.read_text(encoding="utf-8") if path.is_file() else None
+    return path.read_bytes() if path.is_file() else None
