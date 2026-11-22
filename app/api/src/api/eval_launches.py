@@ -63,9 +63,10 @@ async def catalogue(org: OrgDep, store: StoreDep) -> Response:
 
 
 @router.get("")
-async def list_launches(org: OrgDep, store: StoreDep) -> Response:
-    """The org's launches of the last month, newest first."""
-    jobs = await store.eval_launches.recent(org)
+async def list_launches(org: OrgDep, store: StoreDep, project: str | None = None) -> Response:
+    """The org's running launches and those of the last month, newest first, at most 100; only
+    those of ``project`` if given."""
+    jobs = await store.eval_launches.recent(org, project)
     return JSONResponse({"launches": await with_users(store, jobs)})
 
 
@@ -108,6 +109,7 @@ async def get_launch(org: OrgDep, pk: int, store: StoreDep) -> Response:
 
 @router.delete("/{pk}")
 async def cancel_launch(org: OrgDep, pk: int, user: UserDep, store: StoreDep) -> Response:
-    """Cancel a running launch (who started it, or an admin). Its GPU stops at once."""
+    """Cancel a running launch (who started it, or an admin). Its GPU stops at once. 409 while
+    its call is still being made."""
     job = await store.eval_launches.cancel(org, pk, user)
     return JSONResponse((await with_users(store, [job]))[0])

@@ -21,41 +21,47 @@ from pathlib import Path
 
 import modal
 
-ROOT = Path(__file__).parents[2]
 REPO = "/repo"
 # The instrument's settings (D112, D121): BF16 weights at 16384 batch tokens. Not the launcher's
 # to choose, so a launched number is scored as the bank's are.
 DTYPE = "bfloat16"
 BATCH_TOKENS = 16384
 
-# Built as tests/modal_gpu.py builds its image: dependencies in their own layer, keyed on the
-# lockfile and the workspace's pyproject files, so a code-only change reuses the cached layer.
-image = (
-    modal.Image.debian_slim(python_version="3.14")
-    .pip_install("uv==0.12.17")
-    .env({"UV_PROJECT_ENVIRONMENT": "/venv", "UV_LINK_MODE": "copy"})
-    .workdir(REPO)
-    .add_local_file(ROOT / "pyproject.toml", f"{REPO}/pyproject.toml", copy=True)
-    .add_local_file(ROOT / "uv.lock", f"{REPO}/uv.lock", copy=True)
-)
+image = modal.Image.debian_slim(python_version="3.14")
+# Built only where it's deployed from: in the container this file sits alone in /root.
 if modal.is_local():
-    members = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["uv"]["workspace"]
-    for member in members["members"]:
-        image = image.add_local_file(
-            ROOT / member / "pyproject.toml", f"{REPO}/{member}/pyproject.toml", copy=True
-        )
     from flock.eval.provenance import flock_commit
 
+    root = Path(__file__).resolve().parents[2]
+    # Only what git tracks, so an ignored file (app/.env, flock-files/) never reaches Modal, and
+    # not the web app, which scoring doesn't need. Each tracked file's folders are kept too.
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=root, capture_output=True, text=True, check=True
+    )
+    tracked = set()
+    for name in listed.stdout.split("\0"):
+        if name and not name.startswith("app/web/"):
+            tracked.update(str(parent) for parent in Path(name).parents)
+            tracked.add(name)
+    members = tomllib.loads((root / "pyproject.toml").read_text())["tool"]["uv"]["workspace"]
+    # Built as tests/modal_gpu.py builds its image: dependencies in their own layer, keyed on
+    # the lockfile and the workspace's pyproject files, so a code-only change reuses it.
+    image = (
+        image.pip_install("uv==0.12.17")
+        .env({"UV_PROJECT_ENVIRONMENT": "/venv", "UV_LINK_MODE": "copy"})
+        .workdir(REPO)
+        .add_local_file(root / "pyproject.toml", f"{REPO}/pyproject.toml", copy=True)
+        .add_local_file(root / "uv.lock", f"{REPO}/uv.lock", copy=True)
+    )
+    for member in members["members"]:
+        image = image.add_local_file(
+            root / member / "pyproject.toml", f"{REPO}/{member}/pyproject.toml", copy=True
+        )
     # The image has no .git, so the results record the commit deployed, "-dirty" if it had
     # uncommitted changes under flock/.
     image = (
         image.run_commands("uv sync --all-packages --frozen --no-install-workspace")
-        .add_local_dir(
-            ROOT,
-            REPO,
-            copy=True,
-            ignore=["**/.git", "**/.venv", "**/node_modules", "**/__pycache__", "app/web"],
-        )
+        .add_local_dir(root, REPO, copy=True, ignore=lambda path: str(path) not in tracked)
         .run_commands("uv sync --all-packages --frozen")
         .env({"FLOCK_COMMIT": flock_commit()})
     )

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -243,8 +244,18 @@ def test_the_monthly_cap_counts_running_launches_at_their_cap(
         first["id"],
     )
     assert api.post(LAUNCHES, body()).status == 202
-    # Launches of earlier months don't count.
+
+    # A running launch counts at its cap whenever it started, and an ended one that ran into
+    # this month at its whole time; launches that ended before the month don't count.
     sql(server, "UPDATE eval_launches SET started_at = now() - interval '40 days'")
+    assert api.post(LAUNCHES, body()).status == 409
+    for job in api.get(LAUNCHES).json()["launches"]:
+        api.delete(f"{LAUNCHES}/{job['id']}")
+    sql(
+        server,
+        "UPDATE eval_launches SET started_at = now() - interval '40 days', "
+        "finished_at = now() - interval '35 days'",
+    )
     assert api.post(LAUNCHES, body()).status == 202
 
 
@@ -322,15 +333,126 @@ def test_the_key_never_reaches_the_database_responses_or_logs(
     assert key not in caplog.text
 
 
-def test_deleting_the_org_cancels_its_launches(
-    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+def test_deleting_the_org_stops_its_launches_until_modal_confirms(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
 ) -> None:
     server, modal = make_server()
+    api = server.client()
+    pk = api.post(LAUNCHES, body()).json()["id"]
+    # A refused delete (an active run) leaves its launches running.
+    api.create_run("p", "active")
     org = server.call(server.store.find_org("flock"))
-    server.client().post(LAUNCHES, body())
+    with pytest.raises(Exception, match="active"):
+        server.call(server.store.delete_org(org))
+    assert modal.cancelled == []
+
+    # Modal down at first: the watcher keeps asking, and ends the launch once it's cancelled.
+    failing = modal.cancel
+
+    async def down(call_id: str) -> None:
+        raise RuntimeError("Modal is down")
+
+    modal.cancel = down  # type: ignore[method-assign]
     server.call(server.store.delete_org(org, force=True))
+    wait_for(
+        lambda: sql(server, "SELECT heartbeat_at > now() - interval '1 second' FROM eval_launches")[
+            0
+        ][0]
+    )
+    assert sql(server, "SELECT state FROM eval_launches")[0][0] == "running"
+    modal.cancel = failing  # type: ignore[method-assign]
+    wait_for(lambda: modal.cancelled == ["fc-0"])
+    wait_for(lambda: sql(server, "SELECT state FROM eval_launches")[0][0] == "cancelled")
+    assert sql(server, "SELECT count(*) FROM api_keys WHERE name LIKE 'eval launch%'")[0][0] == 0
+    # The row outlives the org's purge, so the month's spend still counts it.
+    server.call(server.store.flush())
+    assert sql(server, "SELECT pk FROM eval_launches")[0][0] == pk
+
+
+def test_a_cancel_waits_for_the_call_and_a_slow_spawn_taken_over_is_stopped(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
+) -> None:
+    server, modal = make_server()
+    api = server.client()
+    gate = threading.Event()
+    spawn = modal.spawn
+
+    async def slow(timeout: int, env: dict[str, str | None], **kwargs: Any) -> str:
+        while not gate.is_set():
+            await asyncio.sleep(0.02)
+        return await spawn(timeout, env, **kwargs)
+
+    modal.spawn = slow  # type: ignore[method-assign]
+    started: list[Any] = []
+    thread = threading.Thread(target=lambda: started.append(api.post(LAUNCHES, body())))
+    thread.start()
+    pk = wait_for(lambda: (r := sql(server, "SELECT pk FROM eval_launches")) and r[0][0])
+    refused = server.client().delete(f"{LAUNCHES}/{pk}")
+    assert refused.status == 409 and "still starting" in refused.json()["error"]
+
+    # Its replica looks gone: another ends the row, so the call made late is stopped at once.
+    sql(server, "UPDATE eval_launches SET heartbeat_at = now() - interval '1 hour'")
+    wait_for(lambda: sql(server, "SELECT state FROM eval_launches")[0][0] == "failed")
+    gate.set()
+    thread.join(10)
+    assert started[0].json()["state"] == "failed"
     assert modal.cancelled == ["fc-0"]
     assert sql(server, "SELECT count(*) FROM api_keys WHERE name LIKE 'eval launch%'")[0][0] == 0
+
+
+def test_a_project_lists_its_own_launches_and_every_running_one(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+) -> None:
+    server, _ = make_server()
+    api = server.client()
+    old = api.post(LAUNCHES, body(project="evals")).json()["id"]
+    api.post(LAUNCHES, body(project="other"))
+    sql(server, "UPDATE eval_launches SET started_at = now() - interval '90 days'")
+    listed = api.get(LAUNCHES, project="evals").json()["launches"]
+    assert [j["id"] for j in listed] == [old]  # running, so listed however old
+
+
+def test_a_key_made_before_its_row_named_it_is_deleted_with_the_launch(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
+) -> None:
+    server, modal = make_server()
+    api = server.client()
+    pk = api.post(LAUNCHES, body()).json()["id"]
+    sql(server, "UPDATE eval_launches SET api_key_pk = NULL")
+    modal.outcomes["fc-0"] = "abc1234"
+    wait_for(lambda: api.get(f"{LAUNCHES}/{pk}").json()["state"] == "finished")
+    assert (
+        server.call(server.store.accounts.api_key(modal.spawned[0]["env"]["WANDB_API_KEY"])) is None
+    )
+
+
+def test_the_modal_adapter_tells_a_poll_deadline_from_the_calls_own_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import modal
+
+    from app.api.src.core.eval_launches import Modal
+
+    raised: list[BaseException] = []
+
+    class Call:
+        class get:
+            @staticmethod
+            async def aio(timeout: float) -> str:
+                raise raised[0]
+
+    monkeypatch.setattr(modal.FunctionCall, "from_id", lambda call_id, client: Call())
+    adapter = Modal("ak", "as")
+    adapter._client = object()
+    # Still running: the poll's deadline, or Modal itself unavailable for a while.
+    for error in (TimeoutError(), modal.exception.ServiceError("unavailable")):
+        raised[:] = [error]
+        assert asyncio.run(adapter.wait("fc-0", 0.01)) is None
+    # The call's own end: its time limit, or what the worker raised.
+    for error in (modal.exception.FunctionTimeoutError("limit"), RuntimeError("not public")):
+        raised[:] = [error]
+        with pytest.raises(type(error)):
+            asyncio.run(adapter.wait("fc-0", 0.01))
 
 
 def test_the_worker_runs_only_suites_and_tasks_on_public_datasets() -> None:

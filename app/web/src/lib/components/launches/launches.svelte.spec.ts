@@ -155,15 +155,16 @@ describe('EvalLaunchRows', () => {
 	it('cancels a running launch of the viewer’s', async () => {
 		const calls = serve({
 			'/api/evals/acme/launches/7': () => launch({ state: 'cancelled', finished_at: now }),
-			'/api/evals/acme/launches': () => ({
-				launches: [launch(), launch({ id: 8, project: 'other', model: 'acme/elsewhere' })]
+			'/api/evals/acme/launches?project=bert': () => ({
+				launches: [launch()]
 			})
 		});
 		const list = new LaunchList('acme', 'bert');
 		const stop = list.watch();
 		render(EvalLaunchRows, { org: 'acme', project: 'bert', list, me: ME.id, admin: false });
 		await expect.element(screen.getByText('allenai/OLMo-2-0425-1B@0123456')).toBeVisible();
-		await expect.element(screen.getByText(/acme\/elsewhere/)).not.toBeInTheDocument();
+		// Flock filters by project before its limit, so the list asks for this project only.
+		expect(calls[0].url).toBe('/api/evals/acme/launches?project=bert');
 		await screen.getByRole('button', { name: 'Cancel' }).click();
 		await expect.element(screen.getByText('Cancelled')).toBeVisible();
 		expect(calls.at(-1)).toMatchObject({
@@ -175,7 +176,7 @@ describe('EvalLaunchRows', () => {
 
 	it('offers Cancel on someone else’s launch only to an admin', async () => {
 		serve({
-			'/api/evals/acme/launches': () => ({
+			'/api/evals/acme/launches?project=bert': () => ({
 				launches: [launch({ started_by: { ...ME, id: 9, name: 'Bo' } })]
 			})
 		});
@@ -194,7 +195,7 @@ describe('EvalLaunchRows', () => {
 
 	it('links a finished launch to its run, and says why one failed', async () => {
 		serve({
-			'/api/evals/acme/launches': () => ({
+			'/api/evals/acme/launches?project=bert': () => ({
 				launches: [
 					launch({ state: 'finished', finished_at: now, flock_commit: 'deadbeef' }),
 					launch({ id: 8, state: 'failed', finished_at: now, error: 'CUDA out of memory' })

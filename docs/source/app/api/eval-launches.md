@@ -8,9 +8,9 @@ Endpoints for launching evals on Modal from the dashboard, which the server foll
 |---|---|
 | `GET catalogue` | `{"suites": [...], "tasks": [...], "max_usd", "monthly_usd"}`: the suites and tasks a launch may run (every dataset of each is public), and the caps in US dollars. |
 | `POST` (the launches path itself) | Launches an eval. Answers 202 with the launch. See [Launching](#launching). |
-| `GET` (the launches path itself) | `{"launches": [...]}`: the organization's launches of the last 30 days, newest first, at most 100. |
+| `GET` (the launches path itself) | `{"launches": [...]}`: the organization's running launches and those of the last 30 days, newest first, at most 100. Add `?project=` for one project's. |
 | `GET {id}` | One launch. |
-| `DELETE {id}` | Cancels a running launch, and answers it. Only whoever launched it, or an admin, can cancel (403 otherwise). A launch that already ended is answered as it is. |
+| `DELETE {id}` | Cancels a running launch, and answers it. Only whoever launched it, or an admin, can cancel (403 otherwise). It answers 409 for the few seconds while Modal is still starting the call. A launch that already ended is answered as it is. |
 
 ## Launching[[launching]]
 

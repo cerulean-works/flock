@@ -44,12 +44,5 @@
 	<Button title="Launch an eval on a Modal H100" onclick={() => (open = true)}>
 		<FlaskConicalIcon /><span class="max-sm:sr-only">Launch eval</span>
 	</Button>
-	<EvalLaunchDialog
-		bind:open
-		{org}
-		{project}
-		{catalogue}
-		{catalogueError}
-		onstarted={started}
-	/>
+	<EvalLaunchDialog bind:open {org} {project} {catalogue} {catalogueError} onstarted={started} />
 {/if}

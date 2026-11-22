@@ -6,9 +6,11 @@
 -- `run` is the tracker run the worker logs to, named before it starts. `api_key_pk` is the wandb
 -- key made for this launch and deleted when it ends: the key itself is never stored. `cap_usd`
 -- and `usd_per_hour` are the cap and price at launch, which bound what it may cost.
+-- A purged org's launches stay, with no org, so the month's spend over the Modal workspace
+-- still counts them; a deleted org's running launches are stopped by the replica watching them.
 CREATE TABLE eval_launches (
     pk bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    org_pk bigint NOT NULL REFERENCES orgs ON DELETE CASCADE,
+    org_pk bigint REFERENCES orgs ON DELETE SET NULL,
     project text NOT NULL,
     model text NOT NULL,
     revision text NOT NULL,

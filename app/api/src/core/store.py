@@ -1815,7 +1815,6 @@ class Store:
         # Its import stops first: it would wait on the locks taken below.
         await self.imports.cancel(org)
         await self.hf_imports.cancel_org(org)
-        await self.eval_launches.cancel_org(org)
         now = time.time()
         async with self.db.pool.acquire() as conn, conn.transaction():
             await self._lock_org(conn, org, update=True)

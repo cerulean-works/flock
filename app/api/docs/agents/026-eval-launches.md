@@ -30,9 +30,11 @@ The numbering continues from 025 (D182 to D187).
   `eval_launch_usd_per_hour`. Modal bills one workspace, so the month is counted over every org.
 - **The per-launch cap is enforced by Modal,** as the call's `timeout` (cap over price, at most
   Modal's 24 hours). A launch can't overrun it, whatever happens to the server.
-- **The monthly count never undercounts.** A running launch counts at its full cap. An ended one
-  counts at its time from launch to end, which includes any wait for a GPU that Modal doesn't
-  bill. A launch is refused (409) when its cap doesn't fit under what is left.
+- **The monthly count never undercounts.** A running launch counts at its full cap, whenever it
+  started. An ended one counts at its time from launch to end, which includes any wait for a GPU
+  that Modal doesn't bill, in every month it ran in. A purged org's launches stay as rows with no
+  org (`ON DELETE SET NULL`), so they still count. A launch is refused (409) when its cap doesn't
+  fit under what is left.
 - **Launches are serialized** by a transaction-scoped advisory lock around the count and the
   insert, so two launches can't both take the month's last dollars.
 - **No queue.** At the defaults the monthly cap allows 12 launches at once, and Modal queues GPU
@@ -59,6 +61,10 @@ The numbering continues from 025 (D182 to D187).
   image is built as `tests/modal_gpu.py` builds the GPU tests' image, from `uv.lock` and the
   workspace, and records `FLOCK_COMMIT` at deploy time (the image has no `.git`), so every
   launched run's provenance names the commit that scored it.
+- **Only tracked files go to Modal.** The image takes the files `git ls-files` lists, without the
+  web app, so an ignored file such as `app/.env` or `flock-files/` never leaves the machine it
+  is deployed from. Everything that reads the checkout runs only there (`modal.is_local()`): in
+  the container the file sits alone in `/root`.
 - Each function runs the same file again inside the workspace's environment (`uv run`), as the
   GPU tests run pytest, because Modal runs functions with the image's own Python.
 - **The instrument is not the launcher's choice:** BF16 weights at 16,384 batch tokens, the eval
@@ -75,7 +81,8 @@ The numbering continues from 025 (D182 to D187).
   the call in its environment with the tracker's URL, the org and the run's name. A wandb key
   reaches tracking only (D72): the REST API and the S3 key exchange refuse it. It is deleted
   when the launch ends, whoever ends it (the trigger of migration 0013 drops it from every
-  replica's cache), so it works only while the launch runs.
+  replica's cache), so it works only while the launch runs. It is deleted by its name as well,
+  so a key made just before its replica stopped, before the row named it, goes too.
 - **Never stored.** The row keeps the key's `pk` only. The key is not in the database, a
   response or a log line, and the launcher can see it in their key list while it lives.
 - **The run is named before it starts** (`eval-launch-{id}`, as `WANDB_RUN_ID`), so the launch
@@ -93,10 +100,16 @@ The numbering continues from 025 (D182 to D187).
   than a minute (`FOR UPDATE SKIP LOCKED`, so one replica wins), and a launch cut short between
   its row and its call ends `failed` there.
 - **Cancel** (its launcher or an org admin, as D124) cancels the call with its containers, so the
-  GPU stops being billed at once, then ends the row and deletes the key. Deleting the org does
-  the same for its running launches.
-- **A connection error to Modal is not a failure.** The watcher asks again at the next heartbeat;
-  only the call's own error fails the launch.
+  GPU stops being billed at once, then ends the row and deletes the key. While the call is still
+  being made the row has no call id, so a cancel then answers 409 instead of ending a row whose
+  call would run unwatched. A call made after its row was taken over and ended is cancelled by
+  the replica that made it.
+- **Deleting the org** doesn't cancel anything itself, so a refused delete stops nothing. The
+  replica watching each of its launches sees the org's `deleted_at` at its next heartbeat and
+  cancels the call, retrying every heartbeat until Modal confirms.
+- **Only the call's own end ends a launch.** A poll's deadline is Python's `TimeoutError`;
+  Modal's `FunctionTimeoutError` is the call's time limit and fails it. Modal's own trouble
+  (`ConnectionError`, `ServiceError`, `InternalError`) is retried at the next heartbeat.
 
 ---
 
