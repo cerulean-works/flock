@@ -184,6 +184,8 @@ def evaluate(config: EvalConfig) -> Results:
         dtype=model.dtype,
         batch_tokens=model.batch_tokens,
         max_length=model.max_length,
+        tokenizer=model.tokenizer_name,
+        tokenizer_hash=model.tokenizer_hash,
         add_bos=model.add_bos,
         attention=model.attention,
         sdpa_backend=model.sdpa_backend,
@@ -472,7 +474,9 @@ def _score_perplexity(
         perplexity = math.inf
 
     if predictions is not None:
-        write_perplexity_predictions(predictions, docs, scores, num_bytes, task.window)
+        write_perplexity_predictions(
+            predictions, docs, scores, num_bytes, task.window, task.dataset.subset, task.domain
+        )
 
     return TaskResult(
         task=task.name,

@@ -42,6 +42,10 @@ class Provenance:
             The forward-pass budget in padded tokens.
         max_length (`int`):
             The model's input limit in tokens. Longer inputs lost tokens from the left.
+        tokenizer (`str`, *optional*):
+            Where the tokenizer was loaded from: a Hugging Face repo or folder, or a SentencePiece model file. `None` in results files written before it was added.
+        tokenizer_hash (`str`, *optional*):
+            The sha256 of the tokenizer's whole definition (see [`~eval.model.ScoringModel.tokenizer_hash`]), which token ids in a run's files are meaningless without. `None` in results files written before it was added.
         add_bos (`bool`):
             Whether every non-empty context started with the tokenizer's BOS token. Results files written before it was added have no `add_bos`: none added one.
         attention (`str`):
@@ -67,6 +71,8 @@ class Provenance:
     dtype: str
     batch_tokens: int
     max_length: int
+    tokenizer: str | None = field(default=None, kw_only=True)
+    tokenizer_hash: str | None = field(default=None, kw_only=True)
     add_bos: bool
     attention: str
     sdpa_backend: str | None
@@ -94,6 +100,8 @@ class Provenance:
         model_org: str | None = None,
         model_project: str | None = None,
         model_path: str | None = None,
+        tokenizer: str | None = None,
+        tokenizer_hash: str | None = None,
     ) -> Provenance:
         """Collects provenance for a run on this machine, now."""
         import datasets
@@ -113,6 +121,8 @@ class Provenance:
             dtype=str(dtype).removeprefix("torch."),
             batch_tokens=batch_tokens,
             max_length=max_length,
+            tokenizer=tokenizer,
+            tokenizer_hash=tokenizer_hash,
             add_bos=add_bos,
             attention=attention,
             sdpa_backend=sdpa_backend,

@@ -558,6 +558,20 @@ class ScoringModel:
         return isinstance(self.tokenizer, SentencePieceTokenizer)
 
     @property
+    def tokenizer_name(self) -> str:
+        """Where the tokenizer was loaded from, its `name_or_path`: the repo or folder of a Hugging Face tokenizer, the model file of a [`~eval.tokenizer.SentencePieceTokenizer`]."""
+        return self.tokenizer.name_or_path
+
+    @property
+    def tokenizer_hash(self) -> str:
+        """The sha256 of the tokenizer's whole definition, so token ids written by a run can be checked against the tokenizer that made them: its `tokenizer.json` as the Tokenizers library serializes it, or the SentencePiece model's bytes."""
+        if isinstance(self.tokenizer, SentencePieceTokenizer):
+            data = self.tokenizer.processor.serialized_model_proto()
+        else:
+            data = self.tokenizer.backend_tokenizer.to_str().encode()
+        return hashlib.sha256(data).hexdigest()
+
+    @property
     def sdpa_backend(self) -> str | None:
         """The SDPA kernel scoring is pinned to, `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, else `None`: the CPU has no such kernel, and other attention never calls SDPA."""
         if self.device.type == "cuda" and self.attention == "sdpa":

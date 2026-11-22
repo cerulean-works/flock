@@ -20,6 +20,7 @@ from flock.eval import cli, run
 from flock.eval.metrics import ChoiceScores
 from flock.eval.model import ScoringModel
 from flock.eval.provenance import Provenance
+from flock.eval.requests import Request
 from flock.eval.results import Results, SuiteResult, prediction_rows, write_predictions
 from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import Choice, MCDoc, MCRequests, Suite, cloze
@@ -35,7 +36,6 @@ if TYPE_CHECKING:
     from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
 
     from flock.eval.model import Encoded, Scores
-    from flock.eval.requests import Request
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def test_evaluate_writes_results_and_predictions(offline_model: None, tmp_path: 
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 11
+    assert data["schema_version"] == 12
     assert data["provenance"]["model"] == "tiny@0"
     assert data["provenance"]["model_digest"] is None  # only a Flock version has one
     assert data["provenance"]["flock_commit"] == "abc123"
@@ -342,8 +342,10 @@ def test_prediction_rows_drop_padded_choices_and_carry_the_text(tmp_path: Path) 
             id="b", choices=(Choice("貓", " 跑"), Choice("狗", " 跑"), Choice("鳥", " 跑")), gold=0
         ),
     )
-    # Doc b is shown no example, so its row says which it saw.
-    requests = MCRequests(docs, (), "hash", False, "Pick one.\n\n", (shot,), ((0,), ()))
+    # Doc b is shown no example, so its row says which it saw. Each row's `prompt_hash` is its
+    # first request's context.
+    scored = tuple(Request(c.context, c.continuation) for doc in docs for c in doc.choices)
+    requests = MCRequests(docs, scored, "hash", False, "Pick one.\n\n", (shot,), ((0,), ()))
     counts = torch.tensor([[1, 2, 0], [3, 4, 5]])
     scores = ChoiceScores(
         logprob=-counts.float(),
@@ -374,6 +376,7 @@ def test_prediction_rows_drop_padded_choices_and_carry_the_text(tmp_path: Path) 
             "num_bytes": [21, 22],
             "is_greedy": [False, False],
             "tokens_cut": [31, 32],
+            "prompt_hash": hashlib.sha256(b"Question: ?\nAnswer:").hexdigest(),
         },
         {
             "id": "b",
@@ -390,6 +393,7 @@ def test_prediction_rows_drop_padded_choices_and_carry_the_text(tmp_path: Path) 
             "num_bytes": [23, 24, 25],
             "is_greedy": [False, True, True],
             "tokens_cut": [33, 34, 35],
+            "prompt_hash": hashlib.sha256("貓".encode()).hexdigest(),
         },
     ]
 

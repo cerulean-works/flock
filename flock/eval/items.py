@@ -15,6 +15,16 @@ ONE_RUN = ("wrong", "right", "all")
 CELLS = ("only_a", "only_b", "both_wrong", "both_right")
 # The accuracies that rank choices, each by its score in `metrics.ranking_scores`.
 RANKED = ("acc_raw", "acc_per_token", "acc_per_char", "acc_per_byte", "acc_uncond")
+# The fields a row has from schema 12 on that say where its doc comes from.
+SOURCE_FIELDS = (
+    "split",
+    "source_index",
+    "native_id",
+    "subject",
+    "meta",
+    "doc_hash",
+    "prompt_hash",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +77,8 @@ class Item:
             The index of the correct choice.
         runs (`list[Answer]`):
             Each run's answer, in the order the runs were given.
+        source (`dict[str, Any]`, *optional*):
+            Where the doc comes from, as the first run's row has it from schema 12 on: `split`, `source_index`, `doc_hash` and `prompt_hash`, and `native_id`, `subject` and `meta` where the task gives them. Empty for an older run.
     """
 
     task: str
@@ -77,6 +89,7 @@ class Item:
     choices: list[str]
     gold: int
     runs: list[Answer]
+    source: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Returns the item as plain JSON-ready data."""
@@ -283,16 +296,18 @@ def items(
                 )
             )
         if i in kept_set:
+            row = rows_of[0][i]
             found.append(
                 Item(
                     task=task,
                     metric=metric,
-                    id=rows_of[0][i]["id"],
+                    id=row["id"],
                     question=question,
                     contexts=contexts,
                     choices=choices,
                     gold=gold,
                     runs=answers,
+                    source={key: row[key] for key in SOURCE_FIELDS if key in row},
                 )
             )
 
