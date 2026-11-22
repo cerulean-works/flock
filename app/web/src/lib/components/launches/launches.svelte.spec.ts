@@ -174,6 +174,24 @@ describe('EvalLaunchRows', () => {
 		stop();
 	});
 
+	it('asks again after a failed first read, before any launch is known', async () => {
+		let reads = 0;
+		serve({
+			'/api/evals/acme/launches?project=bert': () =>
+				++reads === 1
+					? Response.json({ error: 'unavailable' }, { status: 503 })
+					: { launches: [launch()] }
+		});
+		const list = new LaunchList('acme', 'bert');
+		const stop = list.watch();
+		render(EvalLaunchRows, { org: 'acme', project: 'bert', list, me: ME.id, admin: false });
+		await expect
+			.element(screen.getByText('allenai/OLMo-2-0425-1B@0123456'), { timeout: 8000 })
+			.toBeVisible();
+		expect(reads).toBe(2);
+		stop();
+	});
+
 	it('offers Cancel on someone else’s launch only to an admin', async () => {
 		serve({
 			'/api/evals/acme/launches?project=bert': () => ({
