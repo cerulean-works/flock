@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     import torch
 
     from flock.eval.metrics import ChoiceScores
-    from flock.eval.requests import ContextScores, Scores
+    from flock.eval.requests import ContextScores, Scores, TokenValues
     from flock.eval.tasks.base import MCRequests
     from flock.eval.tasks.perplexity import TextDoc
 
@@ -297,6 +297,48 @@ def write_tokens(
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if private else 0o666)
     with open(descriptor, "wb") as f:
         pq.write_table(pa.concat_tables(tables), f, compression="zstd")
+
+
+def write_perplexity_tokens(
+    path: Path,
+    docs: Sequence[TextDoc],
+    values: TokenValues,
+    byte_ends: Sequence[Sequence[int]],
+    private: bool = False,
+) -> None:
+    """
+    Writes a perplexity task's per-token values to `path`, a Parquet file beside its predictions, creating its directory if needed: one `text` row per doc with its `id`, and per token its `byte_end` (from [`~eval.model.ScoringModel.byte_ends`]), `logprob` (its loss, negated), `rank`, `entropy`, `top1_logprob` and `logprob_std`. No token ids: they are the text, which a perplexity task's files never hold. With `private`, the file is readable by its owner only.
+
+    Raises:
+        `ValueError`: if `values` or `byte_ends` doesn't hold every doc's tokens.
+        `FileExistsError`: if `path` exists, so two runs never write one file.
+    """
+    # Imported here: only writing or reading per-token values needs it.
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    lengths = [len(ends) for ends in byte_ends]
+    if len(lengths) != len(docs) or tuple(lengths) != values.lengths:
+        raise ValueError(f"{len(docs)} docs but token values of {len(values.lengths)} texts")
+    offsets = pa.array([0, *itertools.accumulate(lengths)], pa.int32())
+    columns = {
+        "id": [doc.id for doc in docs],
+        "part": ["text"] * len(docs),
+        "byte_end": pa.ListArray.from_arrays(
+            offsets, pa.array(list(itertools.chain.from_iterable(byte_ends)), pa.int32())
+        ),
+    }
+    # One host copy per array; ranks fit 32 bits, as a vocabulary's size does.
+    for name in ("logprob", "rank", "entropy", "top1_logprob", "logprob_std"):
+        kind = pa.int32() if name == "rank" else pa.float32()
+        flat = pa.array(getattr(values, name).cpu().numpy(), kind)
+        columns[name] = pa.ListArray.from_arrays(offsets, flat)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Created with its mode, as the predictions file is.
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if private else 0o666)
+    with open(descriptor, "wb") as f:
+        pq.write_table(pa.table(columns), f, compression="zstd")
 
 
 def write_perplexity_predictions(
