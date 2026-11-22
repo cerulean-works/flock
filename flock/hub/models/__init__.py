@@ -16,8 +16,8 @@ A model's name is a path with folders, such as `acme/eval/olmo2-1b`. Each model 
 org's) or belongs to one project: every function that takes a model takes `project=` and
 `org=`, and the `project:path` shorthand, which is resolved in `org=` or your default org.
 
-Saving and loading models needs torch and safetensors (`flock-hub[models]`), imported only
-when used. Everything signs in as [`~cli.credentials.resolve`] does.
+Saving and loading models needs torch and safetensors, imported only when used. Everything
+signs in as [`~cli.credentials.resolve`] does.
 """
 
 from flock.hub.models._common import ModelError, ModelFile, ModelVersion
