@@ -1558,7 +1558,9 @@ class Store:
             await self._lock_org(conn, project.org)
             await self._lock_projects(conn, [project], update=True)
             await self.forks.refuse_project(conn, project.org, Scope(project.pk).root)
-            await self.eval_launches.refuse_project(conn, project.org, project.name, "delete")
+            # The locked row's name: a rename may have come since the request read it.
+            name = await conn.fetchval("SELECT name FROM projects WHERE pk = $1", project.pk)
+            await self.eval_launches.refuse_project(conn, project.org, name, "delete")
             await self._delete_projects(conn, [project], force, now)
         self._work_wanted.set()
 

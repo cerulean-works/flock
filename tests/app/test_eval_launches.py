@@ -512,6 +512,19 @@ def test_a_launch_past_its_longest_life_ends_even_where_launches_are_off(
     job = restarted.client().get(f"{LAUNCHES}/{pk}").json()
     assert job["state"] == "failed" and "time limit" in job["error"]
     assert restarted.call(restarted.store.accounts.api_key(key)) is None
+    # What it cost is unknown, so it keeps its cap in the month's count.
+    assert sql(restarted, "SELECT unconfirmed FROM eval_launches")[0][0] is True
+
+    # With Modal, a launch Modal can't tell about (a rotated token, say) ends the same way,
+    # and its call is cancelled.
+    again, modal = make_server(reuse=restarted)
+    pk = again.client().post(LAUNCHES, body()).json()["id"]
+    sql(
+        again, "UPDATE eval_launches SET started_at = now() - interval '40 hours' WHERE pk = $1", pk
+    )
+    again.call(again.store.eval_launches.sweep())
+    assert again.client().get(f"{LAUNCHES}/{pk}").json()["state"] == "failed"
+    assert modal.cancelled == ["fc-0"]
 
 
 def test_the_modal_adapter_tells_a_poll_deadline_from_the_calls_own_errors(
