@@ -174,12 +174,21 @@ class MCRequests:
             sha256 of exactly what is scored, as [Results files](results#the-task-hash) defines it.
         has_uncond (`bool`):
             Whether the unconditional requests for pointwise mutual information (PMI) follow the conditional ones.
+        description (`str`):
+            The task's text before the few-shot examples.
+        shots (`tuple[MCDoc, ...]`):
+            The task's few-shot examples, in order.
+        shown (`tuple[tuple[int, ...], ...]`):
+            Per doc, the indices in `shots` of the examples it was shown, in order. A doc's context is `description`, then `shots[i].example_text` and a blank line for each `i`, then its choice's context.
     """
 
     docs: tuple[MCDoc, ...]
     requests: tuple[Request, ...]
     hash: str
     has_uncond: bool
+    description: str
+    shots: tuple[MCDoc, ...]
+    shown: tuple[tuple[int, ...], ...]
 
     def choice_scores(self, scores: Scores) -> ChoiceScores:
         """
@@ -407,13 +416,14 @@ class MultipleChoiceTask:
 
     def requests(self, docs: Sequence[MCDoc], shots: Sequence[MCDoc]) -> MCRequests:
         """Builds every request needed to score `docs`, with a hash of exactly what is scored."""
-        conditional = []
+        conditional, shown = [], []
         for doc in docs:
             # `description`, then each example followed by a blank line.
             examples = self._shots_for(doc, shots)
-            head = self.description + "".join(f"{shot.example_text}\n\n" for shot in examples)
+            head = self.description + "".join(f"{shots[i].example_text}\n\n" for i in examples)
             for choice in doc.choices:
                 conditional.append(Request(head + choice.context, choice.continuation))
+            shown.append(tuple(examples))
 
         unconditional = []
         if self.unconditional_context is not None:
@@ -429,29 +439,33 @@ class MultipleChoiceTask:
             requests=requests,
             hash=self._hash(docs, requests),
             has_uncond=self.unconditional_context is not None,
+            description=self.description,
+            shots=tuple(shots),
+            shown=tuple(shown),
         )
 
-    def _shots_for(self, doc: MCDoc, shots: Sequence[MCDoc]) -> Sequence[MCDoc]:
+    def _shots_for(self, doc: MCDoc, shots: Sequence[MCDoc]) -> list[int]:
         """
-        Returns the examples `doc` is shown: those that aren't `doc` itself, and with `num_shots` only the first that many.
+        Returns the indices in `shots` of the examples `doc` is shown: those that aren't `doc` itself, and with `num_shots` only the first that many.
 
         An example from another split is `doc` itself if it shows the text `doc` would show as an example. lm-evaluation-harness drops an example only if its whole dataset row equals the doc's (`lm_eval/api/samplers.py`, v0.4.3), which misses a repeat with its choices reordered. An example from the scored split is `doc` itself only with `num_shots`, if it has the doc's id: OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
         """
+        shown = list(range(len(shots)))
         if self.fewshot is None:
-            return shots
+            return shown
 
         # A dataset may repeat a doc's question and answer in another split, possibly with the
         # choices reordered, which would show the doc its own answer. Ids aren't compared there:
         # they are unique within a split only.
         if self.fewshot.split is not None and self.fewshot.split != self.dataset.split:
             own = doc.example_text
-            shots = [shot for shot in shots if shot.example_text != own]
+            shown = [i for i in shown if shots[i].example_text != own]
         # Examples from the scored split are dropped only by `num_shots`: OLMES shows a curated
         # example even to its own doc.
         if self.fewshot.num_shots is not None:
-            shots = [shot for shot in shots if shot.id != doc.id][: self.fewshot.num_shots]
+            shown = [i for i in shown if shots[i].id != doc.id][: self.fewshot.num_shots]
 
-        return shots
+        return shown
 
     def _hash(self, docs: Sequence[MCDoc], requests: Sequence[Request]) -> str:
         """Returns the sha256 of the definition's data fields, every request and every gold index."""

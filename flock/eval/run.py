@@ -12,7 +12,7 @@ from typing import Literal, get_args
 import torch
 
 from flock.eval import hub
-from flock.eval.metrics import bits_per_byte, multiple_choice
+from flock.eval.metrics import best_choice, bits_per_byte, multiple_choice, ranking_scores
 from flock.eval.model import DEFAULT_BATCH_TOKENS, Encoded, ScoringModel
 from flock.eval.provenance import Provenance
 from flock.eval.results import (
@@ -424,7 +424,10 @@ def score_prepared(
         # just averaged, so models can be compared doc by doc.
         primary = per_doc[task.primary_metric]
         correct = primary if scale(task.primary_metric) == "accuracy" else None
-        write_predictions(predictions, requests.docs, scores, correct)
+        # The choice that metric picks, when it ranks choices (`acc_greedy` and `bpb` don't).
+        ranked = ranking_scores(scores).get(task.primary_metric)
+        pick = best_choice(ranked, scores.valid) if ranked is not None else None
+        write_predictions(predictions, requests, scores, correct, pick)
 
     return TaskResult(
         task=task.name,

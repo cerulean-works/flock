@@ -204,15 +204,15 @@ def log_results_file(path: Path, project: str) -> str:
     A field the file lacks stays absent from the run: an older file's missing `sdpa_backend` means an unknown kernel, not none. The tracker stamps the run with this machine's host, time and commit; the scoring job's are the config's `created_at` and `flock_commit`.
 
     Raises:
-        `ValueError`: if the file's schema isn't 6 to 10, Flock refuses the sign-in or the query, the project already has a run with the file's `model` and `created_at` that didn't fail or crash, the project is public and the predictions of a task on a private dataset would go to it, or the file is schema 9 or later and isn't a file named `results.json` or names one predictions file for two tasks.
+        `ValueError`: if the file's schema isn't 6 to 11, Flock refuses the sign-in or the query, the project already has a run with the file's `model` and `created_at` that didn't fail or crash, the project is public and the predictions of a task on a private dataset would go to it, or the file is schema 9 or later and isn't a file named `results.json` or names one predictions file for two tasks.
         `click.ClickException`: if Flock can't be reached.
         `wandb.errors.Error`: if the tracker refuses the run, for example for a wandb key set for another server.
     """
     results = json.loads(path.read_text())
-    # Schemas 6 to 10 hold every field the run is built from. Older files lack suite hashes, and
+    # Schemas 6 to 11 hold every field the run is built from. Older files lack suite hashes, and
     # some lack suites.
-    if results.get("schema_version") not in (6, 7, 8, 9, 10):
-        raise ValueError(f"{path} has schema {results.get('schema_version')}; only 6 to 10 log")
+    if results.get("schema_version") not in (6, 7, 8, 9, 10, 11):
+        raise ValueError(f"{path} has schema {results.get('schema_version')}; only 6 to 11 log")
     provenance = results["provenance"]
 
     api, entity = _signed_in()
@@ -272,7 +272,8 @@ def read_run_file(
     with api.client:
         answer = api.get(f"projects/{entity}/{project}/runs/{run_id}/files/{quote(name)}")
     if answer.status_code == 200:
-        return answer.text
+        # UTF-8 whatever the server says: rows hold text from schema 11 on.
+        return answer.content.decode()
     if answer.status_code == 404 and error_of(answer) == "file not found":
         return None
     raise ValueError(f"{api.host} refused {run}'s {name} ({error_of(answer)})")

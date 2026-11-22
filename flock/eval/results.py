@@ -21,12 +21,12 @@ if TYPE_CHECKING:
 
     from flock.eval.metrics import ChoiceScores
     from flock.eval.requests import Scores
-    from flock.eval.tasks.base import MCDoc
+    from flock.eval.tasks.base import MCRequests
     from flock.eval.tasks.perplexity import TextDoc
 
 # The layouts `WrittenResults.read` accepts. The Flock app's dashboard reads the same ones, and a
 # test holds its list to this one.
-READ_SCHEMAS = (8, 9, 10)
+READ_SCHEMAS = (8, 9, 10, 11)
 
 
 def scale(metric: str) -> str:
@@ -125,7 +125,7 @@ class Results:
     """
     Every task's scores from one run, and its provenance.
 
-    `schema_version`, 10, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
+    `schema_version`, 11, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
 
     Args:
         provenance (`Provenance`):
@@ -139,7 +139,7 @@ class Results:
     provenance: Provenance
     tasks: list[TaskResult]
     suites: list[SuiteResult] = field(default_factory=list)
-    schema_version: int = field(default=10, init=False)
+    schema_version: int = field(default=11, init=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Returns the results as plain JSON-ready data, with each task's `docs_per_second` added."""
@@ -177,16 +177,25 @@ class Results:
 
 
 def write_predictions(
-    path: Path, docs: Sequence[MCDoc], scores: ChoiceScores, correct: torch.Tensor | None = None
+    path: Path,
+    requests: MCRequests,
+    scores: ChoiceScores,
+    correct: torch.Tensor | None = None,
+    pick: torch.Tensor | None = None,
 ) -> None:
     """
-    Writes `prediction_rows` to `path` as JSON lines, creating its directory if needed.
+    Writes a multiple-choice task's predictions to `path` as JSON lines, creating its directory if needed: first a header, `{"prompt": {"description": ..., "shots": [{"id": ..., "text": ...}, ...]}}`, the text every doc's context starts with, written once, then `prediction_rows`.
 
     Raises:
         `FileExistsError`: if `path` exists, so two runs never write one file.
     """
+    # Each example as another doc is shown it; a row's `shots` indexes this list.
+    prompt = {
+        "description": requests.description,
+        "shots": [{"id": shot.id, "text": shot.example_text} for shot in requests.shots],
+    }
     # Built before the file is created, so a failed check leaves no empty file to block a rerun.
-    _write_rows(path, prediction_rows(docs, scores, correct))
+    _write_rows(path, [{"prompt": prompt}, *prediction_rows(requests, scores, correct, pick)])
 
 
 def write_perplexity_predictions(
@@ -205,33 +214,44 @@ def _write_rows(path: Path, rows: Sequence[dict[str, Any]]) -> None:
     """Writes `rows` to `path` as JSON lines, refusing a file that exists."""
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    with path.open("x") as f:
+    # UTF-8 as itself, so the text of a Chinese task reads as written and takes fewer bytes.
+    with path.open("x", encoding="utf-8") as f:
         for row in rows:
-            f.write(json.dumps(row) + "\n")
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 def prediction_rows(
-    docs: Sequence[MCDoc], scores: ChoiceScores, correct: torch.Tensor | None = None
+    requests: MCRequests,
+    scores: ChoiceScores,
+    correct: torch.Tensor | None = None,
+    pick: torch.Tensor | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Returns one row per doc with its id, gold index, whether the doc counts as right, and each choice's scores and lengths, enough to recompute every metric and the truncation counts, dropping the padding past each doc's last choice.
+    Returns one row per doc with its id, gold index, outcome, text, and each choice's scores and lengths, enough to recompute every metric and the truncation counts, dropping the padding past each doc's last choice.
+
+    A row's text is the doc's own `question` (the context its choices share) and its `choices` (each continuation exactly as scored, leading space included). A doc whose choices have their own contexts, such as Winogrande's, has `question` null and `contexts`, one per choice. A doc shown other than every few-shot example in order has `shots`, the indices of those it was shown in the header [`write_predictions`] writes.
 
     Args:
-        docs (`Sequence[MCDoc]`):
-            The scored docs, in order.
+        requests (`MCRequests`):
+            The scored docs, in order, and the examples each was shown.
         scores (`ChoiceScores`):
             Their choice scores.
         correct (`torch.Tensor`, *optional*):
             `[docs]`, each doc's value of the task's primary metric when that is an accuracy, written as the row's `correct`. Rows have no `correct` if not given.
+        pick (`torch.Tensor`, *optional*):
+            `[docs]`, the index of the choice the primary metric picks, when it ranks choices, written as the row's `pick`. Rows have no `pick` if not given.
 
     Raises:
-        `ValueError`: if `scores` or `correct` doesn't hold one row per doc.
+        `ValueError`: if `scores`, `correct` or `pick` doesn't hold one row per doc.
     """
+    docs = requests.docs
     # Rows are read by doc position, so extra score rows would be dropped without a word.
     if len(docs) != len(scores.gold):
         raise ValueError(f"{len(docs)} docs but scores for {len(scores.gold)}")
     if correct is not None and len(docs) != len(correct):
         raise ValueError(f"{len(docs)} docs but outcomes for {len(correct)}")
+    if pick is not None and len(docs) != len(pick):
+        raise ValueError(f"{len(docs)} docs but picks for {len(pick)}")
 
     # One host copy per field, not per doc.
     fields = {
@@ -248,12 +268,23 @@ def prediction_rows(
     # The scorer's own per-doc values, which results.json averages, so a row's outcome and the
     # task's accuracy can't disagree.
     outcomes = correct.bool().tolist() if correct is not None else None
+    picks = pick.tolist() if pick is not None else None
+    every_shot = tuple(range(len(requests.shots)))
 
     rows = []
     for i, doc in enumerate(docs):
         row: dict[str, Any] = {"id": doc.id, "gold": doc.gold}
         if outcomes is not None:
             row["correct"] = outcomes[i]
+        if picks is not None:
+            row["pick"] = picks[i]
+        contexts = [choice.context for choice in doc.choices]
+        row["question"] = contexts[0] if len(set(contexts)) == 1 else None
+        if row["question"] is None:
+            row["contexts"] = contexts
+        row["choices"] = [choice.continuation for choice in doc.choices]
+        if requests.shown[i] != every_shot:
+            row["shots"] = list(requests.shown[i])
         for name, per_doc in values.items():
             row[name] = per_doc[i][: len(doc.choices)]
         rows.append(row)
@@ -307,7 +338,7 @@ class WrittenResults:
         source (`str`):
             Where it was read: a folder, or a tracker run as `run:entity/project/id`.
         schema_version (`int`):
-            The file's layout, 8 to 10. Only rows from schema 9 on hold `correct`, and only schema 9 on records `dataset.private`: an older file's datasets read as not private. Schema 10 adds the provenance's `model_org`, `model_project` and `model_path`, which read as `None` before it.
+            The file's layout, 8 to 11. Only rows from schema 9 on hold `correct`, and only schema 9 on records `dataset.private`: an older file's datasets read as not private. Schema 10 adds the provenance's `model_org`, `model_project` and `model_path`, which read as `None` before it. Only rows from schema 11 on hold the doc's text and `pick`.
         provenance (`Provenance`):
             What produced the run.
         tasks (`list[TaskResult]`):
@@ -327,7 +358,7 @@ class WrittenResults:
 
     def predictions(self, task: str) -> list[dict[str, Any]] | None:
         """
-        Returns `task`'s prediction rows, or `None` if the run has no predictions file for it. On a tracker run, a task on a private dataset is read from `private/predictions/<task>.jsonl`.
+        Returns `task`'s prediction rows, one per doc, or `None` if the run has no predictions file for it. A schema 11 file's header line is left out. On a tracker run, a task on a private dataset is read from `private/predictions/<task>.jsonl`.
 
         Raises:
             `ValueError`: if `task` isn't a single file name, so a name read from a file can't reach outside `predictions/`.
@@ -339,7 +370,14 @@ class WrittenResults:
         if on_run and any(t.task == task and t.dataset.private for t in self.tasks):
             name = f"private/{name}"
         text = self.read_file(name)
-        return None if text is None else [json.loads(line) for line in text.splitlines()]
+        if text is None:
+            return None
+        rows = [json.loads(line) for line in text.splitlines()]
+        # From schema 11 a multiple-choice file opens with the prompt every doc's context starts
+        # with; a perplexity file has none. A row always has an id, a header never.
+        if self.schema_version >= 11 and rows and isinstance(rows[0], dict) and "prompt" in rows[0]:
+            rows = rows[1:]
+        return rows
 
     @classmethod
     def read(cls, source: str, read_file: Callable[[str], str | None]) -> WrittenResults:
@@ -348,7 +386,7 @@ class WrittenResults:
 
         Raises:
             `FileNotFoundError`: if `read_file` finds no `results.json`.
-            `ValueError`: if `results.json` isn't a results file of schema 8 to 10.
+            `ValueError`: if `results.json` isn't a results file of schema 8 to 11.
         """
         text = read_file("results.json")
         if text is None:
@@ -358,7 +396,7 @@ class WrittenResults:
             # Schema 8 holds every field these types have but `dataset.private` and schema 10's
             # provenance fields, which default; older files lack other provenance fields.
             if data.get("schema_version") not in READ_SCHEMAS:
-                raise ValueError(f"schema {data.get('schema_version')}; only 8 to 10 are read")
+                raise ValueError(f"schema {data.get('schema_version')}; only 8 to 11 are read")
             # An object or a string would iterate as nothing, and a diff would read every task as
             # missing from this run.
             if not isinstance(data["tasks"], list) or not isinstance(data["suites"], list):
@@ -406,7 +444,7 @@ def read_results(source: str) -> WrittenResults:
 
     Raises:
         `FileNotFoundError`: if the folder or run has no `results.json`.
-        `ValueError`: if `results.json` isn't a results file of schema 8 to 10, `run:` isn't followed by `entity/project/id`, or Flock refuses the read.
+        `ValueError`: if `results.json` isn't a results file of schema 8 to 11, `run:` isn't followed by `entity/project/id`, or Flock refuses the read.
         `click.ClickException`: if Flock can't be reached.
     """
     if source.startswith("run:"):
@@ -489,4 +527,4 @@ def _read_folder_file(folder: Path, name: str) -> str | None:
         path = path / part
         if path.is_symlink():
             raise ValueError(f"{path} is a link; a run's files must be in its folder")
-    return path.read_text() if path.is_file() else None
+    return path.read_text(encoding="utf-8") if path.is_file() else None
