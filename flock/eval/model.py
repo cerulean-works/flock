@@ -826,12 +826,14 @@ class ScoringModel:
 
         return self.tokenizer(texts, add_special_tokens=False)["input_ids"]
 
-    def byte_ends(self, texts: list[str]) -> list[list[int]]:
+    def byte_ends(
+        self, texts: list[str], token_ids: Sequence[list[int]] | None = None
+    ) -> list[list[int]]:
         """
-        Where each token of each text ends, in UTF-8 bytes from the text's start, as [`tokenize`] splits it and as far as the tokenizer places its tokens: a token's bytes are those after the previous token's end. A token that holds only part of a character (a byte-level or byte-fallback piece) may end where the character ends, or where it starts, so some tokens span no bytes.
+        Where each token of each text ends, in UTF-8 bytes from the text's start, for the texts' `token_ids` (from [`tokenize`] if not given) and as far as the tokenizer places its tokens: a token's bytes are those after the previous token's end. A token that holds only part of a character (a byte-level or byte-fallback piece) may end where the character ends, or where it starts, so some tokens span no bytes.
 
         Raises:
-            `ValueError`: if the tokenizer splits a text into other tokens than [`tokenize`] does.
+            `ValueError`: if the tokenizer places other tokens than `token_ids`, so no end could be paired with the wrong token.
         """
         if isinstance(self.tokenizer, SentencePieceTokenizer):
             # SentencePiece places each piece in bytes of the text as given.
@@ -846,8 +848,8 @@ class ScoringModel:
             for text, offsets in zip(texts, encoded["offset_mapping"], strict=True):
                 in_bytes = [0, *itertools.accumulate(len(c.encode()) for c in text)]
                 ends.append([in_bytes[end] for _, end in offsets])
-        if ids != self.tokenize(texts):
-            raise ValueError("the tokenizer placed other tokens than it scores")
+        if ids != list(token_ids if token_ids is not None else self.tokenize(texts)):
+            raise ValueError("the tokenizer placed other tokens than the ones scored")
 
         # Never before the previous end: merged bytes can place a token's end inside another's.
         return [list(itertools.accumulate(text_ends, max)) for text_ends in ends]
