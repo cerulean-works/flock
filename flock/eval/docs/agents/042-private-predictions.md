@@ -6,9 +6,9 @@
 | Date | 2026-11-21 |
 | Builds on | [041](041-result-files.md) (041.D1 uploads, 041.D3 `Dataset.private`, 041.D4 the check before the run, 041.D5 `read_results`); the app's stage 024 (`app/api/docs/agents/024-private-run-files.md`: run files under `private/` are members-only) |
 | Amends | 041.D1 (a private task's predictions have another name on the run), 041.D5 (the reader looks there) |
-| Keeps | 041.D2 to 041.D4, 041.D6, every task hash, every score, the run folder's layout, `results.json` schema 9 |
+| Keeps | 041.D2 to 041.D4, 041.D6, every task hash, every score, the run folder's layout, the `results.json` schema |
 
-The file number and the decision numbers are provisional. The file takes the next free number when its PR is opened, and `042.D1` and `042.D2` take the next free global numbers after every stage merged before it.
+The decision numbers are provisional: `042.D1` and `042.D2` take the next free global numbers after every stage merged before it.
 
 ## 1. Goal
 
@@ -26,15 +26,15 @@ The file number and the decision numbers are provisional. The file takes the nex
 
 041.D4 stays. A server older than app stage 024 serves the prefix to anyone, and a project made public there exposes the files, so the private project is still the first protection. The server must be deployed before clients upload under the prefix.
 
-### 042.D2. A schema 9 results file is logged only as `results.json`
+### 042.D2. A results file from schema 9 on is logged only as `results.json`
 
-A backfill takes the predictions beside the results file. Two hand-renamed copies of results in one folder would both pick up the same `predictions/`, and the run would hold another run's rows. A schema 9 file named otherwise, or a link named `results.json` (whose marks would come from its target and its predictions from beside the link), is refused before the run is created. So are two tasks whose predictions are one file (a repeated name, or two names a case-insensitive disk takes as one): with different marks, the file would go up under both names. `Results.write` always writes `results.json`, so this only refuses hand-renamed copies. Older schemas upload no predictions, so a renamed bank (such as `olmo2-1b-results.json`) still logs. Binding each predictions file to its results by a digest would also close it, but needs a new schema for the same protection.
+A backfill takes the predictions beside the results file. Two hand-renamed copies of results in one folder would both pick up the same `predictions/`, and the run would hold another run's rows. A file of schema 9 or later named otherwise, or a link named `results.json` (whose marks would come from its target and its predictions from beside the link), is refused before the run is created. So are two tasks whose predictions are one file (a repeated name, or two names a case-insensitive disk takes as one): with different marks, the file would go up under both names. `Results.write` always writes `results.json`, so this only refuses hand-renamed copies. Older schemas upload no predictions, so a renamed bank (such as `olmo2-1b-results.json`) still logs. Binding each predictions file to its results by a digest would also close it, but needs a new schema for the same protection.
 
 ---
 
 ## 3. Plan
 
-1. Name the files by their task's mark in `_run_files`, which already reads every predictions file, and refuse a renamed schema 9 file there.
+1. Name the files by their task's mark in `_run_files`, which already reads every predictions file, and refuse a renamed file of schema 9 or later there.
 2. The reader's name for a private task on a run.
 3. Tests with the fake tracker: the upload names, the refusal, a remote read of a private task, and no fallback to the public name.
 4. The tracker runs section of the commands page, and the results page.

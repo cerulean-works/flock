@@ -8,8 +8,6 @@
 | Amends | D112 (the run files routes answer outsiders except for `private/`), D113 (one more thing outsiders never see) |
 | Keeps | D110, D111, D114 to D118, D151 to D157 |
 
-The file number and the decision number are provisional: 022 and 023 are on other branches. Whichever merges later renumbers.
-
 ## 1. Goal
 
 `flock eval` uploads each task's predictions to the eval run, and some tasks read private datasets (exam sets, crawled text). Eval checks that such a run goes to a private project before it uploads (041.D4), but that is a snapshot: once the files are on the run, making the project public, or moving the run into a public project, serves them to anyone through the run files routes. The server keeps no mark of which files are private, and the wandb protocol's `CreateRunFiles` carries names only, so a client can't attach one.
@@ -26,9 +24,9 @@ This stage gives run files one rule that holds whatever happens to the project l
 
 ## 2. Design decisions
 
-The numbering continues from 023 (D171 to D176), which is on another branch.
+The numbering continues from 023 (D171 to D180).
 
-### D177. A run file whose first path component is `private` is members-only, whatever the project's visibility
+### D181. A run file whose first path component is `private` is members-only, whatever the project's visibility
 
 `GET .../runs/{run}/files` leaves such files out for a viewer whose access is `public` (no name, size or time, since a name like `private/predictions/<task>.jsonl` says which private dataset a run read). `GET .../runs/{run}/files/{name}` answers such a viewer the same `file not found` 404 as a missing file, before storage is opened. Members, org admins and super admins read them as any other file, as `accounts.access` already answers (D111).
 

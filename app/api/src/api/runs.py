@@ -510,7 +510,7 @@ async def get_run_models(run: MemberRunDep, store: StoreDep) -> Response:
 
 
 # A run file in this folder is listed and served to the org's members only, whatever the
-# project's visibility (D177): an eval's rows from a private dataset, for example.
+# project's visibility (D181): an eval's rows from a private dataset, for example.
 PRIVATE_FOLDER = "private"
 
 
