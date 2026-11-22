@@ -1,0 +1,144 @@
+# 026: launching evals on Modal from the dashboard
+
+| | |
+| --- | --- |
+| Status | implemented, pending review |
+| Date | 2026-11-22 |
+| Builds on | [017](017-hf-compat.md) (D124: the background job with state, heartbeat and cancel), [025](025-eval-results.md) (the Results tab a launched run shows on); `tests/modal_gpu.py` (the H100 image) |
+| Keeps | D1 to D187; D72 (a wandb key reaches tracking only) is what D191 relies on |
+
+## 1. Goal
+
+`flock eval run` scores a model from a checkout on a GPU machine. Nobody can do that from the
+dashboard. This stage adds a **Launch eval** button to a project: a member picks a public
+Hugging Face model and public suites or tasks, and the server runs `flock eval` on a Modal H100
+and logs the run to the project, where 025's Results tab shows it.
+
+**Out of scope:** other backends (Slurm, nest), training launches, models in the Flock registry,
+private datasets or models, and a queue of launches.
+
+---
+
+## 2. Design decisions
+
+The numbering continues from 025 (D182 to D187).
+
+### D188. A launch's cap is its time limit, and a monthly cap counts running launches at theirs
+
+- **Two caps, in US dollars,** as server settings: `eval_launch_max_usd` per launch (25) and
+  `eval_launch_monthly_usd` for the month over the whole server (300), with the H100 price as
+  `eval_launch_usd_per_hour`. Modal bills one workspace, so the month is counted over every org.
+- **The per-launch cap is enforced by Modal,** as the call's `timeout` (cap over price, at most
+  Modal's 24 hours). A launch can't overrun it, whatever happens to the server.
+- **The monthly count never undercounts.** A running launch counts at its full cap. An ended one
+  counts at its time from launch to end, which includes any wait for a GPU that Modal doesn't
+  bill. A launch is refused (409) when its cap doesn't fit under what is left.
+- **Launches are serialized** by a transaction-scoped advisory lock around the count and the
+  insert, so two launches can't both take the month's last dollars.
+- **No queue.** At the defaults the monthly cap allows 12 launches at once, and Modal queues GPU
+  requests itself, so a queued state would add a scheduler and protect nothing.
+
+### D189. Only public models and suites or tasks whose datasets are all public are launched
+
+- **Why.** Modal is a third party. Private eval text (the exam sets, tc-edu, tw-text, CMMLU's
+  mirror) and private checkpoints stay on our storage until someone decides otherwise.
+- **The list comes from the task definitions,** not from a list kept in the app: the worker
+  returns the suites and tasks whose every dataset has `private=False` (`catalogue`). The API
+  can't import the task registry itself (it imports torch, about 15 s), so it asks the deployed
+  worker once an hour. A suite with one private task is left out whole, as `zh_tw` is.
+- **Three checks.** The API refuses a name outside the list (422), the worker refuses it again
+  before any model loads, and the worker holds no Hugging Face token and no Flock storage key, so
+  a private dataset or model can't be read even if both checks were wrong.
+- **Models** are public Hugging Face repositories, checked without a token at launch (gated or
+  private: 403 or 404) and resolved to a commit, which the worker scores. A moving branch can't
+  change what a finished launch scored.
+
+### D190. The worker is a deployed Modal app at the server's release, scoring with fixed settings
+
+- `app/api/eval_worker.py` is deployed with `modal deploy` from the release the server runs. Its
+  image is built as `tests/modal_gpu.py` builds the GPU tests' image, from `uv.lock` and the
+  workspace, and records `FLOCK_COMMIT` at deploy time (the image has no `.git`), so every
+  launched run's provenance names the commit that scored it.
+- Each function runs the same file again inside the workspace's environment (`uv run`), as the
+  GPU tests run pytest, because Modal runs functions with the image's own Python.
+- **The instrument is not the launcher's choice:** BF16 weights at 16,384 batch tokens, the eval
+  bank's settings. Only `add_bos` is offered, because Gemma models are scored with it.
+- **Another GPU is another device.** The run's provenance records `NVIDIA H100`. The bank was
+  scored on H200, and the docs say not to compare the two until a parity check passes.
+
+### D191. The server's own Modal token, and a wandb key per launch that ends with it
+
+- **Modal token.** `modal_token_id` and `modal_token_secret` in the API's environment, a token for
+  the server only, not CI's. Launches are off (404) without them, the price, or
+  `api_public_url`: without that URL the worker's wandb SDK would send the key to W&B itself.
+- **Logging.** The server makes a wandb key for the launcher (`eval launch {id}`) and passes it to
+  the call in its environment with the tracker's URL, the org and the run's name. A wandb key
+  reaches tracking only (D72): the REST API and the S3 key exchange refuse it. It is deleted
+  when the launch ends, whoever ends it (the trigger of migration 0013 drops it from every
+  replica's cache), so it works only while the launch runs.
+- **Never stored.** The row keeps the key's `pk` only. The key is not in the database, a
+  response or a log line, and the launcher can see it in their key list while it lives.
+- **The run is named before it starts** (`eval-launch-{id}`, as `WANDB_RUN_ID`), so the launch
+  links to its run without asking the worker.
+
+### D192. A launch is a row watched by one replica, and any replica takes it over
+
+- One row per launch in `eval_launches` (migration 0026), with the call's id, the key's `pk`, the
+  cap and price at launch, and the flock commit once finished. States: `running`, `finished`,
+  `failed`, `cancelled`.
+- **Watching.** The replica that launched it waits on the call in short slices and heartbeats
+  between them. A heartbeat that finds the launch no longer running stops watching.
+- **No `interrupted` state,** unlike D124's imports: the call keeps running on Modal when a replica
+  stops (a deploy, a crash). Any replica's sweep takes over a launch whose heartbeat is older
+  than a minute (`FOR UPDATE SKIP LOCKED`, so one replica wins), and a launch cut short between
+  its row and its call ends `failed` there.
+- **Cancel** (its launcher or an org admin, as D124) cancels the call with its containers, so the
+  GPU stops being billed at once, then ends the row and deletes the key. Deleting the org does
+  the same for its running launches.
+- **A connection error to Modal is not a failure.** The watcher asks again at the next heartbeat;
+  only the call's own error fails the launch.
+
+---
+
+## 3. Plan
+
+### Part 1. API
+
+- Migration `0026_eval_launches.sql`; settings; `core/eval_launches.py` (`EvalLaunches`, and
+  `Modal`, the four calls to the deployed worker); routes in `api/eval_launches.py`.
+- `app/api/eval_worker.py`: `catalogue` and `run_eval`.
+
+### Part 2. Web
+
+- A **Launch eval** dialog and the launch rows on the project page, through the web server's
+  relay, as 017's import dialog and rows.
+
+### Tests
+
+- `tests/app/test_eval_launches.py`, with Modal as a fake and the Hub as an httpx mock: a launch
+  from start to end (pinned commit, timeout from the cap, the key's environment, the key deleted
+  at the end); refusals of private names, gated and private models and bad bodies, with nothing
+  spawned and no key made; launches off without each setting; who may launch and cancel (an
+  anonymous caller, another org, a wandb key, another member, the admin); the monthly cap; a
+  failed call and a refused spawn; a restart with the takeover; the key absent from the database,
+  responses and logs; deleting the org. One test lists the worker's public names from the real
+  registry and checks its refusal.
+
+### Docs
+
+- `app/launch-evals.md` (guide, with the setup), `app/api/eval-launches.md` (reference), the
+  settings in `app/configuration.md`.
+
+---
+
+## 4. How it was actually built
+
+To be completed with the review record.
+
+## 5. Known gaps
+
+- Models in the Flock registry can't be launched: the worker would need a credential that reads
+  `flock-models`, which today also reads private ones.
+- The parity of H100 and H200 scores is checked outside the repository, once; until then a
+  launched run is labelled with its device and kept out of comparisons with the bank by hand.
+- A launch's cost is bounded, not measured: the row has no billed seconds from Modal.

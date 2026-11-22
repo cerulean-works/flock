@@ -32,6 +32,11 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_HF_DATASETS_SERVER` | `https://datasets-server.huggingface.co` | The Hub's dataset viewer API, which lists a dataset's configs, splits and sizes in the import dialog. |
 | `FLOCK_HF_IMPORT_MAX_BYTES` | `53687091200` (50 GiB) | The largest dataset or model, in bytes, that the server imports from the dashboard. Bigger ones are refused with the `flock` command to run instead. |
 | `FLOCK_HF_IMPORT_WORKERS` | `4` | Per import, the processes converting a dataset's files, and the files downloaded or uploaded at once. |
+| `FLOCK_MODAL_TOKEN_ID` | none | The Modal token id that [eval launches](launch-evals) run with. With the secret, the GPU price and `FLOCK_API_PUBLIC_URL`, it turns launches on. |
+| `FLOCK_MODAL_TOKEN_SECRET` | none | That Modal token's secret. |
+| `FLOCK_EVAL_LAUNCH_USD_PER_HOUR` | `0` (off) | What Modal charges for an H100 hour, in US dollars. A launch's cap becomes its time limit at this price. |
+| `FLOCK_EVAL_LAUNCH_MAX_USD` | `25` | The most one launch may cost, in US dollars. |
+| `FLOCK_EVAL_LAUNCH_MONTHLY_USD` | `300` | The most this month's launches may cost together, in US dollars. A running launch counts at `FLOCK_EVAL_LAUNCH_MAX_USD`. |
 | `FLOCK_CRASH_TIMEOUT` | `600` | Seconds without a heartbeat before an active run is marked `crashed`. See [Crash detection](operations#crash-detection). |
 | `FLOCK_POOL_SIZE` | `16` | Maximum number of database connections of each API replica. See [Database connections](operations#database-connections). |
 | `FLOCK_CORS_ORIGINS` | none | Origins allowed to call the API from browsers, comma-separated, such as `https://flock.example.com`. |
