@@ -68,6 +68,8 @@ guide:
       title: Share projects and datasets publicly
     - local: app/import-hf
       title: Import from Hugging Face
+    - local: app/launch-evals
+      title: Launch evals from the dashboard
     - local: app/import-wandb
       title: Import W&B runs
     - local: app/configure-budgets
@@ -179,3 +181,5 @@ reference:
       title: Models
     - local: app/api/hf-imports
       title: Hugging Face imports
+    - local: app/api/eval-launches
+      title: Eval launches
