@@ -15,7 +15,7 @@ uv run flock eval run \
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--model` | required | The model as `repo@revision`. A branch or tag is resolved to its commit through the Hub, and the results record the commit. A full commit hash needs no Hub access, so it works offline. A model stored in Flock is `flock:org/path`, `flock:org/path@{number}`, `flock:org/path@{tag}` or `flock:org/path@primary`, where the path may hold folders, such as `flock:acme/eval/olmo2-1b@12`. A project's model is `flock:project:path[@version]`, in your default organization, such as `flock:pretrain:sweeps/lr-3e-4`. No version means the primary. It's resolved to its number through Flock, and the results record it with that number, the version's `model_digest` and the model's organization, project and path. See [Score a model stored in Flock](run-evaluation#score-a-model-stored-in-flock). |
+| `--model` | required | The model as `repo@revision`. A branch or tag is resolved to its commit through the Hub, and the results record the commit. A full commit hash needs no Hub access, so it works offline. A model stored in Flock is `flock:org/path`, `flock:org/path@{number}`, `flock:org/path@{tag}` or `flock:org/path@primary`, where the path may hold folders, such as `flock:acme/eval/olmo2-1b@12`. A project's model is `flock:project:path[@version]`, in your default organization, such as `flock:pretrain:sweeps/lr-3e-4`. No version means the primary. It's resolved to its number through Flock, and the results record it with that number, the version's `model_digest` and the model's organization, project and path. See [Score a model stored in Flock](run-evaluation#score-a-model-stored-in-flock). A local folder is `local:folder@{digest}`, the id `flock eval digest` prints, and the results record `local:{digest}` and the digest in `model_digest`. See [Score a local model folder](run-evaluation#score-a-local-model-folder). |
 | `--task` | none | A task name from [Tasks](tasks#available-tasks). Repeat it for several tasks with one model load. |
 | `--suite` | none | A suite name from [Suites](tasks#suites). It runs the suite's tasks and scores the suite and every suite it holds. Repeat it for several suites. A task in several suites, or also given with `--task`, runs once. |
 | `--out` | required | The directory for `results.json` and `predictions/`. It must be new or empty, so one directory holds one run. |
@@ -36,6 +36,14 @@ uv run flock eval run \
   --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf \
   --suite base_easy \
   --out results/olmo2-1b-base-easy
+```
+
+## `flock eval digest`
+
+Prints the `--model` id that scores a local folder, `local:folder@{digest}`. The digest is the sha256 of one `{path}\t{size}\t{sha256}` line per file in the folder, sorted by path, as Flock computes a version's digest. See [Score a local model folder](run-evaluation#score-a-local-model-folder).
+
+```bash
+uv run flock eval digest /work/acme/run-190m/export-000700
 ```
 
 ## `flock eval compare`
