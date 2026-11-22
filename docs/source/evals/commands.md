@@ -80,7 +80,7 @@ uv run flock eval items results/olmo2-1b run:acme/model-evals/k3v9x2pa --task ar
 | `--seed` | none | With `--limit`, print a sample drawn with this seed instead, still in doc order. |
 | `--json` | off | Print one JSON object per doc instead of text. See [Reading items](comparison#reading-items) for its fields. |
 
-The text form prints, per doc, the task, id and metric, each run's model, verdict and pick, the question, then one line per choice: each run's probability (`p`) and share (`s`), `*` on the gold choice and `<` on each run's pick. Two runs must be readable by `flock eval diff`, with the task under one hash in both. Runs written before schema version 11 hold no text, so the command refuses them: score the model again. It exits with code 2 on any refusal.
+The text form prints, per doc, the task, id and metric, where the doc comes from (its split, its row's position and, where the task gives them, its dataset id and subject), each run's model, verdict and pick, the question, then one line per choice: each run's probability (`p`) and share (`s`), `*` on the gold choice and `<` on each run's pick. Two runs must be readable by `flock eval diff`, with the task under one hash in both. Runs written before schema version 11 hold no text, so the command refuses them: score the model again. It exits with code 2 on any refusal.
 
 ## `flock eval log`
 
@@ -92,7 +92,7 @@ uv run flock eval log results/olmo2-1b/results.json --project model-evals
 
 | Argument or flag | Default | Meaning |
 |---|---|---|
-| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6 to 11. It goes on the run as `results.json`, whatever its name, and from schema version 9 on so do the predictions in the `predictions/` folder beside it. From schema version 9 on, the file must be named `results.json`, so the predictions beside it are its own. |
+| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6 to 12. It goes on the run as `results.json`, whatever its name, and from schema version 9 on so do the predictions in the `predictions/` folder beside it. From schema version 9 on, the file must be named `results.json`, so the predictions beside it are its own. |
 | `--project` | required | The tracker project. |
 
 It needs both sign-ins: `flock login` for the duplicate check, and the wandb SDK's key for the same server to log the run. [Sign in](../cli/sign-in) sets up both. The run goes to the server you signed in to with `flock login` and to your default organization, online, whatever the SDK's own settings and `WANDB_MODE` say. A `WANDB_API_KEY` set for another server fails with HTTP 401.

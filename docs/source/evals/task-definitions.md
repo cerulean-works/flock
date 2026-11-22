@@ -32,6 +32,28 @@ A task with another format writes its own choices in `to_doc`:
 A changed prompt is a different task, and its numbers don't compare with the old ones, so give it a new name.
 
 
+## What a row records
+
+Each [prediction row](results#predictions) records where its doc comes from: the split, the row's position in it and lm-evaluation-harness's `doc_hash` of the row. A task can name more columns of its rows to copy, with [`~eval.tasks.RowFields`]:
+
+```python
+HELLASWAG = MultipleChoiceTask(
+    ...,
+    # OLMES's `native_id_field` for HellaSwag is `ind` (`oe_eval/tasks/oe_eval_tasks/hellaswag.py`).
+    row_fields=RowFields(
+        native_id="ind", subject="activity_label", meta=("source_id", "split_type")
+    ),
+)
+```
+
+| Field | Copies |
+|---|---|
+| `native_id` | The column holding the dataset's own id, when the doc's `id` is something else, such as a row index. |
+| `subject` | The column holding the row's subject or category. |
+| `meta` | Columns of plain values (a string, number, boolean or `null`), written under the row's `meta`. A column holding a list or an object is refused when the task loads. |
+
+`row_fields` changes no request, so it isn't in the task hash, and adding it to a task keeps the task's past results comparable.
+
 ## The task hash
 
 Each result records the task's [hash](results#the-task-hash), so results from before and after a change to the task never share one.
