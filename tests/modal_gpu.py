@@ -11,6 +11,8 @@ import re
 import shlex
 import shutil
 import subprocess
+import tarfile
+import time
 import tomllib
 from pathlib import Path
 
@@ -19,8 +21,10 @@ import modal
 ROOT = Path(__file__).parent.parent
 MEMBERS = ["flock/cli", "flock/eval", "flock/hub", "flock/training", "app/api", "tests"]
 REPO = "/repo"
-# Compiled kernels persist between runs in a Volume; each container works on a local copy.
+# Compiled kernels persist between runs as one archive in a Volume, since reading thousands of
+# small files from a Volume is slow; each run unpacks it to local disk and saves it again.
 VOLUME_DIR = Path("/compile-cache")
+ARCHIVE = VOLUME_DIR / "kernels.tar"
 CACHE_DIR = Path("/tmp/compile-cache")
 CUDA_PACKAGES = re.compile(r"(torch|triton|nvidia-|cuda-|flash-attn)")
 
@@ -71,10 +75,8 @@ app = modal.App("flock-gpu-tests", image=image)
 compile_cache = modal.Volume.from_name("flock-gpu-compile-cache", create_if_missing=True, version=2)
 
 
-def copy_new(source: str, destination: str) -> None:
-    """Only add kernels: an existing entry is the same kernel compiled by an earlier run."""
-    if not os.path.exists(destination):
-        shutil.copy2(source, destination)
+def without_locks(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    return None if member.name.endswith(".lock") else member
 
 
 # The test models are tiny, so one H100 runs several pytest workers at once. Each worker
@@ -83,7 +85,12 @@ def copy_new(source: str, destination: str) -> None:
     gpu="H100", cpu=8, memory=32 * 1024, timeout=60 * 60, volumes={str(VOLUME_DIR): compile_cache}
 )
 def run_pytest(pytest_args: str, workers: int) -> int:
-    shutil.copytree(VOLUME_DIR, CACHE_DIR, dirs_exist_ok=True)
+    start = time.monotonic()
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    if ARCHIVE.exists():
+        with tarfile.open(ARCHIVE) as archive:
+            archive.extractall(CACHE_DIR, filter="data")
+    print(f"Restored the compile cache in {time.monotonic() - start:.1f}s", flush=True)
     env = os.environ | {
         "TORCHINDUCTOR_CACHE_DIR": str(CACHE_DIR / "inductor"),
         "TRITON_CACHE_DIR": str(CACHE_DIR / "triton"),
@@ -95,14 +102,16 @@ def run_pytest(pytest_args: str, workers: int) -> int:
     command = ["uv", "run", "--no-sync", "python", "-m", "pytest", "-n", str(workers)]
     command += ["--dist=worksteal", *shlex.split(pytest_args)]
     returncode = subprocess.run(command, env=env, check=False).returncode
-    shutil.copytree(
-        CACHE_DIR,
-        VOLUME_DIR,
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("*.lock"),
-        copy_function=copy_new,
-    )
+    # Concurrent runs each save the cache they started from plus their own kernels; the last
+    # one to finish wins, which at worst drops another run's new kernels.
+    start = time.monotonic()
+    with tarfile.open("/tmp/kernels.tar", "w") as archive:
+        archive.add(CACHE_DIR, arcname=".", filter=without_locks)
+    partial = ARCHIVE.with_suffix(".partial")
+    shutil.copyfile("/tmp/kernels.tar", partial)
+    partial.replace(ARCHIVE)
     compile_cache.commit()
+    print(f"Saved the compile cache in {time.monotonic() - start:.1f}s", flush=True)
     return returncode
 
 
