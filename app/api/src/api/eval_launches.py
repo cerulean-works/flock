@@ -1,17 +1,15 @@
 """Evals launched on Modal from the web app (026): what may be launched, start, list, follow
 and cancel. Members and admins of the org may launch; anyone else gets the org's 404."""
 
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.src.api.deps import APIError, JSONResponse, Name, OrgDep, StoreDep, UserDep, rest_user
-from app.api.src.api.hf_imports import Repo, Revision
-from app.api.src.core.eval_launches import EvalLaunch
+from app.api.src.api.hf_imports import Repo, Revision, with_users
 from app.api.src.core.hf_imports import HubError
-from app.api.src.core.store import Store
 
 router = APIRouter(
     prefix="/api/v1/orgs/{org}/evals/launches",
@@ -34,17 +32,6 @@ class LaunchBody(BaseModel):
     tasks: list[RegistryName] = Field(default_factory=list, max_length=1000)
     add_bos: bool = Field(False, description="start each request with BOS, as Gemma needs")
     project: Name
-
-
-async def with_users(store: Store, jobs: list[EvalLaunch]) -> list[dict[str, Any]]:
-    """Each launch's info, with who started it as the user."""
-    briefs = await store.accounts.briefs(j.started_by for j in jobs if j.started_by is not None)
-    out = []
-    for job in jobs:
-        info = job.info()
-        info["started_by"] = briefs.get(job.started_by) if job.started_by is not None else None
-        out.append(info)
-    return out
 
 
 @router.get("/catalogue")

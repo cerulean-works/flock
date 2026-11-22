@@ -2,7 +2,8 @@
 Hub metadata the import dialogs show. Members and admins of the org may import."""
 
 import re
-from typing import Annotated, Any, Literal
+from collections.abc import Sequence
+from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import Response
@@ -10,7 +11,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 
 from app.api.src.api.datasets import scope_of
 from app.api.src.api.deps import APIError, JSONResponse, OrgDep, StoreDep, UserDep, rest_user
-from app.api.src.core.hf_imports import HFImport, HubError, TooLarge
+from app.api.src.core.hf_imports import HubError, TooLarge
 from app.api.src.core.store import Store
 
 router = APIRouter(
@@ -81,8 +82,16 @@ class HFImportBody(BaseModel):
         return self
 
 
-async def with_users(store: Store, jobs: list[HFImport]) -> list[dict[str, Any]]:
-    """Each import's info, with who started it as the user."""
+class Job(Protocol):
+    """A background job of an org: an import, or an eval launch."""
+
+    started_by: int | None
+
+    def info(self) -> dict[str, Any]: ...
+
+
+async def with_users(store: Store, jobs: Sequence[Job]) -> list[dict[str, Any]]:
+    """Each job's info, with who started it as the user."""
     briefs = await store.accounts.briefs(j.started_by for j in jobs if j.started_by is not None)
     out = []
     for job in jobs:
