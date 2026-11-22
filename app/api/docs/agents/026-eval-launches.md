@@ -38,7 +38,10 @@ The numbering continues from 025 (D182 to D187).
   lost answer to the spawn, or a replica that stopped while making the call). An ended one counts
   at its time from launch to end plus the ten minutes, which includes any wait for a GPU that
   Modal doesn't bill, in every month it ran in. Only a spawn Modal surely refused (no such app,
-  a bad token) ends at no cost. A purged org's launches stay as rows with no
+  a bad token) ends at no cost. An unconfirmed launch keeps its cap in every month until its
+  call can't be running any more (a day in Modal's queue, its time limit and the overhead).
+- **A cap too small to pay for a minute of scoring** after the overhead is refused (422) before
+  any row or key is made. A purged org's launches stay as rows with no
   org (`ON DELETE SET NULL`), so they still count. A launch is refused (409) when its cap doesn't
   fit under what is left.
 - **Launches are serialized** by a transaction-scoped advisory lock around the count and the
@@ -121,12 +124,18 @@ The numbering continues from 025 (D182 to D187).
   Modal's `FunctionTimeoutError` is the call's time limit and fails it. A failed question to
   Modal (its `ConnectionError`, or any of its RPC errors, which are `GRPCError`s) is asked again
   at the next heartbeat.
-- **A launch past its longest life ends.** Every replica's sweep ends a running launch older than
-  its time limit plus the ten minutes and a minute more, whose call can't be running, and deletes
-  its key, even on a server that no longer launches evals.
+- **A server that can't ask Modal ends launches by time.** When launches are off (no token, say),
+  the sweep ends a running launch older than a day in Modal's queue plus its time limit and the
+  overhead, whose call can't be running any more, and deletes its key. A server that can ask
+  Modal never ends a launch by time: Modal's time limit starts only when the call leaves the
+  queue, so only the call's own end counts.
 - **Its project stays put.** The worker logs to the project by name when it finishes, so a
   project with a running launch can't be renamed or deleted (409), as one with active runs can't
-  be renamed.
+  be renamed. A launch holds its project's row (`FOR SHARE`) while it is registered, so a rename
+  or delete either sees it or came first. Ended launches follow a rename. A deleted project's
+  name reused later shows the old project's launches: a gap, as runs are addressed by name too.
+- **A cancel is recorded before Modal is asked** (`cancel_requested`), so a watcher that sees the
+  call end because of it records the launch `cancelled`, not `failed`.
 
 ---
 
