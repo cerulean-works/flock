@@ -256,8 +256,8 @@ describe('the blend dialog', () => {
 		await screen.getByRole('button', { name: 'Source 1', exact: true }).click();
 		await expect.element(screen.getByRole('option', { name: /old/ })).toBeVisible();
 		await screen.getByRole('button', { name: 'Up a folder' }).click();
-		await screen.getByRole('button', { name: 'web/' }).click();
-		await screen.getByLabelText('Filter datasets').fill('tra');
+		await screen.getByRole('option', { name: 'web/' }).click();
+		await screen.getByRole('combobox', { name: 'Search datasets' }).fill('tra');
 		await expect.element(screen.getByRole('option', { name: /test/ })).not.toBeInTheDocument();
 		await screen.getByRole('option', { name: /train/ }).click();
 		await expect
