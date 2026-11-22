@@ -114,3 +114,10 @@ def test_a_private_texts_sidecar_is_its_owners_only_and_training_writes_none(
 
     score_prepared(scorer, prepare_task(scorer, TEXT_TASK), tmp_path / "step")
     assert not (tmp_path / "step" / "predictions" / "toy_text.tokens.parquet").exists()
+
+
+def test_byte_ends_refuse_token_ids_other_than_the_ones_scored(scorer: ScoringModel) -> None:
+    ids = scorer.tokenize(["fox"])
+    assert scorer.byte_ends(["fox"], ids) == scorer.byte_ends(["fox"])
+    with pytest.raises(ValueError, match="other tokens than the ones scored"):
+        scorer.byte_ends(["fox"], [[*ids[0], ids[0][0]]])

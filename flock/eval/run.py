@@ -541,11 +541,14 @@ def _score_perplexity(
     num_bytes = [len(text.encode()) for text in texts]
 
     start = time.perf_counter()
+    # Placed before scoring, so a tokenizer that can't place its tokens fails before any GPU time,
+    # and in the timed span, so `seconds` counts what the values cost.
+    byte_ends = None
+    if token_values is not None:
+        byte_ends = model.byte_ends(texts, prepared.token_ids)
     scores = model.rolling_loglikelihood(
         texts, task.window, prepared.token_ids, tokens=token_values is not None
     )
-    # Placed in the timed span, so `seconds` counts what the values cost.
-    byte_ends = model.byte_ends(texts) if token_values is not None else None
     # Summed over all of the task's docs before dividing, as Paloma defines bits per byte
     # (App. B) and OLMES computes it per domain (`PerplexityMetric`), so a doc counts by its
     # bytes, and the loss is averaged over tokens as a trainer averages it over a batch. Every
