@@ -15,7 +15,7 @@ from flock.eval.cli import main
 from flock.eval.results import Results, SuiteResult, read_results
 from flock.eval.tracking import log_results_file, log_to_tracker, read_run_file
 
-from .toy import PROVENANCE, task_result
+from .toy import PROVENANCE, task_result, write_run
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -313,7 +313,7 @@ def test_schemas_before_6_are_refused_before_any_query(
     written = json.loads((LOGGED / "schema6.json").read_text())
     path.write_text(json.dumps({**written, "schema_version": 5}))
 
-    with pytest.raises(ValueError, match="schema 5; only 6 to 10 log"):
+    with pytest.raises(ValueError, match="schema 5; only 6 to 11 log"):
         log_results_file(path, "model-evals")
 
     assert hub.queries == []
@@ -630,6 +630,50 @@ def test_a_run_reads_a_private_tasks_predictions_from_its_private_folder(
     hub.files["predictions/exam.jsonl"] = "not read\n"
     del hub.files["private/predictions/exam.jsonl"]
     assert remote.predictions("exam") is None
+
+
+def test_a_private_tasks_text_is_in_no_file_outside_private(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    path = written_run(tmp_path / "run", private=True)
+    folder = tmp_path / "run"
+    # Schema 11 text in every row, and the prompt in the header.
+    for name in ("toy", "exam"):
+        rows = [json.loads(line) for line in (folder / "predictions" / f"{name}.jsonl").open()]
+        text = [{"prompt": {"description": f"{name} prompt", "shots": []}}]
+        text += [
+            row | {"question": f"{name} question 試題", "choices": [" a", " b"]} for row in rows
+        ]
+        (folder / "predictions" / f"{name}.jsonl").write_text(
+            "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in text)
+        )
+
+    log_to_tracker(json.loads(path.read_text()), "model-evals", results_file=path)
+
+    holding = sorted(name for name, (body, _) in logged["files"].items() if "exam" in body)
+    assert holding == ["private/predictions/exam.jsonl", "results.json"]  # the task's name only
+    assert "exam question" not in logged["files"]["results.json"][0]
+    assert all(
+        "exam question" not in body and "exam prompt" not in body
+        for name, (body, _) in logged["files"].items()
+        if not name.startswith("private/")
+    )
+
+
+def test_items_read_from_a_run_print_what_its_folder_prints(hub: FakeHub, tmp_path: Path) -> None:
+    folder = tmp_path / "run"
+    write_run(folder, {"toy": ("h", [True, False, False])})
+    for name in ("results.json", "predictions/toy.jsonl"):
+        hub.files[name] = (folder / name).read_text()
+    runner = CliRunner()
+
+    for args in (["--only", "all", "--json"], ["--only", "wrong"]):
+        remote = runner.invoke(
+            main, ["items", "run:acme/model-evals/run-1", "--task", "toy", *args]
+        )
+        local = runner.invoke(main, ["items", str(folder), "--task", "toy", *args])
+        assert remote.exit_code == local.exit_code == 0
+        assert remote.output == local.output != ""
 
 
 def test_a_run_keeps_reading_with_the_sign_in_it_was_opened_with(
