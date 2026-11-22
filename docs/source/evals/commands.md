@@ -25,6 +25,7 @@ uv run flock eval run \
 | `--add-bos` | off | Start every non-empty context with the tokenizer's BOS token. Set it for Gemma models, as OLMES does. Compare only runs with the same value. See [Tokenizing a request](scoring#tokenizing-a-request). |
 | `--no-tokens` | off | Don't write each multiple-choice task's [per-token values](results#per-token-values) beside its predictions. They change no score, and they cost scoring time and disk: see the page. |
 | `--context-tokens` | off | Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. Needs the per-token values, so not with `--no-tokens`. |
+| `--perplexity-tokens` | off | Write each perplexity task's [per-token values](results#per-token-values) beside its predictions: each token's loss and where it ends in the text, without token ids. |
 | `--device` | `cuda` if available, else `cpu` | The torch device. |
 | `--wandb-project` | off | Also log the run to this project through the `wandb` SDK, with `results.json` and the predictions as files of the run. [Connect the SDK](../cli/sign-in#wandb-sdk) first so it goes to Flock. See [Tracker runs](#tracker-runs). |
 | `--verbose` | off | Print every metric of each task, primary first, with its speed and the start of its task hash, then each suite with its members. |

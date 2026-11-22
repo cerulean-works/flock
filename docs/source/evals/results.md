@@ -164,6 +164,8 @@ Context values and greedy tokens come from a pass of their own over each doc's d
 
 A private dataset's per-token file is readable by its owner only, and goes under `private/` on a tracker run, as its predictions do: token ids are the dataset's text. A training loop that scores between steps writes none unless it asks (`score_prepared(..., tokens=True)`).
 
+With `--perplexity-tokens`, a perplexity task gets a file of its own shape: one `text` row per doc with its `id`, and per token `byte_end`, `logprob`, `rank`, `entropy`, `top1_logprob` and `logprob_std`. Its `logprob`s add up to the row's `logprob`, and a token's loss is its `logprob` negated, so you can split a domain's loss by position or by byte range, as Paloma's analyses of which tokens carry the loss need. It has no token ids: they are the text, which a perplexity task's files never hold. `byte_end` is where each token ends in the text's UTF-8 bytes, so a token's bytes are those after the previous token's end. Tokenizers place a token that holds only part of a character (a byte-level or byte-fallback piece) at the character's end or at its start, so such a token can span no bytes.
+
 Read a task's rows, or only some docs', with [`~eval.results.WrittenResults.tokens`]:
 
 ```python
@@ -202,6 +204,8 @@ A tracker run is read as the user signed in with `flock login`, on that server. 
 [[autodoc]] eval.results.WrittenResults
 
 [[autodoc]] eval.results.write_tokens
+
+[[autodoc]] eval.results.write_perplexity_tokens
 
 [[autodoc]] eval.requests.TokenValues
 
