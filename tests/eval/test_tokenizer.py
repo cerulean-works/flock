@@ -136,7 +136,8 @@ def auto(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     """Stands in for `AutoTokenizer`, and returns what it was asked to load."""
     asked = []
 
-    def from_pretrained(repo: str, revision: str) -> object:
+    def from_pretrained(repo: str, revision: str, trust_remote_code: bool) -> object:
+        assert trust_remote_code is False  # code another repo names is never run
         asked.append((repo, revision))
         return SENTINEL
 
@@ -263,7 +264,7 @@ def test_a_conversion_under_another_name_is_refused(
         json.dumps({"tokenizer_class": tokenizer_class})
     )
     with pytest.raises(ValueError, match=f"{tokenizer_class} is built on a SentencePiece model"):
-        load_tokenizer(ModelRef(str(tmp_path), SHA))
+        load_tokenizer(ModelRef(str(tmp_path), SHA, "local"))
 
 
 def test_another_name_beside_tokenizer_json_goes_to_auto_tokenizer(
@@ -271,18 +272,20 @@ def test_another_name_beside_tokenizer_json_goes_to_auto_tokenizer(
 ) -> None:
     (tmp_path / "spiece.model").write_bytes(b"")
     (tmp_path / "tokenizer.json").write_text("{}")
-    assert load_tokenizer(ModelRef(str(tmp_path), SHA)) is SENTINEL
+    assert load_tokenizer(ModelRef(str(tmp_path), SHA, "local")) is SENTINEL
 
 
 def test_a_local_folder_chooses_by_its_own_files(
     model_file: Path, tmp_path: Path, auto: list[tuple[str, str]]
 ) -> None:
     # Not a valid Hub repo id, so reaching the Hub would raise.
-    assert isinstance(load_tokenizer(ModelRef(str(model_file.parent), SHA)), SentencePieceTokenizer)
+    assert isinstance(
+        load_tokenizer(ModelRef(str(model_file.parent), SHA, "local")), SentencePieceTokenizer
+    )
 
     (tmp_path / "tokenizer.model").write_bytes(model_file.read_bytes())
     (tmp_path / "tokenizer.json").write_text("{}")
-    assert load_tokenizer(ModelRef(str(tmp_path), SHA)) is SENTINEL
+    assert load_tokenizer(ModelRef(str(tmp_path), SHA, "local")) is SENTINEL
 
 
 def test_a_resegmented_context_is_refused(

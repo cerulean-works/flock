@@ -20,15 +20,15 @@ class Provenance:
 
     Args:
         model (`str`):
-            The scored model as `repo@commit`, or as `flock:org/path@number` or `flock:project:path@number` for a version in the Flock registry.
+            The scored model as `repo@commit`, as `flock:org/path@number` or `flock:project:path@number` for a version in the Flock registry, or as `local:digest` for a local folder.
         model_digest (`str`, *optional*):
-            The Flock version's digest, which names its exact files, or `None` for a Hugging Face model, whose commit in `model` already does. Results files written before it was added have no `model_digest`, and read as `None`.
+            The digest of the Flock version or local folder, which names its exact files, or `None` for a Hugging Face model, whose commit in `model` already does. Results files written before it was added have no `model_digest`, and read as `None`.
         model_org (`str`, *optional*):
-            The Flock model's org, so the result doesn't depend on whose default org read `model`. `None` for a Hugging Face model, and in results files written before it was added.
+            The Flock model's org, so the result doesn't depend on whose default org read `model`. `None` for a Hugging Face model, a local folder, and in results files written before it was added.
         model_project (`str`, *optional*):
-            The project the Flock model belongs to, or `None` for a global one, a Hugging Face model, and results files written before it was added.
+            The project the Flock model belongs to, or `None` for a global one, a Hugging Face model, a local folder, and results files written before it was added.
         model_path (`str`, *optional*):
-            The Flock model's path in its scope, such as `eval/olmo2-1b`. `None` for a Hugging Face model, and in results files written before it was added.
+            The Flock model's path in its scope, such as `eval/olmo2-1b`. `None` for a Hugging Face model, a local folder, and in results files written before it was added.
         flock_commit (`str`):
             The flock commit that ran, from `FLOCK_COMMIT` or git, or `"unknown"`. A `-dirty` suffix means the checkout had uncommitted changes or new files under `flock/`.
         command (`str`, *optional*):

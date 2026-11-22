@@ -15,6 +15,7 @@ import lance
 import pyarrow as pa
 import pytest
 import torch
+import torch._functorch.config as functorch_config
 from lance.torch.data import SafeLanceDataset
 from pydantic import ValidationError
 from tokenizers.models import WordLevel
@@ -673,6 +674,130 @@ def test_local_checkpoint_records_run_identity(
     metadata = json.loads((trainer.output_dir / "checkpoint-3" / "flock.json").read_text())
     assert metadata["run"] == "flock/pretrain/run123"
     assert metadata["step"] == trainer.state.step.item() == 3
+
+
+@pytest.fixture
+def compile_calls(monkeypatch: pytest.MonkeyPatch) -> Generator[list[dict[str, Any]]]:
+    """Compile with AOT eager on CPU and record each call's options; GPU tests cover Inductor."""
+    calls: list[dict[str, Any]] = []
+    real_compile = torch.compile
+
+    def compile_for_test(function: Callable, **options: Any) -> Callable:
+        calls.append(options)
+        return real_compile(function, backend="aot_eager")
+
+    monkeypatch.setattr(torch, "compile", compile_for_test)
+    yield calls
+    torch.compiler.reset()
+
+
+def test_compiled_training_matches_eager_and_shares_checkpoints(
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    compile_calls: list[dict[str, Any]],
+    tmp_path: Path,
+) -> None:
+    options = {
+        "num_workers": 0,
+        "prefetch_factor": None,
+        "validation_tasks": [task.name for task in validation_tasks],
+        "validation_steps": 1,
+    }
+    eager, _, _ = trainer_factory(**options, save_steps=1)
+    eager.train()
+    assert compile_calls == []
+    compiled, run, _ = trainer_factory(
+        **options, torch_compile=True, output_dir=str(tmp_path / "compiled")
+    )
+    # The model compiles in place up front.
+    assert compile_calls == [{"mode": "default"}]
+
+    compiled.train(resume_from_checkpoint=eager.output_dir / "checkpoint-1")
+    # The loss and the clipped update compile on first call, then every step reuses them.
+    assert compile_calls == [{"mode": "default"}] * 3
+    torch.testing.assert_close(compiled.model.state_dict(), eager.model.state_dict())
+    torch.testing.assert_close(
+        compiled.state_dict()["optimizer_state_dict"], eager.state_dict()["optimizer_state_dict"]
+    )
+    assert compiled.state.step.item() == compiled.lr_scheduler.completed_steps == 3
+    assert any(key.startswith("eval/") for metrics in run.metrics for key in metrics)
+    assert compiled.model.training
+    assert isinstance(compiled.optimizer.param_groups[0]["lr"], torch.Tensor)
+
+    # Compiled checkpoints keep float learning rates, so an eager run resumes them.
+    save_checkpoint(compiled)
+    restored, _, _ = trainer_factory(output_dir=str(tmp_path / "restored"))
+    load_checkpoint(restored, compiled.output_dir / "checkpoint-3")
+    assert_nested_equal(restored.model.state_dict(), compiled.model.state_dict())
+    saved, resumed = compiled.state_dict(), restored.state_dict()
+    # Compiled runs hold learning rates in FP32 tensors; resuming recomputes them exactly.
+    torch.testing.assert_close(
+        resumed.pop("optimizer_state_dict"), saved.pop("optimizer_state_dict")
+    )
+    assert_nested_equal(resumed, saved)
+    assert isinstance(restored.optimizer.param_groups[0]["lr"], float)
+
+
+def test_compiled_update_does_not_recompile_as_the_learning_rate_changes(
+    trainer_factory: TrainerFactory, compile_calls: list[dict[str, Any]]
+) -> None:
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, torch_compile=True)
+    learning_rates = []
+    # Dynamo's own patch restores its config; pytest 9.2's monkeypatch would hide the key.
+    with torch._dynamo.config.patch(error_on_recompile=True):
+        for _ in range(3):
+            for parameter in trainer.model.parameters():
+                parameter.grad = torch.ones_like(parameter)
+            trainer._clip_and_step()
+            trainer.lr_scheduler.step()
+            learning_rates.append(float(trainer.optimizer.param_groups[0]["lr"]))
+    assert len(set(learning_rates)) == 3
+
+
+def test_compiled_backward_runs_outside_autocast_like_eager(
+    trainer_factory: TrainerFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from torch._dynamo.backends.registry import lookup_backend
+
+    settings = []
+    real_compile = torch.compile
+    aot_eager = lookup_backend("aot_eager")
+
+    def backend(graph: torch.fx.GraphModule, inputs: list[torch.Tensor]) -> Callable:
+        # AOTAutograd traces the backward when the forward graph compiles. The clipped
+        # update compiles outside autocast and has no backward.
+        if torch.is_autocast_enabled("cpu"):
+            settings.append(functorch_config.backward_pass_autocast)
+        return aot_eager(graph, inputs)
+
+    monkeypatch.setattr(
+        torch, "compile", lambda function, **options: real_compile(function, backend=backend)
+    )
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, torch_compile=True)
+    original = functorch_config.backward_pass_autocast
+    try:
+        trainer.train()
+    finally:
+        torch.compiler.reset()
+    assert settings
+    assert set(settings) == {"off"}
+    assert functorch_config.backward_pass_autocast == original
+
+
+@pytest.mark.parametrize(
+    "mode", ["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"]
+)
+def test_compile_mode_compiles_the_model_in_place(
+    trainer_factory: TrainerFactory, compile_calls: list[dict[str, Any]], mode: str
+) -> None:
+    trainer, _, _ = trainer_factory(
+        num_workers=0, prefetch_factor=None, torch_compile=True, torch_compile_mode=mode
+    )
+    assert compile_calls == [{"mode": mode}]
+    # Training and evaluation share the compiled model, and its state-dict keys stay unchanged.
+    assert trainer.training_model is trainer.model
+    assert trainer.model._compiled_call_impl is not None
+    assert not any(key.startswith("_orig_mod.") for key in trainer.model.state_dict())
 
 
 def assert_nested_equal(actual: Any, expected: Any) -> None:
@@ -1947,6 +2072,7 @@ def test_loss_and_gradients_match_cross_entropy_over_valid_targets(dtype: torch.
     valid = labels != -100
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
+    trainer.torch_compile = False
     loss, losses, count = trainer._calc_batch_loss(logits, labels)
     expected = F.cross_entropy(reference.float()[valid], labels[valid])
     assert count.item() == 4
@@ -1967,6 +2093,7 @@ def test_all_ignored_targets_do_not_produce_nan_loss(dtype: torch.dtype) -> None
     labels = torch.full((2, 3), -100, dtype=torch.long)
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
+    trainer.torch_compile = False
     loss, losses, count = trainer._calc_batch_loss(logits, labels)
     assert count.item() == 0
     assert torch.isfinite(loss), (
@@ -1993,6 +2120,7 @@ def test_dummy_batch_has_zero_loss_tokens_and_model_gradients(
     model = Olmo2(config)
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
+    trainer.torch_compile = False
     calc_loss = trainer._calc_batch_loss
     if compiled_loss:
         # Full-graph capture rejects graph breaks in the dummy loss path.

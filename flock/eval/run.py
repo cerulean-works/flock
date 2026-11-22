@@ -52,7 +52,7 @@ class EvalConfig:
 
     Args:
         model (`str`):
-            The model as `repo@revision`, or a version in the Flock registry as `flock:org/path`, `flock:org/path@{number}`, `flock:org/path@{tag}` or `flock:org/path@primary`, with folders in the path, or for a project's model in your default org `flock:project:path[@version]`.
+            The model as `repo@revision`, or a version in the Flock registry as `flock:org/path`, `flock:org/path@{number}`, `flock:org/path@{tag}` or `flock:org/path@primary`, with folders in the path, for a project's model in your default org `flock:project:path[@version]`, or a local folder as `local:folder@digest`.
         tasks (`tuple[str, ...]`, *optional*):
             Registry names of the tasks to run, in order.
         out (`Path`, *optional*):

@@ -11,7 +11,7 @@ import click
 from flock.eval import hub
 from flock.eval.compare import Comparison, compare
 from flock.eval.diff import ItemDiff, diff
-from flock.eval.model import DEFAULT_BATCH_TOKENS
+from flock.eval.model import DEFAULT_BATCH_TOKENS, folder_digest
 from flock.eval.results import Results, read_results
 from flock.eval.run import Dtype, EvalConfig, evaluate
 from flock.eval.tasks import SUITES, TASKS
@@ -26,7 +26,10 @@ def main() -> None:
 @click.option(
     "--model",
     required=True,
-    help="Model as repo@revision, flock:org/path[@version] or flock:project:path[@version].",
+    help=(
+        "Model as repo@revision, flock:org/path[@version], flock:project:path[@version] "
+        "or local:folder@digest."
+    ),
 )
 @click.option(
     "--task",
@@ -115,6 +118,17 @@ def run(
         raise click.UsageError(str(error)) from None
 
     click.echo(format_results(evaluate(config), verbose=verbose))
+
+
+@main.command(name="digest")
+@click.argument("folder", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def digest_command(folder: Path) -> None:
+    """Print the model id that scores a local folder: local:FOLDER@DIGEST, where the digest names every file in it."""
+    try:
+        click.echo(f"local:{folder}@{folder_digest(folder)}")
+    # A folder the digest refuses, or one it can't read.
+    except (ValueError, OSError) as error:
+        raise click.ClickException(str(error)) from None
 
 
 @main.command(name="compare")
