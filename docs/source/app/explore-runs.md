@@ -45,6 +45,8 @@ Tasks that can't be compared are listed below with the reason, such as another t
 
 ### Read the items[[read-eval-items]]
 
+With two runs, a map of every doc of the task sits above the table: one small mark per doc, grouped as the four groups are and in the table's order, A's margin on its top half and B's on the bottom, green above zero and red below. The colour is full at the task's 90th percentile of margins, shown in the legend. Hover a mark to see its doc and margins, and click it to open that doc in the table, on its page.
+
 Each doc is one row: its id, the part of its question that varies (the lines every question of the list shares, such as `Answer:`, are left out), the gold choice, and for each run its pick with a check or a cross, and its margin. With two runs, the last column is the gap between their margins.
 
 A run's margin is its gold choice's score minus its best wrong choice's, in the task's primary metric: per character for `acc_per_char`, the log-probability for `acc_raw`. Above zero the run got the doc right, and the further from zero, the surer it was. A margin that rounds to zero can show either sign: the scorer picked in FP32, and Flock computes the margin in double precision. The tint follows the sign and grows with the margin. A task scored by `acc_greedy` ranks no choices, so its rows have no margin.

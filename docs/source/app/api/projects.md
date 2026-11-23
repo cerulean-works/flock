@@ -200,6 +200,16 @@ Anyone may call it on two public projects. Item text isn't returned, only doc id
 
 Texts longer than 240 characters end with `…`. The answers are those of the [diff](#run-diff): 404 for a run that's unknown, you can't read, or has no `results.json`, and 409 with eval's reason when the items can't be read, such as runs scored with another instrument, a task one run didn't score, a `keep` that doesn't fit the number of runs, or a run whose results schema is older than 11, whose predictions hold no text. A task on a private dataset is read for the organization's members only: to anyone else its predictions don't exist, and the answer is a 409 with no text.
 
+## Eval item map[[run-items-map]]
+
+`GET .../runs/{run}/items/map?task={task}&with={entity}/{project}/{run}` returns every doc of one task for two runs, a cell of their diff at a time, for drawing them all at once. Each cell lists its doc ids in the order [Eval items](#run-items) lists that cell by default, and each doc's two margins (the run in the path first), rounded to 4 decimals, `null` where a run has none.
+
+```json
+{"cells": [{"keep": "only_a", "ids": ["Mercury_7017010", ...], "margins": [[0.29, -0.51], ...]}, {"keep": "only_b", ...}, {"keep": "both_wrong", ...}, {"keep": "both_right", ...}]}
+```
+
+It answers as the list does.
+
 ## One eval item[[run-item]]
 
 `GET .../runs/{run}/item?doc={doc}&task={task}&keep={keep}` returns one doc with its whole text and each run's answer, as [`flock eval items --json`](../../evals/commands#flock-eval-items) prints it. It takes `task`, `keep` and `with` as the [list](#run-items) does: `keep` is the list the doc is in, since two runs are read by a cell of their diff. The id is a query parameter, so any id, with slashes or dots, reaches it as written.
