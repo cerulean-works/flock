@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import stat
 from typing import TYPE_CHECKING
 
@@ -99,7 +100,7 @@ def test_a_perplexity_sidecar_has_each_docs_losses_and_byte_ends_but_no_token_id
     assert off.predictions("toy_text") == predictions
 
 
-def test_a_private_texts_sidecar_is_its_owners_only_and_training_writes_none(
+def test_a_private_texts_files_are_its_owners_only_and_training_writes_none(
     scorer: ScoringModel, tmp_path: Path
 ) -> None:
     import dataclasses
@@ -107,9 +108,20 @@ def test_a_private_texts_sidecar_is_its_owners_only_and_training_writes_none(
     private = dataclasses.replace(
         TEXT_TASK, dataset=dataclasses.replace(TEXT_TASK.dataset, private=True)
     )
-    score_task(scorer, private, out=tmp_path / "private", perplexity_tokens=True)
+    # A known umask, so the public files' mode is the writers' and not the shell's.
+    previous = os.umask(0o022)
+    try:
+        score_task(scorer, private, out=tmp_path / "private", perplexity_tokens=True)
+        score_task(scorer, TEXT_TASK, out=tmp_path / "public", perplexity_tokens=True)
+    finally:
+        os.umask(previous)
+
+    # Predictions too, though they hold ids and numbers and no text: every file of a private
+    # task is its owner's only.
+    for name in ("toy_text.jsonl", "toy_text.tokens.parquet"):
+        assert stat.S_IMODE((tmp_path / "private" / "predictions" / name).stat().st_mode) == 0o600
+        assert stat.S_IMODE((tmp_path / "public" / "predictions" / name).stat().st_mode) == 0o644
     path = tmp_path / "private" / "predictions" / "toy_text.tokens.parquet"
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert pq.read_table(path).num_rows == len(TEXT_ROWS)
 
     score_prepared(scorer, prepare_task(scorer, TEXT_TASK), tmp_path / "step")
