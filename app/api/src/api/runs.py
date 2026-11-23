@@ -37,7 +37,7 @@ from app.api.src.core.errors import NotFound
 from app.api.src.core.evals import PairFiles
 from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
 from flock.eval.diff import diff
-from flock.eval.items import Item, items
+from flock.eval.items import CELLS, Item, items
 from flock.eval.results import WrittenResults
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
@@ -644,6 +644,40 @@ async def diff_runs(
         raise APIError(409, str(exc)) from exc
 
 
+def _with_margins(
+    found: list[Item], sort: Literal["margin", "doc"]
+) -> list[tuple[Item, list[float | None]]]:
+    """Each item with each run's margin, its gold choice's score minus its best wrong choice's in the primary metric's units, in doc order or with ``sort="margin"`` the most telling first (D198): for two runs the largest gap between their margins, for one run the largest margin either way."""
+    # `share` is a softmax of the metric's scores, so the log of a ratio of shares is a gap
+    # between scores. `acc_greedy` ranks no choices, and a doc with one choice has no wrong one:
+    # no margin. A share that underflowed is floored.
+    ranked = []
+    for item in found:
+        margins: list[float | None] = []
+        for answer in item.runs:
+            wrong = [s for k, s in enumerate(answer.share or []) if k != item.gold]
+            if answer.share is None or not wrong:
+                margins.append(None)
+                continue
+            gold = max(answer.share[item.gold], 1e-300)
+            margins.append(math.log(gold) - math.log(max(max(wrong), 1e-300)))
+        ranked.append((item, margins))
+    if sort == "margin":
+
+        def rank(entry: tuple[Item, list[float | None]]) -> tuple[int, float]:
+            # One run: the surest first, right or wrong. Two: the biggest gap first. Items
+            # without a margin go last, in doc order (the sort is stable).
+            _, margins = entry
+            known = [m for m in margins if m is not None]
+            if len(known) < len(margins):
+                return (1, 0.0)
+            gap = known[0] if len(known) == 1 else known[0] - known[1]
+            return (0, -abs(gap))
+
+        ranked.sort(key=rank)
+    return ranked
+
+
 # What an items list keeps: eval's own values (`ONE_RUN` and `CELLS`), one run's or a cell of two.
 ItemKeep = Literal["wrong", "right", "all", "only_a", "only_b", "both_wrong", "both_right"]
 
@@ -677,35 +711,7 @@ async def run_items(
 
     def read() -> bytes:
         runs = [WrittenResults.read(source, reader) for source, reader in readers]
-        found = items(runs, task, keep)
-
-        # Each run's margin per item. `share` is a softmax of the metric's scores, so the log of a
-        # ratio of shares is a gap between scores. `acc_greedy` ranks no choices, and a doc with
-        # one choice has no wrong one: no margin. A share that underflowed is floored.
-        ranked = []
-        for item in found:
-            margins: list[float | None] = []
-            for answer in item.runs:
-                wrong = [s for k, s in enumerate(answer.share or []) if k != item.gold]
-                if answer.share is None or not wrong:
-                    margins.append(None)
-                    continue
-                gold = max(answer.share[item.gold], 1e-300)
-                margins.append(math.log(gold) - math.log(max(max(wrong), 1e-300)))
-            ranked.append((item, margins))
-        if sort == "margin":
-
-            def rank(entry: tuple[Item, list[float | None]]) -> tuple[int, float]:
-                # One run: the surest first, right or wrong. Two: the biggest gap first. Items
-                # without a margin go last, in doc order (the sort is stable).
-                _, margins = entry
-                known = [m for m in margins if m is not None]
-                if len(known) < len(margins):
-                    return (1, 0.0)
-                gap = known[0] if len(known) == 1 else known[0] - known[1]
-                return (0, -abs(gap))
-
-            ranked.sort(key=rank)
+        ranked = _with_margins(items(runs, task, keep), sort)
 
         # The whole lines every question shares at both ends (a wrapper such as `Question:` and
         # `Answer:`) are left out of the rows, which show what varies; a doc opens whole.
@@ -768,6 +774,37 @@ async def run_items(
     except FileNotFoundError as exc:
         raise APIError(404, str(exc)) from exc
     except ValueError as exc:  # eval's refusal, which says how to get the items where it can
+        raise APIError(409, str(exc)) from exc
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/items/map")
+async def run_items_map(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    task: Annotated[str, Query(description="the task whose docs are drawn")],
+    other: Annotated[str, Query(alias="with", description="the other run, as entity/project/id")],
+) -> Response:
+    """Every doc of a task for two runs, a cell of their diff at a time, each cell in the order ``.../items`` lists it by default: each doc's id and both runs' margins, rounded to 4 decimals. What the compare page's map draws (029); a doc opens through ``.../item``.
+
+    Read and refused as ``.../items`` is."""
+    loop = asyncio.get_running_loop()
+    readers = await eval_readers(run, other, store, viewer)
+
+    def read() -> bytes:
+        runs = [WrittenResults.read(source, reader) for source, reader in readers]
+        cells = []
+        for keep in CELLS:
+            ranked = _with_margins(items(runs, task, keep), "margin")
+            margins = [[None if m is None else round(m, 4) for m in ms] for _, ms in ranked]
+            cells.append({"keep": keep, "ids": [item.id for item, _ in ranked], "margins": margins})
+        return orjson.dumps({"cells": cells})
+
+    try:
+        return Response(await loop.run_in_executor(DIFFS, read), media_type="application/json")
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:
         raise APIError(409, str(exc)) from exc
 
 

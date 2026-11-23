@@ -349,6 +349,42 @@ def test_items_come_by_margin_unless_asked_for_the_datasets_order(
     assert api.get(route, task="t", keep="all", sort="best").status == 422
 
 
+def test_the_map_draws_every_doc_by_cell_in_the_lists_order(
+    flock: FlockServer, api: Client, tmp_path: Path
+) -> None:
+    """The map holds every doc of a task for two runs, a cell at a time in eval's order, each cell's ids in the order the list shows them by default and each run's margin rounded to 4 decimals; it is refused as the list is, and a private task's ids reach members only (029)."""
+    a = write_run(tmp_path / "a", {"t": ("h", [True, False, False, True, True])})
+    b = write_run(tmp_path / "b", {"t": ("h", [True, True, False, False, True])})
+    keep_private(a, "t")
+    keep_private(b, "t")
+    log_run(api, "p", "a", a)
+    log_run(api, "p", "b", b)
+    route = f"{P}/p/runs/a/items/map"
+
+    found = api.get(route, task="t", **{"with": "flock/p/b"})
+    assert found.status == 200, found.body
+    cells = found.json()["cells"]
+    assert [c["keep"] for c in cells] == list(CELLS)
+    for cell in cells:
+        query: dict[str, Any] = {"task": "t", "keep": cell["keep"], "with": "flock/p/b"}
+        rows = api.get(f"{P}/p/runs/a/items", **query).json()["items"]
+        assert cell["ids"] == [r["id"] for r in rows], cell["keep"]
+        margins = [[round(r["margin"], 4) for r in row["runs"]] for row in rows]
+        assert cell["margins"] == margins
+    assert sum(len(c["ids"]) for c in cells) == 5
+
+    # Refused as the list is: one run, or a run before schema 11.
+    assert api.get(route, task="t").status == 422
+    log_run(api, "p", "old", write_run(tmp_path / "old", {"t": ("h", [True])}, schema=10))
+    old = api.get(route, task="t", **{"with": "flock/p/old"})
+    assert old.status == 409 and "schema 10" in old.json()["error"]
+
+    # The task's dataset is private: on the public project, an outsider gets eval's refusal.
+    assert api.patch(f"{P}/p", {"visibility": "public"}).status == 200
+    outside = flock.anonymous().get(route, task="t", **{"with": "flock/p/b"})
+    assert outside.status == 409 and b"d-" not in outside.body
+
+
 def test_items_are_refused_as_eval_refuses_them(api: Client, tmp_path: Path) -> None:
     """A run before schema 11 has no text, and eval says how to get it; a keep that doesn't fit the number of runs, or an unknown task, is eval's refusal too; an unknown keep is invalid."""
     log_run(api, "p", "new", write_run(tmp_path / "new", {"t": ("h", [True, False])}))
