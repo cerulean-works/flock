@@ -89,9 +89,23 @@ def assert_packed_matches_documents_alone(model: Olmo2) -> None:
 
 
 def assert_reads_nothing_back(model: Olmo2, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A packed forward never waits on the device: boundaries arrive ready from the CPU."""
+    """A packed forward never waits on the device: boundaries arrive ready from the CPU.
+
+    The CPU has no device to wait on, so this records the Python-level tensor calls that
+    read values to the host, including the implicit ones in `if t`, `int(t)` and `range(t)`.
+    """
     host_reads: list[str] = []
-    for name in ("item", "cpu", "tolist"):
+    for name in (
+        "item",
+        "cpu",
+        "tolist",
+        "numpy",
+        "nonzero",
+        "__bool__",
+        "__int__",
+        "__float__",
+        "__index__",
+    ):
         original = getattr(torch.Tensor, name)
         monkeypatch.setattr(
             torch.Tensor,
@@ -100,10 +114,15 @@ def assert_reads_nothing_back(model: Olmo2, monkeypatch: pytest.MonkeyPatch) -> 
                 host_reads.append(_name) or _original(*args, **kwargs)
             ),
         )
-    original_equal = torch.equal
-    monkeypatch.setattr(
-        torch, "equal", lambda *a, **k: host_reads.append("equal") or original_equal(*a, **k)
-    )
+    for name in ("equal", "nonzero"):
+        original = getattr(torch, name)
+        monkeypatch.setattr(
+            torch,
+            name,
+            lambda *args, _name=name, _original=original, **kwargs: (
+                host_reads.append(_name) or _original(*args, **kwargs)
+            ),
+        )
     model(packed_batch(PACKED_ROWS, PACKED_WIDTH))
     assert host_reads == []
 
