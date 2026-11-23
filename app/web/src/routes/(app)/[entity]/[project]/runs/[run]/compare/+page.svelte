@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { onMount, tick } from 'svelte';
 	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -18,28 +19,61 @@
 		typedIn,
 		withItemsView
 	} from '#lib/evals.ts';
-	import type { ItemKeep, RunDetail } from '#lib/types.ts';
+	import type { ItemDiff, ItemKeep, RunDetail } from '#lib/types.ts';
 	import { projectHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
-	// The items' filters: each task with its four cells' counts.
-	const tasks = $derived(
-		(data.diff?.tasks ?? []).map((t) => ({
-			task: t.task,
-			counts: {
-				only_a: t.only_a.length,
-				only_b: t.only_b.length,
-				both_wrong: t.both_wrong,
-				both_right: t.both_right
+	// The diff streams in after the page (031 D209), so the runs and a linked task's items show
+	// first: until it lands there is no diff and no refusal.
+	let diff = $state<ItemDiff | null>(null);
+	let refusalText = $state<string | null>(null);
+	let failure = $state<string | null>(null);
+	$effect(() => {
+		const pending = data.compared;
+		diff = null;
+		refusalText = null;
+		failure = null;
+		// An answer for a pair the reader has since left is dropped.
+		pending?.then(
+			(found) => {
+				if (data.compared !== pending) return;
+				diff = found.diff;
+				refusalText = found.refusal;
+			},
+			(cause: { message?: string }) => {
+				if (data.compared === pending) failure = cause?.message ?? 'Flock gave no reason';
 			}
-		}))
+		);
+	});
+
+	// A task the link names loads its items at once: a whole bank's diff takes seconds, one task's
+	// items under one.
+	const linked = $derived(itemsViewOf(page.url.searchParams).task);
+	// The items' filters: each task with its four cells' counts.
+	const tasks = $derived.by(() => {
+		if (diff)
+			return diff.tasks.map((t) => ({
+				task: t.task,
+				counts: {
+					only_a: t.only_a.length,
+					only_b: t.only_b.length,
+					both_wrong: t.both_wrong,
+					both_right: t.both_right
+				}
+			}));
+		// Until then a task the link names is offered alone, without counts.
+		return linked ? [{ task: linked, counts: {} }] : [];
+	});
+	// A linked task the diff leaves out restarts the items on a task it compared.
+	const dropped = $derived(
+		diff !== null && linked !== undefined && !diff.tasks.some((t) => t.task === linked)
 	);
 
 	const totals = $derived.by(() => {
 		const sum = { docs: 0, both_right: 0, both_wrong: 0, only_a: 0, only_b: 0 };
-		for (const t of data.diff?.tasks ?? []) {
+		for (const t of diff?.tasks ?? []) {
 			sum.docs += t.num_docs;
 			sum.both_right += t.both_right;
 			sum.both_wrong += t.both_wrong;
@@ -105,7 +139,7 @@
 	// Flock names a run without a results file by its tracker source, `run:entity/project/id`:
 	// the page says it with the run's name.
 	const refusal = $derived(
-		data.refusal
+		refusalText
 			?.replaceAll(`run:${pathOf(data.a)}`, `${nameOf(data.a)}`)
 			.replaceAll(`run:${data.b ? pathOf(data.b) : ''}`, `${data.b ? nameOf(data.b) : ''}`)
 			.replace(/ has no results\.json$/, ' has no eval results (no results.json)')
@@ -169,7 +203,7 @@
 
 <!-- Without text (a run before schema 11), a cell's doc ids, where the diff lists them. -->
 {#snippet ids(task: string, keep: ItemKeep)}
-	{@const t = data.diff?.tasks.find((d) => d.task === task)}
+	{@const t = diff?.tasks.find((d) => d.task === task)}
 	{#if t && (keep === 'only_a' || keep === 'only_b')}
 		{@const list = t[keep]}
 		<div class="min-w-0 px-3">
@@ -220,15 +254,17 @@
 
 	<div class="grid gap-6 pb-16 text-[13px]">
 		<div class="grid gap-2 sm:grid-cols-2">
-			{@render side('A', data.a, data.diff?.a)}
-			{@render side('B', data.b, data.diff?.b)}
+			{@render side('A', data.a, diff?.a)}
+			{@render side('B', data.b, diff?.b)}
 		</div>
 
-		{#if refusal}
+		{#if failure}
+			<p class="bg-card px-3 py-2.5" role="alert">The comparison failed: {failure}</p>
+		{:else if refusal}
 			<p class="bg-card px-3 py-2.5" role="alert">
 				These runs can’t be compared doc by doc: {refusal}
 			</p>
-		{:else if data.diff && data.b}
+		{:else if data.b}
 			<!-- A pair with no task in common has nothing to list: the reasons below say why. -->
 			{#if tasks.length}
 				<section aria-labelledby="items">
@@ -239,8 +275,9 @@
 					>
 						Items
 					</h2>
-					<!-- Another pair, or a task picked in the table below, starts the items over. -->
-					{#key `${pathOf(data.a)} ${pathOf(data.b)} ${picked}`}
+					<!-- Another pair, a task picked in the table below, or a linked task the diff left out
+						starts the items over. -->
+					{#key `${pathOf(data.a)} ${pathOf(data.b)} ${picked} ${dropped}`}
 						<EvalItems
 							entity={data.a.entity}
 							project={data.a.project}
@@ -263,101 +300,109 @@
 				</section>
 			{/if}
 
-			<section aria-labelledby="compared">
-				<h2 id="compared" class="mb-2 flex items-center gap-2 text-[22px] tracking-[-0.01em]">
-					{data.diff.tasks.length} tasks compared
-					<InfoHint label="About these counts">
-						A and B are each run’s accuracy on the docs compared, and Δ points is A’s lead. Click a
-						task to read its items above. Doc ids are the dataset’s own ids, or a hash of the doc
-						where it has none. Counts only: no test of significance.
-					</InfoHint>
-				</h2>
-				<div class="overflow-x-auto">
-					<table class="w-full min-w-[60rem] table-fixed border-t border-divider">
-						{@render columns()}
-						<thead class="border-b text-xs text-muted-foreground">
-							<tr>
-								<th class="px-3 py-2 text-left font-medium">Task</th>
-								<th class="px-3 py-2 text-right font-medium">Docs</th>
-								<th class="px-3 py-2 text-right font-medium">A</th>
-								<th class="px-3 py-2 text-right font-medium">B</th>
-								<th class="px-3 py-2 text-right font-medium">Δ points</th>
-								<th class="px-3 py-2 text-right font-medium">Both right</th>
-								<th class="px-3 py-2 text-right font-medium">Both wrong</th>
-								<th class="px-3 py-2 text-right font-medium">Only A right</th>
-								<th class="px-3 py-2 text-right font-medium">Only B right</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each data.diff.tasks as t (t.task)}
-								{@const rate = score(t.both_right, t.only_a.length, t.only_b.length, t.num_docs)}
-								<!-- The row opens the task's items above; its name is the button for the keys. -->
-								<tr
-									class="cursor-pointer border-b border-divider hover:bg-muted"
-									onclick={() => showTask(t.task)}
-								>
-									<td class="truncate px-3 py-1.5">
-										<button
-											type="button"
-											class="block max-w-full truncate font-mono text-[12.5px] hover:underline"
-											title="Show its items"
-										>
-											{t.task}
-										</button>
-										<span class="text-xs text-faint" title={t.task_hash}>
-											{t.metric} · {t.task_hash.slice(0, 12)}
-										</span>
-									</td>
-									<td class="px-3 py-1.5 text-right tabular-nums">{t.num_docs}</td>
-									{@render rates(rate)}
-									<td class="px-3 py-1.5 text-right tabular-nums">{t.both_right}</td>
-									<td class="px-3 py-1.5 text-right tabular-nums">{t.both_wrong}</td>
-									<td class="px-3 py-1.5 text-right tabular-nums">{t.only_a.length}</td>
-									<td class="px-3 py-1.5 text-right tabular-nums">{t.only_b.length}</td>
-								</tr>
-							{/each}
-						</tbody>
-						{#if data.diff.tasks.length > 1}
-							<tfoot class="text-muted-foreground">
-								<tr>
-									<td class="px-3 py-2">All compared tasks</td>
-									<td class="px-3 py-2 text-right tabular-nums">{totals.docs}</td>
-									{@render rates(
-										score(totals.both_right, totals.only_a, totals.only_b, totals.docs)
-									)}
-									<td class="px-3 py-2 text-right tabular-nums">{totals.both_right}</td>
-									<td class="px-3 py-2 text-right tabular-nums">{totals.both_wrong}</td>
-									<td class="px-3 py-2 text-right tabular-nums">{totals.only_a}</td>
-									<td class="px-3 py-2 text-right tabular-nums">{totals.only_b}</td>
-								</tr>
-							</tfoot>
-						{/if}
-					</table>
-				</div>
-			</section>
-
-			{#if data.diff.not_compared.length}
-				<section aria-labelledby="not-compared">
-					<h2 id="not-compared" class="mb-2 text-[22px] tracking-[-0.01em]">
-						{data.diff.not_compared.length} tasks not compared
+			{#if !diff}
+				<p class="flex items-center gap-2 text-muted-foreground" role="status">
+					<LoaderCircleIcon class="size-4 animate-spin" aria-hidden="true" />
+					Comparing every task of the two runs…
+				</p>
+			{:else}
+				<section aria-labelledby="compared">
+					<h2 id="compared" class="mb-2 flex items-center gap-2 text-[22px] tracking-[-0.01em]">
+						{diff.tasks.length} tasks compared
+						<InfoHint label="About these counts">
+							A and B are each run’s accuracy on the docs compared, and Δ points is A’s lead. Click
+							a task to read its items above. Doc ids are the dataset’s own ids, or a hash of the
+							doc where it has none. Counts only: no test of significance.
+						</InfoHint>
 					</h2>
 					<div class="overflow-x-auto">
 						<table class="w-full min-w-[60rem] table-fixed border-t border-divider">
 							{@render columns()}
+							<thead class="border-b text-xs text-muted-foreground">
+								<tr>
+									<th class="px-3 py-2 text-left font-medium">Task</th>
+									<th class="px-3 py-2 text-right font-medium">Docs</th>
+									<th class="px-3 py-2 text-right font-medium">A</th>
+									<th class="px-3 py-2 text-right font-medium">B</th>
+									<th class="px-3 py-2 text-right font-medium">Δ points</th>
+									<th class="px-3 py-2 text-right font-medium">Both right</th>
+									<th class="px-3 py-2 text-right font-medium">Both wrong</th>
+									<th class="px-3 py-2 text-right font-medium">Only A right</th>
+									<th class="px-3 py-2 text-right font-medium">Only B right</th>
+								</tr>
+							</thead>
 							<tbody>
-								{#each data.diff.not_compared as [task, reason] (task)}
-									<tr class="border-b border-divider">
-										<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" title={task}>{task}</td
-										>
-										<td colspan="8" class="px-3 py-1.5 text-muted-foreground"
-											>{NOT_COMPARED[reason] ?? reason}</td
-										>
+								{#each diff.tasks as t (t.task)}
+									{@const rate = score(t.both_right, t.only_a.length, t.only_b.length, t.num_docs)}
+									<!-- The row opens the task's items above; its name is the button for the keys. -->
+									<tr
+										class="cursor-pointer border-b border-divider hover:bg-muted"
+										onclick={() => showTask(t.task)}
+									>
+										<td class="truncate px-3 py-1.5">
+											<button
+												type="button"
+												class="block max-w-full truncate font-mono text-[12.5px] hover:underline"
+												title="Show its items"
+											>
+												{t.task}
+											</button>
+											<span class="text-xs text-faint" title={t.task_hash}>
+												{t.metric} · {t.task_hash.slice(0, 12)}
+											</span>
+										</td>
+										<td class="px-3 py-1.5 text-right tabular-nums">{t.num_docs}</td>
+										{@render rates(rate)}
+										<td class="px-3 py-1.5 text-right tabular-nums">{t.both_right}</td>
+										<td class="px-3 py-1.5 text-right tabular-nums">{t.both_wrong}</td>
+										<td class="px-3 py-1.5 text-right tabular-nums">{t.only_a.length}</td>
+										<td class="px-3 py-1.5 text-right tabular-nums">{t.only_b.length}</td>
 									</tr>
 								{/each}
 							</tbody>
+							{#if diff.tasks.length > 1}
+								<tfoot class="text-muted-foreground">
+									<tr>
+										<td class="px-3 py-2">All compared tasks</td>
+										<td class="px-3 py-2 text-right tabular-nums">{totals.docs}</td>
+										{@render rates(
+											score(totals.both_right, totals.only_a, totals.only_b, totals.docs)
+										)}
+										<td class="px-3 py-2 text-right tabular-nums">{totals.both_right}</td>
+										<td class="px-3 py-2 text-right tabular-nums">{totals.both_wrong}</td>
+										<td class="px-3 py-2 text-right tabular-nums">{totals.only_a}</td>
+										<td class="px-3 py-2 text-right tabular-nums">{totals.only_b}</td>
+									</tr>
+								</tfoot>
+							{/if}
 						</table>
 					</div>
 				</section>
+
+				{#if diff.not_compared.length}
+					<section aria-labelledby="not-compared">
+						<h2 id="not-compared" class="mb-2 text-[22px] tracking-[-0.01em]">
+							{diff.not_compared.length} tasks not compared
+						</h2>
+						<div class="overflow-x-auto">
+							<table class="w-full min-w-[60rem] table-fixed border-t border-divider">
+								{@render columns()}
+								<tbody>
+									{#each diff.not_compared as [task, reason] (task)}
+										<tr class="border-b border-divider">
+											<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" title={task}
+												>{task}</td
+											>
+											<td colspan="8" class="px-3 py-1.5 text-muted-foreground"
+												>{NOT_COMPARED[reason] ?? reason}</td
+											>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					</section>
+				{/if}
 			{/if}
 		{/if}
 	</div>
