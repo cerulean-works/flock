@@ -1,5 +1,6 @@
 import asyncio
 import dataclasses
+import hashlib
 import math
 import mimetypes
 import os
@@ -814,9 +815,9 @@ def _accuracy_suites(a: WrittenResults, b: WrittenResults) -> dict[str, list[str
 
 # The suite squares of a pair (029): reading every accuracy task of two runs takes tens of seconds,
 # so it runs on a worker of its own, never holding up the lists' and docs' reads in `DIFFS`, and
-# its answer is kept for the last few pairs, keyed by both runs' results files and whether the
-# viewer reads each as an outsider: finished runs' files don't change, a results file that does
-# is a new key, and an answer missing a task a run is still uploading isn't kept.
+# its answer is kept for the last few pairs, keyed by both runs' files (names, sizes and times)
+# and whether the viewer reads each as an outsider: any upload is a new key, and an answer
+# missing a task a run is still uploading isn't kept.
 SQUARES = ThreadPoolExecutor(max_workers=1, thread_name_prefix="squares")
 SQUARE_ANSWERS: OrderedDict[tuple[str, ...], bytes] = OrderedDict()
 
@@ -835,19 +836,25 @@ async def run_items_suites(
     readers = await eval_readers(run, other, store, viewer)
     # Whether the viewer reads each run as an outsider, who gets no private dataset's predictions,
     # as `eval_readers` decides it; it is in the key, so a change of membership is a new key.
-    entity, project, _ = other.split("/")
-    projects = [run.project, await get_readable_project(entity, project, store, viewer)]
-    public = [store.accounts.access(viewer, p) == "public" for p in projects]
+    entity, project, name = other.split("/")
+    other_project = await get_readable_project(entity, project, store, viewer)
+    pair = [run, await find_run(store, other_project, name)]
+    public = [store.accounts.access(viewer, r.project) == "public" for r in pair]
+    # Every file of both runs, by name, size and time: any upload, a predictions file replaced
+    # under the same results file too, is a new key. Read here, so a kept answer is served
+    # without waiting behind another pair's computation on `SQUARES`.
+    listing = hashlib.sha256()
+    for of in pair:
+        listing.update(f"{of.pk}\n".encode())
+        for file in await store.list_files(of):
+            listing.update(f"{file}\n".encode())
+    key = (listing.hexdigest(), *(str(p) for p in public))
+    if key in SQUARE_ANSWERS:
+        SQUARE_ANSWERS.move_to_end(key)
+        return Response(SQUARE_ANSWERS[key], media_type="application/json")
 
-    def read() -> bytes:
+    def read() -> tuple[bytes, bool]:
         runs = [WrittenResults.read(source, text) for source, text in readers]
-        # The results files themselves are in the key, so a run scored again is computed again.
-        key = tuple(r.source + "\n" + (r.read_file("results.json") or "") for r in runs)
-        key += tuple(str(p) for p in public)
-        if key in SQUARE_ANSWERS:
-            SQUARE_ANSWERS.move_to_end(key)
-            return SQUARE_ANSWERS[key]
-
         suites = _accuracy_suites(*runs)
         # The tasks an outsider can't read; any other task without predictions is a run still
         # uploading, and an answer missing it isn't kept.
@@ -895,20 +902,20 @@ async def run_items_suites(
                         dots.append([round(a, 3), round(b, 3), k, t, i, doc_id])
             counts = {keep: len(pairs) for keep, pairs in zip(CELLS, cells, strict=True)}
             rows.append({"suite": suite, "tasks": shown, "counts": counts, "dots": dots})
-        answer = orjson.dumps({"suites": rows})
-        if not whole:
-            return answer
-        SQUARE_ANSWERS[key] = answer
-        while len(SQUARE_ANSWERS) > 8:
-            SQUARE_ANSWERS.popitem(last=False)
-        return answer
+        return orjson.dumps({"suites": rows}), whole
 
     try:
-        return Response(await loop.run_in_executor(SQUARES, read), media_type="application/json")
+        answer, whole = await loop.run_in_executor(SQUARES, read)
     except FileNotFoundError as exc:
         raise APIError(404, str(exc)) from exc
     except ValueError as exc:
         raise APIError(409, str(exc)) from exc
+    # Kept from the event loop only, so one thread ever touches the kept answers.
+    if whole:
+        SQUARE_ANSWERS[key] = answer
+        while len(SQUARE_ANSWERS) > 8:
+            SQUARE_ANSWERS.popitem(last=False)
+    return Response(answer, media_type="application/json")
 
 
 @public.get("/projects/{entity}/{project}/runs/{run}/item")

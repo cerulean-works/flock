@@ -249,10 +249,11 @@
 	function pick(tasks: string[], cell: ItemKeep) {
 		const to = tasks.includes(task) ? task : tasks[0];
 		if (to === task && cell === keep && at === 1 && open === null) return;
+		// Another list's count isn't this one's; the same list keeps its pager while it reloads.
+		if (to !== task || cell !== keep) total = null;
 		task = to;
 		keep = cell;
 		at = 1;
-		total = null;
 		open = null;
 		tell();
 	}

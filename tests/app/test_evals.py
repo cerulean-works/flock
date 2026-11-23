@@ -407,8 +407,18 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     margins = [round(m["margin"], 3) for m in listed.json()["items"][0]["runs"]]
     assert [*margins, 1, 0, 0, "d-1"] in rows["s"]["dots"]
 
-    # The same pair again is the kept answer, byte for byte.
+    # The same pair again is the kept answer, byte for byte; a predictions file uploaded again
+    # with other rows, under the same results file, is a new answer.
     assert api.get(route, **{"with": "flock/p/b"}).body == found.body
+    rows_u = (
+        (Path(b) / "predictions" / "u.jsonl")
+        .read_text()
+        .replace('"correct": true', '"correct": false')
+    )
+    rows_u = rows_u.replace('"pick": 0', '"pick": 1').replace("[-1.0, -2.0]", "[-2.0, -1.0]")
+    api.upload("p", "b", "predictions/u.jsonl", rows_u.encode())
+    again = {r["suite"]: r for r in api.get(route, **{"with": "flock/p/b"}).json()["suites"]}
+    assert again["s"]["counts"]["only_a"] == rows["s"]["counts"]["only_a"] + 1
     assert api.get(route).status == 422
 
     # On the public project, an outsider's squares leave the private exam out.
