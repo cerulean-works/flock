@@ -292,7 +292,7 @@ describe('eval items', () => {
 		const onview = vi.fn();
 		render(EvalItems, { ...PAIR, onview });
 
-		const canvas = screen.getByRole('img', { name: 'Only A right: 25 docs' });
+		const canvas = screen.getByRole('img', { name: /^25 docs: Only A right 25, Only B right 0/ });
 		await expect.element(canvas).toBeVisible();
 		const map = asked(fetch).find((url) => url.pathname.endsWith('/items/map'))!;
 		expect(map.pathname).toBe('/api/projects/acme/evals/runs/r1/items/map');
@@ -300,12 +300,19 @@ describe('eval items', () => {
 			task: 'arc_easy',
 			with: 'acme/evals/r2'
 		});
-		// The empty cells draw nothing.
-		expect(screen.getByRole('img').all()).toHaveLength(1);
 
-		// a-21 is the 22nd mark: 9 px apart for a task this small, two runs' halves to a row.
-		const perRow = canvas.element().getBoundingClientRect().width / 9;
-		const position = { x: (21 % perRow) * 9 + 4, y: Math.floor(21 / perRow) * 18 + 4 };
+		// a-21 sits at A's margin 0.16 across and B's -0.5 up, on axes reaching the 98th percentile
+		// of the task's absolute margins, inside 40 px on the left, 8 on the right and top, 22 below.
+		const sizes = MAP.cells[0].margins
+			.flat()
+			.map((m) => Math.abs(m!))
+			.sort((x, y) => x - y);
+		const scale = sizes[Math.floor((sizes.length - 1) * 0.98)];
+		const width = canvas.element().getBoundingClientRect().width;
+		const position = {
+			x: 40 + ((0.16 / scale + 1) / 2) * (width - 48),
+			y: 8 + ((1 + 0.5 / scale) / 2) * (300 - 30)
+		};
 		await userEvent.click(canvas, { position });
 		await expect
 			.element(screen.getByRole('button', { name: 'a-21', exact: true }))

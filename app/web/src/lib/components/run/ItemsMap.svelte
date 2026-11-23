@@ -5,10 +5,11 @@
 	import type { ItemKeep, ItemsMap } from '#lib/types.ts';
 
 	/**
-	 * Every doc of a task for two runs, a canvas per cell of their diff (029): one mark per doc,
-	 * A's margin on top and B's below, tinted by sign as the list tints margins, as strong as the
-	 * task's 90th percentile of margins. Each cell is in the list's default order, so a clicked mark
-	 * lands on its row. The list stays the way to read docs by keyboard; the map is for the eye.
+	 * Every doc of a task for two runs on one scatter plot (029): a dot per doc at A's margin across
+	 * and B's margin up, so the zero lines split the plot into the diff's four cells, and a dot far
+	 * from the diagonal is a doc the runs disagree on. Docs only one run got right stand out in the
+	 * reading blue; the rest recede. A clicked dot opens its doc in the list, at its page. The list
+	 * stays the way to read docs by keyboard; the plot is for the eye.
 	 */
 	interface Props {
 		/** Run A's path under `/api/projects/`. */
@@ -18,7 +19,7 @@
 		other: string;
 		/** The cells' names, as the list's keeps label them. */
 		keeps: { keep: ItemKeep; label: string }[];
-		/** Told the cell, the doc's place in its default order and its id when a mark is clicked. */
+		/** Told the cell, the doc's place in its default order and its id when a dot is clicked. */
 		onopen: (keep: ItemKeep, index: number, id: string) => void;
 	}
 
@@ -27,11 +28,10 @@
 	let map = $state<ItemsMap | null>(null);
 	let loading = $state(false);
 	let width = $state(0);
-	let root = $state<HTMLElement>();
-	// The doc under the pointer, and where its tooltip sits in the map's box.
+	// The doc under the pointer, and where its tooltip sits in the plot's box.
 	let hover = $state<{ id: string; margins: (number | null)[]; x: number; y: number } | null>(null);
 
-	// Refused or failed, the map stays away: the list under it says why.
+	// Refused or failed, the plot stays away: the list under it says why.
 	$effect(() => {
 		const asked = new URLSearchParams({ task, with: other });
 		const controller = new AbortController();
@@ -50,116 +50,178 @@
 		return () => controller.abort();
 	});
 
-	const docs = $derived(map?.cells.reduce((n, c) => n + c.ids.length, 0) ?? 0);
-	// Small marks for a large task, so HellaSwag's 10,042 docs fit a few screens' worth of rows.
-	const pitch = $derived(docs > 2000 ? 5 : 9);
-	const perRow = $derived(Math.max(1, Math.floor(width / pitch)));
-	// Full tint at the task's 90th percentile: margins under a length-normalized metric are small,
-	// so one fixed scale would wash such a task out.
+	// A fixed height, so the plot never moves the list under it as it loads or the page narrows.
+	const HEIGHT = 300;
+	// Room for the axes' numbers on the left and bottom.
+	const PAD = { left: 40, right: 8, top: 8, bottom: 22 };
+	// Both axes reach the task's 98th percentile of margins, the same either way so the diagonal is
+	// at 45 degrees; a margin past it sits on the edge. Margins under a length-normalized metric
+	// are small, so one fixed scale would crowd such a task into the middle.
 	const scale = $derived.by(() => {
 		const all = map?.cells.flatMap((c) => c.margins.flat()).filter((m) => m !== null) ?? [];
 		const sizes = all.map(Math.abs).sort((x, y) => x - y);
-		return sizes[Math.floor(sizes.length * 0.9)] || 1;
+		return sizes[Math.floor((sizes.length - 1) * 0.98)] || 1;
 	});
+	// Each dot's place in the plot's box, with its cell and its index in the cell's default order.
+	const dots = $derived.by(() => {
+		const plotW = Math.max(1, width - PAD.left - PAD.right);
+		const plotH = HEIGHT - PAD.top - PAD.bottom;
+		const out: { x: number; y: number; keep: ItemKeep; index: number; flip: boolean }[] = [];
+		for (const cell of map?.cells ?? []) {
+			cell.margins.forEach(([a, b], index) => {
+				if (a === null || b === null) return; // no margin, no place on the plot
+				const clamp = (m: number) => Math.max(-1, Math.min(1, m / scale));
+				out.push({
+					x: PAD.left + ((clamp(a) + 1) / 2) * plotW,
+					y: PAD.top + ((1 - clamp(b)) / 2) * plotH,
+					keep: cell.keep,
+					index,
+					flip: cell.keep === 'only_a' || cell.keep === 'only_b'
+				});
+			});
+		}
+		return out;
+	});
+	const counts = $derived(
+		Object.fromEntries((map?.cells ?? []).map((c) => [c.keep, c.ids.length])) as Partial<
+			Record<ItemKeep, number>
+		>
+	);
+	const label = (keep: ItemKeep) => keeps.find((k) => k.keep === keep)?.label ?? keep;
 
-	// Draws one cell's marks: the muted ground, then each run's tint over it.
-	function draw(canvas: HTMLCanvasElement, cell: ItemsMap['cells'][number]) {
+	function draw(canvas: HTMLCanvasElement) {
 		$effect(() => {
 			void scheme.dark;
 			const css = getComputedStyle(canvas);
-			const ground = css.getPropertyValue('--muted').trim();
-			const right = css.getPropertyValue('--state-finished').trim();
-			const wrong = css.getPropertyValue('--destructive').trim();
+			const ink = css.getPropertyValue('--muted-foreground').trim();
+			const rule = css.getPropertyValue('--border').trim();
+			const flip = css.getPropertyValue('--primary').trim();
 			const dpr = Math.min(window.devicePixelRatio || 1, 2);
-			const rows = Math.ceil(cell.ids.length / perRow);
-			canvas.width = perRow * pitch * dpr;
-			canvas.height = rows * 2 * pitch * dpr;
-			canvas.style.width = `${perRow * pitch}px`;
-			canvas.style.height = `${rows * 2 * pitch}px`;
+			canvas.width = Math.max(1, width) * dpr;
+			canvas.height = HEIGHT * dpr;
 			const ctx = canvas.getContext('2d');
-			if (!ctx) return;
+			if (!ctx || !width) return;
 			ctx.scale(dpr, dpr);
-			// A mark is pitch - 1 wide with a 1 px gap; each run's half is pitch - 2 tall, so a row
-			// of marks takes 2 * pitch with 4 px to spare under it.
-			const side = pitch - 1;
-			cell.margins.forEach((margins, i) => {
-				const x = (i % perRow) * pitch;
-				const y = Math.floor(i / perRow) * 2 * pitch;
-				margins.forEach((m, run) => {
-					ctx.globalAlpha = 1;
-					ctx.fillStyle = ground;
-					ctx.fillRect(x, y + run * (side - 1), side, side - 1);
-					if (m === null) return;
-					ctx.globalAlpha = Math.min(Math.abs(m) / scale, 1);
-					ctx.fillStyle = m >= 0 ? right : wrong;
-					ctx.fillRect(x, y + run * (side - 1), side, side - 1);
-				});
-			});
+			const left = PAD.left;
+			const right = width - PAD.right;
+			const top = PAD.top;
+			const bottom = HEIGHT - PAD.bottom;
+			const midX = (left + right) / 2;
+			const midY = (top + bottom) / 2;
+
+			// The zero lines (the cells' borders) solid, the diagonal (agreement) dashed.
+			ctx.strokeStyle = rule;
+			ctx.lineWidth = 1;
+			ctx.strokeRect(left + 0.5, top + 0.5, right - left - 1, bottom - top - 1);
+			ctx.beginPath();
+			ctx.moveTo(midX, top);
+			ctx.lineTo(midX, bottom);
+			ctx.moveTo(left, midY);
+			ctx.lineTo(right, midY);
+			ctx.stroke();
+			ctx.setLineDash([3, 3]);
+			ctx.beginPath();
+			ctx.moveTo(left, bottom);
+			ctx.lineTo(right, top);
+			ctx.stroke();
+			ctx.setLineDash([]);
+
+			// Small, see-through dots, so a crowd reads darker; the docs the runs split on last, on top.
+			const radius = dots.length > 2000 ? 1.5 : 2.5;
+			for (const flips of [false, true]) {
+				ctx.fillStyle = flips ? flip : ink;
+				ctx.globalAlpha = flips ? 0.7 : dots.length > 2000 ? 0.18 : 0.35;
+				for (const dot of dots) {
+					if (dot.flip !== flips) continue;
+					ctx.beginPath();
+					ctx.arc(dot.x, dot.y, radius, 0, 2 * Math.PI);
+					ctx.fill();
+				}
+			}
+			ctx.globalAlpha = 1;
+
+			// Each quadrant's cell and count, in its outer corner; the scale on the axes.
+			ctx.fillStyle = ink;
+			ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
+			const corner = (keep: ItemKeep, x: number, y: number, align: CanvasTextAlign) => {
+				ctx.textAlign = align;
+				ctx.fillText(`${label(keep)} ${counts[keep] ?? 0}`, x, y);
+			};
+			corner('only_b', left + 6, top + 14, 'left');
+			corner('both_right', right - 6, top + 14, 'right');
+			corner('both_wrong', left + 6, bottom - 6, 'left');
+			corner('only_a', right - 6, bottom - 6, 'right');
+			ctx.textAlign = 'center';
+			ctx.fillText(`−${scale.toFixed(2)}`, left + 16, HEIGHT - 6);
+			ctx.fillText('A’s margin →', midX, HEIGHT - 6);
+			ctx.fillText(`+${scale.toFixed(2)}`, right - 16, HEIGHT - 6);
+			ctx.textAlign = 'right';
+			ctx.fillText(`+${scale.toFixed(2)}`, left - 4, top + 10);
+			ctx.fillText('B ↑', left - 4, midY + 4);
+			ctx.fillText(`−${scale.toFixed(2)}`, left - 4, bottom);
 		});
 	}
 
-	// The doc under a pointer event on a cell's canvas, with its place in the cell.
-	function at(e: MouseEvent, cell: ItemsMap['cells'][number]) {
+	// The dot nearest a pointer event, within 6 px.
+	function at(e: MouseEvent) {
 		const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		const column = Math.floor((e.clientX - box.left) / pitch);
-		const index = Math.floor((e.clientY - box.top) / (2 * pitch)) * perRow + column;
-		return column < perRow && index < cell.ids.length ? index : null;
+		const x = e.clientX - box.left;
+		const y = e.clientY - box.top;
+		let best = null;
+		let near = 36; // 6 px, squared
+		for (const dot of dots) {
+			const d = (dot.x - x) ** 2 + (dot.y - y) ** 2;
+			if (d <= near) {
+				near = d;
+				best = dot;
+			}
+		}
+		return best;
 	}
 </script>
 
-<!-- Its width is the page's, not its canvases': a canvas drawn wide must not keep the map from
-     narrowing, or the marks would never wrap again. -->
-<div class="relative grid gap-2 [contain:inline-size]" bind:clientWidth={width} bind:this={root}>
+<!-- Its width is the page's, not its canvas': a canvas drawn wide must not keep the plot from
+     narrowing. Its height is fixed, so it never moves what's under it. -->
+<div class="relative [contain:inline-size]" bind:clientWidth={width}>
 	{#if map}
-		<p class="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-			<span>Every doc: A’s margin on top, B’s below; click one to open it.</span>
-			<span class="flex items-center gap-1" aria-hidden="true">
-				<span class="size-2.5 rounded-sm bg-destructive"></span>−{scale.toFixed(2)}
-				<span class="size-2.5 rounded-sm bg-muted"></span>0
-				<span class="size-2.5 rounded-sm bg-state-finished"></span>+{scale.toFixed(2)}
-			</span>
+		<p class="mb-1 text-xs text-muted-foreground">
+			Each dot is a doc: A’s margin across, B’s up. Dots off the dashed diagonal are docs the runs
+			disagree on; the blue ones only one run got right. Click one to open it.
 		</p>
-		{#each map.cells as cell (cell.keep)}
-			{#if cell.ids.length}
-				{@const label = keeps.find((k) => k.keep === cell.keep)?.label ?? cell.keep}
-				<div>
-					<p class="mb-0.5 text-xs">
-						{label}
-						<span class="text-muted-foreground tabular-nums">{cell.ids.length}</span>
-					</p>
-					<!-- Not reachable by keyboard: the list below holds the same docs, by keys. -->
-					<canvas
-						{@attach (c) => draw(c, cell)}
-						class="block cursor-pointer"
-						role="img"
-						aria-label="{label}: {cell.ids.length} docs"
-						onmousemove={(e) => {
-							const i = at(e, cell);
-							const box = root?.getBoundingClientRect();
-							hover =
-								i === null || !box
-									? null
-									: {
-											id: cell.ids[i],
-											margins: cell.margins[i],
-											x: e.clientX - box.left,
-											y: e.clientY - box.top
-										};
-						}}
-						onmouseleave={() => (hover = null)}
-						onclick={(e) => {
-							const i = at(e, cell);
-							if (i !== null) onopen(cell.keep, i, cell.ids[i]);
-						}}
-					></canvas>
-				</div>
-			{/if}
-		{/each}
+		<!-- Not reachable by keyboard: the list below holds the same docs, by keys. -->
+		<canvas
+			{@attach draw}
+			class="block w-full cursor-crosshair"
+			style:height="{HEIGHT}px"
+			role="img"
+			aria-label="{dots.length} docs: {(['only_a', 'only_b', 'both_wrong', 'both_right'] as const)
+				.map((k) => `${label(k)} ${counts[k] ?? 0}`)
+				.join(', ')}"
+			onmousemove={(e) => {
+				const dot = at(e);
+				const cell = dot && map?.cells.find((c) => c.keep === dot.keep);
+				hover =
+					dot && cell
+						? {
+								id: cell.ids[dot.index],
+								margins: cell.margins[dot.index],
+								x: dot.x,
+								y: dot.y
+							}
+						: null;
+			}}
+			onmouseleave={() => (hover = null)}
+			onclick={(e) => {
+				const dot = at(e);
+				const cell = dot && map?.cells.find((c) => c.keep === dot.keep);
+				if (dot && cell) onopen(dot.keep, dot.index, cell.ids[dot.index]);
+			}}
+		></canvas>
 		{#if hover}
 			<div
 				class="pointer-events-none absolute z-10 rounded-md border bg-popover px-2 py-1 font-mono text-[11px] whitespace-nowrap shadow-sm"
 				style:left="{Math.min(hover.x + 12, width - 160 /* the tooltip's widest */)}px"
-				style:top="{hover.y + 14}px"
+				style:top="{hover.y + 30}px"
 			>
 				<div>{hover.id}</div>
 				<div class="text-muted-foreground">
