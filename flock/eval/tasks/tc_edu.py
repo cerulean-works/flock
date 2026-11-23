@@ -1,6 +1,6 @@
 """Taiwanese junior-high and senior-high questions from publishers' question banks (tc-edu): nine subjects of single-answer questions in the mock exams' format, one task each, read from a private dataset."""
 
-from flock.eval.tasks.base import Fewshot, MultipleChoiceTask
+from flock.eval.tasks.base import Fewshot, MultipleChoiceTask, RowFields
 from flock.eval.tasks.suite import Suite
 from flock.eval.tasks.tw_mock_exams import Subject, exam_task
 
@@ -108,6 +108,22 @@ SUBJECTS = (
     ),
 )
 
+# The question bank's own id (`uid`; the doc's id is the row's `hash`), its record and number,
+# then where it comes from and how it was extracted and checked.
+ROW_FIELDS = RowFields(
+    native_id="uid",
+    meta=(
+        "record_id",
+        "number",
+        "publisher",
+        "school_year_semester",
+        "source_dataset",
+        "extraction_method",
+        "rights",
+        "check",
+    ),
+)
+
 # Private: only members of the Cerulean organization can run these tasks (039.D1). Every `test`
 # row was read and passed before the set was frozen, so no row is filtered here.
 TC_EDU_TASKS = tuple(
@@ -117,6 +133,7 @@ TC_EDU_TASKS = tuple(
         repo="cerulean-works/tc-edu-exams",
         revision="66c8db07fa379e9ee88af646debd3d22aed6a49e",
         private=True,
+        row_fields=ROW_FIELDS,
     )
     for subject in SUBJECTS
 )
@@ -154,6 +171,7 @@ for subject in SUBJECTS:
                 repo="cerulean-works/tc-edu-exams",
                 revision="83677842ba8bd843c1163338a12af07eb6f4b095",
                 private=True,
+                row_fields=ROW_FIELDS,
                 fewshot=Fewshot(split="long_context", num_shots=num_shots),
             )
         )

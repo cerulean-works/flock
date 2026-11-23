@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask
+from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask, RowFields
 
 
 def _yesno_doc(row: dict[str, Any], evidence: str) -> MCDoc:
@@ -44,6 +44,8 @@ QASPER_YESNO = MultipleChoiceTask(
         split="train",
         ids=("1909.00338_0", "1812.06705_2", "1907.05664_0", "1908.10449_0", "1909.05890_0"),
     ),
+    # What the question's writer knew of the field and the topic, and whether they read the paper.
+    row_fields=RowFields(meta=("nlp_background", "topic_background", "paper_read")),
 )
 
 SCIRIFF_YESNO = MultipleChoiceTask(

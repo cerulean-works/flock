@@ -9,6 +9,7 @@ from flock.eval.tasks.base import (
     Fewshot,
     GoldOnlyTask,
     MCDoc,
+    RowFields,
     cloze,
 )
 
@@ -46,4 +47,6 @@ DRCD_BPB = GoldOnlyTask(
     to_doc=drcd_doc,
     # The first dev question whose two answers agree, in an article test doesn't share (010.D4).
     fewshot=Fewshot(split="validation", ids=("1172-3-2",)),
+    # The Wikipedia article a question is about.
+    row_fields=RowFields(subject="title"),
 )
