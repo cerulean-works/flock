@@ -6,7 +6,6 @@
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { tick, untrack, type Snippet } from 'svelte';
-	import InfoHint from '#lib/components/InfoHint.svelte';
 	import PageNumbers from '#lib/components/PageNumbers.svelte';
 	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
 	import ItemChoiceRow from './ItemChoiceRow.svelte';
@@ -395,13 +394,6 @@
 			{#if sort === 'margin'}<ArrowDownWideNarrowIcon />{:else}<ArrowDownUpIcon />{/if}
 			{sort === 'margin' ? 'Margin' : 'Doc order'}
 		</Button>
-		<InfoHint label="About the items">
-			A run’s margin is its gold choice’s score minus its best wrong choice’s, in the task’s primary
-			metric (per character for <code class="font-mono">acc_per_char</code>): above zero it got the
-			doc right, and the further from zero the surer it was (one that rounds to zero can show either
-			sign: the scorer picked in FP32). Open a row for each choice’s share, probability and
-			log-probability.
-		</InfoHint>
 	</div>
 	{#if summary}
 		<p class="text-xs text-muted-foreground tabular-nums">{summary}</p>
