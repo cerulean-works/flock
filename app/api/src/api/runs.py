@@ -2,6 +2,7 @@ import asyncio
 import math
 import mimetypes
 import os
+from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from functools import cache, partial
@@ -806,6 +807,15 @@ def _accuracy_suites(a: WrittenResults, b: WrittenResults) -> dict[str, list[str
     return found
 
 
+# The suite squares of a pair (029): reading every accuracy task of two runs takes tens of seconds,
+# so it runs on a worker of its own, never holding up the lists' and docs' reads in `DIFFS`, and
+# its answer is kept for the last few pairs, keyed by both runs' results files and the viewer
+# (who may read a private task or not): finished runs' files don't change, and a results file
+# that does is a new key.
+SQUARES = ThreadPoolExecutor(max_workers=1, thread_name_prefix="squares")
+SQUARE_ANSWERS: OrderedDict[tuple[str, ...], bytes] = OrderedDict()
+
+
 @public.get("/projects/{entity}/{project}/runs/{run}/items/suites")
 async def run_items_suites(
     run: ReadableRunDep,
@@ -813,64 +823,56 @@ async def run_items_suites(
     viewer: ViewerDep,
     other: Annotated[str, Query(alias="with", description="the other run, as entity/project/id")],
 ) -> Response:
-    """The suites the compare page draws a square for, with their tasks: each suite both runs recorded alike that holds a task of its own, and every accuracy task under it both scored under one hash (029). Reads the two results files only.
+    """The compare page's row of suite squares for two runs (029): each suite both runs recorded alike that holds a task of its own, with its tasks (every accuracy task under it both scored under one hash), the number of docs in each cell of their diff, and up to 800 of its docs as ``[A's margin, B's margin, cell]`` (the cell an index into eval's ``CELLS``), taken evenly through each cell in the list's default order, margins rounded to 3 decimals.
 
-    404 as ``.../items`` for a run unknown, unreadable or without results, 409 with eval's reason for another instrument."""
+    Each task is computed once for all its suites. A task a run has no predictions for, or whose predictions the viewer can't read (a private dataset's, outside the organization), is left out of its suites. The answer is kept for the last 8 pairs. 404 as ``.../items`` for a run unknown, unreadable or without results; 409 with eval's reason otherwise."""
     loop = asyncio.get_running_loop()
     readers = await eval_readers(run, other, store, viewer)
 
     def read() -> bytes:
-        a, b = (WrittenResults.read(source, reader) for source, reader in readers)
-        suites = _accuracy_suites(a, b)
-        return orjson.dumps({"suites": [{"suite": s, "tasks": t} for s, t in suites.items()]})
+        runs = [WrittenResults.read(source, cache(text)) for source, text in readers]
+        # The results files themselves are in the key, so a run scored again is computed again.
+        key = tuple(r.source + "\n" + (r.read_file("results.json") or "") for r in runs)
+        key += (str(viewer.pk if viewer else None),)
+        if key in SQUARE_ANSWERS:
+            SQUARE_ANSWERS.move_to_end(key)
+            return SQUARE_ANSWERS[key]
 
-    try:
-        return Response(await loop.run_in_executor(DIFFS, read), media_type="application/json")
-    except FileNotFoundError as exc:
-        raise APIError(404, str(exc)) from exc
-    except ValueError as exc:
-        raise APIError(409, str(exc)) from exc
-
-
-@public.get("/projects/{entity}/{project}/runs/{run}/items/map")
-async def run_items_map(
-    run: ReadableRunDep,
-    store: StoreDep,
-    viewer: ViewerDep,
-    suite: Annotated[str, Query(description="a suite ``.../items/suites`` lists")],
-    other: Annotated[str, Query(alias="with", description="the other run, as entity/project/id")],
-) -> Response:
-    """Every doc of a suite's tasks for two runs, a task at a time and in it a cell of their diff at a time, each cell in the order ``.../items`` lists it by default: each doc's id and both runs' margins, rounded to 4 decimals. What one square of the compare page draws (029); a doc opens through ``.../item``.
-
-    A task a run has no predictions for, or whose predictions the viewer can't read (a private dataset's, outside the organization), is left out. 409 for a suite ``.../items/suites`` doesn't list; otherwise read and refused as ``.../items`` is."""
-    loop = asyncio.get_running_loop()
-    readers = await eval_readers(run, other, store, viewer)
-
-    def read() -> bytes:
-        # Each file read once for the four cells, so they're cut from the same rows (a file
-        # replaced between two reads would put a doc in two cells or none) at a quarter the cost.
-        runs = [WrittenResults.read(source, cache(reader)) for source, reader in readers]
-        tasks = _accuracy_suites(*runs).get(suite)
-        if tasks is None:
-            raise ValueError(f"{suite} isn't a suite of accuracy tasks both runs scored alike")
-        found = []
-        for task in tasks:
-            # A task whose predictions a run lacks, or this viewer can't read (a private
-            # dataset's, outside the organization), has no dots; read once here, as `items` will.
-            if any(run.predictions(task) is None for run in runs):
+        suites = _accuracy_suites(*runs)
+        cells_of: dict[str, list[list[list[float | None]]]] = {}
+        for task in dict.fromkeys(t for tasks in suites.values() for t in tasks):
+            if any(r.predictions(task) is None for r in runs):
                 continue
-            cells = []
-            for keep in CELLS:
-                ids, margins = [], []
-                for item, pair in _with_margins(items(runs, task, keep), "margin"):
-                    ids.append(item.id)
-                    margins.append([None if m is None else round(m, 4) for m in pair])
-                cells.append({"keep": keep, "ids": ids, "margins": margins})
-            found.append({"task": task, "cells": cells})
-        return orjson.dumps({"suite": suite, "tasks": found})
+            cells_of[task] = [
+                [pair for _, pair in _with_margins(items(runs, task, keep), "margin")]
+                for keep in CELLS
+            ]
+        rows = []
+        for suite, tasks in suites.items():
+            cells = [[], [], [], []]
+            for task in tasks:
+                for k, pairs in enumerate(cells_of.get(task, [])):
+                    cells[k].extend(pairs)
+            docs = sum(len(pairs) for pairs in cells)
+            if not docs:
+                continue
+            # Every stride-th doc of each cell, so a cell keeps its share of the dots.
+            stride = max(1, math.ceil(docs / 800))
+            dots = []
+            for k, pairs in enumerate(cells):
+                for a, b in pairs[::stride]:
+                    if a is not None and b is not None:
+                        dots.append([round(a, 3), round(b, 3), k])
+            counts = {keep: len(pairs) for keep, pairs in zip(CELLS, cells, strict=True)}
+            rows.append({"suite": suite, "tasks": tasks, "counts": counts, "dots": dots})
+        answer = orjson.dumps({"suites": rows})
+        SQUARE_ANSWERS[key] = answer
+        while len(SQUARE_ANSWERS) > 8:
+            SQUARE_ANSWERS.popitem(last=False)
+        return answer
 
     try:
-        return Response(await loop.run_in_executor(DIFFS, read), media_type="application/json")
+        return Response(await loop.run_in_executor(SQUARES, read), media_type="application/json")
     except FileNotFoundError as exc:
         raise APIError(404, str(exc)) from exc
     except ValueError as exc:

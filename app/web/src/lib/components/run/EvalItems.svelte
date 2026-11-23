@@ -14,7 +14,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { signedMargin, typedIn } from '#lib/evals.ts';
-	import type { EvalItem, ItemKeep, ItemsPage, ItemSummary, ItemsView } from '#lib/types.ts';
+	import type { EvalItem, ItemKeep, ItemsPage, ItemsView } from '#lib/types.ts';
 	import { ITEM_W, readWidth, saveWidth } from '#lib/widths.ts';
 
 	/**
@@ -22,8 +22,9 @@
 	 * per run whether it was right (icon and word, not colour alone), its signed margin and its
 	 * pick. Flock lists the most telling rows first (D198). One row opens at a time, to the whole
 	 * question and every choice's share, probability and log-probability per run, fetched then
-	 * (028). j and k move through the docs, Enter opens, Esc closes. With two runs, a square scatter
-	 * plot per suite sits above the list, and a click on a dot opens that doc here (029). A caller
+	 * (028). j and k move through the docs, Enter opens, Esc closes. With two runs, a row of small
+	 * scatter plots, one per suite, sits above the list; a click on a quadrant shows that suite and
+	 * cell here, and the pointer on a quadrant or a button lifts the other (029). A caller
 	 * that changes the runs remounts it (`{#key}`).
 	 */
 	interface Props {
@@ -90,14 +91,12 @@
 	// The open row's id, and its whole item once Flock sends it.
 	let open = $state<string | null>(untrack(() => view.item ?? null));
 	let detail = $state<EvalItem | null>(null);
+	// The cell the pointer is on, on a button or in a square, which both lift.
+	let lifted = $state<ItemKeep | null>(null);
 	let detailRefusal = $state<string | null>(null);
-	// Where j, k or a click on the map land once the page they turned to arrives, and whether they
-	// open it. Only that page's answer lands there: any other change of view drops it.
-	let landing: {
-		page: string;
-		row: (rows: ItemSummary[]) => ItemSummary | undefined;
-		open: boolean;
-	} | null = null;
+	// Where j or k land once the page they turned to arrives, and whether they open it. Only that
+	// page's answer lands there: any other change of view drops it.
+	let landing: { page: string; end: 'first' | 'last'; open: boolean } | null = null;
 	let root = $state<HTMLElement>();
 	// An item open on another page or before a re-sort doesn't fade this page's rows.
 	const opened = $derived(found?.items.some((item) => item.id === open) ?? false);
@@ -193,10 +192,9 @@
 					return;
 				}
 				found = page;
-				const to = landing?.row(page.items);
+				const to = landing && page.items[landing.end === 'first' ? 0 : page.items.length - 1];
 				if (!landing || !to) return;
-				// j or k turned the page, on to its first or last doc, opened if one was; or the
-				// map did, on to the doc clicked.
+				// j or k turned the page: on to its first or last doc, opened if one was.
 				if (landing.open) open = to.id;
 				landing = null;
 				tell();
@@ -241,23 +239,16 @@
 		tell();
 	}
 
-	// A mark of the map: its cell's list in the default order, at the page that holds the doc,
-	// with the doc open.
-	function openAt(to: string, cell: ItemKeep, index: number, id: string) {
-		const page = Math.floor(index / SIZE) + 1;
-		const shown = task === to && keep === cell && sort === 'margin' && at === page && found;
-		open = id;
-		if (shown) {
-			tell();
-			focus(id);
-			return;
-		}
-		if (task !== to || keep !== cell) total = null;
+	// A square's quadrant: its suite's task (the one shown, if the suite holds it, else its first)
+	// and that cell, from the first page.
+	function pick(tasks: string[], cell: ItemKeep) {
+		const to = tasks.includes(task) ? task : tasks[0];
+		if (to === task && cell === keep) return;
 		task = to;
 		keep = cell;
-		sort = 'margin';
-		at = page;
-		landing = { page: query, row: (rows) => rows.find((r) => r.id === id), open: true };
+		at = 1;
+		total = null;
+		open = null;
 		tell();
 	}
 
@@ -289,11 +280,7 @@
 		} else if (step && at + step >= 1 && at + step <= pages) {
 			// Past the page's end: the next page's first doc, or the previous page's last.
 			at += step;
-			landing = {
-				page: query,
-				row: (rows) => rows[step > 0 ? 0 : rows.length - 1],
-				open: open !== null
-			};
+			landing = { page: query, end: step > 0 ? 'first' : 'last', open: open !== null };
 			open = null;
 			tell();
 		} else {
@@ -369,7 +356,12 @@
 					type="button"
 					role="radio"
 					aria-checked={k.keep === keep}
-					class="rounded-md border px-2.5 py-1 text-[13px] hover:bg-muted aria-checked:border-ring aria-checked:bg-accent"
+					class={[
+						'rounded-md border px-2.5 py-1 text-[13px] hover:bg-muted aria-checked:border-ring aria-checked:bg-accent',
+						lifted === k.keep && 'bg-muted'
+					]}
+					onmouseenter={() => (lifted = k.keep)}
+					onmouseleave={() => (lifted = null)}
 					onclick={() => {
 						if (k.keep === keep) return;
 						keep = k.keep;
@@ -416,7 +408,7 @@
 	{/if}
 
 	{#if other}
-		<ItemsMap {path} {other} {task} onopen={openAt} />
+		<ItemsMap {path} {other} {task} {keeps} {lifted} onlift={(k) => (lifted = k)} onpick={pick} />
 	{/if}
 
 	{#if refusal}

@@ -1,12 +1,13 @@
 <script lang="ts">
 	import ItemsSquare from './ItemsSquare.svelte';
-	import type { ItemKeep, ItemsMap, ItemSuites } from '#lib/types.ts';
+	import type { ItemKeep, ItemSuites } from '#lib/types.ts';
 
 	/**
-	 * Two runs' docs suite by suite (029): a square scatter plot per suite both runs recorded that
-	 * holds accuracy tasks, lined up in a grid above the items, the one holding the list's task
-	 * marked. The suites are listed first and drawn one at a time, so the squares don't hold up the
-	 * list's own reads.
+	 * Two runs' docs suite by suite (029): one row of equal squares, a small scatter plot per suite
+	 * both runs recorded that holds accuracy tasks, scrolling sideways when they don't fit. The one
+	 * holding the list's task is marked. Clicking a square's quadrant shows that suite and cell in
+	 * the list; the pointer on a quadrant lifts the list's button for its cell, and the pointer on a
+	 * button lifts the quadrant in the marked square.
 	 */
 	interface Props {
 		/** Run A's path under `/api/projects/`. */
@@ -15,52 +16,60 @@
 		other: string;
 		/** The task the list shows. */
 		task: string;
-		/** Told a clicked dot's task, cell, place in the cell's default order and id. */
-		onopen: (task: string, keep: ItemKeep, index: number, id: string) => void;
+		/** The cells' names, as the list's keeps label them. */
+		keeps: { keep: ItemKeep; label: string }[];
+		/** The cell lifted from the list's buttons, which the marked square lifts too. */
+		lifted: ItemKeep | null;
+		/** Told the cell under the pointer in any square, or null when it leaves. */
+		onlift: (keep: ItemKeep | null) => void;
+		/** Told a clicked square's tasks and cell. */
+		onpick: (tasks: string[], keep: ItemKeep) => void;
 	}
 
-	let { path, other, task, onopen }: Props = $props();
+	let { path, other, task, keeps, lifted, onlift, onpick }: Props = $props();
 
-	let suites = $state<ItemSuites['suites']>([]);
-	let maps = $state<Record<string, ItemsMap>>({});
+	let suites = $state<ItemSuites['suites'] | null>(null);
+	let loading = $state(false);
 
-	// Refused or failed, a square stays empty: the list under it says why.
+	// Refused or failed, the row stays away: the list under it says why. A pair's first visit
+	// computes every suite (tens of seconds on a whole bank); Flock keeps the answer after.
 	$effect(() => {
 		const controller = new AbortController();
-		const signal = controller.signal;
-		suites = [];
-		maps = {};
-		void (async () => {
-			try {
-				const asked = new URLSearchParams({ with: other });
-				const res = await fetch(`/api/projects/${path}/items/suites?${asked}`, { signal });
-				if (!res.ok) return;
-				suites = ((await res.json()) as ItemSuites).suites;
-				for (const { suite } of suites) {
-					const query = new URLSearchParams({ suite, with: other });
-					const answer = await fetch(`/api/projects/${path}/items/map?${query}`, { signal });
-					if (answer.ok) maps[suite] = (await answer.json()) as ItemsMap;
-				}
-			} catch {
-				// Aborted, or the network failed: the squares already drawn stay.
-			}
-		})();
+		suites = null;
+		loading = true;
+		const asked = new URLSearchParams({ with: other });
+		fetch(`/api/projects/${path}/items/suites?${asked}`, { signal: controller.signal })
+			.then(async (res) => {
+				const body = res.ok ? ((await res.json()) as ItemSuites) : null;
+				if (controller.signal.aborted) return;
+				suites = body?.suites ?? null;
+				loading = false;
+			})
+			.catch(() => {
+				if (!controller.signal.aborted) loading = false;
+			});
 		return () => controller.abort();
 	});
 </script>
 
-{#if suites.length}
-	<!-- Squares as wide as the column allows, as many to a row as fit; each keeps its shape. -->
-	<div class="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
-		{#each suites as { suite, tasks } (suite)}
-			{#if maps[suite]}
-				<ItemsSquare map={maps[suite]} current={tasks.includes(task)} {onopen} />
-			{:else}
-				<figure class="grid min-w-0 gap-1" aria-hidden="true">
-					<figcaption class="truncate font-mono text-xs text-muted-foreground">{suite}</figcaption>
-					<div class="aspect-square animate-pulse rounded-md bg-muted/40"></div>
-				</figure>
-			{/if}
+{#if suites?.length}
+	<div class="flex gap-3 overflow-x-auto pb-1">
+		{#each suites as suite (suite.suite)}
+			<ItemsSquare
+				{suite}
+				current={suite.tasks.includes(task)}
+				{lifted}
+				{keeps}
+				{onlift}
+				onpick={(keep) => onpick(suite.tasks, keep)}
+			/>
+		{/each}
+	</div>
+{:else if loading}
+	<!-- The row's place, kept while the suites are computed, so the list doesn't jump. -->
+	<div class="flex gap-3 overflow-hidden pb-1" aria-hidden="true">
+		{#each Array.from({ length: 8 }, (_, i) => i) as i (i)}
+			<div class="size-28 flex-none animate-pulse rounded-md bg-muted/40"></div>
 		{/each}
 	</div>
 {/if}

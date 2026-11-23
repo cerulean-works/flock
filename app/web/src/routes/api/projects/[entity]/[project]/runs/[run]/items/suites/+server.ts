@@ -3,7 +3,7 @@ import { relayAnswer } from '#lib/server/datasets.ts';
 import type { RequestHandler } from './$types';
 
 /**
- * The suites the compare page draws a square for (029), relayed with its
+ * The compare page's row of suite squares (029), relayed with its
  * query (`with`), which Flock checks. A refusal comes back as `{message}`.
  */
 export const GET: RequestHandler = ({ params, request }) =>
