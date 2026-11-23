@@ -90,4 +90,4 @@ A reference is a shorthand when a `:` comes before any `/`, and everything befor
 
 A model's path is up to 255 characters, in parts separated by `/`. Each part is up to 100 lowercase ASCII characters, starts with a letter or digit, and may also contain `.`, `-`, and `_`. Tag names follow the same rule for one part, with uppercase letters allowed. Tags reserve `primary` in any case and names made entirely of digits.
 
-A `checkpoint-{step}` tag uses the optimizer step without leading zeros. Checkpoint tags cannot move, and versions with only checkpoint tags are eligible for retention. [Manage models and retention](../app/browse-models)
+A `checkpoint-{step}` tag uses the optimizer step without leading zeros. Checkpoint tags cannot move, and versions with only checkpoint tags and no eval runs are eligible for retention. [Manage models and retention](../app/browse-models)

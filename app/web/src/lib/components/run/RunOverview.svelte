@@ -19,7 +19,7 @@
 		owner: { name: string; avatar_url: string | null } | null;
 		/** The org's, for the run's cost; null outside the org, where there's no cost (D113). */
 		currency: string | null;
-		/** The model versions it made; null when they can't be read. */
+		/** The model versions it made and scored; null when they can't be read. */
 		models?: RunModels | null;
 		now: number;
 	}
@@ -213,7 +213,11 @@
 	</dl>
 
 	{#if models?.made.length}
-		<RunModelsList versions={models.made} />
+		<RunModelsList title="Checkpoints" versions={models.made} />
+	{/if}
+	<!-- An API from before 025 answers no `scored`. -->
+	{#if models?.scored?.length}
+		<RunModelsList title="Models scored" versions={models.scored} />
 	{/if}
 
 	{#if run.notes || run.description}

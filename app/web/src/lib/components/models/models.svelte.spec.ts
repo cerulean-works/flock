@@ -71,6 +71,7 @@ const version = (number: number, extra: Partial<ModelVersion> = {}): ModelVersio
 	run: null,
 	created_by: alice,
 	created_at: NOW - number * 3600,
+	eval_runs: 0,
 	bucket: 'flock-models',
 	prefix: `olmo2-1b/u/ULID${number}/`,
 	...extra
@@ -84,13 +85,14 @@ const detail = (v: ModelVersion, extra: Partial<ModelVersionDetail> = {}): Model
 		{ path: 'flock.json', size: 80, sha256: 'd'.repeat(64) },
 		{ path: 'model.safetensors', size: 3 * 1024 ** 3, sha256: 'e'.repeat(64) }
 	],
+	evals: [],
 	...extra
 });
 
 const versions: ModelVersion[] = [
 	version(14, { tags: ['checkpoint-12000'], step: 12000, run: 'acme/pretrain/3k9x2' }),
 	version(13, { tags: ['checkpoint-900', 'release'], step: 900 }),
-	version(12, { primary: true })
+	version(12, { primary: true, eval_runs: 2 })
 ];
 
 const info: ModelInfo = {
@@ -509,6 +511,95 @@ describe('ModelView', () => {
 			.element(screen.getByRole('menuitem', { name: 'Browse files' }))
 			.not.toBeInTheDocument();
 	});
+
+	it('shows each eval run’s scores side by side and compares two of them', async () => {
+		const scored = detail(versions[2], { evals: ['acme/evals/e1', 'acme/evals/e2'] });
+		const run = (id: string, display_name: string | null, scores: unknown) => ({
+			path: `acme/evals/${id}`,
+			entity: 'acme',
+			project: 'evals',
+			id,
+			display_name,
+			state: 'finished',
+			created_at: NOW,
+			scores
+		});
+		const row = (key: string, kind: string, name: string, metric: string | null) => ({
+			key,
+			kind,
+			name,
+			metric,
+			hash: key.split('@')[1]
+		});
+		const calls = serve({
+			[`${API}/olmo2-1b/-/versions/12/evals`]: () => ({
+				runs: [
+					run('e1', 'base easy', {
+						rows: [row('mmlu/acc_raw@h', 'task', 'mmlu', 'acc_raw')],
+						values: { 'mmlu/acc_raw@h': 0.5 }
+					}),
+					run('e2', null, {
+						rows: [
+							row('suites/core@s', 'suite', 'core', null),
+							row('mmlu/acc_raw@h', 'task', 'mmlu', 'acc_raw')
+						],
+						values: { 'suites/core@s': 0.25, 'mmlu/acc_raw@h': 0.625 }
+					}),
+					run('old', null, null)
+				]
+			})
+		});
+		resetApp('http://flock.test/models/acme/olmo2-1b?tab=evals');
+		render(ModelView, {
+			scope: { org: 'acme', project: null },
+			info,
+			version: scored,
+			requested: null,
+			now: NOW
+		});
+		await expect.element(screen.getByRole('link', { name: 'base easy' })).toBeVisible();
+		expect(screen.getByRole('link', { name: 'e2' }).element().getAttribute('href')).toBe(
+			'/acme/evals/runs/e2'
+		);
+		// Suites first, then each task's primary metric.
+		const rows = screen
+			.getByRole('rowheader')
+			.all()
+			.map((r) => r.element().textContent!.replace(/\s+/g, ' ').trim());
+		expect(rows).toEqual(['core suite', 'mmlu acc_raw']);
+		const mmlu = screen.getByRole('row').filter({ hasText: 'acc_raw' });
+		expect(
+			mmlu
+				.getByRole('cell')
+				.all()
+				.map((c) => c.element().textContent!.trim())
+		).toEqual(['0.5000', '0.6250', '–']);
+		expect(calls[0].url).toBe(`${API}/olmo2-1b/-/versions/12/evals`);
+
+		// Two checked runs give the comparison's link; a third can't be checked.
+		await screen.getByRole('checkbox', { name: 'Compare base easy' }).click();
+		await screen.getByRole('checkbox', { name: 'Compare e2' }).click();
+		await expect.element(screen.getByRole('checkbox', { name: 'Compare old' })).toBeDisabled();
+		const compare = screen.getByRole('link', { name: 'Compare items' });
+		expect(compare.element().getAttribute('href')).toBe(
+			'/acme/evals/runs/e1/compare?with=acme%2Fevals%2Fe2'
+		);
+	});
+
+	it('says how to evaluate a version no run has scored', async () => {
+		serve({});
+		view('http://flock.test/models/acme/olmo2-1b?tab=evals');
+		await expect
+			.element(screen.getByText('No eval runs have scored this version yet.'))
+			.toBeVisible();
+		await expect
+			.element(
+				screen.getByText(
+					'flock eval run --model flock:acme/olmo2-1b@12 --suite base_easy --wandb-project model-evals --out results'
+				)
+			)
+			.toBeVisible();
+	});
 });
 
 describe('the tag dialogs', () => {
@@ -609,17 +700,24 @@ describe('the tag dialogs', () => {
 });
 
 describe('the delete dialogs', () => {
-	it('deletes a version after its name is typed', async () => {
+	it('deletes a version after its name is typed, warning about its eval runs', async () => {
 		const calls = serve({ [`${API}/olmo2-1b/-/versions/11`]: () => ({ kind: 'version', id: 1 }) });
 		const ondeleted = vi.fn();
 		render(DeleteVersionDialog, {
 			open: true,
 			scope: { org: 'acme', project: null },
-			version: version(11, { tags: ['checkpoint-100'] }),
+			version: version(11, { eval_runs: 2, tags: ['checkpoint-100'] }),
 			shown: false,
 			ondeleted
 		});
 		await expect.element(screen.getByText('Org admins can restore it for 14 days.')).toBeVisible();
+		await expect
+			.element(
+				screen.getByText(
+					'2 eval runs scored this version. Their results stay, but the version they name can’t be loaded after it’s deleted.'
+				)
+			)
+			.toBeVisible();
 		const confirm = screen.getByRole('button', { name: 'Delete version' });
 		await expect.element(confirm).toBeDisabled();
 		await screen.getByLabelText('Type acme/olmo2-1b@11 to confirm').fill('acme/olmo2-1b@11');
@@ -746,7 +844,8 @@ describe('DeletedModels', () => {
 		expires_at: NOW + 86_400 - 60,
 		moved: true,
 		bytes: 1024,
-		tags: ['checkpoint-700']
+		tags: ['checkpoint-700'],
+		eval_runs: 0
 	};
 
 	it('lists deleted models and versions with the days they have left', async () => {
@@ -852,6 +951,7 @@ describe('ModelRetention', () => {
 describe('RunModels', () => {
 	it('lists the versions a run made, linked to each one, with steps and tags', async () => {
 		render(RunModels, {
+			title: 'Checkpoints',
 			versions: [version(13, { step: 900, tags: ['release', 'checkpoint-900'], primary: true })]
 		});
 		await expect.element(screen.getByRole('heading', { name: /Checkpoints/ })).toBeVisible();
@@ -869,7 +969,7 @@ describe('RunModels', () => {
 			org: 'acme',
 			project: 'pretrain'
 		};
-		render(RunModels, { versions: [version(7, project)] });
+		render(RunModels, { title: 'Checkpoints', versions: [version(7, project)] });
 		const link = screen.getByRole('link', { name: 'pretrain:sweeps/lr-3e-4@7' });
 		expect(link.element().getAttribute('href')).toBe(
 			'/acme/pretrain/models/sweeps/lr-3e-4?version=7'

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
+	import InfoHint from '#lib/components/InfoHint.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as Popover from '#lib/components/ui/popover/index.js';
@@ -35,12 +36,14 @@
 	>
 		<p class="text-xs text-muted-foreground">Line plots</p>
 		<div class="grid gap-2">
-			<Label>X axis</Label>
+			<div class="flex items-center gap-1.5">
+				<Label>X axis</Label>
+				<InfoHint label="About the x axis">
+					For panels without their own. Step plots each metric against its step metric, when its run
+					defined one. System metrics stay on time.
+				</InfoHint>
+			</div>
 			<XAxisPicker value={ws.xAxis} onchange={(v) => (ws.xAxis = v ?? '_step')} />
-			<p class="text-xs text-muted-foreground">
-				For panels without their own. Step plots each metric against its step metric, when its run
-				defined one. System metrics stay on time.
-			</p>
 		</div>
 		<SmoothingPicker
 			id="ws-smoothing"
@@ -63,7 +66,12 @@
 			<Switch id="ignore-outliers" bind:checked={ws.ignoreOutliers} />
 		</div>
 		<div class="flex items-center justify-between gap-4">
-			<Label>Default rows per section</Label>
+			<div class="flex items-center gap-1.5">
+				<Label>Default rows per section</Label>
+				<InfoHint label="About rows per section">
+					Drag a section’s bottom edge to show more or fewer rows of it.
+				</InfoHint>
+			</div>
 			<Select.Root
 				type="single"
 				value={String(ws.defaultRows)}
@@ -79,8 +87,5 @@
 				</Select.Content>
 			</Select.Root>
 		</div>
-		<p class="-mt-2 text-xs text-muted-foreground">
-			Drag a section’s bottom edge to show more or fewer rows of it.
-		</p>
 	</Popover.Content>
 </Popover.Root>

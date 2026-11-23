@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging
+import os
 import secrets
 import string
 import time
@@ -18,7 +19,7 @@ from app.api.src.core.avatars import Avatars
 from app.api.src.core.budgets import Budgets
 from app.api.src.core.bus import Bus
 from app.api.src.core.datasets import Datasets, Scope
-from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
+from app.api.src.core.errors import Conflict, Discarded, Forbidden, Invalid, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.files import file_store
 from app.api.src.core.forks import Forks
@@ -734,17 +735,47 @@ class Store:
         parts = self.file_parts(name)
         return None if parts is None else self.files_dir / str(run.pk) / Path(*parts)
 
-    async def read_file(self, run: Run, name: str) -> bytes | None:
-        """A run file's bytes (for small files the server reads itself)."""
+    async def read_file(self, run: Run, name: str, max_bytes: int | None = None) -> bytes | None:
+        """A run file's bytes (for small files the server reads itself). A file over
+        ``max_bytes`` is ``Invalid``, refused before any of it is read."""
         if self.file_parts(name) is None:
             return None
         found = await self.files.get(run.pk, name)
         if found is None:
             return None
+        limit = -1 if max_bytes is None else max_bytes
+        too_big = Invalid(f"{name} is more than the {max_bytes} bytes read here")
         if isinstance(found, Path):
-            return await asyncio.to_thread(found.read_bytes)
-        chunks, _ = found
-        return b"".join([chunk async for chunk in chunks])
+            # One handle for the size and a bounded read: an upload renamed in meanwhile, or a
+            # file still growing, can't slip past.
+            def read() -> bytes | None:
+                with found.open("rb") as file:
+                    if limit >= 0 and os.fstat(file.fileno()).st_size > limit:
+                        return None
+                    data = file.read(limit + 1 if limit >= 0 else -1)
+                    return None if limit >= 0 and len(data) > limit else data
+
+            data = await asyncio.to_thread(read)
+            if data is None:
+                raise too_big
+            return data
+        chunks, size = found
+        # Counted as it arrives too: a response may not say its length.
+        received, parts = 0, []
+        try:
+            if limit >= 0 and size > limit:
+                # Only a started generator runs the `finally` that releases its S3 response, so
+                # one refused unread is started (one chunk) before it is closed.
+                await anext(chunks, None)
+                raise too_big
+            async for chunk in chunks:
+                received += len(chunk)
+                if limit >= 0 and received > limit:
+                    raise too_big
+                parts.append(chunk)
+        finally:
+            await chunks.aclose()
+        return b"".join(parts)
 
     # ------------------------------------------------------------------ locks (D80)
 
@@ -815,6 +846,9 @@ class Store:
                             name,
                         )
                         await self._update_run(conn, project, pk, name, fields, owner, admin)
+                    if fields.get("config") is not None:
+                        # An eval of a version in the registry links to it (014, D106; 025, D182).
+                        await self.models.link_eval(conn, project.org, pk, fields["config"])
             except NotFound:
                 continue  # deleted or renamed meanwhile: resolve the name again
             run = await self.project_run(project, name)

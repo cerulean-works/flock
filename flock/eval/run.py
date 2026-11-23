@@ -12,13 +12,14 @@ from typing import Literal, get_args
 import torch
 
 from flock.eval import hub
-from flock.eval.metrics import bits_per_byte, multiple_choice, scale
+from flock.eval.metrics import bits_per_byte, multiple_choice
 from flock.eval.model import DEFAULT_BATCH_TOKENS, Encoded, ScoringModel
 from flock.eval.provenance import Provenance
 from flock.eval.results import (
     Results,
     SuiteResult,
     TaskResult,
+    scale,
     write_perplexity_predictions,
     write_predictions,
 )

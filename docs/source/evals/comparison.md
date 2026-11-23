@@ -109,3 +109,5 @@ The models may differ, and so may `max_length` and `add_bos`, which belong to th
 | `tasks` | One entry per compared task, in run A's order. `only_a` and `only_b` hold doc ids in A's doc order, and their lengths are the two disagreement counts. |
 | `not_compared` | `[task, reason]` pairs, A's tasks first, then B's. |
 | `schema_version` | The layout of this JSON, bumped when a field changes. |
+
+In the dashboard, the same diff runs on Flock from two logged runs' files: check two eval runs in a project's table and click **Compare items** ([Eval results in the dashboard](../app/explore-runs#compare-two-eval-runs)).
