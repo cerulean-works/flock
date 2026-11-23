@@ -98,6 +98,12 @@ def run_pytest(pytest_args: str, workers: int) -> int:
         "FLASH_ATTENTION_CUTE_DSL_CACHE_DIR": str(CACHE_DIR / "cute"),
     }
     subprocess.run(["uv", "sync", "--all-packages", "--frozen"], check=True)
+    # PROBE: time cold and warm imports of what the controller loads.
+    for attempt in ("cold", "warm"):
+        for module in ("torch", "transformers", "flock.training.core.models.olmo2", "tests.training.conftest"):
+            t = time.monotonic()
+            subprocess.run(["/venv/bin/python", "-c", f"import {module}"], check=False)
+            print(f"PROBE {attempt} import {module}: {time.monotonic() - t:.1f}s", flush=True)
     # Work stealing keeps the few slow compile tests from queueing behind each other.
     command = ["uv", "run", "--no-sync", "python", "-m", "pytest", "-n", str(workers)]
     command += ["--dist=worksteal", *shlex.split(pytest_args)]
@@ -116,7 +122,7 @@ def run_pytest(pytest_args: str, workers: int) -> int:
 
 
 @app.local_entrypoint()
-def main(pytest_args: str = "-q tests/training -m gpu", workers: int = 8) -> None:
+def main(pytest_args: str = "-q --durations=15 tests/training -m gpu", workers: int = 8) -> None:
     returncode = run_pytest.remote(pytest_args, workers)
     if returncode:
         raise SystemExit(returncode)
