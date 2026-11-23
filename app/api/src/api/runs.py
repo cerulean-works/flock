@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import math
 import mimetypes
 import os
@@ -796,11 +797,14 @@ def _accuracy_suites(a: WrittenResults, b: WrittenResults) -> dict[str, list[str
             continue
         if all(member in suites for member in suite.members):
             continue
-        tasks, todo = [], list(suite.members)
+        # Each suite opened once: an uploaded file may nest suites in a loop, or share one twice.
+        tasks, todo, opened = [], list(suite.members), {suite.suite}
         while todo:
             name = todo.pop(0)
             if name in suites:
-                todo.extend(suites[name].members)
+                if name not in opened:
+                    opened.add(name)
+                    todo.extend(suites[name].members)
             elif name in ranked and name not in tasks:
                 tasks.append(name)
         if tasks:
@@ -810,9 +814,9 @@ def _accuracy_suites(a: WrittenResults, b: WrittenResults) -> dict[str, list[str
 
 # The suite squares of a pair (029): reading every accuracy task of two runs takes tens of seconds,
 # so it runs on a worker of its own, never holding up the lists' and docs' reads in `DIFFS`, and
-# its answer is kept for the last few pairs, keyed by both runs' results files and the viewer
-# (who may read a private task or not): finished runs' files don't change, and a results file
-# that does is a new key.
+# its answer is kept for the last few pairs, keyed by both runs' results files and whether the
+# viewer reads each as an outsider: finished runs' files don't change, a results file that does
+# is a new key, and an answer missing a task a run is still uploading isn't kept.
 SQUARES = ThreadPoolExecutor(max_workers=1, thread_name_prefix="squares")
 SQUARE_ANSWERS: OrderedDict[tuple[str, ...], bytes] = OrderedDict()
 
@@ -829,44 +833,64 @@ async def run_items_suites(
     Each task is computed once for all its suites. A task a run has no predictions for, or whose predictions the viewer can't read (a private dataset's, outside the organization), is left out of its suites. The answer is kept for the last 8 pairs. 404 as ``.../items`` for a run unknown, unreadable or without results; 409 with eval's reason otherwise."""
     loop = asyncio.get_running_loop()
     readers = await eval_readers(run, other, store, viewer)
+    # Whether the viewer reads each run as an outsider, who gets no private dataset's predictions,
+    # as `eval_readers` decides it; it is in the key, so a change of membership is a new key.
+    entity, project, _ = other.split("/")
+    projects = [run.project, await get_readable_project(entity, project, store, viewer)]
+    public = [store.accounts.access(viewer, p) == "public" for p in projects]
 
     def read() -> bytes:
-        runs = [WrittenResults.read(source, cache(text)) for source, text in readers]
+        runs = [WrittenResults.read(source, text) for source, text in readers]
         # The results files themselves are in the key, so a run scored again is computed again.
         key = tuple(r.source + "\n" + (r.read_file("results.json") or "") for r in runs)
-        key += (str(viewer.pk if viewer else None),)
+        key += tuple(str(p) for p in public)
         if key in SQUARE_ANSWERS:
             SQUARE_ANSWERS.move_to_end(key)
             return SQUARE_ANSWERS[key]
 
         suites = _accuracy_suites(*runs)
+        # The tasks an outsider can't read; any other task without predictions is a run still
+        # uploading, and an answer missing it isn't kept.
+        private = set()
+        for written, outsider in zip(runs, public, strict=True):
+            if outsider:
+                private |= {t.task for t in written.tasks if t.dataset.private}
+        whole = True
         cells_of: dict[str, list[list[list[float | None]]]] = {}
         for task in dict.fromkeys(t for tasks in suites.values() for t in tasks):
-            if any(r.predictions(task) is None for r in runs):
+            # A task's files read once for its four cells, so they come from the same rows, and
+            # let go before the next task.
+            scoped = [dataclasses.replace(r, read_file=cache(r.read_file)) for r in runs]
+            if any(r.predictions(task) is None for r in scoped):
+                whole = whole and task in private
                 continue
             cells_of[task] = [
-                [pair for _, pair in _with_margins(items(runs, task, keep), "margin")]
+                [pair for _, pair in _with_margins(items(scoped, task, keep), "margin")]
                 for keep in CELLS
             ]
         rows = []
         for suite, tasks in suites.items():
+            shown = [task for task in tasks if task in cells_of]
             cells = [[], [], [], []]
-            for task in tasks:
-                for k, pairs in enumerate(cells_of.get(task, [])):
+            for task in shown:
+                for k, pairs in enumerate(cells_of[task]):
                     cells[k].extend(pairs)
             docs = sum(len(pairs) for pairs in cells)
             if not docs:
                 continue
-            # Every stride-th doc of each cell, so a cell keeps its share of the dots.
-            stride = max(1, math.ceil(docs / 800))
+            # Each cell's share of 800 dots, taken evenly through it: never more than 800 in all.
             dots = []
             for k, pairs in enumerate(cells):
-                for a, b in pairs[::stride]:
+                n = len(pairs) if docs <= 800 else len(pairs) * 800 // docs
+                for i in range(n):
+                    a, b = pairs[i * len(pairs) // n]
                     if a is not None and b is not None:
                         dots.append([round(a, 3), round(b, 3), k])
             counts = {keep: len(pairs) for keep, pairs in zip(CELLS, cells, strict=True)}
-            rows.append({"suite": suite, "tasks": tasks, "counts": counts, "dots": dots})
+            rows.append({"suite": suite, "tasks": shown, "counts": counts, "dots": dots})
         answer = orjson.dumps({"suites": rows})
+        if not whole:
+            return answer
         SQUARE_ANSWERS[key] = answer
         while len(SQUARE_ANSWERS) > 8:
             SQUARE_ANSWERS.popitem(last=False)

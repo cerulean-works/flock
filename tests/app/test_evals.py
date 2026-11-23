@@ -379,6 +379,9 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     b_tasks["exam"] = ("e", [False, False])
     suites = {"s": ["t", "sub"], "sub": ["u", "x", "exam"], "group": ["s"], "moved": ["t"]}
     suites["s:bpb"] = ["t"]
+    # Two suites holding each other, as an uploaded file may: each is opened once.
+    suites["loop"] = ["u", "loop2"]
+    suites["loop2"] = ["loop", "t"]
     a = with_suites(write_run(tmp_path / "a", a_tasks), suites)
     b = with_suites(write_run(tmp_path / "b", b_tasks), suites, {"moved": "another"})
     for folder in (a, b):
@@ -392,7 +395,8 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     # x was scored under another hash; `group` only groups; `moved` has another suite hash;
     # `s:bpb` is scored by bits per byte.
     rows = {row["suite"]: row for row in found.json()["suites"]}
-    assert list(rows) == ["s", "sub"]
+    assert list(rows) == ["s", "sub", "loop", "loop2"]
+    assert rows["loop"]["tasks"] == ["u", "t"]
     assert rows["s"]["tasks"] == ["t", "u", "exam"]
     # t: A right on d-0, d-3, d-4; B on d-0, d-1, d-4. u: both right. exam: A right on d-0 only.
     assert rows["s"]["counts"] == {"only_a": 2, "only_b": 1, "both_wrong": 2, "both_right": 3}

@@ -243,7 +243,7 @@
 	// and that cell, from the first page.
 	function pick(tasks: string[], cell: ItemKeep) {
 		const to = tasks.includes(task) ? task : tasks[0];
-		if (to === task && cell === keep) return;
+		if (to === task && cell === keep && at === 1 && open === null) return;
 		task = to;
 		keep = cell;
 		at = 1;
