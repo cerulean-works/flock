@@ -24,7 +24,7 @@ Results schema 12 writes, beside each task's predictions, a Parquet sidecar with
 
 - `GET .../runs/{run}/item/tokens?doc=&task=&keep=[&with=]` takes the doc route's query (D199) and answers `{"runs": [{"choices", "note"}]}`, one entry per run in order. `choices` has one entry per choice: its tokens' `text`, `logprob`, `rank` and `entropy`, read with eval's `WrittenResults.tokens` for that doc only.
 - Only the `continuation` rows: the context and greedy rows come by flags and aren't shown here. `top1_logprob` and `logprob_std` aren't sent: the four shown are what a reader asked of a token.
-- **A run without values says why** (`choices` null, a `note`): a run written before schema 12, or without the sidecar. The other run's tokens still show.
+- **A run without values says why** (`choices` null, a `note`): a run written before schema 12, or without the sidecar. The other run's tokens still show. The page puts the reason behind an info icon in that run's column, on the doc's first choice: a line of text for each opened doc was noise.
 - **Access** is the doc's: the sidecar of a private task is read from `private/` for the org's members only. Its token ids are the exam's text, so to anyone else the route is eval's refusal and holds none.
 - `PairFiles` gains `read_bytes` (the sidecar is Parquet), and `eval_readers` hands each run's text and bytes readers in `WrittenResults.read`'s order.
 - **Cost**, measured on two whole-bank runs: HellaSwag's 22 MB sidecar reads in 0.1 to 0.6 s per run, after the doc's own read (0.46 s); an ARC-Easy doc's tokens take 0.02 s once both tokenizers are fetched.
@@ -40,7 +40,7 @@ The sidecar holds token ids, not text (text would double its size and, for a pri
 
 ### D208. Four tints, fixed scales; A against B only where both cut the choice alike
 
-- **Surprisal** (minus the log-probability) by default, then **rank**, **entropy** and **A vs B**, one switch above the choices, kept from doc to doc.
+- **Surprisal** (minus the log-probability) by default, then **rank**, **entropy** and **A vs B**, picked in a small menu in the list's toolbar ("Tokens: Surprisal"), beside the order, and kept from doc to doc. The first build put a row of switches inside each opened doc, above its choices; at the first look it read as clutter between the question and its choices.
 - One hue, the reading blue, for the first three, as strong as the value over a fixed scale: 8 nats of surprisal, rank 1,024 (log scale) and 6 nats of entropy are full. Fixed, not per doc, so two docs read alike; hovering a token gives its three numbers.
 - **A vs B** tints each token by its run's log-probability minus the other's, green where this run was surer and red where less, full at 3 nats, only where both runs cut the choice into the same tokens and no token ends inside a character (an empty piece): two tokenizers can split one character at different bytes and still show equal pieces. Elsewhere tokens don't line up, so nothing is tinted.
 - Tokens show whitespace as cut, with a newline as ↵.
