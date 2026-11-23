@@ -3,6 +3,8 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import os
+import stat
 from typing import TYPE_CHECKING, Never
 
 import pytest
@@ -193,6 +195,26 @@ def test_score_task_writes_one_prediction_row_per_doc_and_never_replaces_it(
     monkeypatch.setattr(scorer, "rolling_loglikelihood", None)  # scoring would fail on None
     with pytest.raises(FileExistsError, match="Pass a new out directory"):
         score_task(scorer, TEXT_TASK, out=tmp_path)
+
+
+def test_a_private_texts_predictions_are_its_owners_only(
+    scorer: ScoringModel, tmp_path: Path
+) -> None:
+    private = dataclasses.replace(
+        TEXT_TASK, dataset=dataclasses.replace(TEXT_TASK.dataset, private=True)
+    )
+    # A known umask, so the public file's mode is the writer's and not the shell's.
+    previous = os.umask(0o022)
+    try:
+        score_task(scorer, private, out=tmp_path / "private")
+        score_task(scorer, TEXT_TASK, out=tmp_path / "public")
+    finally:
+        os.umask(previous)
+
+    # Though they hold ids and numbers and no text: every file of a private task is its owner's.
+    for name, mode in (("private", 0o600), ("public", 0o644)):
+        path = tmp_path / name / "predictions" / "toy_text.jsonl"
+        assert stat.S_IMODE(path.stat().st_mode) == mode
 
 
 def test_prediction_rows_need_scores_for_every_doc() -> None:

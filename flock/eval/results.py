@@ -284,14 +284,16 @@ def write_perplexity_predictions(
     window: int,
     source: str | None = None,
     domain: str | None = None,
+    private: bool = False,
 ) -> None:
     """
-    Writes `perplexity_prediction_rows` to `path` as JSON lines, creating its directory if needed.
+    Writes `perplexity_prediction_rows` to `path` as JSON lines, creating its directory if needed. With `private`, for a task on a private dataset, the file is readable by its owner only, as every file of a private task is, though it holds ids and numbers and no text.
 
     Raises:
         `FileExistsError`: if `path` exists, so two runs never write one file.
     """
-    _write_rows(path, perplexity_prediction_rows(docs, scores, num_bytes, window, source, domain))
+    rows = perplexity_prediction_rows(docs, scores, num_bytes, window, source, domain)
+    _write_rows(path, rows, mode=0o600 if private else 0o666)
 
 
 def _write_rows(path: Path, rows: Sequence[dict[str, Any]], mode: int = 0o666) -> None:

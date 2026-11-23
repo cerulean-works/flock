@@ -515,7 +515,14 @@ def _score_perplexity(
 
     if predictions is not None:
         write_perplexity_predictions(
-            predictions, docs, scores, num_bytes, task.window, task.dataset.subset, task.domain
+            predictions,
+            docs,
+            scores,
+            num_bytes,
+            task.window,
+            task.dataset.subset,
+            task.domain,
+            task.dataset.private,
         )
 
     return TaskResult(
