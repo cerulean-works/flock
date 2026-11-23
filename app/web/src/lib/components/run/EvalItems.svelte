@@ -426,7 +426,7 @@
 					tasks.findIndex((t) => t.task === task)
 				);
 			}}
-			aria-label="Task"
+			aria-label="Task: {task}"
 			class="h-7 max-w-80 min-w-56 font-mono text-[12.5px]"
 		>
 			<span class="min-w-0 flex-1 truncate">{task}</span>

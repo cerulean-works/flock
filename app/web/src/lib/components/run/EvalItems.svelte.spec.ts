@@ -354,7 +354,8 @@ describe('eval items', () => {
 		expect(onview).toHaveBeenLastCalledWith(
 			expect.objectContaining({ task: 'piqa', page: undefined })
 		);
-		await expect.element(screen.getByRole('button', { name: 'Task' })).toHaveTextContent('piqa');
+		// The field's name says the task shown, since a screen reader reads no value from a button.
+		await expect.element(screen.getByRole('button', { name: 'Task: piqa' })).toBeVisible();
 	});
 
 	it('draws a square per suite whose quadrants lift and pick the list’s cells', async () => {
