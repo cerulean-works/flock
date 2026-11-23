@@ -40,7 +40,7 @@ The sidecar holds token ids, not text (text would double its size and, for a pri
 
 ### D208. Four tints, fixed scales; A against B only where both cut the choice alike
 
-- **Surprisal** (minus the log-probability) by default, then **rank**, **entropy** and **A vs B**, picked in a small menu in the list's toolbar ("Tokens: Surprisal"), beside the order, and kept from doc to doc. The first build put a row of switches inside each opened doc, above its choices; at the first look it read as clutter between the question and its choices.
+- **Surprisal** (minus the log-probability) by default, then **rank**, **entropy** and **A vs B**, turned by a button in the list's toolbar beside the order's, as that one is turned: each click the next, its title saying what the heat shows, kept from doc to doc. The first build put a row of switches inside each opened doc, above its choices, which read as clutter between the question and its choices; a menu in the toolbar came next, and a button matching the order's replaced it.
 - One hue, the reading blue, for the first three, as strong as the value over a fixed scale: 8 nats of surprisal, rank 1,024 (log scale) and 6 nats of entropy are full. Fixed, not per doc, so two docs read alike; hovering a token gives its three numbers.
 - **A vs B** tints each token by its run's log-probability minus the other's, green where this run was surer and red where less, full at 3 nats, only where both runs cut the choice into the same tokens and no token ends inside a character (an empty piece): two tokenizers can split one character at different bytes and still show equal pieces. Elsewhere tokens don't line up, so nothing is tinted.
 - Tokens show whitespace as cut, with a newline as ↵.
