@@ -62,7 +62,8 @@ def _tokenizer(name: str, revision: str | None) -> Tokenizer:
     if constants.HF_HUB_OFFLINE:
         raise ValueError("the Hub is offline here")
     # Asked without a token: a private repo answers as if it didn't exist.
-    if HfApi().model_info(name, revision=revision, token=False).private:
+    # Bounded, as the fetch below is (httpx's 5 s), so a stalled Hub leaves the tokens unnamed.
+    if HfApi().model_info(name, revision=revision, token=False, timeout=10).private:
         raise ValueError(f"{name} isn't a public repo")
     url = hf_hub_url(name, "tokenizer.json", revision=revision)
     data = bytearray()

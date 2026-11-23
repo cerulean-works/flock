@@ -677,6 +677,28 @@ def test_sidecar_values_the_writer_cant_write_count_as_none(
     assert found.json()["runs"][0]["choices"] is None, column
 
 
+def test_choices_that_arent_whole_numbers_once_each_count_as_none(
+    api: Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sidecar whose choices are lists, or name a choice twice, isn't the writer's: that run has no values, and the route answers (030)."""
+    monkeypatch.setattr(evals, "_tokenizer", lambda name, revision: Bytes())
+    for name, choices in (("lists", lambda c: [[c]]), ("twice", lambda c: 0)):
+        folder = with_tokens(
+            write_run(tmp_path / name, {"t": ("h", [True])}), "t", {0: [0, 1], 1: [2]}
+        )
+        path = Path(folder) / "predictions" / "t.tokens.parquet"
+        table = pq.read_table(path)
+        column = pa.array([choices(c) for c in table.column("choice").to_pylist()])
+        pq.write_table(
+            table.set_column(table.schema.get_field_index("choice"), "choice", column), path
+        )
+        log_run(api, "p", name, folder)
+
+        found = api.get(f"{P}/p/runs/{name}/item/tokens", doc="d-0", task="t", keep="all")
+        assert found.status == 200, found.body
+        assert found.json()["runs"][0]["choices"] is None, name
+
+
 def test_a_sidecar_parquet_cant_read_costs_only_its_own_run(
     api: Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -701,7 +723,7 @@ def test_a_private_tokenizer_repo_is_never_read(monkeypatch: pytest.MonkeyPatch)
     """The name comes from an uploaded run: a repo the Hub lists as private is refused before any fetch, so the server's own token never opens one for a viewer (030)."""
 
     class Hub:
-        def model_info(self, name: str, revision: str | None, token: bool) -> Any:
+        def model_info(self, name: str, revision: str | None, token: bool, timeout: float) -> Any:
             assert token is False  # asked without the server's token
             return dataclasses.make_dataclass("Info", ["private"])(True)
 

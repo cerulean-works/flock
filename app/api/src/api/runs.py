@@ -1001,8 +1001,9 @@ async def run_item_tokens(
             # A sidecar is an uploaded file: one Parquet can't read leaves this run without
             # values, never the other run without its own.
             # Its footer is read first: a file under the 64 MiB read limit can unpack to far more,
-            # so one past 256 MiB unpacked is refused before a row is decoded. The file is read
-            # once for both, named as `tokens` names it.
+            # so one holding more than 2^25 values (the bank's largest default sidecar holds 8.1
+            # million) is refused before a row is decoded. The file is read once for both, named
+            # as `tokens` names it.
             scoped = dataclasses.replace(written, read_bytes=cache(written.read_bytes))
             name = tokens_name(task)
             if any(t.task == task and t.dataset.private for t in written.tasks):
@@ -1010,12 +1011,13 @@ async def run_item_tokens(
             try:
                 rows = []
                 data = scoped.read_bytes(name) if scoped.read_bytes else None
-                unpacked = 0
+                values = 0
                 if data:
                     footer = pq.read_metadata(pa.BufferReader(data))
                     for i in range(footer.num_row_groups):
-                        unpacked += footer.row_group(i).total_byte_size
-                if unpacked <= 256 << 20:
+                        group = footer.row_group(i)
+                        values += sum(group.column(j).num_values for j in range(group.num_columns))
+                if values <= 1 << 25:
                     rows = scoped.tokens(task, [doc]) or []
             # (pyarrow's errors are these: `ArrowInvalid` a ValueError, `ArrowTypeError` a
             # TypeError, its I/O errors OSErrors.)
@@ -1024,9 +1026,12 @@ async def run_item_tokens(
             # A file that isn't the writer's counts as none: a choice missing or twice, or not a
             # whole number; a column missing; arrays of other lengths or of other than numbers.
             continuation = [r for r in rows if r.get("part") == "continuation"]
-            by_choice = {r.get("choice"): r for r in continuation}
+            # Checked before any is a key: a list or struct isn't one.
+            indices = [r.get("choice") for r in continuation]
+            whole = all(type(k) is int for k in indices)
+            whole = whole and sorted(indices) == list(range(len(found.choices)))
+            by_choice = {r["choice"]: r for r in continuation} if whole else {}
             fields = ("token_ids", "logprob", "rank", "entropy")
-            whole = len(by_choice) == len(continuation) and all(type(k) is int for k in by_choice)
             for k in range(len(found.choices)):
                 row = by_choice.get(k, {})
                 lists = [row[f] for f in fields if isinstance(row.get(f), list)]
