@@ -141,7 +141,7 @@ class BaseModel(nn.Module, ABC):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
         """Validate a collated batch and return the inputs `_forward` takes.
 
-        Position IDs come from the batch, as the collator builds them.
+        Position IDs and `cu_seq_lens` pass through unchecked, as the collator builds them.
 
         Args:
             batch (`Batch`): Token IDs, a matching mask and position IDs, shaped
@@ -149,8 +149,9 @@ class BaseModel(nn.Module, ABC):
 
         Returns:
             `tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]`: The
-            token IDs, the mask as booleans on the IDs' device and position IDs, all
-            `[batch, sequence]`, then `cu_seq_lens`, or `None` unless the batch is packed.
+            token IDs and the mask as booleans on the IDs' device, both `[batch, sequence]`,
+            then the batch's position IDs and `cu_seq_lens`, or `None` unless the batch is
+            packed.
 
         Raises:
             `ValueError`: If IDs are not rank two, length is outside the configured

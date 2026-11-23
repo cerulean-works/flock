@@ -17,7 +17,7 @@ class TokenChunkDataset(Dataset):
 
     Args:
         cache_dir (`str` or `Path`): Local cache created by `prepare`.
-        chunk_length (`int`, *optional*, defaults to `4096`): Token IDs per item, including one context token.
+        chunk_length (`int`, *optional*, defaults to `4096`): Token IDs per chunk, including one context token.
         packing (`bool`, *optional*, defaults to `False`): Pack chunks into rows of `chunk_length - 1` inputs with best-fit decreasing. Each item is then one row, `{"_flock_chunks": [chunk, ...]}`.
 
     Each chunk inherits its source row's metadata. `_flock_document_index` and `_flock_chunk_index` identify its position. Documents with fewer than two tokens have no items. Cache version 1 is pinned; preparing an existing path is refused.
@@ -145,7 +145,7 @@ class TokenChunkDataset(Dataset):
         With `packing`, return each requested row as `{"_flock_chunks": [chunk, ...]}`.
         """
         if any(index < 0 or index >= len(self) for index in indices):
-            raise IndexError("Chunk index outside dataset")
+            raise IndexError("Index outside dataset")
         if not self.packing:
             return self._chunks(indices)
         bounds = [(int(self.row_offsets[row]), int(self.row_offsets[row + 1])) for row in indices]
@@ -212,7 +212,7 @@ def _best_fit_decreasing(sizes: np.ndarray, *, capacity: int) -> tuple[np.ndarra
 
     Items go in decreasing size, ties by index, each into the open row with the
     least space that still fits it, or into a new row. This follows OLMo-core's
-    OBFD and TRL's `bfd`: documents stay whole and rows have little padding.
+    OBFD and TRL's `bfd`: no item is split across rows, and rows have little padding.
 
     Returns:
         `tuple[numpy.ndarray, numpy.ndarray]`: Row offsets, starting at 0, into the

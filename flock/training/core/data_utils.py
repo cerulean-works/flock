@@ -13,7 +13,7 @@ from flock.hub import s3
 
 
 class Batch(TypedDict, closed=True):
-    """Describe aligned tensors with shape `[batch, sequence]`.
+    """Describe aligned `[batch, sequence]` tensors, plus a packed batch's boundaries.
 
     Attributes:
         input_ids (`torch.Tensor`): Integer token IDs, excluding the final token.
@@ -60,7 +60,8 @@ class LanceBatchCollator:
         """Pad and truncate rows, then align inputs with next-token labels.
 
         Args:
-            batch (`list[dict[str, Any]]`): Rows containing the configured text field.
+            batch (`list[dict[str, Any]]`): Rows containing the configured text field,
+                `TokenChunkDataset` chunks, or packed rows holding `_flock_chunks`.
 
         Returns:
             `Batch`: Tensors of shape `[rows, padded_length - 1]`. Invalid targets
@@ -79,7 +80,7 @@ class LanceBatchCollator:
                 "labels": torch.full((1, 1), -100, dtype=torch.long),
                 "position_ids": torch.zeros((1, 1), dtype=torch.long),
             }
-        # Since the flock chunks is a packed representation, we use to check if the batch contains packed rows.
+        # Packed rows hold their chunks under `_flock_chunks`.
         if "_flock_chunks" in batch[0]:
             return self._collate_packed(batch)
 
