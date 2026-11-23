@@ -3,12 +3,58 @@ import torch
 from torch.nn import functional as F
 
 from flock.training.core.attention import (
+    AttentionInterface,
     VarlenMetadata,
+    prepare_packed_sdpa_mask,
     prepare_sdpa_mask,
     prepare_varlen_metadata,
     sdpa_attention,
 )
 from flock.training.core.attention.registry import _MaskPreparationFunction
+
+
+def test_packed_sdpa_mask_is_causal_by_default() -> None:
+    # Two documents followed by one padding token.
+    boundaries = torch.tensor([0, 2, 4, 5], dtype=torch.int32)
+    mask = prepare_packed_sdpa_mask(boundaries, batch_size=1, seq_len=5)
+    block = torch.tensor([[True, False], [True, True]])
+    expected = torch.block_diag(block, block, torch.ones(1, 1, dtype=torch.bool))
+    torch.testing.assert_close(mask, expected[None, None])
+
+
+@pytest.mark.parametrize("is_causal", [False, True])
+def test_packed_sdpa_matches_independent_documents(is_causal: bool) -> None:
+    # First row: A A B B PAD. Second row: C D D D D.
+    lengths = [(2, 2, 1), (1, 4)]
+    boundaries = torch.tensor([0, 2, 4, 5, 6, 10], dtype=torch.int32)
+    prepare = AttentionInterface.get_packed_preparer("sdpa")
+    assert prepare is prepare_packed_sdpa_mask
+    mask = prepare(boundaries, batch_size=2, seq_len=5, is_causal=is_causal)
+    torch.testing.assert_close(
+        mask[0, 0, 2], torch.tensor([False, False, True, not is_causal, False])
+    )
+
+    inputs = [torch.randn(2, 2, 5, 8, dtype=torch.float64, requires_grad=True) for _ in range(3)]
+    references = [tensor.detach().clone().requires_grad_() for tensor in inputs]
+    actual = AttentionInterface.get_interface("sdpa")(
+        *inputs, attention_metadata=mask, is_causal=is_causal
+    )
+
+    rows = []
+    for row, segment_lengths in enumerate(lengths):
+        q, k, v = (tensor[row].split(segment_lengths, dim=-2) for tensor in references)
+        outputs = [
+            F.scaled_dot_product_attention(qi, ki, vi, is_causal=is_causal)
+            for qi, ki, vi in zip(q, k, v, strict=True)
+        ]
+        rows.append(torch.cat(outputs, dim=-2))
+    expected = torch.stack(rows)
+    torch.testing.assert_close(actual, expected)
+    upstream = torch.randn_like(actual)
+    torch.testing.assert_close(
+        torch.autograd.grad(actual, inputs, upstream),
+        torch.autograd.grad(expected, references, upstream),
+    )
 
 
 @pytest.mark.parametrize("prepare", [prepare_sdpa_mask, prepare_varlen_metadata])

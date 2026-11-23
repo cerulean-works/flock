@@ -9,7 +9,12 @@ class EchoModel(BaseModel):
     """Exercise shared input handling independently of any model architecture."""
 
     def _forward(
-        self, input_ids: torch.Tensor, attention_mask: torch.Tensor, position_ids: torch.Tensor
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,
+        *,
+        cu_seq_lens: torch.Tensor | None = None,
     ) -> torch.Tensor:
         self.received_mask = attention_mask
         self.received_positions = position_ids

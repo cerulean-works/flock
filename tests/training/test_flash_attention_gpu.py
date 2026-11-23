@@ -18,6 +18,7 @@ from torch.nn import attention
 from flock.training.core.attention import (
     flash_attention_3,
     flash_attention_4,
+    prepare_packed_varlen_metadata,
     prepare_sdpa_mask,
     prepare_varlen_metadata,
     sdpa_attention,
@@ -82,6 +83,7 @@ def test_varlen_mixed_padding_outputs_and_gradients(
     fp32_references = [tensor.detach().float().requires_grad_() for tensor in inputs]
     prepared = prepare_varlen_metadata(mask, is_causal=is_causal)
     assert prepared is not None
+    assert prepared.indices is not None
     assert prepared.indices.device.type == "cuda"
     assert prepared.cu_seq_lens_q.device.type == "cuda"
     dense_mask = prepare_sdpa_mask(mask, is_causal=is_causal)
@@ -223,6 +225,72 @@ def test_fp32_weights_with_cuda_autocast(
                 fp32=fp32_reference.get_parameter(name).grad,
             )
         assert attention.current_flash_attention_impl() == flash.name
+    finally:
+        if previous is None and attention.current_flash_attention_impl() == flash.name:
+            attention.restore_flash_attention_impl()
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
+@pytest.mark.parametrize("is_causal", [False, True])
+def test_packed_documents_match_each_document_alone(
+    flash: Flash,
+    cuda_device: torch.device,
+    dtype: torch.dtype,
+    kv_heads: int,
+    is_causal: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Rows of 160: documents of 7, 64, 1 and 88, then documents of 100 and padding of 60.
+    lengths, batch, width = [7, 64, 1, 88, 100, 60], 2, 160
+    cu = torch.tensor([0, *torch.tensor(lengths).cumsum(0).tolist()], dtype=torch.int32)
+    inputs = [
+        torch.randn(batch, width, heads, 64, device=cuda_device, dtype=dtype)
+        .transpose(1, 2)
+        .requires_grad_()
+        for heads in (4, kv_heads, kv_heads)
+    ]
+    metadata = prepare_packed_varlen_metadata(cu.to(cuda_device), batch_size=batch, seq_len=width)
+    cudnn = Mock(side_effect=AssertionError(f"{flash.name} varlen must not dispatch to cuDNN"))
+    monkeypatch.setattr(torch.ops.aten, "_cudnn_attention_forward", cudnn)
+    monkeypatch.setattr(torch.ops.aten, "_cudnn_attention_backward", cudnn)
+
+    def documentwise(tensors: list[torch.Tensor]) -> torch.Tensor:
+        flat = [tensor.transpose(1, 2).flatten(0, 1) for tensor in tensors]
+        outputs = []
+        for start, stop in zip(cu.tolist(), cu.tolist()[1:], strict=False):
+            q, k, v = (tensor[start:stop].transpose(0, 1)[None] for tensor in flat)
+            with attention.sdpa_kernel(attention.SDPBackend.MATH):
+                output = torch.nn.functional.scaled_dot_product_attention(
+                    q, k, v, is_causal=is_causal, enable_gqa=kv_heads != 4
+                )
+            outputs.append(output[0].transpose(0, 1))
+        return torch.cat(outputs).unflatten(0, (batch, width)).transpose(1, 2)
+
+    references = [tensor.detach().clone().requires_grad_() for tensor in inputs]
+    fp32_references = [tensor.detach().float().requires_grad_() for tensor in inputs]
+    previous = attention.current_flash_attention_impl()
+    assert previous in (None, flash.name)
+    try:
+        actual = flash.attend(*inputs, attention_metadata=metadata, is_causal=is_causal)
+        expected, fp32_expected = documentwise(references), documentwise(fp32_references)
+        assert_parity(actual, expected, dtype, "logits", "packed documents", fp32=fp32_expected)
+        upstream = torch.randn_like(actual)
+        actual.backward(upstream)
+        expected.backward(upstream)
+        fp32_expected.backward(upstream.float())
+        for tensor, reference, fp32_reference in zip(
+            inputs, references, fp32_references, strict=True
+        ):
+            assert_parity(
+                tensor.grad,
+                reference.grad,
+                dtype,
+                "gradients",
+                "packed documents",
+                fp32=fp32_reference.grad,
+            )
+        cudnn.assert_not_called()
     finally:
         if previous is None and attention.current_flash_attention_impl() == flash.name:
             attention.restore_flash_attention_impl()

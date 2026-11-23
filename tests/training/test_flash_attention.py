@@ -3,6 +3,7 @@
 import importlib
 from collections.abc import Callable, Iterator
 from dataclasses import replace
+from itertools import pairwise
 from typing import Any, NamedTuple
 from unittest.mock import Mock
 
@@ -17,6 +18,7 @@ from flock.training.core.attention import (
     VarlenMetadata,
     flash_attention_3,
     flash_attention_4,
+    prepare_packed_varlen_metadata,
     prepare_varlen_metadata,
     sdpa_attention,
 )
@@ -97,6 +99,7 @@ def math_varlen(
 def test_backend_registers_its_function_with_varlen_preparer(flash: Flash) -> None:
     assert AttentionInterface.get_interface(flash.backend) is flash.attend
     assert AttentionInterface.get_mask_preparer(flash.backend) is prepare_varlen_metadata
+    assert AttentionInterface.get_packed_preparer(flash.backend) is prepare_packed_varlen_metadata
 
 
 @pytest.mark.parametrize("kv_heads", [4, 2, 1])
@@ -571,3 +574,41 @@ def test_missing_kernel_dependency_has_actionable_error(
     ):
         pytest.fail("missing dependency was ignored")
     assert kernels in str(error.value)
+
+
+@pytest.mark.parametrize("kv_heads", [4, 2, 1])
+@pytest.mark.parametrize("is_causal", [False, True])
+def test_packed_documents_never_attend_across_boundaries(
+    math_kernel: Mock, flash: Flash, kv_heads: int, is_causal: bool
+) -> None:
+    # Rows of 7: documents of 3, 2 and 2, then documents of 4 and 1 and padding of 2.
+    batch, width = 2, 7
+    cu = torch.tensor([0, 3, 5, 7, 11, 12, 14], dtype=torch.int32)
+    inputs = [
+        torch.randn(batch, width, heads, 8).transpose(1, 2).requires_grad_()
+        for heads in (4, kv_heads, kv_heads)
+    ]
+    metadata = prepare_packed_varlen_metadata(
+        cu, batch_size=batch, seq_len=width, is_causal=is_causal
+    )
+    assert metadata.indices is None
+    assert metadata.max_length_q == metadata.max_length_k == width
+    actual = flash.attend(*inputs, attention_metadata=metadata, is_causal=is_causal)
+
+    # Oracle: run each document alone through SDPA's math kernel.
+    flat = [tensor.detach().transpose(1, 2).flatten(0, 1) for tensor in inputs]
+    expected = torch.empty_like(flat[0])
+    for start, stop in pairwise(cu.tolist()):
+        q, k, v = (tensor[start:stop].transpose(0, 1)[None] for tensor in flat)
+        with attention.sdpa_kernel(attention.SDPBackend.MATH):
+            output = F.scaled_dot_product_attention(
+                q, k, v, is_causal=is_causal, enable_gqa=kv_heads != 4
+            )
+        expected[start:stop] = output[0].transpose(0, 1)
+    expected = expected.unflatten(0, (batch, width)).transpose(1, 2)
+    torch.testing.assert_close(actual, expected)
+    assert math_kernel.call_count == 1
+    call = math_kernel.call_args
+    assert call.args[3] is cu and call.args[5] == width
+    actual.sum().backward()
+    assert all(tensor.grad is not None and tensor.grad.isfinite().all() for tensor in inputs)
