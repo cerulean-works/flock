@@ -55,6 +55,50 @@
 		b: docs ? (bothRight + onlyB) / docs : NaN
 	});
 
+	// The counts table's order: a column and a direction, the diff's own order until a column is
+	// picked. A column's header turns it, as the runs table's do: the same column flips the
+	// direction, a new one starts largest first (a task's name A to Z).
+	type Column =
+		'task' | 'docs' | 'a' | 'b' | 'lead' | 'both_right' | 'both_wrong' | 'only_a' | 'only_b';
+	const COLUMNS: { key: Column; label: string }[] = [
+		{ key: 'task', label: 'Task' },
+		{ key: 'docs', label: 'Docs' },
+		{ key: 'a', label: 'A' },
+		{ key: 'b', label: 'B' },
+		{ key: 'lead', label: 'Δ points' },
+		{ key: 'both_right', label: 'Both right' },
+		{ key: 'both_wrong', label: 'Both wrong' },
+		{ key: 'only_a', label: 'Only A right' },
+		{ key: 'only_b', label: 'Only B right' }
+	];
+	let order = $state<{ by: Column; desc: boolean } | null>(null);
+	const compared = $derived.by(() => {
+		const tasks = [...(data.diff?.tasks ?? [])];
+		if (!order) return tasks;
+		const { by, desc } = order;
+		const value = (t: (typeof tasks)[number]): number => {
+			const { a, b } = score(t.both_right, t.only_a.length, t.only_b.length, t.num_docs);
+			if (by === 'docs') return t.num_docs;
+			if (by === 'a') return a;
+			if (by === 'b') return b;
+			if (by === 'lead') return a - b;
+			if (by === 'both_right') return t.both_right;
+			if (by === 'both_wrong') return t.both_wrong;
+			return by === 'only_a' ? t.only_a.length : t.only_b.length;
+		};
+		tasks.sort((x, y) => {
+			// A task with no rate (no docs) goes last either way.
+			const [vx, vy] = by === 'task' ? [0, 0] : [value(x), value(y)];
+			if (Number.isNaN(vx) !== Number.isNaN(vy)) return Number.isNaN(vx) ? 1 : -1;
+			const gap = by === 'task' ? x.task.localeCompare(y.task) : vx - vy;
+			return desc ? -gap : gap;
+		});
+		return tasks;
+	});
+	function sortBy(by: Column) {
+		order = order?.by === by ? { by, desc: !order.desc } : { by, desc: by !== 'task' };
+	}
+
 	// The lead's tint at full strength: the table's largest lead either way, as the items tint
 	// their margins by the page's largest.
 	const widestLead = $derived(
@@ -303,19 +347,35 @@
 						{@render columns()}
 						<thead class="border-b text-xs text-muted-foreground">
 							<tr>
-								<th class="px-3 py-2 text-left font-medium">Task</th>
-								<th class="px-3 py-2 text-right font-medium">Docs</th>
-								<th class="px-3 py-2 text-right font-medium">A</th>
-								<th class="px-3 py-2 text-right font-medium">B</th>
-								<th class="px-3 py-2 text-right font-medium">Δ points</th>
-								<th class="px-3 py-2 text-right font-medium">Both right</th>
-								<th class="px-3 py-2 text-right font-medium">Both wrong</th>
-								<th class="px-3 py-2 text-right font-medium">Only A right</th>
-								<th class="px-3 py-2 text-right font-medium">Only B right</th>
+								{#each COLUMNS as c (c.key)}
+									{@const active = order?.by === c.key}
+									<th
+										class={['px-3 py-2 font-medium', c.key === 'task' ? 'text-left' : 'text-right']}
+										aria-sort={active ? (order?.desc ? 'descending' : 'ascending') : undefined}
+									>
+										<!-- ⇅ while the pointer is on a header, its direction once picked. -->
+										<button
+											type="button"
+											class="group/sort inline-flex items-center gap-1 hover:text-foreground"
+											onclick={() => sortBy(c.key)}
+										>
+											{c.label}
+											<span
+												class={[
+													'w-2.5 text-center',
+													active
+														? 'text-foreground'
+														: 'invisible group-hover/sort:visible group-focus-visible/sort:visible'
+												]}
+												aria-hidden="true">{active ? (order?.desc ? '↓' : '↑') : '⇅'}</span
+											>
+										</button>
+									</th>
+								{/each}
 							</tr>
 						</thead>
 						<tbody>
-							{#each data.diff.tasks as t (t.task)}
+							{#each compared as t (t.task)}
 								{@const rate = score(t.both_right, t.only_a.length, t.only_b.length, t.num_docs)}
 								<!-- The row opens the task's items above; its name is the button for the keys. -->
 								<tr
