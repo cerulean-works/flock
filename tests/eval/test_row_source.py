@@ -224,3 +224,19 @@ def test_a_row_is_recorded_before_to_doc_sees_it_and_any_column_hashes(
         {**ROWS["test"][0], "seen": stamp}, indent=2, ensure_ascii=False, default=str
     )
     assert doc.source.doc_hash == hashlib.sha256(expected.encode()).hexdigest()
+
+
+def test_a_null_id_or_subject_stays_missing_and_a_non_finite_value_is_null(
+    rows_by_split: dict[str, list[dict[str, Any]]],
+) -> None:
+    rows = [{**ROWS["test"][0], "uid": None, "topic": None, "score": float("nan")}]
+    rows_by_split.update(test=rows, train=[dict(row) for row in ROWS["train"]])
+    fields = RowFields(native_id="uid", subject="topic", meta=("score",))
+
+    [doc], _ = dataclasses.replace(TASK, row_fields=fields).load()
+
+    assert doc.source is not None
+    # Not the string "None", which would join unrelated rows on one id.
+    assert (doc.source.native_id, doc.source.subject) == (None, None)
+    # JSON has no NaN, so the row stays readable by any JSON reader.
+    assert doc.source.meta == {"score": None}

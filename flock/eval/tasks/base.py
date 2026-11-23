@@ -3,6 +3,7 @@
 import dataclasses
 import hashlib
 import json
+import math
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -478,9 +479,17 @@ class MultipleChoiceTask:
             doc_hash = hashlib.sha256(
                 json.dumps(original, indent=2, ensure_ascii=False, default=str).encode()
             ).hexdigest()
-            native_id = str(row[fields.native_id]) if fields.native_id is not None else None
-            subject = str(row[fields.subject]) if fields.subject is not None else None
-            meta = {column: row[column] for column in fields.meta}
+            # A null id or subject stays missing, not the string "None".
+            native_id = row[fields.native_id] if fields.native_id is not None else None
+            subject = row[fields.subject] if fields.subject is not None else None
+            # JSON has no NaN or Infinity, so a non-finite value is written as null, as
+            # `results.json` writes a non-finite metric.
+            meta = {}
+            for column in fields.meta:
+                value = row[column]
+                meta[column] = (
+                    None if isinstance(value, float) and not math.isfinite(value) else value
+                )
 
             doc = self.to_doc(row)
             if any(type(value) not in (str, int, float, bool, NoneType) for value in meta.values()):
@@ -491,8 +500,8 @@ class MultipleChoiceTask:
                 split=self.dataset.split,
                 index=index,
                 doc_hash=doc_hash,
-                native_id=native_id if native_id != doc.id else None,
-                subject=subject,
+                native_id=None if native_id is None or str(native_id) == doc.id else str(native_id),
+                subject=None if subject is None else str(subject),
                 meta=meta,
             )
             docs.append(dataclasses.replace(doc, source=source))

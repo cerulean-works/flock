@@ -17,6 +17,14 @@ def test_every_test_row_is_scored_whatever_its_check(rows_by_split: dict[str, li
         texts = [{"label": "ABCDE"[i], "text": text} for i, text in enumerate(options)]
         return {
             "hash": id,
+            "uid": f"uid-{id}",
+            "record_id": "r1",
+            "number": None,
+            "publisher": "hanlin",
+            "school_year_semester": "111",
+            "source_dataset": "high-school__tests",
+            "extraction_method": "ooxml",
+            "explanation": "解析",
             "passage": "",
             "stem": f"{id}？",
             "options": texts,
@@ -45,6 +53,12 @@ def test_every_test_row_is_scored_whatever_its_check(rows_by_split: dict[str, li
     assert [shot.id for shot in shots] == ["s1"]
     assert len(docs[0].choices) == 5
     assert docs[1].choices[0].context == "父親每天早起。\n問題：t2？\n答案："
+    # The bank's own id is the row's native id; the metadata is copied, the explanation isn't.
+    assert docs[2].source is not None
+    assert docs[2].source.native_id == "uid-t3"
+    assert docs[2].source.meta["check"] == "unsure"
+    assert docs[2].source.meta["number"] is None
+    assert "explanation" not in docs[2].source.meta
     assert task.description == "以下是關於社會考試單選題，請選出正確的答案。\n\n"
 
 
