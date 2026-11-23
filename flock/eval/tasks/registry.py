@@ -7,7 +7,7 @@ from flock.eval.tasks.fineweb import FINEWEB
 from flock.eval.tasks.fineweb_edu import FINEWEB_EDU
 from flock.eval.tasks.paloma import PALOMA
 from flock.eval.tasks.suite import Suite, Task, by_name
-from flock.eval.tasks.tc_edu import TC_EDU_ALL
+from flock.eval.tasks.tc_edu import TC_EDU_ALL, TC_EDU_MANYSHOT_TASKS
 from flock.eval.tasks.tmmluplus import TMMLUPLUS_ALL
 from flock.eval.tasks.tw_mock_exams import TW_MOCK_EXAMS_ALL
 from flock.eval.tasks.tw_text import TW_TEXT, TW_TEXT_V1
@@ -41,6 +41,7 @@ TASKS: dict[str, Task] = by_name(
         *TMMLUPLUS_ALL.tasks,
         *TW_MOCK_EXAMS_ALL.tasks,
         *TC_EDU_ALL.tasks,
+        *TC_EDU_MANYSHOT_TASKS,
         DRCD_BPB,
         *CEVAL_ALL.tasks,
         *CMMLU_ALL.tasks,

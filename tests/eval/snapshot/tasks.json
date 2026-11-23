@@ -14364,6 +14364,482 @@
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
+    "tc_edu_manyshot_32k_hs_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "hs_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 91,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_32k_jh_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 114,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_32k_jh_science": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_science"
+      },
+      "description": "以下是關於自然考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 228,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_32k_jh_social": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_social"
+      },
+      "description": "以下是關於社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 192,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_4k_jh_english": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_english"
+      },
+      "description": "The following are multiple choice questions (with answers) about English.\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 80,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.english_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "tc_edu_manyshot_4k_jh_math": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_math"
+      },
+      "description": "以下是關於數學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 42,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_4k_jh_science": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_science"
+      },
+      "description": "以下是關於自然考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 22,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_4k_jh_social": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_social"
+      },
+      "description": "以下是關於社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 19,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_hs_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "hs_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_jh_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_jh_english": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_english"
+      },
+      "description": "The following are multiple choice questions (with answers) about English.\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.english_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "tc_edu_manyshot_5shot_jh_math": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_math"
+      },
+      "description": "以下是關於數學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_jh_science": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_science"
+      },
+      "description": "以下是關於自然考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_jh_social": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_social"
+      },
+      "description": "以下是關於社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_8k_jh_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 17,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_8k_jh_science": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_science"
+      },
+      "description": "以下是關於自然考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 61,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_8k_jh_social": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_social"
+      },
+      "description": "以下是關於社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 46,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
     "tmmluplus_accounting": {
       "dataset": {
         "private": false,
