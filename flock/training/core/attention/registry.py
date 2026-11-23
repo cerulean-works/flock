@@ -138,13 +138,6 @@ class AttentionInterface:
         return cls._get_backend(attn_implementation).mask_preparer
 
     @classmethod
-    def get_packed_preparer(
-        cls, attn_implementation: str
-    ) -> _PackedPreparationFunction[Any] | None:
-        """Resolve an implementation name to its packed preparer, or `None` without one."""
-        return cls._get_backend(attn_implementation).packed_preparer
-
-    @classmethod
     def get_metadata_preparer(cls, attn_implementation: str) -> AttentionMetadataPreparer:
         """Resolve an implementation name to one preparer for padded and packed batches.
 

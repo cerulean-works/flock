@@ -109,7 +109,6 @@ def _flash_attention(
         not isinstance(attention_metadata, VarlenMetadata)
         or attention_metadata.batch_size != q.shape[0]
         or attention_metadata.seq_len != q.shape[2]
-        # After the type check: a tensor also has an `indices` attribute.
         or (
             attention_metadata.indices is not None and attention_metadata.indices.device != q.device
         )

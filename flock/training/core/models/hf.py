@@ -8,8 +8,6 @@ import transformers
 from transformers import CONFIG_MAPPING, PretrainedConfig, PreTrainedModel
 from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING
 
-from flock.training.core.data_utils import Batch
-
 from .base import BaseModel
 
 
@@ -261,26 +259,6 @@ class HFCompatibleModel(BaseModel):
         assign_weights(model, state)
         return model
 
-    def forward(self, batch: Batch) -> torch.Tensor:
-        """Return full-sequence logits for a collated batch.
-
-        `transformers` builds its own attention mask from the 2-D one, and picks its fast
-        path when nothing is padded.
-
-        Args:
-            batch (`Batch`): Token IDs and a matching mask shaped `[batch, sequence]`.
-                Mask values `True` or `1` identify real tokens.
-
-        Returns:
-            `torch.Tensor`: Logits shaped `[batch, sequence, vocabulary]`.
-
-        Raises:
-            `ValueError`: If IDs are not rank two, length is outside the configured
-                range, the attention mask shape differs from the IDs, or the batch is
-                packed.
-        """
-        return super().forward(batch)
-
     def _forward(
         self,
         input_ids: torch.Tensor,
@@ -290,6 +268,9 @@ class HFCompatibleModel(BaseModel):
         cu_seq_lens: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Run the `transformers` model with a 2-D boolean mask and no cache.
+
+        `transformers` builds its own attention mask from the 2-D one, and picks its fast
+        path when nothing is padded.
 
         Packed batches are refused: `transformers` would see only the mask and attend
         across documents.
