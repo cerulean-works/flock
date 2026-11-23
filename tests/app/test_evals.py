@@ -630,6 +630,34 @@ def test_a_character_split_across_tokens_goes_to_the_token_that_completes_it(
     assert texts == [["", " 臺"], [" ye", "s"]]
 
 
+def test_a_sidecar_that_isnt_the_writers_counts_as_none(
+    api: Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sidecar whose arrays for a choice have other lengths (an entropy missing for a token) answers as a run without values, not with arrays the page would misread (030)."""
+    monkeypatch.setattr(evals, "_tokenizer", lambda name, revision: Bytes())
+    folder = with_tokens(write_run(tmp_path / "a", {"t": ("h", [True])}), "t", {0: [0, 1], 1: [2]})
+    path = Path(folder) / "predictions" / "t.tokens.parquet"
+    table = pq.read_table(path)
+    entropy = [[0.25] for _ in range(table.num_rows)]
+    pq.write_table(table.set_column(6, "entropy", pa.array(entropy)), path)
+    log_run(api, "p", "a", folder)
+
+    found = api.get(f"{P}/p/runs/a/item/tokens", doc="d-0", task="t", keep="all")
+    assert found.status == 200, found.body
+    assert found.json()["runs"] == [
+        {"choices": None, "note": "run:flock/p/a has no per-token values for t"}
+    ]
+
+
+def test_a_choice_too_long_to_name_keeps_its_values_without_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Naming tokens costs a choice's length squared, so past 256 tokens it is refused (030)."""
+    monkeypatch.setattr(evals, "_tokenizer", lambda name, revision: Bytes())
+    with pytest.raises(ValueError, match="a choice of 257 tokens is too long"):
+        evals.token_texts("tiny", None, [[2] * 257], [" no" * 257])
+
+
 @pytest.mark.parametrize("route", [run_items, run_item, run_item_tokens])
 def test_the_items_routes_take_the_keeps_eval_takes(route: Callable[..., Any]) -> None:
     """The routes' `keep` values are eval's: one they lacked would be a 422 for a filter `items()` reads, and an extra one a 409 nobody could get past."""

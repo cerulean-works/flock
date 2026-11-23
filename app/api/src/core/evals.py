@@ -5,7 +5,9 @@ import asyncio
 import functools
 from dataclasses import dataclass
 
-from huggingface_hub import hf_hub_download
+import httpx
+from huggingface_hub import hf_hub_url
+from huggingface_hub.utils import build_hf_headers
 from tokenizers import Tokenizer
 
 from app.api.src.core.store import Run, Store
@@ -52,8 +54,17 @@ class PairFiles:
 @functools.lru_cache(maxsize=8)
 def _tokenizer(name: str, revision: str | None) -> Tokenizer:
     """The tokenizer ``name`` from the Hub at ``revision``, the last few kept once fetched: the API
-    decodes one doc's tokens at a time, and a fetch costs a round trip."""
-    return Tokenizer.from_file(hf_hub_download(name, "tokenizer.json", revision=revision))
+    decodes one doc's tokens at a time, and a fetch costs a round trip. Fetched into memory, never
+    the disk, and refused past ``FILE_BYTES``: the name comes from an uploaded run."""
+    url = hf_hub_url(name, "tokenizer.json", revision=revision)
+    data = bytearray()
+    with httpx.stream("GET", url, headers=build_hf_headers(), follow_redirects=True) as answer:
+        answer.raise_for_status()
+        for chunk in answer.iter_bytes():
+            data += chunk
+            if len(data) > FILE_BYTES:
+                raise ValueError(f"{name}'s tokenizer.json is over {FILE_BYTES >> 20} MiB")
+    return Tokenizer.from_str(data.decode())
 
 
 def token_texts(
@@ -74,6 +85,10 @@ def token_texts(
         raise ValueError(f"no tokenizer {tokenizer} to name the tokens: {exc}") from exc
     texts = []
     for choice_ids, choice in zip(ids, choices, strict=True):
+        # Each token's text costs a decode of its prefix, so a long choice costs its length
+        # squared; multiple-choice continuations are a few dozen tokens.
+        if len(choice_ids) > 256:
+            raise ValueError(f"a choice of {len(choice_ids)} tokens is too long to name them")
         # Decoded a prefix at a time: a byte-level token alone can hold half a character, which
         # decodes to U+FFFD until the token that completes it.
         pieces, done = [], ""

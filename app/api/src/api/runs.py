@@ -998,7 +998,14 @@ async def run_item_tokens(
             # and aren't shown.
             rows = written.tokens(task, [doc]) or []
             by_choice = {r["choice"]: r for r in rows if r["part"] == "continuation"}
-            if any(k not in by_choice for k in range(len(found.choices))):
+            # A file that isn't the writer's (a choice or a column missing, arrays of other
+            # lengths) counts as none.
+            fields = ("token_ids", "logprob", "rank", "entropy")
+            whole = all(
+                k in by_choice and len({len(by_choice[k].get(f) or []) for f in fields}) == 1
+                for k in range(len(found.choices))
+            )
+            if not whole:
                 note = f"{written.source} has no per-token values for {task}"
                 answers.append({"choices": None, "note": note})
                 continue
