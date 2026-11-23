@@ -6,7 +6,7 @@ import functools
 from dataclasses import dataclass
 
 import httpx
-from huggingface_hub import hf_hub_url
+from huggingface_hub import constants, hf_hub_url
 from huggingface_hub.utils import build_hf_headers
 from tokenizers import Tokenizer
 
@@ -56,6 +56,8 @@ def _tokenizer(name: str, revision: str | None) -> Tokenizer:
     """The tokenizer ``name`` from the Hub at ``revision``, the last few kept once fetched: the API
     decodes one doc's tokens at a time, and a fetch costs a round trip. Fetched into memory, never
     the disk, and refused past ``FILE_BYTES``: the name comes from an uploaded run."""
+    if constants.HF_HUB_OFFLINE:
+        raise ValueError("the Hub is offline here")
     url = hf_hub_url(name, "tokenizer.json", revision=revision)
     data = bytearray()
     with httpx.stream("GET", url, headers=build_hf_headers(), follow_redirects=True) as answer:
@@ -77,6 +79,11 @@ def token_texts(
     Raises:
         ValueError: if the tokenizer can't be fetched, or its pieces don't give back each
             choice's text, so the ids weren't made by it."""
+    # Each token's text costs a decode of its prefix, so a long choice costs its length squared;
+    # multiple-choice continuations are a few dozen tokens. Checked before any fetch.
+    longest = max((len(choice_ids) for choice_ids in ids), default=0)
+    if longest > 256:
+        raise ValueError(f"a choice of {longest} tokens is too long to name them")
     try:
         decoder = _tokenizer(tokenizer, revision)
     # Whatever stops the fetch (a local path, a gated or missing repo, no network) leaves the
@@ -85,10 +92,6 @@ def token_texts(
         raise ValueError(f"no tokenizer {tokenizer} to name the tokens: {exc}") from exc
     texts = []
     for choice_ids, choice in zip(ids, choices, strict=True):
-        # Each token's text costs a decode of its prefix, so a long choice costs its length
-        # squared; multiple-choice continuations are a few dozen tokens.
-        if len(choice_ids) > 256:
-            raise ValueError(f"a choice of {len(choice_ids)} tokens is too long to name them")
         # Decoded a prefix at a time: a byte-level token alone can hold half a character, which
         # decodes to U+FFFD until the token that completes it.
         pieces, done = [], ""

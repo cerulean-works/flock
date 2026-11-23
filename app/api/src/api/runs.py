@@ -1001,10 +1001,12 @@ async def run_item_tokens(
             # A file that isn't the writer's (a choice or a column missing, arrays of other
             # lengths) counts as none.
             fields = ("token_ids", "logprob", "rank", "entropy")
-            whole = all(
-                k in by_choice and len({len(by_choice[k].get(f) or []) for f in fields}) == 1
-                for k in range(len(found.choices))
-            )
+            whole = True
+            for k in range(len(found.choices)):
+                row = by_choice.get(k, {})
+                lists = [row[f] for f in fields if isinstance(row.get(f), list)]
+                if len(lists) < len(fields) or len({len(a) for a in lists}) != 1:
+                    whole = False
             if not whole:
                 note = f"{written.source} has no per-token values for {task}"
                 answers.append({"choices": None, "note": note})
