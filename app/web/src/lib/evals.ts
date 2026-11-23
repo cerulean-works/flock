@@ -1,5 +1,13 @@
 import { resolve } from '$app/paths';
-import type { EvalResults, EvalRow, EvalScores, ModelEvalRun } from './types.ts';
+import type {
+	EvalResults,
+	EvalRow,
+	EvalScores,
+	ItemKeep,
+	ItemsView,
+	ModelEvalRun
+} from './types.ts';
+import { withParams } from './workspace/url.ts';
 
 /**
  * The schemas of eval's results file the dashboard reads (025 D184): eval's own reader's
@@ -136,3 +144,35 @@ export function compareHref(entity: string, project: string, run: string, other 
 	const page = resolve('/(app)/[entity]/[project]/runs/[run]/compare', { entity, project, run });
 	return other ? `${page}?with=${encodeURIComponent(other)}` : page;
 }
+
+/** The items list's state as a link holds it (028), on the compare page and the Results tab. */
+export function itemsViewOf(search: { get(key: string): string | null }): ItemsView {
+	const page = Number(search.get('page'));
+	return {
+		// The list checks the task and keep against its own.
+		task: search.get('task') ?? undefined,
+		keep: (search.get('keep') as ItemKeep | null) ?? undefined,
+		sort: search.get('sort') === 'doc' ? 'doc' : undefined,
+		page: Number.isInteger(page) && page > 1 ? page : undefined,
+		item: search.get('item') ?? undefined
+	};
+}
+
+/** The current page with the items list's state in its search params, the rest kept. */
+export const withItemsView = (url: { pathname: string; search: string }, view: ItemsView) =>
+	withParams(url, {
+		task: view.task,
+		keep: view.keep,
+		sort: view.sort,
+		page: view.page?.toString(),
+		item: view.item
+	});
+
+/**
+ * Whether a key belongs to what it was typed in, not to a page's shortcuts: a field, a select or
+ * list, a menu, a dialog or editable text.
+ */
+export const typedIn = (target: EventTarget | null) =>
+	!!(target as Element | null)?.closest?.(
+		'input, textarea, select, [role=combobox], [role=listbox], [role=menu], [role=dialog], [contenteditable=""], [contenteditable=true]'
+	);

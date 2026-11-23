@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { page as screen } from 'vitest/browser';
+import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
-import type { EvalItem, ItemsPage } from '#lib/types.ts';
+import type { EvalItem, ItemSummary, ItemsPage } from '#lib/types.ts';
 import EvalItems from './EvalItems.svelte';
 
 const ITEM: EvalItem = {
@@ -33,15 +33,51 @@ const ITEM: EvalItem = {
 	]
 };
 
-/** The dashboard's answer to every request; the URLs asked for are in its calls. */
-function answer(status: number, body: unknown) {
-	const fetch = vi.fn(async () => new Response(JSON.stringify(body), { status }));
+/** ITEM as a row of the list: Flock's summary, with each run's margin. */
+const ROW: ItemSummary = {
+	id: 'Mercury_7017010',
+	text: 'Question: Which planet is closest to the Sun?',
+	gold: 1,
+	gold_text: 'Mercury',
+	runs: [
+		{ correct: true, pick: 1, pick_text: 'Mercury', margin: Math.log(0.4 / 0.3), gold_prob: 0.665 },
+		{ correct: false, pick: 2, pick_text: 'Mars', margin: Math.log(0.3 / 0.5), gold_prob: 0.09 }
+	]
+};
+
+/** A page of the list holding these rows, of `total` in all. */
+const rows = (items: ItemSummary[], total = items.length, offset = 0): ItemsPage => ({
+	total,
+	offset,
+	items
+});
+
+/**
+ * The dashboard's answers: `list` (or `list(offset)`) for a page of rows, and ITEM, or a doc of
+ * that id, for a doc. The URLs asked for are in its calls.
+ */
+function answer(status: number, list: unknown | ((offset: number) => unknown)) {
+	const fetch = vi.fn(async (input: string) => {
+		const url = new URL(input, 'https://flock.test');
+		if (url.pathname.endsWith('/item')) {
+			const id = url.searchParams.get('doc');
+			return new Response(JSON.stringify({ ...ITEM, id }), { status: 200 });
+		}
+		const offset = Number(url.searchParams.get('offset'));
+		const body = typeof list === 'function' ? list(offset) : list;
+		return new Response(JSON.stringify(body), { status });
+	});
 	vi.stubGlobal('fetch', fetch);
 	return fetch;
 }
 
-const asked = (fetch: ReturnType<typeof answer>, call: number) =>
-	new URL(String((fetch.mock.calls[call] as unknown[])[0]), 'https://flock.test');
+/** The URLs asked for, in order: `…/items` for a page, `…/item` for a doc. */
+const asked = (fetch: ReturnType<typeof answer>) =>
+	fetch.mock.calls.map(([input]) => new URL(String(input), 'https://flock.test'));
+const lists = (fetch: ReturnType<typeof answer>) =>
+	asked(fetch).filter((url) => url.pathname.endsWith('/items'));
+const docs = (fetch: ReturnType<typeof answer>) =>
+	asked(fetch).filter((url) => url.pathname.endsWith('/item'));
 
 const PAIR = {
 	entity: 'acme',
@@ -65,14 +101,14 @@ afterEach(() => {
 
 describe('eval items', () => {
 	it('shows a row per doc with each run’s outcome, margin and pick, opening to every choice', async () => {
-		const page: ItemsPage = { total: 21, offset: 0, items: [ITEM] };
-		const fetch = answer(200, page);
-		render(EvalItems, PAIR);
+		const fetch = answer(200, rows([ROW], 21));
+		const onview = vi.fn();
+		render(EvalItems, { ...PAIR, onview });
 
 		// The first task with docs in the first keep, asked of the pair, surest gap first.
 		const row = screen.getByRole('row').filter({ hasText: 'Mercury_7017010' });
 		await expect.element(row).toBeVisible();
-		const url = asked(fetch, 0);
+		const [url] = lists(fetch);
 		expect(url.pathname).toBe('/api/projects/acme/evals/runs/r1/items');
 		expect(Object.fromEntries(url.searchParams)).toEqual({
 			task: 'arc_easy',
@@ -82,20 +118,45 @@ describe('eval items', () => {
 			limit: '20',
 			with: 'acme/evals/r2'
 		});
-		// Margins: A log(0.4 / 0.3), B log(0.3 / 0.5); the gap between them.
+		// Margins: A log(0.4 / 0.3), B log(0.3 / 0.5); the gap between them. No doc's text is asked
+		// for until it opens.
 		expect(
 			row
 				.getByRole('cell')
 				.all()
-				.slice(2)
+				.slice(1)
 				.map((c) => c.element().textContent!.replace(/\s+/g, ' ').trim())
-		).toEqual(['Mercury', 'right: Mercury +0.29', 'wrong: Mars −0.51', '+0.80', '']);
+		).toEqual([
+			'Question: Which planet is closest to the Sun?',
+			'Mercury',
+			'right: Mercury +0.29',
+			'wrong: Mars −0.51',
+			'+0.80',
+			''
+		]);
+		expect(docs(fetch)).toEqual([]);
 		// The task's scores and flips, from the counts.
 		await expect.element(screen.getByText(/docs only A got right/)).toBeVisible();
 
 		await row.getByRole('button', { name: 'Mercury_7017010' }).click();
-		// The whole question in the row, then a row per choice in the same table.
+		// The doc asked for with the list's task, keep and pair; the whole question in the row, then
+		// a row per choice in the same table.
+		const [doc] = docs(fetch);
+		expect(doc.pathname).toBe('/api/projects/acme/evals/runs/r1/item');
+		expect(Object.fromEntries(doc.searchParams)).toEqual({
+			doc: 'Mercury_7017010',
+			task: 'arc_easy',
+			keep: 'only_a',
+			with: 'acme/evals/r2'
+		});
 		await expect.element(row.getByText(/Answer:/)).toBeVisible();
+		expect(onview).toHaveBeenLastCalledWith({
+			task: 'arc_easy',
+			keep: 'only_a',
+			sort: undefined,
+			page: undefined,
+			item: 'Mercury_7017010'
+		});
 		const choices = screen.getByRole('table');
 		// Each run's pick is named in its cell: A's on the gold choice, B's on Mars.
 		const gold = choices.getByRole('row').filter({ hasText: 'gold' });
@@ -107,29 +168,94 @@ describe('eval items', () => {
 			.toHaveAccessibleName('B (its pick): share 50.0% · prob 66.5% · logprob -1.00');
 	});
 
+	it('opens where a link left it, ignoring a part that doesn’t fit', async () => {
+		const fetch = answer(200, rows([{ ...ROW, id: 'set/7' }], 30, 20));
+		const view = { task: 'piqa', keep: 'wrong' as const, sort: 'doc' as const, page: 2 };
+		render(EvalItems, { ...PAIR, view: { ...view, item: 'set/7' } });
+
+		// `wrong` isn't a keep of two runs: the first keep instead.
+		await expect
+			.element(screen.getByRole('button', { name: 'set/7' }))
+			.toHaveAttribute('aria-expanded', 'true');
+		const [url] = lists(fetch);
+		expect(url.searchParams.get('task')).toBe('piqa');
+		expect(url.searchParams.get('keep')).toBe('only_a');
+		expect(url.searchParams.get('sort')).toBe('doc');
+		expect(url.searchParams.get('offset')).toBe('20');
+		// The id is a query value, whatever it holds.
+		expect(docs(fetch)[0].searchParams.get('doc')).toBe('set/7');
+	});
+
+	it('moves through the docs with j and k, opening each while one is open', async () => {
+		// Two pages, the first ending on d-1 and the second starting on d-2 (only two rows of each are
+		// sent; a total of 40 makes two pages of 20).
+		const page = (offset: number) =>
+			rows(
+				[0, 1].map((i) => ({ ...ROW, id: `d-${offset / 10 + i}` })),
+				40,
+				offset
+			);
+		const fetch = answer(200, page);
+		const onview = vi.fn();
+		render(EvalItems, { ...PAIR, onview });
+		const toggle = (id: string) => screen.getByRole('button', { name: id, exact: true });
+		await expect.element(toggle('d-0')).toBeVisible();
+
+		await userEvent.keyboard('j');
+		await expect.element(toggle('d-0')).toHaveFocus();
+		await userEvent.keyboard('{Enter}');
+		await expect.element(toggle('d-0')).toHaveAttribute('aria-expanded', 'true');
+		await userEvent.keyboard('j');
+		await expect.element(toggle('d-1')).toHaveAttribute('aria-expanded', 'true');
+		await expect.element(toggle('d-0')).toHaveAttribute('aria-expanded', 'false');
+		expect(onview).toHaveBeenLastCalledWith(expect.objectContaining({ item: 'd-1' }));
+
+		// Past the page's last doc: the next page, its first doc open.
+		await userEvent.keyboard('j');
+		await expect.element(toggle('d-2')).toHaveAttribute('aria-expanded', 'true');
+		expect(lists(fetch).at(-1)!.searchParams.get('offset')).toBe('20');
+		expect(onview).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, item: 'd-2' }));
+		await userEvent.keyboard('k');
+		await expect.element(toggle('d-1')).toHaveAttribute('aria-expanded', 'true');
+
+		// Esc closes it and leaves the focus on its row; o opens it again.
+		await userEvent.keyboard('{Escape}');
+		await expect.element(toggle('d-1')).toHaveAttribute('aria-expanded', 'false');
+		await expect.element(toggle('d-1')).toHaveFocus();
+		expect(onview).toHaveBeenLastCalledWith(expect.objectContaining({ item: undefined }));
+		await userEvent.keyboard('o');
+		await expect.element(toggle('d-1')).toHaveAttribute('aria-expanded', 'true');
+	});
+
 	it('switches to the dataset’s order', async () => {
-		const fetch = answer(200, { total: 1, offset: 0, items: [ITEM] });
-		render(EvalItems, PAIR);
+		const fetch = answer(200, rows([ROW]));
+		const onview = vi.fn();
+		render(EvalItems, { ...PAIR, onview });
 		await screen.getByRole('button', { name: 'Biggest margin gap first' }).click();
-		await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-		expect(asked(fetch, 1).searchParams.get('sort')).toBe('doc');
+		await vi.waitFor(() => expect(lists(fetch)).toHaveLength(2));
+		expect(lists(fetch)[1].searchParams.get('sort')).toBe('doc');
 		await expect.element(screen.getByRole('button', { name: 'Dataset order' })).toBeVisible();
+		expect(onview).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'doc' }));
 	});
 
 	it('pages through a keep and starts over on another one', async () => {
-		const page: ItemsPage = { total: 21, offset: 0, items: [ITEM] };
-		const fetch = answer(200, page);
-		render(EvalItems, PAIR);
+		const fetch = answer(200, rows([ROW], 21));
+		const onview = vi.fn();
+		render(EvalItems, { ...PAIR, onview });
 
 		// Clicking the keep already chosen keeps the pager.
 		await screen.getByRole('radio', { name: /Only A right/ }).click();
 		await screen.getByRole('button', { name: 'Next page' }).click();
-		await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-		expect(asked(fetch, 1).searchParams.get('offset')).toBe('20');
+		await vi.waitFor(() => expect(lists(fetch)).toHaveLength(2));
+		expect(lists(fetch)[1].searchParams.get('offset')).toBe('20');
+		expect(onview).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }));
 		await screen.getByRole('radio', { name: /Only B right/ }).click();
-		await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
-		expect(asked(fetch, 2).searchParams.get('keep')).toBe('only_b');
-		expect(asked(fetch, 2).searchParams.get('offset')).toBe('0');
+		await vi.waitFor(() => expect(lists(fetch)).toHaveLength(3));
+		expect(lists(fetch)[2].searchParams.get('keep')).toBe('only_b');
+		expect(lists(fetch)[2].searchParams.get('offset')).toBe('0');
+		expect(onview).toHaveBeenLastCalledWith(
+			expect.objectContaining({ keep: 'only_b', page: undefined })
+		);
 		await expect
 			.element(screen.getByRole('radio', { name: /Only B right/ }))
 			.toHaveTextContent('4');

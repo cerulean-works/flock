@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { onMount, tick } from 'svelte';
+	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
 	import CopyButton from '#lib/components/CopyButton.svelte';
 	import Page from '#lib/components/Page.svelte';
@@ -9,7 +10,14 @@
 	import InfoHint from '#lib/components/InfoHint.svelte';
 	import EvalItems from '#lib/components/run/EvalItems.svelte';
 	import EvalRunPicker from '#lib/components/run/EvalRunPicker.svelte';
-	import { NOT_COMPARED, compareHref } from '#lib/evals.ts';
+	import {
+		NOT_COMPARED,
+		compareHref,
+		formatScore,
+		itemsViewOf,
+		typedIn,
+		withItemsView
+	} from '#lib/evals.ts';
 	import type { ItemKeep, RunDetail } from '#lib/types.ts';
 	import { projectHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
@@ -41,6 +49,30 @@
 		return sum;
 	});
 
+	// Each run's accuracy over the docs both scored: right in both, plus right in that run alone.
+	const score = (bothRight: number, onlyA: number, onlyB: number, docs: number) => ({
+		a: docs ? (bothRight + onlyA) / docs : NaN,
+		b: docs ? (bothRight + onlyB) / docs : NaN
+	});
+
+	// Clicking a task in the counts table opens its items above: the link takes the task (the
+	// reader's group and order kept, or the first group with docs) and the list starts over there.
+	let picked = $state(0);
+	function showTask(task: string) {
+		const view = itemsViewOf(page.url.searchParams);
+		const counts: Partial<Record<ItemKeep, number>> =
+			tasks.find((t) => t.task === task)?.counts ?? {};
+		const keeps = ['only_a', 'only_b', 'both_wrong', 'both_right'] as const;
+		const keep =
+			view.keep && (counts[view.keep] ?? 0) > 0
+				? view.keep
+				: keeps.find((k) => (counts[k] ?? 0) > 0);
+		replaceState(withItemsView(page.url, { task, keep, sort: view.sort }), page.state);
+		picked += 1;
+		// The reader goes where the task opened, focus included, so Tab and a screen reader follow.
+		void tick().then(() => document.getElementById('items')?.focus());
+	}
+
 	const pathOf = (r: RunDetail) => `${r.entity}/${r.project}/${r.id}`;
 	const nameOf = (r: RunDetail) => r.display_name ?? r.id;
 
@@ -60,10 +92,8 @@
 	});
 	function onkeydown(e: KeyboardEvent) {
 		if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
-		const target = e.target as HTMLElement | null;
 		// A select's own keys (the task select's typeahead) aren't the page's.
-		const own = 'input, textarea, select, [role=combobox], [role=listbox], [contenteditable=""]';
-		if (target?.closest(`${own}, [contenteditable=true]`)) return;
+		if (typedIn(e.target)) return;
 		if (pickingA || pickingB) return;
 		const key = e.key.toLowerCase();
 		if (key === 'a') pickingA = true;
@@ -126,6 +156,17 @@
 	{/if}
 {/snippet}
 
+<!-- Each run's accuracy over the docs compared, and A's lead in points. -->
+{#snippet rates({ a, b }: { a: number; b: number })}
+	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(a)}</td>
+	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(b)}</td>
+	<td class="px-3 py-1.5 text-right tabular-nums">
+		{Number.isFinite(a - b)
+			? `${a > b ? '+' : a < b ? '−' : ''}${Math.abs(100 * (a - b)).toFixed(1)}`
+			: '–'}
+	</td>
+{/snippet}
+
 <!-- Without text (a run before schema 11), a cell's doc ids, where the diff lists them. -->
 {#snippet ids(task: string, keep: ItemKeep)}
 	{@const t = data.diff?.tasks.find((d) => d.task === task)}
@@ -143,15 +184,18 @@
 	{/if}
 {/snippet}
 
-<!-- The task column takes what the five counts leave, in both tables, so they line up. -->
+<!-- The task column takes what the numbers leave, in both tables, so they line up. -->
 {#snippet columns()}
 	<colgroup>
 		<col />
+		<col class="w-[5rem]" />
+		<col class="w-[5.5rem]" />
+		<col class="w-[5.5rem]" />
+		<col class="w-[4.5rem]" />
 		<col class="w-[6.5rem]" />
-		<col class="w-[7.5rem]" />
-		<col class="w-[7.5rem]" />
-		<col class="w-[7.5rem]" />
-		<col class="w-[7.5rem]" />
+		<col class="w-[6.5rem]" />
+		<col class="w-[7rem]" />
+		<col class="w-[7rem]" />
 	</colgroup>
 {/snippet}
 
@@ -188,9 +232,15 @@
 			<!-- A pair with no task in common has nothing to list: the reasons below say why. -->
 			{#if tasks.length}
 				<section aria-labelledby="items">
-					<h2 id="items" class="mb-2 text-[22px] tracking-[-0.01em]">Items</h2>
-					<!-- Another pair starts the items over. -->
-					{#key `${pathOf(data.a)} ${pathOf(data.b)}`}
+					<h2
+						id="items"
+						tabindex="-1"
+						class="mb-2 scroll-mt-4 rounded-md text-[22px] tracking-[-0.01em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+					>
+						Items
+					</h2>
+					<!-- Another pair, or a task picked in the table below, starts the items over. -->
+					{#key `${pathOf(data.a)} ${pathOf(data.b)} ${picked}`}
 						<EvalItems
 							entity={data.a.entity}
 							project={data.a.project}
@@ -206,6 +256,8 @@
 							]}
 							fallback={ids}
 							bleed
+							view={itemsViewOf(page.url.searchParams)}
+							onview={(view) => replaceState(withItemsView(page.url, view), page.state)}
 						/>
 					{/key}
 				</section>
@@ -215,17 +267,21 @@
 				<h2 id="compared" class="mb-2 flex items-center gap-2 text-[22px] tracking-[-0.01em]">
 					{data.diff.tasks.length} tasks compared
 					<InfoHint label="About these counts">
-						Doc ids are the dataset’s own ids, or a hash of the doc where it has none. Counts only:
-						no test of significance.
+						A and B are each run’s accuracy on the docs compared, and Δ points is A’s lead. Click a
+						task to read its items above. Doc ids are the dataset’s own ids, or a hash of the doc
+						where it has none. Counts only: no test of significance.
 					</InfoHint>
 				</h2>
 				<div class="overflow-x-auto">
-					<table class="w-full min-w-[48rem] table-fixed border-t border-divider">
+					<table class="w-full min-w-[60rem] table-fixed border-t border-divider">
 						{@render columns()}
 						<thead class="border-b text-xs text-muted-foreground">
 							<tr>
 								<th class="px-3 py-2 text-left font-medium">Task</th>
 								<th class="px-3 py-2 text-right font-medium">Docs</th>
+								<th class="px-3 py-2 text-right font-medium">A</th>
+								<th class="px-3 py-2 text-right font-medium">B</th>
+								<th class="px-3 py-2 text-right font-medium">Δ points</th>
 								<th class="px-3 py-2 text-right font-medium">Both right</th>
 								<th class="px-3 py-2 text-right font-medium">Both wrong</th>
 								<th class="px-3 py-2 text-right font-medium">Only A right</th>
@@ -234,14 +290,26 @@
 						</thead>
 						<tbody>
 							{#each data.diff.tasks as t (t.task)}
-								<tr class="border-b border-divider hover:bg-muted">
+								{@const rate = score(t.both_right, t.only_a.length, t.only_b.length, t.num_docs)}
+								<!-- The row opens the task's items above; its name is the button for the keys. -->
+								<tr
+									class="cursor-pointer border-b border-divider hover:bg-muted"
+									onclick={() => showTask(t.task)}
+								>
 									<td class="truncate px-3 py-1.5">
-										<span class="block truncate font-mono text-[12.5px]">{t.task}</span>
+										<button
+											type="button"
+											class="block max-w-full truncate font-mono text-[12.5px] hover:underline"
+											title="Show its items"
+										>
+											{t.task}
+										</button>
 										<span class="text-xs text-faint" title={t.task_hash}>
 											{t.metric} · {t.task_hash.slice(0, 12)}
 										</span>
 									</td>
 									<td class="px-3 py-1.5 text-right tabular-nums">{t.num_docs}</td>
+									{@render rates(rate)}
 									<td class="px-3 py-1.5 text-right tabular-nums">{t.both_right}</td>
 									<td class="px-3 py-1.5 text-right tabular-nums">{t.both_wrong}</td>
 									<td class="px-3 py-1.5 text-right tabular-nums">{t.only_a.length}</td>
@@ -254,6 +322,9 @@
 								<tr>
 									<td class="px-3 py-2">All compared tasks</td>
 									<td class="px-3 py-2 text-right tabular-nums">{totals.docs}</td>
+									{@render rates(
+										score(totals.both_right, totals.only_a, totals.only_b, totals.docs)
+									)}
 									<td class="px-3 py-2 text-right tabular-nums">{totals.both_right}</td>
 									<td class="px-3 py-2 text-right tabular-nums">{totals.both_wrong}</td>
 									<td class="px-3 py-2 text-right tabular-nums">{totals.only_a}</td>
@@ -271,14 +342,14 @@
 						{data.diff.not_compared.length} tasks not compared
 					</h2>
 					<div class="overflow-x-auto">
-						<table class="w-full min-w-[48rem] table-fixed border-t border-divider">
+						<table class="w-full min-w-[60rem] table-fixed border-t border-divider">
 							{@render columns()}
 							<tbody>
 								{#each data.diff.not_compared as [task, reason] (task)}
 									<tr class="border-b border-divider">
 										<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" title={task}>{task}</td
 										>
-										<td colspan="5" class="px-3 py-1.5 text-muted-foreground"
+										<td colspan="8" class="px-3 py-1.5 text-muted-foreground"
 											>{NOT_COMPARED[reason] ?? reason}</td
 										>
 									</tr>

@@ -3,8 +3,12 @@ import { page as screen } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
 import ComparePage from '../../../routes/(app)/[entity]/[project]/runs/[run]/compare/+page.svelte';
+import { page, resetApp } from '#lib/testing/app.svelte.ts';
 import type { EvalResults, ItemDiff, RunDetail } from '#lib/types.ts';
 import RunResults from './RunResults.svelte';
+
+vi.mock('$app/navigation', () => import('#lib/testing/app.svelte.ts'));
+vi.mock('$app/state', () => import('#lib/testing/app.svelte.ts'));
 
 const run = (id: string, display_name: string | null = null) =>
 	({ id, entity: 'acme', project: 'evals', display_name }) as RunDetail;
@@ -132,6 +136,7 @@ const DIFF: ItemDiff = {
 describe('the compare page', () => {
 	it('shows the four counts per task, and the ids of a cell when the runs have no text', async () => {
 		noText();
+		resetApp('http://flock.test/acme/evals/runs/r1/compare?with=acme%2Fevals%2Fr2');
 		render(ComparePage, {
 			data: { a: run('r1', 'olmo'), b: run('r2'), diff: DIFF, refusal: null }
 		} as never);
@@ -142,11 +147,17 @@ describe('the compare page', () => {
 				.all()
 				.slice(1)
 				.map((c) => c.element().textContent!.trim())
-		).toEqual(['5', '1', '1', '2', '1']);
+		).toEqual(['5', '0.6000', '0.4000', '+20.0', '1', '1', '2', '1']);
 		// The items start on the first task with docs only A got right.
 		await expect.element(screen.getByRole('alert')).toHaveTextContent(/schema 10/);
 		await expect.element(screen.getByText('Mercury_1 Mercury_2')).toBeVisible();
 		await screen.getByRole('radio', { name: /Only B right/ }).click();
+		await expect.element(screen.getByText('Mercury_3')).toBeVisible();
+		// The link follows the list, beside the pair (028 D200).
+		expect(page.url.search).toBe('?with=acme%2Fevals%2Fr2&task=arc_easy&keep=only_b');
+		// A task clicked in the table opens its items, in the group chosen when it has docs there.
+		await row.click();
+		expect(page.url.search).toBe('?with=acme%2Fevals%2Fr2&task=arc_easy&keep=only_b');
 		await expect.element(screen.getByText('Mercury_3')).toBeVisible();
 		await expect.element(screen.getByText('Scored by A only')).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: /olmo/ })).toBeVisible();

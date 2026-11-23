@@ -774,12 +774,51 @@ export interface EvalItem {
 	runs: ItemAnswer[];
 }
 
+/** One run's answer in a row of the items list (`GET …/runs/{run}/items`). */
+export interface ItemRunSummary {
+	correct: boolean;
+	/** The choice the primary metric picks; null for `acc_greedy`, which ranks none. */
+	pick: number | null;
+	/** The picked choice as a reader names it, clipped. */
+	pick_text: string | null;
+	/**
+	 * The gold choice's score minus the best wrong choice's, in the primary metric's units; null
+	 * for `acc_greedy` or a doc with one choice.
+	 */
+	margin: number | null;
+	/** The gold choice's probability renormalized over the choices. */
+	gold_prob: number;
+}
+
+/** A doc as a row of the items list: enough to skim, the whole `EvalItem` comes when it opens. */
+export interface ItemSummary {
+	id: string;
+	/** The part of the question that varies (the lines every question shares left out), clipped. */
+	text: string;
+	gold: number;
+	/** The gold choice as a reader names it, clipped. */
+	gold_text: string;
+	/** One answer per run, in the order the runs were asked for. */
+	runs: ItemRunSummary[];
+}
+
 /** A page of a task's items (`GET …/runs/{run}/items`). */
 export interface ItemsPage {
 	/** How many items the filter keeps in all. */
 	total: number;
 	offset: number;
-	items: EvalItem[];
+	items: ItemSummary[];
+}
+
+/** Where a link leaves the items list (028): each part only when it isn't the default. */
+export interface ItemsView {
+	task?: string;
+	keep?: ItemKeep;
+	sort?: 'doc';
+	/** From 1. */
+	page?: number;
+	/** The open item's id. */
+	item?: string;
 }
 
 /** What an items page keeps: one run's docs by outcome, or a cell of two runs' diff. */

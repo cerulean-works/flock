@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { compareHref, evalRows, evalScores, isEvalResults } from './evals.ts';
+import {
+	compareHref,
+	evalRows,
+	evalScores,
+	isEvalResults,
+	itemsViewOf,
+	withItemsView
+} from './evals.ts';
 import type { EvalResults, ModelEvalRun } from './types.ts';
 
 type Task = [name: string, metric: string, value: number | null, hash?: string];
@@ -142,5 +149,29 @@ describe('compare links', () => {
 		expect(compareHref('acme', 'evals', 'e1', 'acme/other evals/e2')).toBe(
 			'/acme/evals/runs/e1/compare?with=acme%2Fother%20evals%2Fe2'
 		);
+	});
+});
+
+describe('items links', () => {
+	it('carry the list’s state beside the page’s own params, defaults left out', () => {
+		const url = { pathname: '/acme/evals/runs/e1/compare', search: '?with=acme%2Fevals%2Fe2' };
+		const view = { task: 'arc_easy', keep: 'only_b' as const, page: 3, item: 'set/7' };
+		const href = withItemsView(url, view);
+		expect(href).toBe(
+			'/acme/evals/runs/e1/compare?with=acme%2Fevals%2Fe2&task=arc_easy&keep=only_b&page=3&item=set%2F7'
+		);
+		expect(itemsViewOf(new URL(href, 'https://flock.test').searchParams)).toEqual({
+			...view,
+			sort: undefined
+		});
+		// Back to the defaults: the list's params go, the page's stay.
+		const search = href.slice(href.indexOf('?'));
+		expect(withItemsView({ ...url, search }, {})).toBe(`${url.pathname}${url.search}`);
+	});
+
+	it('ignore a page that isn’t a whole number past the first', () => {
+		for (const page of ['0', '1', '2.5', 'x', '-3'])
+			expect(itemsViewOf(new URLSearchParams({ page })).page, page).toBeUndefined();
+		expect(itemsViewOf(new URLSearchParams({ sort: 'margin' })).sort).toBeUndefined();
 	});
 });

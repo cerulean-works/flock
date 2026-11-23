@@ -7,7 +7,7 @@
 	import EvalItems from '#lib/components/run/EvalItems.svelte';
 	import { RESULT_SCHEMAS, formatScore } from '#lib/evals.ts';
 	import { versionHref } from '#lib/models.ts';
-	import type { EvalResults, RunDetail, RunModels } from '#lib/types.ts';
+	import type { EvalResults, ItemsView, RunDetail, RunModels } from '#lib/types.ts';
 
 	/**
 	 * An eval run's results file (025 D184): suites, tasks and what produced them. `models` names
@@ -16,8 +16,17 @@
 	let {
 		run,
 		results,
-		models = null
-	}: { run: RunDetail; results: EvalResults; models?: RunModels | null } = $props();
+		models = null,
+		view,
+		onview
+	}: {
+		run: RunDetail;
+		results: EvalResults;
+		models?: RunModels | null;
+		/** Where a link left the items list, and where to tell it moved (028). */
+		view?: ItemsView;
+		onview?: (view: ItemsView) => void;
+	} = $props();
 
 	const p = $derived(results.provenance);
 	// What produced the scores, in the order a reader checks two runs against each other.
@@ -266,6 +275,8 @@
 									{ keep: 'right', label: 'Right' },
 									{ keep: 'all', label: 'All' }
 								]}
+								{view}
+								{onview}
 							/>
 						{/key}
 					{/if}
