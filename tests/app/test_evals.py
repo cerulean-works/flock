@@ -649,6 +649,26 @@ def test_a_sidecar_that_isnt_the_writers_counts_as_none(
     ]
 
 
+def test_a_sidecar_parquet_cant_read_costs_only_its_own_run(
+    api: Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run whose sidecar isn't Parquet answers without values; the other run keeps its tokens (030)."""
+    monkeypatch.setattr(evals, "_tokenizer", lambda name, revision: Bytes())
+    a = with_tokens(write_run(tmp_path / "a", {"t": ("h", [True])}), "t", {0: [0, 1], 1: [2]})
+    b = with_tokens(write_run(tmp_path / "b", {"t": ("h", [True])}), "t", {0: [0, 1], 1: [2]})
+    (Path(b) / "predictions" / "t.tokens.parquet").write_bytes(b"not parquet")
+    log_run(api, "p", "a", a)
+    log_run(api, "p", "b", b)
+
+    found = api.get(
+        f"{P}/p/runs/a/item/tokens", doc="d-0", task="t", keep="both_right", **{"with": "flock/p/b"}
+    )
+    assert found.status == 200, found.body
+    ours, theirs = found.json()["runs"]
+    assert ours["choices"][0]["text"] == [" ye", "s"]
+    assert theirs == {"choices": None, "note": "run:flock/p/b has no per-token values for t"}
+
+
 def test_a_choice_too_long_to_name_keeps_its_values_without_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

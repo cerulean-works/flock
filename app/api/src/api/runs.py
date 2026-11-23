@@ -996,10 +996,17 @@ async def run_item_tokens(
         for written in runs:
             # Only each choice's continuation: context and greedy rows come by flags (045.D3)
             # and aren't shown.
-            rows = written.tokens(task, [doc]) or []
-            by_choice = {r["choice"]: r for r in rows if r["part"] == "continuation"}
+            # A sidecar is an uploaded file: one Parquet can't read leaves this run without
+            # values, never the other run without its own.
+            try:
+                rows = written.tokens(task, [doc]) or []
+            # (pyarrow's errors are these: `ArrowInvalid` a ValueError, `ArrowTypeError` a
+            # TypeError, its I/O errors OSErrors.)
+            except ValueError, TypeError, KeyError, OSError:
+                rows = []
+            by_choice = {r.get("choice"): r for r in rows if r.get("part") == "continuation"}
             # A file that isn't the writer's (a choice or a column missing, arrays of other
-            # lengths) counts as none.
+            # lengths or of other than numbers) counts as none.
             fields = ("token_ids", "logprob", "rank", "entropy")
             whole = True
             for k in range(len(found.choices)):
@@ -1007,6 +1014,10 @@ async def run_item_tokens(
                 lists = [row[f] for f in fields if isinstance(row.get(f), list)]
                 if len(lists) < len(fields) or len({len(a) for a in lists}) != 1:
                     whole = False
+                    continue
+                for values in lists:
+                    if not all(isinstance(v, int | float) for v in values):
+                        whole = False
             if not whole:
                 note = f"{written.source} has no per-token values for {task}"
                 answers.append({"choices": None, "note": note})
