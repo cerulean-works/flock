@@ -158,7 +158,7 @@ A multiple-choice task's `predictions/<task>.tokens.parquet` holds what the mode
 | `top1_logprob` | The log-probability of the most likely token at that position. |
 | `logprob_std` | The standard deviation of the log-probability under that distribution, Min-K%++'s sigma. |
 
-A `greedy` row has no values. A Flock model has no `greedy` rows: it keeps no key-value cache, and decoding without one would read each context 32 times over. A `context` row covers every token of the context but its first, which nothing predicts, after the context loses tokens from the left to leave room for 32 decoded ones.
+A `greedy` row has no values. Only a model that decodes with a key-value cache writes `greedy` rows: with `--greedy-tokens`, a Flock model or a state-space model such as Mamba fails before scoring, since decoding without that cache would read each context 32 times over. A `context` row covers every token of the context but its first, which nothing predicts, after the context loses tokens from the left to leave room for the decoded ones.
 
 Context values and greedy tokens come from a pass of their own over each doc's distinct contexts, once per context, not once per choice. Each is off by default, for its cost. Measured on one H200 with OLMo 2 1B in BF16 at `--batch-tokens 16384`:
 
