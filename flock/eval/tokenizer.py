@@ -19,6 +19,8 @@ class SentencePieceTokenizer:
 
     def __init__(self, model_file: str | Path) -> None:
         self.processor = SentencePieceProcessor(model_file=str(model_file))
+        # As a transformers tokenizer names where it came from.
+        self.name_or_path = str(model_file)
         # SentencePiece writes "this model has no such token" as -1.
         bos, eos = self.processor.bos_id(), self.processor.eos_id()
         self.bos_token_id = bos if bos >= 0 else None

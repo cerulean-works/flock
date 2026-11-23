@@ -77,6 +77,26 @@ def main() -> None:
     is_flag=True,
     help="Start every non-empty context with the tokenizer's BOS token, as OLMES does for Gemma.",
 )
+@click.option(
+    "--no-tokens",
+    is_flag=True,
+    help="Don't write each task's per-token values beside its predictions.",
+)
+@click.option(
+    "--context-tokens",
+    is_flag=True,
+    help="Also write the per-token values of each doc's context, as Min-K%++ reads them.",
+)
+@click.option(
+    "--greedy-tokens",
+    is_flag=True,
+    help="Also write the first 32 tokens greedy decoding writes after each doc's context.",
+)
+@click.option(
+    "--perplexity-tokens",
+    is_flag=True,
+    help="Write each perplexity task's per-token loss and byte offsets beside its predictions.",
+)
 @click.option("--device", help="Torch device (default: cuda if available).")
 @click.option(
     "--wandb-project",
@@ -96,6 +116,10 @@ def run(
     batch_tokens: int,
     dtype: Dtype,
     add_bos: bool,
+    no_tokens: bool,
+    context_tokens: bool,
+    greedy_tokens: bool,
+    perplexity_tokens: bool,
     device: str | None,
     wandb_project: str | None,
     verbose: bool,
@@ -111,6 +135,10 @@ def run(
             batch_tokens=batch_tokens,
             dtype=dtype,
             add_bos=add_bos,
+            tokens=not no_tokens,
+            context_tokens=context_tokens,
+            greedy_tokens=greedy_tokens,
+            perplexity_tokens=perplexity_tokens,
             device=device,
             wandb_project=wandb_project,
             # The program's name as invoked (`flock` for the script) and its arguments.
@@ -310,9 +338,13 @@ def format_diff(found: ItemDiff) -> str:
 
 
 def format_item(item: Item) -> str:
-    """Formats a doc: its task, id and metric, each run's model and verdict, its question, then one line per choice with each run's probability and share, `*` on gold and `<` on each run's pick."""
+    """Formats a doc: its task, id and metric, where it comes from when the run says, each run's model and verdict, its question, then one line per choice with each run's probability and share, `*` on gold and `<` on each run's pick."""
     letters = "ab"[: len(item.runs)]
     lines = [f"{_escaped(item.task)}  {_escaped(item.id)}  {_escaped(item.metric)}"]
+    # The hashes and `meta` are for joining and filtering, and print with `--json`.
+    shown = [key for key in ("split", "source_index", "native_id", "subject") if key in item.source]
+    if shown:
+        lines.append("  ".join(f"{key} {_escaped(str(item.source[key]))}" for key in shown))
     for letter, answer in zip(letters, item.runs, strict=True):
         verdict = "right" if answer.correct else "wrong"
         lines.append(f"{letter}  {_escaped(answer.model)}  {verdict}, picks {answer.pick}")

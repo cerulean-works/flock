@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, cloze
+from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, RowFields, cloze
 from flock.eval.tasks.suite import Suite
 
 SUBJECTS = (
@@ -94,6 +94,7 @@ MMLU_TASKS = tuple(
             "The following are multiple choice questions (with answers) about "
             f"{subject.replace('_', ' ')}.\n\n"
         ),
+        row_fields=RowFields(subject="subject"),
     )
     for subject in SUBJECTS
 )
