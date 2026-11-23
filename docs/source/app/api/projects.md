@@ -200,15 +200,15 @@ Anyone may call it on two public projects. Item text isn't returned, only doc id
 
 Texts longer than 240 characters end with `…`. The answers are those of the [diff](#run-diff): 404 for a run that's unknown, you can't read, or has no `results.json`, and 409 with eval's reason when the items can't be read, such as runs scored with another instrument, a task one run didn't score, a `keep` that doesn't fit the number of runs, or a run whose results schema is older than 11, whose predictions hold no text. A task on a private dataset is read for the organization's members only: to anyone else its predictions don't exist, and the answer is a 409 with no text.
 
-## Eval item map[[run-items-map]]
+## Eval item suites[[run-items-suites]]
 
-`GET .../runs/{run}/items/map?task={task}&with={entity}/{project}/{run}` returns every doc of one task for two runs, a cell of their diff at a time, for drawing them all at once. `with` is required. Each cell lists its doc ids in the order [Eval items](#run-items) lists that cell by default, and each doc's two margins (the run in the path first), rounded to 4 decimals, `null` where a run has none.
+`GET .../runs/{run}/items/suites?with={entity}/{project}/{run}` returns, for two runs, each suite of accuracy tasks both scored alike, with what the compare page draws for it. A suite is listed when both runs recorded it under the same suite hash, it's scored by its tasks' own metrics (not a `:bpb` suite) and it holds a task of its own. Its `tasks` are every task under it, nested suites included, that both runs scored under the same task hash with an accuracy as the primary metric. `counts` gives how many of its docs are in each group, and `dots` up to 800 of its docs as A's margin, B's margin and the group's index in `only_a`, `only_b`, `both_wrong`, `both_right`, taken evenly through each group.
 
 ```json
-{"cells": [{"keep": "only_a", "ids": ["Mercury_7017010", ...], "margins": [[0.29, -0.51], ...]}, {"keep": "only_b", ...}, {"keep": "both_wrong", ...}, {"keep": "both_right", ...}]}
+{"suites": [{"suite": "mmlu", "tasks": ["mmlu_abstract_algebra", ...], "counts": {"only_a": ..., "only_b": ..., "both_wrong": ..., "both_right": ...}, "dots": [[A margin, B margin, group], ...]}]}
 ```
 
-It answers as the list does.
+A task whose predictions a run lacks, or that you can't read (a private dataset's, outside the organization), is left out. The first answer for a pair computes every suite and can take a minute on large runs; Flock keeps it for the last few pairs. It answers as [Eval items](#run-items) does.
 
 ## One eval item[[run-item]]
 
