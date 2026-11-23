@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask
+from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask, RowFields
 
 
 def _preprocess(text: str) -> str:
@@ -44,4 +44,8 @@ HELLASWAG = MultipleChoiceTask(
     # The first 5 of OLMES's curated `FEWSHOT_SOURCES["OLMES:hellaswag"]`, found among the train
     # rows by content.
     fewshot=Fewshot(split="train", ids=("14745", "14755", "2", "19", "14754")),
+    # OLMES's `native_id_field` for HellaSwag is `ind` (`oe_eval/tasks/oe_eval_tasks/hellaswag.py`).
+    row_fields=RowFields(
+        native_id="ind", subject="activity_label", meta=("source_id", "split_type")
+    ),
 )

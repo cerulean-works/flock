@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, Fewshot, GoldOnlyTask, MCDoc
+from flock.eval.tasks.base import Choice, Dataset, Fewshot, GoldOnlyTask, MCDoc, RowFields
 from flock.eval.tasks.shots.minerva_math import MINERVA_MATH_SHOTS
 
 SUBJECTS = (
@@ -43,6 +43,8 @@ MINERVA_MATH_TASKS = tuple(
         ),
         to_doc=minerva_doc,
         fewshot=Fewshot(rows=MINERVA_MATH_SHOTS),
+        # The problem's difficulty, "Level 1" to "Level 5", for slicing by it.
+        row_fields=RowFields(meta=("level",)),
     )
     for subject in SUBJECTS
 )

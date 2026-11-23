@@ -104,9 +104,9 @@ describe('the Results tab', () => {
 
 	it('says which schemas it reads instead of guessing at another', async () => {
 		noText();
-		render(RunResults, { run: run('r1'), results: { ...RESULTS, schema_version: 12 } });
+		render(RunResults, { run: run('r1'), results: { ...RESULTS, schema_version: 13 } });
 		await expect
-			.element(screen.getByText(/has schema 12; the dashboard reads schemas\s+8, 9, 10, 11\./))
+			.element(screen.getByText(/has schema 13; the dashboard reads schemas\s+8, 9, 10, 11, 12\./))
 			.toBeVisible();
 	});
 });

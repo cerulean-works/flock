@@ -177,6 +177,95 @@
       }
     ]
   },
+  "toy:first_rows": {
+    "hash": "c7f1679c8de7643f33e16275dd1204efd72ac615692cbdfbccc28f1f621209de",
+    "requests": [
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  },
   "toy:gold_only": {
     "hash": "84a8a48c56252049c42b4d9881c54571d20327845448ea416b29f65b0f8411d7",
     "requests": [

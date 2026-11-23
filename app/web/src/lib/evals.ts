@@ -13,7 +13,7 @@ import { withParams } from './workspace/url.ts';
  * The schemas of eval's results file the dashboard reads (025 D184): eval's own reader's
  * `READ_SCHEMAS`, which `tests/app/test_evals.py` holds this list to.
  */
-export const RESULT_SCHEMAS = [8, 9, 10, 11];
+export const RESULT_SCHEMAS = [8, 9, 10, 11, 12];
 
 /**
  * Whether a run file is a results file the dashboard can show (025 D184). It is the run's own

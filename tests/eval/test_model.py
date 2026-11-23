@@ -763,14 +763,14 @@ def test_target_logprobs_is_the_same_in_any_chunks(chunk_positions: int) -> None
     targets = torch.randint(7, (3, 5))
     targets[0, 0] = logits[0, 0].argmax()
 
-    chunked, is_argmax = model._target_logprobs(logits, targets, chunk_positions)
+    chunked, is_argmax, _ = model._target_logprobs(logits, targets, chunk_positions=chunk_positions)
 
     whole = logits.float().log_softmax(-1).gather(-1, targets[..., None]).squeeze(-1)
     assert chunked.dtype == torch.float32
     torch.testing.assert_close(chunked, whole)
     assert torch.equal(is_argmax, logits.argmax(-1) == targets)
     assert is_argmax[0, 0]
-    whole_chunk, whole_is_argmax = model._target_logprobs(logits, targets, 15)
+    whole_chunk, whole_is_argmax, _ = model._target_logprobs(logits, targets, chunk_positions=15)
     assert torch.equal(chunked, whole_chunk)
     assert torch.equal(is_argmax, whole_is_argmax)
 
@@ -778,9 +778,9 @@ def test_target_logprobs_is_the_same_in_any_chunks(chunk_positions: int) -> None
 def test_target_logprobs_breaks_argmax_ties_to_the_first_token() -> None:
     # As `torch.argmax` in OLMES: a target tied with an earlier token is not the argmax.
     logits = torch.tensor([[[1.0, 3.0, 3.0]]])
-    _, is_argmax = model._target_logprobs(logits, torch.tensor([[2]]))
+    _, is_argmax, _ = model._target_logprobs(logits, torch.tensor([[2]]))
     assert not is_argmax.item()
-    _, is_argmax = model._target_logprobs(logits, torch.tensor([[1]]))
+    _, is_argmax, _ = model._target_logprobs(logits, torch.tensor([[1]]))
     assert is_argmax.item()
 
 
@@ -802,7 +802,7 @@ def test_batched_rows_do_not_see_each_other(
 
     monkeypatch.setattr(scorer.model, "forward", embedded_forward)
     # `_score` runs one forward pass over all the requests, so there is exactly one input.
-    logprob, _ = scorer._score(scorer.encode_requests(REQUESTS))
+    logprob, _, _ = scorer._score(scorer.encode_requests(REQUESTS))
     [(embedded, attention_mask)] = inputs
 
     for i in range(len(REQUESTS)):
@@ -872,9 +872,9 @@ def recorded_windows(
     """The (context, continuation) windows `rolling_loglikelihood` scores, in order."""
     windows = []
 
-    def record(encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
+    def record(encoded: Sequence[Encoded], tokens: bool) -> tuple[torch.Tensor, torch.Tensor, None]:
         windows.extend(encoded)
-        return torch.zeros(len(encoded)), torch.ones(len(encoded), dtype=torch.bool)
+        return torch.zeros(len(encoded)), torch.ones(len(encoded), dtype=torch.bool), None
 
     monkeypatch.setattr(scorer, "_logprobs", record)
     scorer.rolling_loglikelihood(texts, window)
@@ -901,10 +901,10 @@ def test_rolling_windows_are_lm_eval_windows(
 def test_a_text_is_greedy_only_if_every_window_is(
     scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def score(encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
+    def score(encoded: Sequence[Encoded], tokens: bool) -> tuple[torch.Tensor, torch.Tensor, None]:
         is_greedy = torch.ones(len(encoded), dtype=torch.bool)
         is_greedy[1] = False  # the first text's second window: windows run text by text
-        return torch.zeros(len(encoded)), is_greedy
+        return torch.zeros(len(encoded)), is_greedy, None
 
     monkeypatch.setattr(scorer, "_logprobs", score)
 
@@ -1034,3 +1034,16 @@ def test_rolling_loglikelihood_rejects_a_window_outside_max_length(
 def test_rolling_loglikelihood_rejects_an_empty_text(scorer: ScoringModel) -> None:
     with pytest.raises(ValueError, match="text has no tokens"):
         scorer.rolling_loglikelihood(["fox", ""], 8)
+
+
+@pytest.mark.parametrize("chunk_positions", [1, 2, 4096])
+def test_target_values_are_the_same_in_any_chunks_of_positions(chunk_positions: int) -> None:
+    # One row of 5 positions: chunks of 1 and 2 positions split it, 4096 keeps it whole.
+    torch.manual_seed(0)
+    logits = torch.randn(1, 5, 7)
+    targets = torch.randint(7, (1, 5))
+    _, _, chunked = model._target_logprobs(logits, targets, True, chunk_positions)
+    _, _, whole = model._target_logprobs(logits, targets, True, 4096)
+    assert chunked is not None and whole is not None
+    for name, value in whole.items():
+        torch.testing.assert_close(chunked[name], value)

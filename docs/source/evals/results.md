@@ -6,7 +6,10 @@ A run with an output directory writes `results.json` and one predictions file pe
 <out>/
   results.json
   predictions/<task>.jsonl
+  predictions/<task>.tokens.parquet
 ```
+
+The `.tokens.parquet` files hold [per-token values](#per-token-values), for multiple-choice tasks unless you pass `--no-tokens`.
 
 ## `results.json`
 
@@ -42,7 +45,7 @@ A run with an output directory writes `results.json` and one predictions file pe
       "score": null
     }
   ],
-  "schema_version": 11
+  "schema_version": 12
 }
 ```
 
@@ -73,6 +76,8 @@ A context too long for the model loses tokens from the left, and the continuatio
 `attention` is the model's attention implementation, and `sdpa_backend` the SDPA kernel scoring was pinned to: `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, `null` on the CPU or another non-CUDA device, where PyTorch still picks the kernel, or with other attention (see [Batching and precision](scoring#batching-and-precision)). Files written before schema version 7 have no `sdpa_backend`: PyTorch chose the kernel for each batch, so their BF16 scores don't repeat exactly.
 
 `add_bos` says whether every non-empty context started with the tokenizer's BOS token (see [Tokenizing a request](scoring#tokenizing-a-request)). Files written before schema version 8 have no `add_bos`: none of them added BOS.
+
+`tokenizer` says where the tokenizer was loaded from: the Hugging Face repo or folder, or the `tokenizer.model` file of a repo tokenized by SentencePiece. `tokenizer_hash` is the sha256 of the tokenizer's whole definition: its `tokenizer.json` as the Tokenizers library writes it, or the SentencePiece model's bytes. Token ids in a run's files mean nothing without the tokenizer that made them, so two runs whose `tokenizer_hash` differs can't be compared token by token. A tokenizer written in Python, with no Tokenizers backend, has no `tokenizer_hash`. Files written before schema version 12 have neither, and read as `null`.
 
 ## Predictions
 
@@ -108,8 +113,17 @@ Each later line is one doc, with its text and enough to recompute every metric o
 | `tokens_cut` | The tokens cut from the left of each choice's context, 0 if it fit. |
 | `logprob_uncond` | Each choice's log-probability after the unconditional context, for tasks that score pointwise mutual information (PMI). |
 | `tokens_cut_uncond` | `tokens_cut` for the unconditional requests, with `logprob_uncond`. |
+| `split` | The dataset split the doc's row is in. |
+| `source_index` | The row's position in that split, counting rows a task's `keep` drops, so you can find the row in the dataset whatever its id. |
+| `native_id` | The dataset's own id for the row, where the task names its column and it differs from `id`, as OLMES records `native_id`. HellaSwag's is `ind`. |
+| `subject` | The row's subject or category, where the task names its column, such as MMLU's subject. |
+| `meta` | Other values of the row the task names, each a string, number, boolean or `null`, such as a MATH problem's `level`. |
+| `doc_hash` | lm-evaluation-harness's `doc_hash` of the row: the sha256 of `json.dumps(row, indent=2, ensure_ascii=False)`, the row as the dataset gives it. A sample that lm-evaluation-harness logged with `--log_samples` for the same row, in a task that keeps rows as they are, has the same `doc_hash`, so the two join. |
+| `prompt_hash` | lm-evaluation-harness's `prompt_hash`: the sha256 of the doc's first scored context, few-shot examples included. Equal across runs of one task hash. |
 
 [Metrics](metrics) gives each metric's formula over these fields.
+
+Read rows by their keys. A later schema may add fields to a row, or keys to `meta`, and a reader should skip what it doesn't know, as `flock eval` does. Files written before schema version 12 have none of the last seven fields. A task names the columns `native_id`, `subject` and `meta` come from in its `row_fields` (see [Task definitions](task-definitions#what-a-row-records)).
 
 Text is written as UTF-8, not escaped, so a Chinese task reads as written. Files written before schema version 11 have no header and no `pick`, `question`, `contexts`, `choices` or `shots`. Task hashes don't change: they already cover every scored request, and the text is output, not part of the task's definition. A private dataset's text stays in its predictions file, so it follows that file's privacy rule.
 
@@ -123,10 +137,54 @@ A perplexity task's file has no header, and no text, since its docs are whole te
 | `num_bytes` | The text's UTF-8 byte count. |
 | `windows` | How many windows the text was scored in. |
 | `is_greedy` | Whether every token of the text is its position's most likely next token. |
+| `source` | The dataset's subset, which for Paloma is the source, such as `c4_100_domains`. `null` for a dataset with none. |
+| `domain` | The task's domain within its source, the rows' `subdomain`. `null` for a source with one domain. |
+
+`source` and `domain` let you pool the rows of many tasks and split them again by either. Files written before schema version 12 have neither.
+
+## Per-token values
+
+A multiple-choice task's `predictions/<task>.tokens.parquet` holds what the model made of each token, for analyses that summed log-probabilities can't support: where along a choice two checkpoints diverge, which tokens surprise a model, and contamination checks such as Min-K% (Shi et al. 2023) and Min-K%++ (Zhang et al. 2024). The predictions file stays as it is, so readers of rows don't change. The file is [Parquet](https://parquet.apache.org/), compressed with zstd, as LightEval writes its per-sample details. Each row is one token sequence of one doc:
+
+| Column | Meaning |
+|---|---|
+| `id` | The doc's id, as in its prediction row. |
+| `choice` | The choice the sequence belongs to: for a `context` or `greedy` row, the first choice with that context. |
+| `part` | `continuation`: a choice's scored tokens, one row per choice. `greedy`: the first 32 tokens greedy decoding writes after the doc's context, one row per distinct context, with `--greedy-tokens`. `context`: the context's own tokens, with `--context-tokens`. |
+| `token_ids` | The tokens, from the tokenizer the provenance names and hashes. |
+| `logprob` | Each token's natural-log probability. A continuation's add up to its `logprob` in the prediction row, to FP32 rounding. |
+| `rank` | 1 plus the number of tokens the model found more likely, so the model's own choice has rank 1. |
+| `entropy` | The entropy, in nats, of the distribution each token was drawn against. Its negative is the mean log-probability under that distribution, Min-K%++'s mu. |
+| `top1_logprob` | The log-probability of the most likely token at that position. |
+| `logprob_std` | The standard deviation of the log-probability under that distribution, Min-K%++'s sigma. |
+
+A `greedy` row has no values. A Flock model has no `greedy` rows: it keeps no key-value cache, and decoding without one would read each context 32 times over. A `context` row covers every token of the context but its first, which nothing predicts, after the context loses tokens from the left to leave room for 32 decoded ones.
+
+Context values and greedy tokens come from a pass of their own over each doc's distinct contexts, once per context, not once per choice. Each is off by default, for its cost. Measured on one H200 with OLMo 2 1B in BF16 at `--batch-tokens 16384`:
+
+| Run | Scoring time | Per-token files |
+|---|---|---|
+| Base Easy and one exam task (100,457 docs), no per-token values | 1527 s | none, beside 138 MB of predictions |
+| The same, default per-token values | 1560 s (1.02x) | 101 MB, about 1 KB per doc |
+| The same, with `--context-tokens`, `--greedy-tokens` and `--perplexity-tokens` | 3138 s (2.06x) | 306 MB, about 3 KB per doc |
+| All of MMLU, HellaSwag and ARC-Easy, default values, then with `--greedy-tokens` | 372 s, then 539 s (1.05x, then 1.52x of 353 s) | 35 MB |
+
+Greedy tokens cost the most: 32 decoding steps run one after another for every batch. Scoring itself runs as it does without the file, so every score and every prediction row is the same, bit for bit, with or without it.
+
+A private dataset's per-token file is readable by its owner only, and goes under `private/` on a tracker run, as its predictions do: token ids are the dataset's text. A training loop that scores between steps writes none unless it asks (`score_prepared(..., tokens=True)`).
+
+With `--perplexity-tokens`, a perplexity task gets a file of its own shape: one `text` row per doc with its `id`, and per token `byte_end`, `logprob`, `rank`, `entropy`, `top1_logprob` and `logprob_std`. Its `logprob`s add up to the row's `logprob`, and a token's loss is its `logprob` negated, so you can split a domain's loss by position or by byte range, as Paloma's analyses of which tokens carry the loss need. It has no token ids: they are the text, which a perplexity task's files never hold. `byte_end` is where each token ends in the text's UTF-8 bytes, so a token's bytes are those after the previous token's end. Tokenizers place a token that holds only part of a character (a byte-level or byte-fallback piece) at the character's end or at its start, so such a token can span no bytes.
+
+Read a task's rows, or only some docs', with [`~eval.results.WrittenResults.tokens`]:
+
+```python
+run = read_results("results/olmo2-1b")
+rows = run.tokens("arc_easy", ids=["Mercury_7017010"])  # None if the run has no file for it
+```
 
 ## Reading a run back
 
-[`~eval.results.read_results`] reads a written run from its folder, or from a tracker run that uploaded its files (see [Tracker runs](commands#tracker-runs)) as `run:<entity>/<project>/<id>`. It reads schema versions 8 to 11, and reads a task's predictions only when you ask for them, without the header line:
+[`~eval.results.read_results`] reads a written run from its folder, or from a tracker run that uploaded its files (see [Tracker runs](commands#tracker-runs)) as `run:<entity>/<project>/<id>`. It reads schema versions 8 to 12, and reads a task's predictions only when you ask for them, without the header line:
 
 ```python
 from flock.eval.results import read_results
@@ -153,3 +211,7 @@ A tracker run is read as the user signed in with `flock login`, on that server. 
 [[autodoc]] eval.results.read_results
 
 [[autodoc]] eval.results.WrittenResults
+
+[[autodoc]] eval.requests.TokenValues
+
+[[autodoc]] eval.requests.ContextScores
