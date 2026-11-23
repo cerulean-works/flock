@@ -27,7 +27,7 @@ An expected file appears only if the client uploaded it. Imported W&B runs inclu
 
 Members can change their own runs; organization admins can also change other people's runs and manage projects.
 
-1. Select runs with the table checkboxes. Use **Tags** to organize a group, or open a single run to edit its details.
+1. Select runs with the table checkboxes. Use **Tags** to label related runs, or open a single run to edit its details. To compare whole experiments, such as a sweep against an ablation, save them as [groups](compare-groups).
 2. Use **Move** for finished runs that belong in another project of the same organization. Review the destination, then check the runs there. Their run IDs and logged data are retained.
 3. To rename a project, finish its active runs first and use the project menu. Check its new entry in the organization afterwards.
 4. If deleting runs or a project, review the affected resources before confirming.
