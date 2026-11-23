@@ -72,20 +72,20 @@ class Dataset:
 @dataclass(frozen=True, slots=True)
 class Fewshot:
     """
-    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given, except that a doc is never shown a row of another split that shows the doc's own question and answer, that is, the text the doc would show as an example.
+    Fixed few-shot examples: dataset rows picked by id, the first rows of another split in its order, or rows written out in the task's module. Either way they are shown in the order given, except that a doc is never shown a row of another split that shows the doc's own question and answer, that is, the text the doc would show as an example.
 
     Args:
         split (`str`, *optional*):
-            The dataset split `ids` come from. Required with `ids`, and not taken with `rows`.
+            The dataset split the examples come from. Required unless `rows` are given, and not taken with them.
         ids (`tuple[str, ...]`, *optional*):
             The examples' [`MCDoc`] ids, as `to_doc` returns them.
         rows (`tuple[dict, ...]`, *optional*):
             Examples that aren't rows of the dataset, in its row format. They go through the same `to_doc`.
         num_shots (`int`, *optional*):
-            Show each doc only the first `num_shots` examples that aren't the doc itself. Only for `ids` from the scored split, which [`MultipleChoiceTask`] checks, since an id identifies a doc within one split. All examples are shown if not set.
+            With `ids` from the scored split, show each doc only the first `num_shots` examples that aren't the doc itself; an id identifies a doc within one split, which [`MultipleChoiceTask`] checks. With neither `ids` nor `rows`, the examples are the first `num_shots` rows of `split`, which must not be the scored split. All `ids` or `rows` are shown if not set.
 
     Raises:
-        `ValueError`: if both or neither of `ids` and `rows` are given, `split` is missing with `ids` or given with `rows`, an id repeats, or `num_shots` is set with `rows` or isn't below the number of examples.
+        `ValueError`: if both `ids` and `rows` are given, neither is given without `split` and `num_shots`, `split` is missing without `rows` or given with them, an id repeats, `num_shots` is set with `rows` or is below 1, or with `ids` isn't below their number.
     """
 
     split: str | None = None
@@ -94,8 +94,11 @@ class Fewshot:
     num_shots: int | None = None
 
     def __post_init__(self) -> None:
-        if bool(self.ids) == bool(self.rows):
-            raise ValueError("Fewshot takes either ids or rows")
+        if self.ids and self.rows:
+            raise ValueError("Fewshot takes either ids or rows, not both")
+        # Not `is None`: `Dataset.load` reads an empty split name as the scored split.
+        if not (self.ids or self.rows) and (not self.split or self.num_shots is None):
+            raise ValueError("Fewshot takes ids, rows, or a split's first num_shots rows")
         if self.ids and self.split is None:
             raise ValueError("Fewshot ids need a split")
         if self.rows and self.split is not None:
@@ -109,9 +112,11 @@ class Fewshot:
             return
         if self.rows:
             raise ValueError("num_shots drops a doc's own example by id, so it needs ids")
+        if self.num_shots < 1:
+            raise ValueError("num_shots must be at least 1")
         # One example more than shown, so a doc that is itself an example still gets `num_shots`.
-        if not 1 <= self.num_shots < len(self.ids):
-            raise ValueError(f"num_shots must be at least 1 and below the {len(self.ids)} examples")
+        if self.ids and self.num_shots >= len(self.ids):
+            raise ValueError(f"num_shots must be below the {len(self.ids)} examples")
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,7 +377,7 @@ class MultipleChoiceTask:
             Which rows of the scored split are scored, applied before `limit` and `to_doc`, as lm-evaluation-harness's `process_docs` (`lm_eval/api/task.py`, v0.4.3). Every row if not set. Unlike `process_docs`, it doesn't filter the few-shot split: examples are picked by id, so a task lists only rows it wants shown. Like `to_doc`, it isn't in the task hash, but the docs it keeps are.
 
     Raises:
-        `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, or `fewshot.num_shots` is set on examples from a split other than the scored one.
+        `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, `fewshot.num_shots` is set on `ids` from a split other than the scored one, or the examples are the scored split's first rows.
     """
 
     name: str
@@ -408,11 +413,15 @@ class MultipleChoiceTask:
                 )
             # Ids are unique within a split only. Across splits, a doc that shares an id with an
             # example would lose that example.
-            if self.fewshot.num_shots is not None and self.fewshot.split != self.dataset.split:
+            scored_split = self.fewshot.split == self.dataset.split
+            if self.fewshot.ids and self.fewshot.num_shots is not None and not scored_split:
                 raise ValueError(
                     f"{self.name}: num_shots needs examples from the scored split "
                     f"{self.dataset.split!r}, not {self.fewshot.split!r}"
                 )
+            # The scored split's first rows would show some docs themselves, and nothing drops them.
+            if not (self.fewshot.ids or self.fewshot.rows) and scored_split:
+                raise ValueError(f"{self.name}: first rows of the scored split as examples")
 
     @property
     def reported_metrics(self) -> tuple[str, ...]:
@@ -447,7 +456,7 @@ class MultipleChoiceTask:
             `tuple[list[MCDoc], list[MCDoc]]`: the docs to score, then the few-shot examples.
 
         Raises:
-            `ValueError`: if `limit` is less than 1.
+            `ValueError`: if `limit` is less than 1, or the few-shot split has fewer than `num_shots` rows.
             `KeyError`: if a few-shot id isn't in its split.
         """
         if limit is not None and limit < 1:
@@ -468,6 +477,16 @@ class MultipleChoiceTask:
             return [self.to_doc(row) for row in self.fewshot.rows]
 
         rows = self.dataset.load(self.fewshot.split)
+        if not self.fewshot.ids:
+            # A split's first rows, in its order, as many-shot tasks take a prefix of a fixed list.
+            assert self.fewshot.num_shots is not None  # `Fewshot` requires it without ids.
+            if len(rows) < self.fewshot.num_shots:
+                raise ValueError(
+                    f"{self.name}: {self.fewshot.split} has {len(rows)} rows, "
+                    f"fewer than num_shots {self.fewshot.num_shots}"
+                )
+            return [self.to_doc(row) for row in rows[: self.fewshot.num_shots]]
+
         pool = {doc.id: doc for doc in map(self.to_doc, rows)}
 
         missing = [shot_id for shot_id in self.fewshot.ids if shot_id not in pool]
@@ -518,8 +537,8 @@ class MultipleChoiceTask:
             own = doc.example_text
             shots = [shot for shot in shots if shot.example_text != own]
         # Examples from the scored split are dropped only by `num_shots`: OLMES shows a curated
-        # example even to its own doc.
-        if self.fewshot.num_shots is not None:
+        # example even to its own doc. A split's first rows are already cut to `num_shots`.
+        if self.fewshot.ids and self.fewshot.num_shots is not None:
             shots = [shot for shot in shots if shot.id != doc.id][: self.fewshot.num_shots]
 
         return shots
