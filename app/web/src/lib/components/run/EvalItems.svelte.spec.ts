@@ -60,9 +60,9 @@ const SUITES: ItemSuites = {
 			tasks: ['piqa', 'arc_easy'],
 			counts: { only_a: 0, only_b: 3, both_wrong: 0, both_right: 0 },
 			dots: [
-				[-0.5, 0.5, 1],
-				[-0.2, 0.4, 1],
-				[-0.1, 0.9, 1]
+				[-0.5, 0.5, 1, 0, 0, 'p-0'],
+				[-0.2, 0.4, 1, 0, 1, 'p-1'],
+				[-0.1, 0.9, 1, 0, 2, 'p-2']
 			]
 		}
 	]

@@ -373,7 +373,11 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     flock: FlockServer, api: Client, tmp_path: Path
 ) -> None:
     """A suite gets a square when both runs recorded it under one hash and it holds a task of its own; its tasks are every task under it, nested suites' too, both runs scored under one hash. A square counts its docs per cell and holds them as dots of both margins and their cell; a task the viewer can't read (a private dataset's, outside the organization) is left out (029)."""
-    a_tasks = {"t": ("h", [True, False, False, True, True]), "u": ("h", [True]), "x": ("h", [True])}
+    a_tasks: dict[str, tuple[str, list[bool] | None]] = {
+        "t": ("h", [True, False, False, True, True]),
+        "u": ("h", [True]),
+        "x": ("h", [True]),
+    }
     a_tasks["exam"] = ("e", [True, False])
     b_tasks = a_tasks | {"t": ("h", [True, True, False, False, True]), "x": ("changed", [True])}
     b_tasks["exam"] = ("e", [False, False])
