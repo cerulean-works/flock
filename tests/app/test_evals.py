@@ -12,8 +12,7 @@ from typing import TYPE_CHECKING, Any, get_args
 
 import pytest
 
-from app.api.src.api import runs
-from app.api.src.api.runs import run_items
+from app.api.src.api.runs import run_item, run_items
 from app.api.src.core.errors import Invalid
 from app.api.src.core.evals import PairFiles
 from flock.eval.diff import diff
@@ -22,6 +21,8 @@ from flock.eval.results import READ_SCHEMAS, Results, WrittenResults, read_resul
 from tests.eval.toy import PROVENANCE, write_run
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from tests.app.conftest import Client, FlockServer
 
 P = "/api/v1/projects/flock"
@@ -213,8 +214,8 @@ def test_a_file_the_caller_may_not_read_still_counts_against_the_budget(
         files.read(run, "predictions/t.jsonl")
 
 
-def test_items_are_eval_items_paged(api: Client, tmp_path: Path) -> None:
-    """One run's docs by outcome, or two runs' by cell, are exactly `items()`'s, a page at a time, with `total` counting them all."""
+def test_items_list_summaries_and_open_to_eval_items(api: Client, tmp_path: Path) -> None:
+    """One run's docs by outcome, or two runs' by cell, are `items()`'s, a page of summaries at a time with `total` counting them all; a doc's own route answers its whole `Item` (028)."""
     a = write_run(tmp_path / "a", {"t": ("h", [True, False, False, True, False])})
     b = write_run(tmp_path / "b", {"t": ("h", [True, True, False, False, False])})
     log_run(api, "p", "a", a)
@@ -222,23 +223,90 @@ def test_items_are_eval_items_paged(api: Client, tmp_path: Path) -> None:
     runs = [read_results(a), read_results(b)]
     route = f"{P}/p/runs/a/items"
 
-    def expected(keep: str, *of: WrittenResults) -> list[dict]:
-        return json.loads(json.dumps([i.to_dict() for i in items(of, "t", keep)]))
+    def summaries(keep: str, *of: WrittenResults) -> list[dict]:
+        """What the list says of each of `items()`'s docs: the text that varies between the shared ends, the gold and each run's answer, its margin from its probabilities (`acc_raw` ranks by them)."""
+        found, kept = [], items(of, "t", keep)
+        for item in kept:
+            assert item.question is not None
+            answers = []
+            for answer in item.runs:
+                assert answer.pick is not None
+                answers.append(
+                    {
+                        "correct": answer.correct,
+                        "pick": answer.pick,
+                        "pick_text": item.choices[answer.pick].strip(),
+                        "margin": pytest.approx(answer.logprob[0] - answer.logprob[1]),
+                        "gold_prob": answer.prob[0],
+                    }
+                )
+            # A list of one doc has no shared ends to leave out.
+            text = item.question if len(kept) < 2 else item.question.removesuffix("\nAnswer:")
+            found.append(
+                {"id": item.id, "text": text, "gold": 0, "gold_text": "yes", "runs": answers}
+            )
+        return found
 
-    wrong = api.get(route, task="t", keep="wrong")
+    wrong = api.get(route, task="t", keep="wrong", sort="doc")
     assert wrong.status == 200, wrong.body
-    assert wrong.json() == {"total": 3, "offset": 0, "items": expected("wrong", runs[0])}
-    page = api.get(route, task="t", keep="wrong", offset=1, limit=1).json()
-    assert page == {"total": 3, "offset": 1, "items": expected("wrong", runs[0])[1:2]}
-    assert [i["id"] for i in api.get(route, task="t", keep="all").json()["items"]] == [
+    page = {"total": 3, "offset": 0}
+    assert wrong.json() == page | {"items": summaries("wrong", runs[0])}
+    one = api.get(route, task="t", keep="wrong", sort="doc", offset=1, limit=1).json()
+    assert one == page | {"offset": 1, "items": summaries("wrong", runs[0])[1:2]}
+    assert [i["id"] for i in api.get(route, task="t", keep="all", sort="doc").json()["items"]] == [
         f"d-{i}" for i in range(5)
     ]
-    for cell in ("only_a", "only_b", "both_wrong", "both_right"):
-        found = api.get(route, task="t", keep=cell, **{"with": "flock/q/b"})
+    for cell in CELLS:
+        found = api.get(route, task="t", keep=cell, sort="doc", **{"with": "flock/q/b"})
         assert found.status == 200, found.body
-        assert found.json()["items"] == expected(cell, *runs), cell
+        assert found.json()["items"] == summaries(cell, *runs), cell
     assert api.get(route, task="t", keep="only_a", **{"with": "flock/q/b"}).json()["total"] == 1
     assert api.get(route, task="t", keep="wrong", offset=9).json()["items"] == []
+
+    # A doc opens to eval's whole item, the one `flock eval items --json` prints.
+    for item in items(runs[:1], "t", "wrong"):
+        opened = api.get(f"{P}/p/runs/a/item", doc=item.id, task="t", keep="wrong")
+        assert opened.status == 200, opened.body
+        assert opened.json() == json.loads(json.dumps(item.to_dict()))
+    for item in items(runs, "t", "only_b"):
+        opened = api.get(
+            f"{P}/p/runs/a/item", doc=item.id, task="t", keep="only_b", **{"with": "flock/q/b"}
+        )
+        assert opened.json() == json.loads(json.dumps(item.to_dict()))
+    # Another list's doc isn't in this one.
+    absent = api.get(f"{P}/p/runs/a/item", doc="d-0", task="t", keep="wrong")
+    assert (
+        absent.status == 404 and absent.json()["error"] == "t has no doc d-0 among its wrong docs"
+    )
+
+
+def test_rows_leave_out_the_shared_lines_and_clip_long_text(api: Client, tmp_path: Path) -> None:
+    """Rows leave out the whole lines every question of the list shares at both ends, unless a row would be left with nothing; text past 240 characters is clipped, and a doc whose id holds dots and slashes opens."""
+    folder = write_run(tmp_path / "a", {"t": ("h", [False, False])})
+    path = Path(folder) / "predictions" / "t.jsonl"
+    header, *rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows[0] |= {"id": "../set/0", "question": "Read this.\nIt rains.\nWhy?\nAnswer:"}
+    rows[1] |= {"question": "Read this.\nIt " + "snows " * 50 + "\nWhy?\nAnswer:"}
+    rows[1]["choices"] = [" yes", " " + "no" * 200]
+    path.write_text("".join(json.dumps(r) + "\n" for r in [header, *rows]))
+    log_run(api, "p", "a", folder)
+    route = f"{P}/p/runs/a/items"
+
+    first, second = api.get(route, task="t", keep="wrong", sort="doc").json()["items"]
+    assert first["text"] == "It rains."
+    assert second["text"] == ("It " + "snows " * 50)[:240].rstrip() + "…"
+    assert second["runs"][0]["pick_text"] == ("no" * 200)[:240] + "…"
+    opened = api.get(f"{P}/p/runs/a/item", doc="../set/0", task="t", keep="wrong")
+    assert opened.status == 200 and opened.json()["question"] == rows[0]["question"]
+
+    # The list's shared lines, not the page's: a page of one doc still leaves them out.
+    alone = api.get(route, task="t", keep="wrong", sort="doc", limit=1).json()
+    assert alone["items"][0]["text"] == "It rains."
+    rows[1]["question"] = rows[0]["question"]
+    path.write_text("".join(json.dumps(r) + "\n" for r in [header, *rows]))
+    log_run(api, "p", "same", folder)
+    same = api.get(f"{P}/p/runs/same/items", task="t", keep="wrong").json()  # all lines shared
+    assert same["items"][0]["text"] == rows[0]["question"]
 
 
 def test_items_come_by_margin_unless_asked_for_the_datasets_order(
@@ -271,30 +339,14 @@ def test_items_come_by_margin_unless_asked_for_the_datasets_order(
         return [item["id"] for item in found.json()["items"]]
 
     assert ids(keep="all") == ["d-1", "d-3", "d-0", "d-2"]
+    margins = [r["runs"][0]["margin"] for r in api.get(route, task="t", keep="all").json()["items"]]
+    assert margins == pytest.approx([-3, 2, 1, 0.5])
     assert ids(keep="all", sort="doc") == ["d-0", "d-1", "d-2", "d-3"]
     assert ids(keep="wrong") == ["d-1"]
     # Gaps: d-0 0, d-2 0 (both right); d-1 4 (only B right), d-3 4 (only A right).
     assert ids(keep="both_right", **{"with": "flock/p/b"}) == ["d-0", "d-2"]
     assert ids(keep="only_b", **{"with": "flock/p/b"}) == ["d-1"]
     assert api.get(route, task="t", keep="all", sort="best").status == 422
-
-
-def test_a_page_of_items_over_its_budget_is_refused(
-    api: Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A run's model name repeats in every answer, so the page is held to a size of its own."""
-    log_run(api, "p", "a", write_run(tmp_path / "a", {"t": ("h", [False, False])}))
-    route = f"{P}/p/runs/a/items"
-    one = len(api.get(route, task="t", keep="wrong", limit=1).body)
-
-    # The whole answer counts, its envelope and separators too.
-    monkeypatch.setattr(runs, "PAGE_BYTES", one)
-    assert api.get(route, task="t", keep="wrong", limit=1).status == 200
-    monkeypatch.setattr(runs, "PAGE_BYTES", one - 1)
-    assert api.get(route, task="t", keep="wrong", limit=1).status == 409
-    monkeypatch.setattr(runs, "PAGE_BYTES", one)
-    over = api.get(route, task="t", keep="wrong", limit=2)
-    assert over.status == 409 and "ask for fewer" in over.json()["error"]
 
 
 def test_items_are_refused_as_eval_refuses_them(api: Client, tmp_path: Path) -> None:
@@ -320,6 +372,12 @@ def test_items_are_refused_as_eval_refuses_them(api: Client, tmp_path: Path) -> 
     for bad in ("flock/p", "flock/nope/b", "flock/p/nope"):
         assert api.get(route, task="t", keep="only_a", **{"with": bad}).status == 404, bad
 
+    # A doc is refused as its list is.
+    assert api.get(f"{P}/p/runs/old/item", doc="d-1", task="t", keep="wrong").status == 409
+    assert api.get(f"{P}/p/runs/new/item", doc="d-1", task="t", keep="only_a").status == 409
+    assert api.get(f"{P}/p/runs/new/item", doc="d-1", task="t", keep="worst").status == 422
+    assert api.get(f"{P}/p/runs/train/item", doc="d-1", task="t", keep="wrong").status == 404
+
 
 def test_a_private_tasks_items_reach_members_only(
     flock: FlockServer, api: Client, tmp_path: Path
@@ -340,12 +398,17 @@ def test_a_private_tasks_items_reach_members_only(
     for client in (api, member):
         found = client.get(route, task="exam", keep="only_a", **{"with": "flock/p/b"})
         assert found.status == 200, found.body
-        assert found.json()["items"][0]["question"] == "Question: exam 0?\nAnswer:"
+        assert found.json()["items"][0]["text"] == "Question: exam 0?\nAnswer:"  # one doc: whole
         assert client.get(route, task="exam", keep="all").status == 200
+        opened = client.get(
+            f"{P}/p/runs/a/item", doc="d-0", task="exam", keep="only_a", **{"with": "flock/p/b"}
+        )
+        assert opened.json()["question"] == "Question: exam 0?\nAnswer:"
     for client in (outsider, flock.anonymous()):
         pair = client.get(route, task="exam", keep="only_a", **{"with": "flock/p/b"})
         one = client.get(route, task="exam", keep="all")
-        for refused in (pair, one):
+        opened = client.get(f"{P}/p/runs/a/item", doc="d-0", task="exam", keep="all")
+        for refused in (pair, one, opened):
             assert refused.status == 409
             assert "has no predictions for exam" in refused.json()["error"]
             assert b"Question" not in refused.body
@@ -353,9 +416,10 @@ def test_a_private_tasks_items_reach_members_only(
         assert public.json()["total"] == 1
 
 
-def test_the_items_route_takes_the_keeps_eval_takes() -> None:
-    """The route's `keep` values are eval's: one it lacked would be a 422 for a filter `items()` reads, and an extra one a 409 nobody could get past."""
-    keep = inspect.signature(run_items).parameters["keep"].annotation
+@pytest.mark.parametrize("route", [run_items, run_item])
+def test_the_items_routes_take_the_keeps_eval_takes(route: Callable[..., Any]) -> None:
+    """The routes' `keep` values are eval's: one they lacked would be a 422 for a filter `items()` reads, and an extra one a 409 nobody could get past."""
+    keep = inspect.signature(route).parameters["keep"].annotation
     assert get_args(get_args(keep)[0]) == ONE_RUN + CELLS
 
 

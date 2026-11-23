@@ -1,6 +1,7 @@
 import asyncio
 import math
 import mimetypes
+import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -44,9 +45,6 @@ router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_
 # that need the default executor's threads, so sharing it could deadlock. Four at a time also
 # bound the files held in memory.
 DIFFS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diff")
-# The largest page of items sent. A run's own fields (its model's name) repeat in every answer, so
-# a page can be far larger than the files it was read from.
-PAGE_BYTES = 16 << 20
 # Reads that answer outsiders too, on public projects (D112): they need no credential.
 public = APIRouter(prefix="/api/v1", tags=["flock"])
 
@@ -646,6 +644,10 @@ async def diff_runs(
         raise APIError(409, str(exc)) from exc
 
 
+# What an items list keeps: eval's own values (`ONE_RUN` and `CELLS`), one run's or a cell of two.
+ItemKeep = Literal["wrong", "right", "all", "only_a", "only_b", "both_wrong", "both_right"]
+
+
 @public.get("/projects/{entity}/{project}/runs/{run}/items")
 async def run_items(
     run: ReadableRunDep,
@@ -653,8 +655,7 @@ async def run_items(
     viewer: ViewerDep,
     task: Annotated[str, Query(description="the task whose docs are listed")],
     keep: Annotated[
-        Literal["wrong", "right", "all", "only_a", "only_b", "both_wrong", "both_right"],
-        Query(description="one run's docs by outcome, or a cell of two runs' diff"),
+        ItemKeep, Query(description="one run's docs by outcome, or a cell of two runs' diff")
     ],
     other: Annotated[
         str | None, Query(alias="with", description="the other run, as entity/project/id")
@@ -663,10 +664,10 @@ async def run_items(
         Literal["margin", "doc"],
         Query(description="the biggest margin gap first (two runs), or the surest first (one)"),
     ] = "margin",
-    offset: Annotated[int, Query(ge=0)] = 0,
+    offset: Annotated[int, Query(ge=0, le=1 << 31)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> Response:
-    """A page of one task's docs with their text and each run's answer, as ``flock eval items --json`` prints them: eval's ``Item`` objects, ``total`` counting them all (027).
+    """A page of one task's docs, each a short summary of eval's ``Item``: its id, the part of its question that varies and its gold choice, clipped, and per run whether it was right, its pick, its margin and the gold choice's probability. ``total`` counts them all. A row's text leaves out the whole lines every question of the list shares at either end (027, 028). A doc's whole text is ``.../item``.
 
     By default the items most likely to tell something come first (D198): for two runs, the largest gap between their margins, for one run the largest margin either way. A run's margin is its gold choice's score minus the best wrong choice's, in the primary metric's own units. ``sort=doc`` keeps the dataset's order.
 
@@ -677,41 +678,90 @@ async def run_items(
     def read() -> bytes:
         runs = [WrittenResults.read(source, reader) for source, reader in readers]
         found = items(runs, task, keep)
+
+        # Each run's margin per item. `share` is a softmax of the metric's scores, so the log of a
+        # ratio of shares is a gap between scores. `acc_greedy` ranks no choices, and a doc with
+        # one choice has no wrong one: no margin. A share that underflowed is floored.
+        ranked = []
+        for item in found:
+            margins: list[float | None] = []
+            for answer in item.runs:
+                wrong = [s for k, s in enumerate(answer.share or []) if k != item.gold]
+                if answer.share is None or not wrong:
+                    margins.append(None)
+                    continue
+                gold = max(answer.share[item.gold], 1e-300)
+                margins.append(math.log(gold) - math.log(max(max(wrong), 1e-300)))
+            ranked.append((item, margins))
         if sort == "margin":
 
-            def rank(item: Item) -> tuple[int, float]:
-                margins = []
-                for answer in item.runs:
-                    # `share` is a softmax of the metric's scores, so the log of a ratio of shares
-                    # is a gap between scores. `acc_greedy` ranks no choices, and a task with one
-                    # choice has no wrong one: no margin. A share that underflowed is floored.
-                    wrong = [s for k, s in enumerate(answer.share or []) if k != item.gold]
-                    if answer.share is None or not wrong:
-                        margins.append(None)
-                        continue
-                    gold = max(answer.share[item.gold], 1e-300)
-                    margins.append(math.log(gold) - math.log(max(max(wrong), 1e-300)))
+            def rank(entry: tuple[Item, list[float | None]]) -> tuple[int, float]:
                 # One run: the surest first, right or wrong. Two: the biggest gap first. Items
                 # without a margin go last, in doc order (the sort is stable).
+                _, margins = entry
                 known = [m for m in margins if m is not None]
                 if len(known) < len(margins):
                     return (1, 0.0)
                 gap = known[0] if len(known) == 1 else known[0] - known[1]
                 return (0, -abs(gap))
 
-            found = sorted(found, key=rank)
-        # Encoded here, off the event loop, one item at a time within the budget.
-        head = b'{"total":%d,"offset":%d,"items":[' % (len(found), offset)
-        parts = []
-        size = len(head) + len(b"]}")
-        for item in found[offset : offset + limit]:
-            parts.append(orjson.dumps(item.to_dict()))
-            size += len(parts[-1]) + (len(parts) > 1)  # a comma before all but the first
-            if size > PAGE_BYTES:
-                raise ValueError(
-                    f"this page of items is over {PAGE_BYTES >> 20} MiB: ask for fewer"
+            ranked.sort(key=rank)
+
+        # The whole lines every question shares at both ends (a wrapper such as `Question:` and
+        # `Answer:`) are left out of the rows, which show what varies; a doc opens whole.
+        questions = [item.question for item, _ in ranked if item.question is not None]
+        head = tail = ""
+        # Docs whose choices each have their own context (Winogrande) have no question to share.
+        shared = len(questions) == len(ranked)
+        # Nothing varies when every question is the same, or when there is one.
+        shared = shared and len(set(questions)) > 1
+        if shared:
+            common = os.path.commonprefix(questions)
+            head = common[: common.rfind("\n") + 1]
+            rests = [q[len(head) :] for q in questions]
+            # The common end is the common start of the reversed texts.
+            common = os.path.commonprefix([r[::-1] for r in rests])[::-1]
+            tail = common[common.find("\n") :] if "\n" in common else ""
+        # A row left with nothing to show keeps every question whole.
+        if shared and any(not r[: len(r) - len(tail)].strip() for r in rests):
+            head = tail = ""
+
+        def clip(text: str) -> str:
+            # Enough for two lines of a wide column; the whole text comes when a row opens.
+            return text if len(text) <= 240 else text[:240].rstrip() + "…"
+
+        rows = []
+        for item, margins in ranked[offset : offset + limit]:
+            # A choice as a reader names it: Winogrande's choices share their ending, and the
+            # option is in each choice's own context.
+            named = [c.strip() for c in item.contexts or item.choices]
+            if item.question is None:
+                text = " / ".join(named)
+            else:
+                text = item.question[len(head) : len(item.question) - len(tail)].strip()
+            answers = []
+            for answer, margin in zip(item.runs, margins, strict=True):
+                pick = None if answer.pick is None else clip(named[answer.pick])
+                answers.append(
+                    {
+                        "correct": answer.correct,
+                        "pick": answer.pick,
+                        "pick_text": pick,
+                        "margin": margin,
+                        "gold_prob": answer.prob[item.gold],
+                    }
                 )
-        return head + b",".join(parts) + b"]}"
+            rows.append(
+                {
+                    "id": item.id,
+                    "text": clip(text),
+                    "gold": item.gold,
+                    "gold_text": clip(named[item.gold]),
+                    "runs": answers,
+                }
+            )
+        page = {"total": len(ranked), "offset": offset, "items": rows}
+        return orjson.dumps(page)  # off the event loop
 
     try:
         return Response(await loop.run_in_executor(DIFFS, read), media_type="application/json")
@@ -719,3 +769,39 @@ async def run_items(
         raise APIError(404, str(exc)) from exc
     except ValueError as exc:  # eval's refusal, which says how to get the items where it can
         raise APIError(409, str(exc)) from exc
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/item")
+async def run_item(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    doc: Annotated[str, Query(description="the doc's id")],
+    task: Annotated[str, Query(description="the task the doc is in")],
+    keep: Annotated[
+        ItemKeep, Query(description="the list the doc is in: two runs are read by a cell")
+    ],
+    other: Annotated[
+        str | None, Query(alias="with", description="the other run, as entity/project/id")
+    ] = None,
+) -> Response:
+    """One doc with its whole text and each run's answer, eval's ``Item`` as ``flock eval items --json`` prints it: what a row of ``.../items`` opens to (028). The id is a query parameter, so any id reaches it as written.
+
+    Read and refused as ``.../items`` is, with 404 too if ``keep`` holds no doc ``doc``."""
+    loop = asyncio.get_running_loop()
+    readers = await eval_readers(run, other, store, viewer)
+
+    def read() -> bytes | None:
+        runs = [WrittenResults.read(source, reader) for source, reader in readers]
+        found = next((item for item in items(runs, task, keep) if item.id == doc), None)
+        return None if found is None else orjson.dumps(found.to_dict())
+
+    try:
+        found = await loop.run_in_executor(DIFFS, read)
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:
+        raise APIError(409, str(exc)) from exc
+    if found is None:
+        raise APIError(404, f"{task} has no doc {doc} among its {keep} docs")
+    return Response(found, media_type="application/json")
