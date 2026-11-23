@@ -4,6 +4,7 @@
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
+	import LayersIcon from '@lucide/svelte/icons/layers';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import MenuIcon from '@lucide/svelte/icons/menu';
 	import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open';
@@ -18,6 +19,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
+	import { groupsHref } from '#lib/groups.ts';
 	import { modelsHref } from '#lib/models.ts';
 	import { entityHref, loginHref } from '#lib/workspace/url.ts';
 	import { storageHref } from '#lib/storage.ts';
@@ -52,6 +54,17 @@
 		orgAvatar: data.shell.orgAvatar,
 		signedIn
 	});
+
+	/** On a project's pages with groups (D182), the rail links to them, as the sidebar does. */
+	const groupsProject = $derived(
+		data.shell.org &&
+			page.params.project &&
+			page.route.id?.startsWith('/(app)/[entity]/[project]') &&
+			page.data.groups
+			? page.params.project
+			: null
+	);
+	const onGroups = $derived(!!page.route.id?.startsWith('/(app)/[entity]/[project]/groups'));
 
 	// The rail's switcher keeps home and account pages in place, like the sidebar's.
 	const stay = $derived(
@@ -132,6 +145,19 @@
 					title="Runs"
 				>
 					<ActivityIcon />
+				</Button>
+			{/if}
+			{#if groupsProject && data.shell.org}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={['mt-1 text-muted-foreground', onGroups && 'bg-muted text-foreground']}
+					href={groupsHref(data.shell.org, groupsProject)}
+					aria-label="Groups in {groupsProject}"
+					aria-current={onGroups ? 'page' : undefined}
+					title="Groups"
+				>
+					<LayersIcon />
 				</Button>
 			{/if}
 			{#if data.shell.s3 && data.shell.org && !outside}

@@ -22,8 +22,9 @@
 		panelHref: (panel: number) => ResolvedPathname;
 		onfullscreen: (panel: number, e: MouseEvent) => void;
 		/**
-		 * Beside the runs table (the workspace), whose header the first section's lines up with;
-		 * otherwise the pane fills its container (a run's page).
+		 * Beside the runs table (the workspace), whose header the first section's lines up with,
+		 * from `--pane-left` (else the name column's edge); otherwise the pane fills its container
+		 * (a run's page).
 		 */
 		beside?: boolean;
 	}
@@ -402,7 +403,7 @@
 <div
 	class={[
 		'pane absolute inset-y-0 right-0 z-4 overflow-y-auto overscroll-contain bg-background px-5 pb-10',
-		beside ? 'left-(--name-w) shadow-[-1px_0_0_var(--divider)]' : 'left-0',
+		beside ? 'left-[var(--pane-left,var(--name-w))] shadow-[-1px_0_0_var(--divider)]' : 'left-0',
 		'transition-[opacity,translate,visibility] duration-150 ease-out',
 		shown ? 'visible translate-x-0 opacity-100' : 'invisible translate-x-3 opacity-0',
 		ws.dragging && (rowsDrag ? 'cursor-row-resize' : 'cursor-grabbing')

@@ -227,3 +227,71 @@ export function moveGroup(
 	if (from === -1 || moved[from] === groups[from]) return null;
 	return mergeOrder(saved, moved).filter(isGroup);
 }
+
+/**
+ * Where a column dragged in the table header can land: the gaps between shown columns (`gap` g
+ * is just before `shown[g]`, `shown.length` past the last), each with the index among its
+ * folder's children to move it to. As in the menu, a column moves within its folder, past whole
+ * siblings (a subfolder moves as one), and not ahead of the locked columns. `parent` and `from`
+ * are what `moveColumn` takes; null when `key` can't move (locked, or not in the tree).
+ */
+export function columnDrops(
+	tree: readonly ColumnNode[],
+	shown: readonly string[],
+	key: string
+): { parent: string; from: number; gaps: Map<number, number> } | null {
+	const found = parentOf(tree, key);
+	if (!found) return null;
+	const { folder, from } = found;
+	const kids = folder.children;
+	const free = kids.findIndex((n) => n.kind === 'folder' || !n.locked);
+	if (free === -1 || from < free) return null;
+	const at = new Map(shown.map((k, i) => [k, i]));
+	const gaps = new Map<number, number>();
+	let last: { j: number; end: number } | null = null;
+	for (let j = free; j < kids.length; j++) {
+		const n = kids[j];
+		const places = (n.kind === 'folder' ? leafKeys(n.children) : [n.key])
+			.map((k) => at.get(k))
+			.filter((i) => i !== undefined);
+		if (!places.length) continue;
+		const start = Math.min(...places);
+		if (!gaps.has(start)) gaps.set(start, j > from ? j - 1 : j);
+		last = { j, end: Math.max(...places) + 1 };
+	}
+	if (last && !gaps.has(last.end)) gaps.set(last.end, last.j >= from ? last.j : last.j + 1);
+	return { parent: folder.id, from, gaps };
+}
+
+/** The folder a column sits in directly, and its index among that folder's children. */
+function parentOf(
+	nodes: readonly ColumnNode[],
+	key: string
+): { folder: ColumnFolder; from: number } | null {
+	for (const n of nodes) {
+		if (n.kind !== 'folder') continue;
+		const from = n.children.findIndex((c) => c.kind === 'leaf' && c.key === key);
+		if (from !== -1) return { folder: n, from };
+		const found = parentOf(n.children, key);
+		if (found) return found;
+	}
+	return null;
+}
+
+/** The gaps a list item at `from` can be dropped into, as `columnDrops` gives them. */
+export function listDrops(count: number, from: number): Map<number, number> {
+	return new Map(Array.from({ length: count + 1 }, (_, g) => [g, g > from ? g - 1 : g]));
+}
+
+/** The gap nearest `x` among `gaps`, each at `at(gap)`; null when there are none. */
+export function nearestGap(
+	gaps: ReadonlyMap<number, number>,
+	at: (gap: number) => number,
+	x: number
+) {
+	let best: number | null = null;
+	for (const g of gaps.keys()) {
+		if (best === null || Math.abs(at(g) - x) < Math.abs(at(best) - x)) best = g;
+	}
+	return best;
+}

@@ -3,7 +3,7 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { applyRunQuery, workspaceHref } from '#lib/workspace/url.ts';
+	import { applyRunQuery } from '#lib/workspace/url.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 
 	const ws = getWorkspace();
@@ -28,7 +28,7 @@
 		const params = new URLSearchParams(page.url.search);
 		applyRunQuery(params, { ...ws.page.query, search: q, page: 1 });
 		ws.selected.clear();
-		void goto(workspaceHref(ws.meta.entity, ws.meta.project, params), {
+		void goto(ws.href(params), {
 			replace: true,
 			reset: false
 		});

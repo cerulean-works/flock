@@ -159,6 +159,29 @@ describe('the sidebar on a project’s pages (D169)', () => {
 		await expect.element(panel().getByRole('link', { name: 'Models' })).not.toBeInTheDocument();
 	});
 
+	it('lists Ungrouped runs under Groups only while some runs are in no group', async () => {
+		const groups = (ungrouped_count: number) => ({
+			groups: [],
+			ungrouped_count,
+			best_key: null,
+			best_order: null,
+			assistant: false
+		});
+		open(ADA, '/(app)/[entity]/[project]/groups');
+		page.data = { ...page.data, groups: groups(4) };
+		const { unmount } = render(Sidebar, member);
+		await expect.element(panel().getByRole('link', { name: /Ungrouped runs/ })).toBeVisible();
+		unmount();
+
+		open(ADA, '/(app)/[entity]/[project]/groups');
+		page.data = { ...page.data, groups: groups(0) };
+		render(Sidebar, member);
+		await expect.element(panel().getByRole('link', { name: /^Groups/ })).toBeVisible();
+		await expect
+			.element(panel().getByRole('link', { name: /Ungrouped runs/ }))
+			.not.toBeInTheDocument();
+	});
+
 	it('stays on the org’s panel elsewhere', async () => {
 		open(ADA);
 		render(Sidebar, member);

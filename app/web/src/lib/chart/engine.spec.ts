@@ -207,3 +207,30 @@ describe('computeDomain step ticks', () => {
 		expect(computeDomain([], opts()).xTicks.step).toBeLessThan(1);
 	});
 });
+
+describe('computeDomain bands', () => {
+	const banded = (): PlotSeries => {
+		const p = plot([0, 10, 20], [5, 5, 5]);
+		return { ...p, band: { lo: Float32Array.of(4, NaN, 1), hi: Float32Array.of(6, NaN, 9) } };
+	};
+
+	it('fits a band, not only its line', () => {
+		const d = computeDomain([banded()], opts());
+		expect(d.y0).toBeLessThanOrEqual(1);
+		expect(d.y1).toBeGreaterThanOrEqual(9);
+	});
+
+	it('fits a band when zoomed, inside the range only', () => {
+		const d = computeDomain([banded()], opts({ zoom: [0, 5] }));
+		// Inside: the band at step 0 (4..6); at step 10 (the next point, a gap) nothing.
+		expect(d.y0).toBeLessThanOrEqual(4);
+		expect(d.y0).toBeGreaterThan(1);
+		expect(d.y1).toBeGreaterThanOrEqual(6);
+		expect(d.y1).toBeLessThan(9);
+	});
+
+	it('leaves lines without a band as they were', () => {
+		const p = plot([0, 10, 20], [5, 6, 7]);
+		expect(computeDomain([{ ...p, band: undefined }], opts())).toEqual(computeDomain([p], opts()));
+	});
+});

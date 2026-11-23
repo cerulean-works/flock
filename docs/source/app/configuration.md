@@ -32,6 +32,8 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_HF_DATASETS_SERVER` | `https://datasets-server.huggingface.co` | The Hub's dataset viewer API, which lists a dataset's configs, splits and sizes in the import dialog. |
 | `FLOCK_HF_IMPORT_MAX_BYTES` | `53687091200` (50 GiB) | The largest dataset or model, in bytes, that the server imports from the dashboard. Bigger ones are refused with the `flock` command to run instead. |
 | `FLOCK_HF_IMPORT_WORKERS` | `4` | Per import, the processes converting a dataset's files, and the files downloaded or uploaded at once. |
+| `FLOCK_OPENAI_API_KEY` | none | OpenAI API key for the run groups assistant, which calls OpenAI's Decisions API from the server. Without it the assistant is off. With it, an org admin still turns the assistant on for the org. |
+| `FLOCK_OPENAI_PROPOSAL_MODEL` | `gpt-6.2-sol` | OpenAI model that proposes groups on the **Auto** tab of **New group**, through the Responses API. It needs `FLOCK_OPENAI_API_KEY` and the org's assistant setting, like the assistant. |
 | `FLOCK_CRASH_TIMEOUT` | `600` | Seconds without a heartbeat before an active run is marked `crashed`. See [Crash detection](operations#crash-detection). |
 | `FLOCK_POOL_SIZE` | `16` | Maximum number of database connections of each API replica. See [Database connections](operations#database-connections). |
 | `FLOCK_CORS_ORIGINS` | none | Origins allowed to call the API from browsers, comma-separated, such as `https://flock.example.com`. |

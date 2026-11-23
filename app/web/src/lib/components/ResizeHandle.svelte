@@ -2,8 +2,10 @@
 	import { clampWidth, type Width } from '#lib/widths.ts';
 
 	interface Props {
-		/** The width this handle resizes; it sits on that box's right edge. */
+		/** The width this handle resizes; it sits on that box's right edge, or its left one. */
 		value: number;
+		/** The box's edge it sits on: on the left, dragging left widens the box. */
+		edge?: 'left' | 'right';
 		bounds: Width;
 		label: string;
 		/** Every change while dragging or pressing arrow keys. */
@@ -13,7 +15,17 @@
 		class?: string;
 	}
 
-	let { value, bounds, label, onresize, oncommit, class: className }: Props = $props();
+	let {
+		value,
+		edge = 'right',
+		bounds,
+		label,
+		onresize,
+		oncommit,
+		class: className
+	}: Props = $props();
+
+	const sign = $derived(edge === 'left' ? -1 : 1);
 
 	let dragging = $state(false);
 
@@ -27,7 +39,7 @@
 		let last = w0;
 		dragging = true;
 		const move = (ev: PointerEvent) => {
-			last = clampWidth(bounds, w0 + ev.clientX - x0);
+			last = clampWidth(bounds, w0 + sign * (ev.clientX - x0));
 			onresize(last);
 		};
 		const up = () => {
@@ -46,7 +58,7 @@
 		const by = { ArrowLeft: -16, ArrowRight: 16 }[e.key];
 		if (!by) return;
 		e.preventDefault();
-		onresize(clampWidth(bounds, value + by));
+		onresize(clampWidth(bounds, value + sign * by));
 	}
 
 	function reset() {
@@ -68,7 +80,8 @@
 	tabindex="0"
 	title="Drag to resize, or double-click to reset"
 	class={[
-		'group/resize absolute inset-y-0 -right-[4px] z-10 w-[7px] cursor-col-resize touch-none outline-none',
+		'group/resize absolute inset-y-0 z-10 w-[7px] cursor-col-resize touch-none outline-none',
+		edge === 'left' ? '-left-[4px]' : '-right-[4px]',
 		className
 	]}
 	{onpointerdown}
