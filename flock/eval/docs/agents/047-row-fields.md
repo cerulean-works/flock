@@ -55,3 +55,4 @@ Nothing to declare for ARC, WinoGrande, SocialIQA, PIQA, SciQ (`support` is a pa
 - Every declared task was loaded over all its rows: no missing column and no non-scalar value.
 - Every multiple-choice task's hash over its full data is equal before and after, and equal to the bank's where it has the task; the regenerated snapshot differs only in `row_fields`.
 - A test scores a private and a public text task under umask 022 and checks 600 and 644 for both files.
+- Review found two gaps in 044's copying, fixed here: a null id or subject was written as the string `"None"`, which would join unrelated rows on one id, and is now left missing; a NaN or infinite `meta` value would have written a line no strict JSON reader takes, and is now `null`, as `results.json` writes a non-finite metric. No declared column holds either today.
