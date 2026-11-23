@@ -42,6 +42,8 @@
 	let under = $state<ItemKeep | null>(null);
 	// The dot under the pointer, an index into `suite.dots`.
 	let near = $state<number | null>(null);
+	// Where the pointer is in the window, which the doc's tooltip follows.
+	let pointer = $state({ x: 0, y: 0 });
 	const shown = $derived(under ?? (current ? lifted : null));
 
 	// Both axes reach the suite's 98th percentile of absolute margins, the same either way so the
@@ -165,6 +167,7 @@
 			)}"
 			onmousemove={(e) => {
 				near = dotAt(e);
+				pointer = { x: e.clientX, y: e.clientY };
 				const keep = at(e);
 				if (keep === under) return;
 				under = keep;
@@ -184,9 +187,14 @@
 		></canvas>
 		{#if near !== null}
 			{@const [a, b, , t, , id] = suite.dots[near]}
-			<!-- The doc under the pointer: its task and id, then both margins. -->
+			<!-- The doc under the pointer, its bottom corner just off the pointer: up and to the right,
+			     or to the left near the window's right edge. Fixed, so the scrolling row can't clip it. -->
+			{@const flip = pointer.x > window.innerWidth - 260}
 			<span
-				class="pointer-events-none absolute inset-x-1 bottom-1 grid rounded bg-popover/95 px-1 font-mono text-[10px] leading-tight shadow-sm"
+				class="pointer-events-none fixed z-50 grid max-w-64 -translate-y-full rounded-md border bg-popover px-2 py-1 font-mono text-[11px] leading-snug shadow-md"
+				style:left={flip ? null : `${pointer.x + 10}px`}
+				style:right={flip ? `${window.innerWidth - pointer.x + 10}px` : null}
+				style:top="{pointer.y - 10}px"
 			>
 				<span class="truncate">{suite.tasks[t]} · {id}</span>
 				<span class="text-muted-foreground tabular-nums"
