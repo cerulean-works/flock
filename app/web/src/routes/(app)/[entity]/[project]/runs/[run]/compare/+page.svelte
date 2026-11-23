@@ -218,7 +218,10 @@
 		{/snippet}
 	</PageHeader>
 
-	<div class="grid gap-6 pb-16 text-[13px]">
+	<!-- One column no wider than the page: the counts tables (60rem at least) scroll in their own
+	     boxes, and would otherwise widen the column, every section with it, so the items table's
+	     bleed lands off centre and the page is cropped on the right. -->
+	<div class="grid grid-cols-[minmax(0,1fr)] gap-6 pb-16 text-[13px]">
 		<div class="grid gap-2 sm:grid-cols-2">
 			{@render side('A', data.a, data.diff?.a)}
 			{@render side('B', data.b, data.diff?.b)}
