@@ -1,4 +1,7 @@
 <script lang="ts">
+	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
+	import ArrowUpDownIcon from '@lucide/svelte/icons/arrow-up-down';
+	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
 	import { onMount, tick } from 'svelte';
 	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -258,11 +261,11 @@
 		<col class="w-[5rem]" />
 		<col class="w-[5.5rem]" />
 		<col class="w-[5.5rem]" />
-		<col class="w-[4.5rem]" />
 		<col class="w-[6.5rem]" />
-		<col class="w-[6.5rem]" />
-		<col class="w-[7rem]" />
-		<col class="w-[7rem]" />
+		<col class="w-[7.5rem]" />
+		<col class="w-[7.5rem]" />
+		<col class="w-[8.5rem]" />
+		<col class="w-[8.5rem]" />
 	</colgroup>
 {/snippet}
 
@@ -343,32 +346,34 @@
 					</InfoHint>
 				</h2>
 				<div class="overflow-x-auto">
-					<table class="w-full min-w-[60rem] table-fixed border-t border-divider">
+					<table class="w-full min-w-[66rem] table-fixed border-t border-divider">
 						{@render columns()}
 						<thead class="border-b text-xs text-muted-foreground">
 							<tr>
 								{#each COLUMNS as c (c.key)}
 									{@const active = order?.by === c.key}
 									<th
-										class={['px-3 py-2 font-medium', c.key === 'task' ? 'text-left' : 'text-right']}
+										class={[
+											'px-3 py-2 font-medium whitespace-nowrap',
+											c.key === 'task' ? 'text-left' : 'text-right'
+										]}
 										aria-sort={active ? (order?.desc ? 'descending' : 'ascending') : undefined}
 									>
-										<!-- ⇅ while the pointer is on a header, its direction once picked. -->
+										<!-- As the Slurm dashboard's headers: a faint ⇅ under the pointer, the direction once picked. -->
 										<button
 											type="button"
 											class="group/sort inline-flex items-center gap-1 hover:text-foreground"
+											title="Click to sort"
 											onclick={() => sortBy(c.key)}
 										>
 											{c.label}
-											<span
-												class={[
-													'w-2.5 text-center',
-													active
-														? 'text-foreground'
-														: 'invisible group-hover/sort:visible group-focus-visible/sort:visible'
-												]}
-												aria-hidden="true">{active ? (order?.desc ? '↓' : '↑') : '⇅'}</span
-											>
+											{#if active && order?.desc}<ArrowDownIcon
+													class="size-3 text-foreground"
+												/>{:else if active}<ArrowUpIcon
+													class="size-3 text-foreground"
+												/>{:else}<ArrowUpDownIcon
+													class="size-3 opacity-0 group-hover/sort:opacity-50"
+												/>{/if}
 										</button>
 									</th>
 								{/each}
@@ -428,7 +433,7 @@
 						{data.diff.not_compared.length} tasks not compared
 					</h2>
 					<div class="overflow-x-auto">
-						<table class="w-full min-w-[60rem] table-fixed border-t border-divider">
+						<table class="w-full min-w-[66rem] table-fixed border-t border-divider">
 							{@render columns()}
 							<tbody>
 								{#each data.diff.not_compared as [task, reason] (task)}
