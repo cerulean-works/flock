@@ -37,7 +37,7 @@ Scores show four decimals; hover one for its exact value. Hashes show their firs
 ### Compare two eval runs[[compare-two-eval-runs]]
 
 1. In **Table**, check exactly two eval runs and click **Compare items**. From a model version, open **Evals**, check two runs and click the same button. From an eval run, click **Compare with…** on its **Results** tab or in its **⋯** menu, then pick the other run.
-2. **Items** shows one task's docs side by side, with what each run picked. Choose the task, then one of four groups: docs only A got right, only B got right, both got wrong or both got right. Each shows its count.
+2. **Items** shows one task's docs side by side, with what each run picked. Choose the task (type in its list to narrow it, as in the other pickers), then one of four groups: docs only A got right, only B got right, both got wrong or both got right. Each shows its count.
 3. Below, every task both runs scored under the same task hash is listed with each run's accuracy on the docs compared, A's lead in points and the four counts. Click a task to read its items above. On two large runs the counts take a few seconds to arrive after the page. A link that names a task shows its items meanwhile.
 4. To compare another pair, click either run, or press <kbd>A</kbd> or <kbd>B</kbd>. Type to search the project's eval runs, use the arrow keys and press <kbd>Enter</kbd>. Press <kbd>Backspace</kbd> in the empty search box to pick another project.
 

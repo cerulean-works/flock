@@ -335,6 +335,28 @@ describe('eval items', () => {
 			.toHaveTextContent('4');
 	});
 
+	it('picks a task from the searchable list with the keys, starting the pager over', async () => {
+		const fetch = answer(200, rows([ROW], 21));
+		const onview = vi.fn();
+		render(EvalItems, { ...PAIR, onview });
+
+		await screen.getByRole('button', { name: 'Next page' }).click();
+		await vi.waitFor(() => expect(lists(fetch)).toHaveLength(2));
+		await screen.getByRole('button', { name: 'Task' }).click();
+		// The search box has the focus; its keys aren't the list's j and k.
+		await expect.element(screen.getByRole('combobox', { name: 'Search tasks' })).toHaveFocus();
+		await userEvent.keyboard('piq');
+		await expect.element(screen.getByRole('option')).toHaveTextContent('piqa');
+		await userEvent.keyboard('{Enter}');
+		await vi.waitFor(() => expect(lists(fetch)).toHaveLength(3));
+		expect(lists(fetch)[2].searchParams.get('task')).toBe('piqa');
+		expect(lists(fetch)[2].searchParams.get('offset')).toBe('0');
+		expect(onview).toHaveBeenLastCalledWith(
+			expect.objectContaining({ task: 'piqa', page: undefined })
+		);
+		await expect.element(screen.getByRole('button', { name: 'Task' })).toHaveTextContent('piqa');
+	});
+
 	it('draws a square per suite whose quadrants lift and pick the list’s cells', async () => {
 		const fetch = answer(200, rows([ROW], 21));
 		const onview = vi.fn();

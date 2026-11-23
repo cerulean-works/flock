@@ -9,11 +9,12 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { tick, untrack, type Snippet } from 'svelte';
 	import PageNumbers from '#lib/components/PageNumbers.svelte';
+	import PickerField from '#lib/components/PickerField.svelte';
+	import PickerList from '#lib/components/PickerList.svelte';
 	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
 	import ItemChoiceRow from './ItemChoiceRow.svelte';
 	import ItemsMap from './ItemsMap.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Select from '#lib/components/ui/select/index.js';
 	import { signedMargin, typedIn } from '#lib/evals.ts';
 	import type {
 		EvalItem,
@@ -162,6 +163,14 @@
 	const columns = $derived(4 + sides.length + (other ? 1 : 0));
 
 	const counts = $derived(tasks.find((t) => t.task === task)?.counts ?? {});
+
+	// The task picker: the shared searchable list, its search over the task names.
+	let picking = $state(false);
+	let taskQuery = $state('');
+	let taskActive = $state(0);
+	const taskChoices = $derived(
+		tasks.filter((t) => t.task.toLowerCase().includes(taskQuery.trim().toLowerCase()))
+	);
 	const pages = $derived(Math.max(1, Math.ceil((total ?? 0) / SIZE)));
 
 	// Every change the reader makes ends here, so the page's link follows it. Untracked: the page
@@ -407,29 +416,48 @@
 
 <div class="grid gap-3" bind:this={root}>
 	<div class="flex flex-wrap items-center gap-2">
-		<Select.Root
-			type="single"
-			value={task}
-			onValueChange={(v) => {
-				task = v;
-				at = 1;
-				total = null;
-				open = null; // doc ids repeat across tasks
-				tell();
+		<PickerField
+			bind:open={picking}
+			onOpenChange={(next) => {
+				if (!next) return;
+				taskQuery = '';
+				taskActive = Math.max(
+					0,
+					tasks.findIndex((t) => t.task === task)
+				);
 			}}
+			aria-label="Task"
+			class="h-7 max-w-80 min-w-56 font-mono text-[12.5px]"
 		>
-			<Select.Trigger size="sm" class="max-w-80 min-w-56 font-mono text-[12.5px]" aria-label="Task">
-				{task}
-			</Select.Trigger>
-			<Select.Content class="max-h-96">
-				{#each tasks as t (t.task)}
-					<Select.Item value={t.task} label={t.task}>
+			<span class="min-w-0 flex-1 truncate">{task}</span>
+			{#snippet list()}
+				<PickerList
+					options={taskChoices}
+					key={(t) => t.task}
+					current={(t) => t.task === task}
+					noun="tasks"
+					label="Search tasks"
+					placeholder="Search tasks…"
+					class="max-h-96"
+					bind:query={taskQuery}
+					bind:active={taskActive}
+					onpick={(t) => {
+						picking = false;
+						if (t.task === task) return;
+						task = t.task;
+						at = 1;
+						total = null;
+						open = null; // doc ids repeat across tasks
+						tell();
+					}}
+				>
+					{#snippet row(t: (typeof tasks)[number])}
 						<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{t.task}</span>
 						<span class="text-xs text-muted-foreground tabular-nums">{t.counts[keep] ?? ''}</span>
-					</Select.Item>
-				{/each}
-			</Select.Content>
-		</Select.Root>
+					{/snippet}
+				</PickerList>
+			{/snippet}
+		</PickerField>
 		<div class="flex flex-wrap gap-1" role="radiogroup" aria-label="Docs shown">
 			{#each keeps as k (k.keep)}
 				<button
