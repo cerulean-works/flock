@@ -1,7 +1,11 @@
 """Reading two eval runs' files for an item comparison (025, D185)."""
 
 import asyncio
+import functools
 from dataclasses import dataclass
+
+from huggingface_hub import hf_hub_download
+from tokenizers import Tokenizer
 
 from app.api.src.core.store import Run, Store
 
@@ -26,6 +30,11 @@ class PairFiles:
     def read(self, run: Run, name: str, readable: bool = True) -> str | None:
         """The run's file ``name`` as text, or None when the run has no such file or the caller
         may not read it (``readable`` false), which counts as a lookup all the same."""
+        data = self.read_bytes(run, name, readable)
+        return None if data is None else data.decode()
+
+    def read_bytes(self, run: Run, name: str, readable: bool = True) -> bytes | None:
+        """The run's file ``name`` as bytes (a per-token sidecar is Parquet), as ``read`` reads it."""
         self.lookups -= 1
         if self.lookups < 0:
             raise ValueError("the runs have more files than one comparison reads")
@@ -36,4 +45,43 @@ class PairFiles:
         if data is None:
             return None
         self.left -= len(data)
-        return data.decode()
+        return data
+
+
+@functools.cache
+def _tokenizer(name: str, revision: str | None) -> Tokenizer:
+    """The tokenizer ``name`` from the Hub at ``revision``, kept once fetched: the API decodes one
+    doc's tokens at a time, and a fetch costs a round trip."""
+    return Tokenizer.from_file(hf_hub_download(name, "tokenizer.json", revision=revision))
+
+
+def token_texts(
+    tokenizer: str, revision: str | None, ids: list[list[int]], choices: list[str]
+) -> list[list[str]]:
+    """Each choice's continuation token ids as text, a piece per token, decoded with the run's tokenizer (``tokenizer.json`` from the Hub at ``revision``). A token that ends inside a character has an empty piece; the character goes to the token that completes it.
+
+    Raises:
+        ValueError: if the tokenizer can't be fetched, or its pieces don't give back each choice's text, so the ids weren't made by it."""
+    try:
+        decoder = _tokenizer(tokenizer, revision)
+    # Whatever stops the fetch (a local path, a gated or missing repo, no network) leaves the
+    # values without text, not the doc unread.
+    except Exception as exc:
+        raise ValueError(f"no tokenizer {tokenizer} to name the tokens: {exc}") from exc
+    texts = []
+    for choice_ids, choice in zip(ids, choices, strict=True):
+        # Decoded a prefix at a time: a byte-level token alone can hold half a character, which
+        # decodes to U+FFFD until the token that completes it.
+        pieces, done = [], ""
+        for end in range(1, len(choice_ids) + 1):
+            now = decoder.decode(choice_ids[:end], skip_special_tokens=False)
+            if now.endswith("\ufffd") or not now.startswith(done):
+                pieces.append("")
+                continue
+            pieces.append(now[len(done) :])
+            done = now
+        # Leading space aside (SentencePiece drops it when decoding), the pieces are the choice.
+        if "".join(pieces).strip() != choice.strip():
+            raise ValueError(f"{tokenizer} doesn't give back the text of {choice.strip()!r}")
+        texts.append(pieces)
+    return texts

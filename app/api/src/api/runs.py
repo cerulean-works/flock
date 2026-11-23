@@ -37,7 +37,7 @@ from app.api.src.api.models import with_users
 from app.api.src.core import query
 from app.api.src.core.accounts import User
 from app.api.src.core.errors import NotFound
-from app.api.src.core.evals import PairFiles
+from app.api.src.core.evals import PairFiles, token_texts
 from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
 from flock.eval.diff import check_instrument, diff
 from flock.eval.items import CELLS, RANKED, Item, items
@@ -593,8 +593,8 @@ async def get_run_file(
 
 async def eval_readers(
     run: Run, other: str | None, store: Store, viewer: User | None
-) -> list[tuple[str, Callable[[str], str | None]]]:
-    """The run, and ``other`` (``entity/project/id``) if given, as eval reads tracker runs: each one's ``run:`` source and a reader of its files, the two sharing one ``PairFiles`` budget. The other run must be readable too; either one unknown or unreadable is the same 404."""
+) -> list[tuple[str, Callable[[str], str | None], Callable[[str], bytes | None]]]:
+    """The run, and ``other`` (``entity/project/id``) if given, as eval reads tracker runs: each one's ``run:`` source and readers of its files as text and as bytes, all sharing one ``PairFiles`` budget, the arguments of ``WrittenResults.read``. The other run must be readable too; either one unknown or unreadable is the same 404."""
     # The readers are called from a thread of `DIFFS` and read each file through this loop.
     files = PairFiles(store, asyncio.get_running_loop())
     runs = [(run, f"{run.entity}/{run.project.name}/{run.name}")]
@@ -611,11 +611,16 @@ async def eval_readers(
         # only. To anyone else its task has no predictions, so no count, id or text of it leaves.
         return files.read(of, name, readable=not (public and members_only(name)))
 
+    def read_bytes(of: Run, public: bool, name: str) -> bytes | None:
+        return files.read_bytes(of, name, readable=not (public and members_only(name)))
+
     # As tracker runs (`run:`), so a private dataset's task is read from `private/`.
     readers = []
     for of, source in runs:
         public = store.accounts.access(viewer, of.project) == "public"
-        readers.append((f"run:{source}", partial(read, of, public)))
+        readers.append(
+            (f"run:{source}", partial(read, of, public), partial(read_bytes, of, public))
+        )
     return readers
 
 
@@ -636,7 +641,7 @@ async def diff_runs(
     pair = await eval_readers(run, other, store, viewer)
 
     def compare() -> dict[str, Any]:
-        a, b = (WrittenResults.read(source, reader) for source, reader in pair)
+        a, b = (WrittenResults.read(*reader) for reader in pair)
         return diff(a, b).to_dict()
 
     try:
@@ -713,7 +718,7 @@ async def run_items(
     readers = await eval_readers(run, other, store, viewer)
 
     def read() -> bytes:
-        runs = [WrittenResults.read(source, reader) for source, reader in readers]
+        runs = [WrittenResults.read(*reader) for reader in readers]
         ranked = _with_margins(items(runs, task, keep), sort)
 
         # The whole lines every question shares at both ends (a wrapper such as `Question:` and
@@ -855,7 +860,7 @@ async def run_items_suites(
         return Response(SQUARE_ANSWERS[key], media_type="application/json")
 
     def read() -> tuple[bytes, bool]:
-        runs = [WrittenResults.read(source, text) for source, text in readers]
+        runs = [WrittenResults.read(source, text) for source, text, _ in readers]
         suites = _accuracy_suites(*runs)
         # The tasks an outsider can't read; any other task without predictions is a run still
         # uploading, and an answer missing it isn't kept.
@@ -947,9 +952,81 @@ async def run_item(
     readers = await eval_readers(run, other, store, viewer)
 
     def read() -> bytes | None:
-        runs = [WrittenResults.read(source, reader) for source, reader in readers]
+        runs = [WrittenResults.read(*reader) for reader in readers]
         found = next((item for item in items(runs, task, keep) if item.id == doc), None)
         return None if found is None else orjson.dumps(found.to_dict())
+
+    try:
+        found = await loop.run_in_executor(DIFFS, read)
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:
+        raise APIError(409, str(exc)) from exc
+    if found is None:
+        raise APIError(404, f"{task} has no doc {doc} among its {keep} docs")
+    return Response(found, media_type="application/json")
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/item/tokens")
+async def run_item_tokens(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    doc: Annotated[str, Query(description="the doc's id")],
+    task: Annotated[str, Query(description="the task the doc is in")],
+    keep: Annotated[
+        ItemKeep, Query(description="the list the doc is in: two runs are read by a cell")
+    ],
+    other: Annotated[
+        str | None, Query(alias="with", description="the other run, as entity/project/id")
+    ] = None,
+) -> Response:
+    """Each run's per-token values over each choice of one doc, from its sidecar (schema 12, ``predictions/<task>.tokens.parquet``): log-probability, rank and entropy per token, and each token's text from the run's tokenizer. What an opened row of ``.../items`` shows as heat (029).
+
+    Per run, in order: ``choices`` (one entry per choice, its ``text`` pieces, ``logprob``, ``rank`` and ``entropy``) and ``note``. A run without values for the task (written before schema 12, or without them) has ``choices`` null and says why in ``note``; a run whose tokenizer can't be fetched, or doesn't give back the choices' text, has its values with ``text`` null, and ``note`` says why. Read and refused as ``.../item`` is."""
+    loop = asyncio.get_running_loop()
+    readers = await eval_readers(run, other, store, viewer)
+
+    def read() -> bytes | None:
+        runs = [WrittenResults.read(*reader) for reader in readers]
+        found = next((item for item in items(runs, task, keep) if item.id == doc), None)
+        if found is None:
+            return None
+        answers: list[dict[str, Any]] = []
+        for written in runs:
+            # Only each choice's continuation: context and greedy rows come by flags (044, 045)
+            # and aren't shown.
+            rows = written.tokens(task, [doc]) or []
+            by_choice = {r["choice"]: r for r in rows if r["part"] == "continuation"}
+            if len(by_choice) < len(found.choices):
+                note = f"{written.source} has no per-token values for {task}"
+                answers.append({"choices": None, "note": note})
+                continue
+            values = [by_choice[k] for k in range(len(found.choices))]
+
+            # Schema 12 names the tokenizer; it is at the model's revision when it is the model's
+            # own repo.
+            name, _, revision = written.provenance.model.partition("@")
+            tokenizer = written.provenance.tokenizer or name
+            note = None
+            try:
+                ids = [v["token_ids"] for v in values]
+                at = revision if tokenizer == name and revision else None
+                texts = token_texts(tokenizer, at, ids, found.choices)
+            except ValueError as exc:
+                texts, note = [None] * len(values), str(exc)
+            choices = []
+            for text, v in zip(texts, values, strict=True):
+                choices.append(
+                    {
+                        "text": text,
+                        "logprob": v["logprob"],
+                        "rank": v["rank"],
+                        "entropy": v["entropy"],
+                    }
+                )
+            answers.append({"choices": choices, "note": note})
+        return orjson.dumps({"runs": answers})
 
     try:
         found = await loop.run_in_executor(DIFFS, read)

@@ -8,11 +8,14 @@ import json
 import re
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, get_args
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
-from app.api.src.api.runs import run_item, run_items
+from app.api.src.api.runs import run_item, run_item_tokens, run_items
+from app.api.src.core import evals
 from app.api.src.core.errors import Invalid
 from app.api.src.core.evals import PairFiles
 from flock.eval.diff import diff
@@ -508,7 +511,126 @@ def test_a_private_tasks_items_reach_members_only(
         assert public.json()["total"] == 1
 
 
-@pytest.mark.parametrize("route", [run_items, run_item])
+class Bytes:
+    """Stands in for a fetched tokenizer: each id is a few bytes, and a decode is their UTF-8, a
+    character cut short reading as U+FFFD, as a byte-level BPE decodes."""
+
+    PIECES: ClassVar[dict[int, bytes]] = {
+        0: b" ye",
+        1: b"s",
+        2: b" no",
+        3: b" \xe8\x87",
+        4: b"\xba",
+    }
+
+    def decode(self, ids: list[int], skip_special_tokens: bool = True) -> str:
+        return b"".join(self.PIECES[i] for i in ids).decode(errors="replace")
+
+
+def with_tokens(folder: str, task: str, ids: dict[int, list[int]], private: bool = False) -> str:
+    """Gives a written run schema 12's per-token sidecar for `task`: each doc's choice `k` scored as tokens `ids[k]`, with log-probabilities -0.5, -1.5, ..., ranks 1, 2, ... and entropy 0.25 per token, and a greedy row that isn't shown."""
+    path = Path(folder) / "results.json"
+    data = json.loads(path.read_text())
+    data["schema_version"] = 12
+    data["provenance"]["tokenizer"] = "tiny"
+    path.write_text(json.dumps(data))
+    predictions = Path(folder) / ("private/predictions" if private else "predictions")
+    rows = [json.loads(line) for line in (predictions / f"{task}.jsonl").read_text().splitlines()]
+    table: dict[str, list[Any]] = {
+        "id": [],
+        "choice": [],
+        "part": [],
+        "token_ids": [],
+        "logprob": [],
+        "rank": [],
+        "entropy": [],
+    }
+    for row in rows[1:]:
+        for choice, tokens in [*ids.items(), (-1, [2])]:
+            table["id"].append(row["id"])
+            table["choice"].append(choice)
+            table["part"].append("continuation" if choice >= 0 else "greedy")
+            table["token_ids"].append(tokens)
+            table["logprob"].append([-0.5 - k for k in range(len(tokens))])
+            table["rank"].append([1 + k for k in range(len(tokens))])
+            table["entropy"].append([0.25] * len(tokens))
+    pq.write_table(pa.table(table), predictions / f"{task}.tokens.parquet")
+    return folder
+
+
+def test_an_opened_doc_has_each_runs_token_values_named_by_its_tokenizer(
+    flock: FlockServer, api: Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A doc's tokens route answers each run's continuation values per choice from its sidecar, each token named by the run's tokenizer at the model's revision; a run without a sidecar, or whose tokenizer can't be fetched or doesn't give back the choice, says why; a private task's tokens reach members only (029)."""
+    fetched = []
+
+    def tokenizer(name: str, revision: str | None) -> Bytes:
+        fetched.append((name, revision))
+        return Bytes()
+
+    monkeypatch.setattr(evals, "_tokenizer", tokenizer)
+    a = with_tokens(
+        write_run(tmp_path / "a", {"t": ("h", [True, False])}), "t", {0: [0, 1], 1: [2]}
+    )
+    b = write_run(tmp_path / "b", {"t": ("h", [True, True])})  # schema 11: no sidecar
+    log_run(api, "p", "a", a)
+    log_run(api, "p", "b", b)
+    route = f"{P}/p/runs/a/item/tokens"
+
+    found = api.get(route, doc="d-1", task="t", keep="only_b", **{"with": "flock/p/b"})
+    assert found.status == 200, found.body
+    ours, theirs = found.json()["runs"]
+    assert ours == {
+        "note": None,
+        "choices": [
+            {"text": [" ye", "s"], "logprob": [-0.5, -1.5], "rank": [1, 2], "entropy": [0.25] * 2},
+            {"text": [" no"], "logprob": [-0.5], "rank": [1], "entropy": [0.25]},
+        ],
+    }
+    assert fetched == [("tiny", "0")]  # the model's repo, so its revision
+    assert theirs == {"choices": None, "note": "run:flock/p/b has no per-token values for t"}
+
+    # Ids its tokenizer doesn't give the choice back from: the values, without text.
+    other = with_tokens(write_run(tmp_path / "c", {"t": ("h", [True])}), "t", {0: [2], 1: [2]})
+    log_run(api, "p", "c", other)
+    wrong = api.get(f"{P}/p/runs/c/item/tokens", doc="d-0", task="t", keep="all").json()["runs"][0]
+    assert [c["text"] for c in wrong["choices"]] == [None, None]
+    assert wrong["choices"][0]["logprob"] == [-0.5]
+    assert wrong["note"] == "tiny doesn't give back the text of 'yes'"
+
+    # A tokenizer that can't be fetched, the same.
+    def missing(name: str, revision: str | None) -> Bytes:
+        raise OSError("no such repo")
+
+    monkeypatch.setattr(evals, "_tokenizer", missing)
+    gone = api.get(route, doc="d-0", task="t", keep="all").json()["runs"][0]
+    assert gone["note"] == "no tokenizer tiny to name the tokens: no such repo"
+    assert gone["choices"][1]["rank"] == [1]
+
+    # Refused as the doc is; a private task's tokens reach no outsider.
+    assert api.get(route, doc="d-0", task="t", keep="wrong").status == 404
+    exam = write_run(tmp_path / "e", {"exam": ("e", [True])})
+    keep_private(exam, "exam")
+    log_run(api, "p", "e", with_tokens(exam, "exam", {0: [0, 1], 1: [2]}, private=True))
+    monkeypatch.setattr(evals, "_tokenizer", tokenizer)
+    query: dict[str, Any] = {"doc": "d-0", "task": "exam", "keep": "all"}
+    member = api.get(f"{P}/p/runs/e/item/tokens", **query).json()["runs"][0]
+    assert member["choices"][0]["text"] == [" ye", "s"]
+    assert api.patch(f"{P}/p", {"visibility": "public"}).status == 200
+    outside = flock.anonymous().get(f"{P}/p/runs/e/item/tokens", **query)
+    assert outside.status == 409 and b"ye" not in outside.body
+
+
+def test_a_character_split_across_tokens_goes_to_the_token_that_completes_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A byte-level token can end inside a character: its piece is empty and the next token's holds the whole character, so the pieces still join to the choice."""
+    monkeypatch.setattr(evals, "_tokenizer", lambda name, revision: Bytes())
+    texts = evals.token_texts("tiny", None, [[3, 4], [0, 1]], [" 臺", " yes"])
+    assert texts == [["", " 臺"], [" ye", "s"]]
+
+
+@pytest.mark.parametrize("route", [run_items, run_item, run_item_tokens])
 def test_the_items_routes_take_the_keeps_eval_takes(route: Callable[..., Any]) -> None:
     """The routes' `keep` values are eval's: one they lacked would be a 422 for a filter `items()` reads, and an extra one a 409 nobody could get past."""
     keep = inspect.signature(route).parameters["keep"].annotation
