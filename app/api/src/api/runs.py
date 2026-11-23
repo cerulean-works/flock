@@ -1015,8 +1015,15 @@ async def run_item_tokens(
                 if len(lists) < len(fields) or len({len(a) for a in lists}) != 1:
                     whole = False
                     continue
-                for values in lists:
-                    if not all(isinstance(v, int | float) for v in values):
+                # As the writer writes them: token ids and ranks whole numbers (ids from 0, ranks
+                # from 1), log-probabilities and entropies finite.
+                ids, logprobs, ranks, entropies = lists
+                if not all(type(v) is int and v >= 0 for v in ids):
+                    whole = False
+                if not all(type(v) is int and v >= 1 for v in ranks):
+                    whole = False
+                for values in (logprobs, entropies):
+                    if not all(type(v) in (int, float) and math.isfinite(v) for v in values):
                         whole = False
             if not whole:
                 note = f"{written.source} has no per-token values for {task}"

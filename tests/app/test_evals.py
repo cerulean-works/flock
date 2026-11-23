@@ -649,6 +649,34 @@ def test_a_sidecar_that_isnt_the_writers_counts_as_none(
     ]
 
 
+@pytest.mark.parametrize(
+    ("column", "values"),
+    [
+        ("token_ids", [-1, 1]),
+        ("token_ids", [0.5, 1]),
+        ("rank", [0, 1]),
+        ("logprob", [float("nan"), -1.0]),
+    ],
+)
+def test_sidecar_values_the_writer_cant_write_count_as_none(
+    api: Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, column: str, values: list
+) -> None:
+    """Token ids below 0 or not whole, ranks below 1 and non-finite numbers aren't the writer's: that run has no values (030)."""
+    monkeypatch.setattr(evals, "_tokenizer", lambda name, revision: Bytes())
+    folder = with_tokens(write_run(tmp_path / "a", {"t": ("h", [True])}), "t", {0: [0, 1], 1: [2]})
+    path = Path(folder) / "predictions" / "t.tokens.parquet"
+    table = pq.read_table(path)
+    column_of = table.column(column).to_pylist()
+    column_of[0] = values
+    pq.write_table(
+        table.set_column(table.schema.get_field_index(column), column, pa.array(column_of)), path
+    )
+    log_run(api, "p", "a", folder)
+
+    found = api.get(f"{P}/p/runs/a/item/tokens", doc="d-0", task="t", keep="all")
+    assert found.json()["runs"][0]["choices"] is None, column
+
+
 def test_a_sidecar_parquet_cant_read_costs_only_its_own_run(
     api: Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
