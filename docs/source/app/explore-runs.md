@@ -55,6 +55,8 @@ By default the rows that tell most come first: with two runs, the biggest gap be
 
 Open a row and it grows in place, one row at a time: the whole question as scored, then a line per choice in the same columns, the gold one marked, with each run's share (a softmax of the metric's scores, a probability only for `acc_raw`), probability and log-probability. A run's pick has a solid bar and darker numbers.
 
+Runs scored with results schema 12 also show, under each run's numbers for a choice, the choice's tokens as that run's tokenizer cut them. Each is tinted by how unlikely the run found it (its surprisal, minus its log-probability), or, with the switch above the choices, by its rank among the run's guesses, the run's entropy there, or **A vs B**: green where this run found the token likelier than the other, red where less, shown only where both runs cut the choice into the same tokens. Hover a token for its log-probability, rank and entropy. A run scored without per-token values says so, and if Flock can't fetch a run's tokenizer, its tokens show as dots with their numbers.
+
 Drag a column's edge to resize it, or double-click the edge to reset it; your browser remembers the widths. On the compare page, a table wider than the text grows toward the window's edge and then scrolls sideways.
 
 Move with the keys named under the list:

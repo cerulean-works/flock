@@ -220,6 +220,16 @@ A task whose predictions a run lacks, or that you can't read (a private dataset'
 
 It answers as the list does, and 404 too when `keep` holds no doc of that id.
 
+## One eval item's tokens[[run-item-tokens]]
+
+`GET .../runs/{run}/item/tokens?doc={doc}&task={task}&keep={keep}` returns each run's per-token values over one doc's choices, read from the run's per-token file (results schema 12). It takes the query of [one item](#run-item). Each run has a value per token of each choice's continuation: its text, decoded with the tokenizer the run's results name, fetched from the Hugging Face Hub, its log-probability, its rank (1 for the token the run found likeliest) and the entropy of the run's guess there, in nats.
+
+```json
+{"runs": [{"note": null, "choices": [{"text": [" Mercury"], "logprob": [-1.02], "rank": [1], "entropy": [2.31]}, ...]}, {"choices": null, "note": "run:org/project/b has no per-token values for arc_easy"}]}
+```
+
+A run without per-token values for the task has `choices` set to `null`, and `note` says why. When the tokenizer can't be fetched, or doesn't decode the ids back to the choice's text, `text` is `null` and `note` says why. It answers as one item does.
+
 ## Run models[[run-models]]
 
 `GET .../runs/{run}/models` returns the model versions the run is linked to, in its own organization:
