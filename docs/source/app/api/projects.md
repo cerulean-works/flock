@@ -202,7 +202,7 @@ Texts longer than 240 characters end with `…`. The answers are those of the [d
 
 ## Eval item map[[run-items-map]]
 
-`GET .../runs/{run}/items/map?task={task}&with={entity}/{project}/{run}` returns every doc of one task for two runs, a cell of their diff at a time, for drawing them all at once. Each cell lists its doc ids in the order [Eval items](#run-items) lists that cell by default, and each doc's two margins (the run in the path first), rounded to 4 decimals, `null` where a run has none.
+`GET .../runs/{run}/items/map?task={task}&with={entity}/{project}/{run}` returns every doc of one task for two runs, a cell of their diff at a time, for drawing them all at once. `with` is required. Each cell lists its doc ids in the order [Eval items](#run-items) lists that cell by default, and each doc's two margins (the run in the path first), rounded to 4 decimals, `null` where a run has none.
 
 ```json
 {"cells": [{"keep": "only_a", "ids": ["Mercury_7017010", ...], "margins": [[0.29, -0.51], ...]}, {"keep": "only_b", ...}, {"keep": "both_wrong", ...}, {"keep": "both_right", ...}]}

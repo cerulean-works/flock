@@ -168,6 +168,10 @@ export const withItemsView = (url: { pathname: string; search: string }, view: I
 		item: view.item
 	});
 
+/** A margin as the items show it: its sign, then two decimals; a dash for none. */
+export const signedMargin = (m: number | null) =>
+	m === null ? '–' : `${m > 0 ? '+' : m < 0 ? '−' : ''}${Math.abs(m).toFixed(2)}`;
+
 /**
  * Whether a key belongs to what it was typed in, not to a page's shortcuts: a field, a select or
  * list, a menu, a dialog or editable text.

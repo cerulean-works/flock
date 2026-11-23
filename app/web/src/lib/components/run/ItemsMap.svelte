@@ -1,5 +1,6 @@
 <script lang="ts">
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import { signedMargin } from '#lib/evals.ts';
 	import { scheme } from '#lib/theme.svelte.ts';
 	import type { ItemKeep, ItemsMap } from '#lib/types.ts';
 
@@ -60,8 +61,6 @@
 		const sizes = all.map(Math.abs).sort((x, y) => x - y);
 		return sizes[Math.floor(sizes.length * 0.9)] || 1;
 	});
-	const signed = (m: number | null) =>
-		m === null ? '–' : `${m > 0 ? '+' : m < 0 ? '−' : ''}${Math.abs(m).toFixed(2)}`;
 
 	// Draws one cell's marks: the muted ground, then each run's tint over it.
 	function draw(canvas: HTMLCanvasElement, cell: ItemsMap['cells'][number]) {
@@ -80,8 +79,8 @@
 			const ctx = canvas.getContext('2d');
 			if (!ctx) return;
 			ctx.scale(dpr, dpr);
-			// A mark is pitch - 1 wide with a 1 px gap; each run's half is pitch - 1 tall, and a
-			// gap of 2 separates one row of marks from the next.
+			// A mark is pitch - 1 wide with a 1 px gap; each run's half is pitch - 2 tall, so a row
+			// of marks takes 2 * pitch with 4 px to spare under it.
 			const side = pitch - 1;
 			cell.margins.forEach((margins, i) => {
 				const x = (i % perRow) * pitch;
@@ -159,12 +158,12 @@
 		{#if hover}
 			<div
 				class="pointer-events-none absolute z-10 rounded-md border bg-popover px-2 py-1 font-mono text-[11px] whitespace-nowrap shadow-sm"
-				style:left="{Math.min(hover.x + 12, width - 160)}px"
+				style:left="{Math.min(hover.x + 12, width - 160 /* the tooltip's widest */)}px"
 				style:top="{hover.y + 14}px"
 			>
 				<div>{hover.id}</div>
 				<div class="text-muted-foreground">
-					A {signed(hover.margins[0])} · B {signed(hover.margins[1])}
+					A {signedMargin(hover.margins[0])} · B {signedMargin(hover.margins[1])}
 				</div>
 			</div>
 		{/if}

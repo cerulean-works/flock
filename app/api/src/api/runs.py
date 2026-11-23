@@ -797,9 +797,11 @@ async def run_items_map(
         runs = [WrittenResults.read(source, cache(reader)) for source, reader in readers]
         cells = []
         for keep in CELLS:
-            ranked = _with_margins(items(runs, task, keep), "margin")
-            margins = [[None if m is None else round(m, 4) for m in ms] for _, ms in ranked]
-            cells.append({"keep": keep, "ids": [item.id for item, _ in ranked], "margins": margins})
+            ids, margins = [], []
+            for item, pair in _with_margins(items(runs, task, keep), "margin"):
+                ids.append(item.id)
+                margins.append([None if m is None else round(m, 4) for m in pair])
+            cells.append({"keep": keep, "ids": ids, "margins": margins})
         return orjson.dumps({"cells": cells})
 
     try:

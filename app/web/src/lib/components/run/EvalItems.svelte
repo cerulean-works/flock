@@ -12,7 +12,7 @@
 	import ItemsMap from './ItemsMap.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
-	import { typedIn } from '#lib/evals.ts';
+	import { signedMargin, typedIn } from '#lib/evals.ts';
 	import type { EvalItem, ItemKeep, ItemsPage, ItemSummary, ItemsView } from '#lib/types.ts';
 	import { ITEM_W, readWidth, saveWidth } from '#lib/widths.ts';
 
@@ -248,7 +248,8 @@
 		open = id;
 		if (shown) {
 			tell();
-			return focus(id);
+			focus(id);
+			return;
 		}
 		if (keep !== cell) total = null;
 		keep = cell;
@@ -286,8 +287,11 @@
 		} else if (step && at + step >= 1 && at + step <= pages) {
 			// Past the page's end: the next page's first doc, or the previous page's last.
 			at += step;
-			const end = (rows: ItemSummary[]) => rows[step > 0 ? 0 : rows.length - 1];
-			landing = { page: query, row: end, open: open !== null };
+			landing = {
+				page: query,
+				row: (rows) => rows[step > 0 ? 0 : rows.length - 1],
+				open: open !== null
+			};
 			open = null;
 			tell();
 		} else {
@@ -324,7 +328,6 @@
 			...(found?.items ?? []).flatMap((item) => item.runs.map((r) => Math.abs(r.margin ?? 0)))
 		)
 	);
-	const signed = (m: number) => `${m > 0 ? '+' : m < 0 ? '−' : ''}${Math.abs(m).toFixed(2)}`;
 </script>
 
 <!-- A column heading with the handle that resizes its column. -->
@@ -515,7 +518,7 @@
 													? '--state-finished'
 													: '--destructive'}) {Math.round(
 													(35 * Math.abs(answer.margin)) / widest
-												)}%, transparent)">{signed(answer.margin)}</span
+												)}%, transparent)">{signedMargin(answer.margin)}</span
 											>
 										{/if}
 									</span>
@@ -523,7 +526,7 @@
 							{/each}
 							{#if other}
 								<td class="px-2 py-1.5 text-right font-mono text-[12px] tabular-nums">
-									{m[0] != null && m[1] != null ? signed(m[0] - m[1]) : '–'}
+									{m[0] != null && m[1] != null ? signedMargin(m[0] - m[1]) : '–'}
 								</td>
 							{/if}
 							<td></td>
