@@ -352,7 +352,7 @@ def test_items_come_by_margin_unless_asked_for_the_datasets_order(
 def with_suites(
     folder: str, suites: dict[str, list[str]], hashes: dict[str, str] | None = None
 ) -> str:
-    """Gives a written run these suites, each with its members, as the runner records them; a suite's hash is its name unless `hashes` names another."""
+    """Gives a written run these suites, each with its members, as the runner records them; a suite's hash is its name unless `hashes` names another, and one named `...:bpb` is scored by `bpb`."""
     path = Path(folder) / "results.json"
     data = json.loads(path.read_text())
     data["suites"] = [
@@ -360,7 +360,7 @@ def with_suites(
             "suite": s,
             "suite_hash": (hashes or {}).get(s, s),
             "members": m,
-            "metric": None,
+            "metric": "bpb" if s.endswith(":bpb") else None,
             "score": 0.5,
         }
         for s, m in suites.items()
@@ -378,6 +378,7 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     b_tasks = a_tasks | {"t": ("h", [True, True, False, False, True]), "x": ("changed", [True])}
     b_tasks["exam"] = ("e", [False, False])
     suites = {"s": ["t", "sub"], "sub": ["u", "x", "exam"], "group": ["s"], "moved": ["t"]}
+    suites["s:bpb"] = ["t"]
     a = with_suites(write_run(tmp_path / "a", a_tasks), suites)
     b = with_suites(write_run(tmp_path / "b", b_tasks), suites, {"moved": "another"})
     for folder in (a, b):
@@ -388,7 +389,8 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
 
     found = api.get(route, **{"with": "flock/p/b"})
     assert found.status == 200, found.body
-    # x was scored under another hash; `group` only groups; `moved` has another suite hash.
+    # x was scored under another hash; `group` only groups; `moved` has another suite hash;
+    # `s:bpb` is scored by bits per byte.
     rows = {row["suite"]: row for row in found.json()["suites"]}
     assert list(rows) == ["s", "sub"]
     assert rows["s"]["tasks"] == ["t", "u", "exam"]
