@@ -173,25 +173,42 @@ Files in a top-level `private/` folder, such as `private/predictions/exam.jsonl`
 | 404 | Either run is unknown, or you can't read its project. Both cases give the same answer, so a private project's runs aren't revealed. Also when either run has no `results.json`. |
 | 409 | The diff refuses the pair: the runs used another instrument (`dtype`, `batch_tokens`, `attention` or `sdpa_backend`), a run's predictions don't match its results, or a file is over 64 MiB or the pair over 1 GiB. `error` says which. |
 
-Anyone may call it on two public projects. Item text isn't returned, only doc ids: [Eval items](#run-items) returns it. A task on a private dataset is compared from the runs' `private/predictions/` files for the organization's members only: to anyone else reading a public project it's in `not_compared` as `no_predictions`, as [Run files](#run-files) keep those files from them.
+Anyone may call it on two public projects. Item text isn't returned, only doc ids: [Eval items](#run-items) and [One eval item](#run-item) return it. A task on a private dataset is compared from the runs' `private/predictions/` files for the organization's members only: to anyone else reading a public project it's in `not_compared` as `no_predictions`, as [Run files](#run-files) keep those files from them.
 
 ## Eval items[[run-items]]
 
-`GET .../runs/{run}/items?task={task}&keep={keep}` returns a page of one task's docs with their text and the run's answer, as [`flock eval items --json`](../../evals/commands#flock-eval-items) prints them. With `with={entity}/{project}/{run}`, it returns two runs' answers side by side, the run in the path first.
+`GET .../runs/{run}/items?task={task}&keep={keep}` returns a page of one task's docs as short rows: enough to list and sort them, without their whole text. With `with={entity}/{project}/{run}`, each row has two runs' answers, the run in the path first. A doc's whole text comes from [one item](#run-item).
 
 | Parameter | Meaning |
 |---|---|
 | `task` | The task, whose primary metric must be an accuracy. |
 | `keep` | One run: `wrong`, `right` or `all`. Two runs: `only_a`, `only_b`, `both_wrong` or `both_right`. |
 | `with` | The other run, as `entity/project/id`. |
-| `sort` | `margin` (the default): with two runs, the biggest gap between their margins first, with one run the biggest margin either way. A run's margin is its gold choice's score minus its best wrong choice's, in the primary metric's units; items without one (`acc_greedy`) come last. `doc`: the dataset's order. |
+| `sort` | `margin` (the default): with two runs, the biggest gap between their margins first, with one run the biggest margin either way. Items without a margin (`acc_greedy`) come last. `doc`: the dataset's order. |
 | `offset`, `limit` | The page: `limit` from 1 to 100, 20 by default. |
 
 ```json
-{"total": 268, "offset": 0, "items": [{"task": "arc_easy", "metric": "acc_per_char", "id": "Mercury_7017010", "question": "...", "contexts": null, "choices": [" ...", " ..."], "gold": 1, "runs": [{"model": "...", "pick": 1, "correct": true, "logprob": [...], "prob": [...], "share": [...]}, ...]}]}
+{"total": 268, "offset": 0, "items": [{"id": "Mercury_7017010", "text": "Question: Which planet is closest to the Sun?", "gold": 1, "gold_text": "Mercury", "runs": [{"correct": true, "pick": 1, "pick_text": "Mercury", "margin": 0.29, "gold_prob": 0.665}, ...]}]}
 ```
 
-Each item is eval's `Item`, unchanged; `total` counts every doc the filter keeps. The answers are those of the [diff](#run-diff): 404 for a run that's unknown, you can't read, or has no `results.json`, and 409 with eval's reason when the items can't be read, such as runs scored with another instrument, a task one run didn't score, a `keep` that doesn't fit the number of runs, a run whose results schema is older than 11, whose predictions hold no text, or a page of more than 16 MiB (ask for a smaller `limit`). A task on a private dataset is read for the organization's members only: to anyone else its predictions don't exist, and the answer is a 409 with no text.
+| Field | Meaning |
+|---|---|
+| `total` | How many docs the filter keeps. |
+| `text` | The part of the question that varies: the whole lines every question of the filter starts and ends with, such as `Answer:`, are left out, unless nothing varies or a row would be left empty. For a doc whose choices each have their own context (Winogrande), the options, joined by ` / `. |
+| `gold`, `gold_text` | The gold choice's index and its text. |
+| `runs` | Per run: `correct`; `pick`, the choice its primary metric picks (null for `acc_greedy`), and `pick_text`; `margin`, its gold choice's score minus its best wrong choice's, in the primary metric's units (null for `acc_greedy` or a doc with one choice); `gold_prob`, the gold choice's probability renormalized over the choices. |
+
+Texts longer than 240 characters end with `…`. The answers are those of the [diff](#run-diff): 404 for a run that's unknown, you can't read, or has no `results.json`, and 409 with eval's reason when the items can't be read, such as runs scored with another instrument, a task one run didn't score, a `keep` that doesn't fit the number of runs, or a run whose results schema is older than 11, whose predictions hold no text. A task on a private dataset is read for the organization's members only: to anyone else its predictions don't exist, and the answer is a 409 with no text.
+
+## One eval item[[run-item]]
+
+`GET .../runs/{run}/item?doc={doc}&task={task}&keep={keep}` returns one doc with its whole text and each run's answer, as [`flock eval items --json`](../../evals/commands#flock-eval-items) prints it. It takes `task`, `keep` and `with` as the [list](#run-items) does: `keep` is the list the doc is in, since two runs are read by a cell of their diff. The id is a query parameter, so any id, with slashes or dots, reaches it as written.
+
+```json
+{"task": "arc_easy", "metric": "acc_per_char", "id": "Mercury_7017010", "question": "...", "contexts": null, "choices": [" ...", " ..."], "gold": 1, "runs": [{"model": "...", "pick": 1, "correct": true, "logprob": [...], "prob": [...], "share": [...]}, ...]}
+```
+
+It answers as the list does, and 404 too when `keep` holds no doc of that id.
 
 ## Run models[[run-models]]
 

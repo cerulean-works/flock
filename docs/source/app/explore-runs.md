@@ -38,22 +38,32 @@ Scores show four decimals; hover one for its exact value. Hashes show their firs
 
 1. In **Table**, check exactly two eval runs and click **Compare items**. From a model version, open **Evals**, check two runs and click the same button. From an eval run, click **Compare with…** on its **Results** tab or in its **⋯** menu, then pick the other run.
 2. **Items** shows one task's docs side by side, with what each run picked. Choose the task, then one of four groups: docs only A got right, only B got right, both got wrong or both got right. Each shows its count.
-3. Below, every task both runs scored under the same task hash is listed with the four counts.
+3. Below, every task both runs scored under the same task hash is listed with each run's accuracy on the docs compared, A's lead in points and the four counts. Click a task to read its items above.
 4. To compare another pair, click either run, or press <kbd>A</kbd> or <kbd>B</kbd>. Type to search the project's eval runs, use the arrow keys and press <kbd>Enter</kbd>. Press <kbd>Backspace</kbd> in the empty search box to pick another project.
 
 Tasks that can't be compared are listed below with the reason, such as another task hash or a primary metric that isn't an accuracy. Runs scored with another instrument aren't compared at all, and the page says why. The counts are those of `flock eval diff`, and the items those of [`flock eval items`](../evals/commands#flock-eval-items), computed by Flock from the runs' files. A task on a private dataset is compared, and its text shown, for your organization's members only: anyone else sees it among the tasks not compared, with no predictions.
 
 ### Read the items[[read-eval-items]]
 
-Each doc is one row: its id, the part of its question that varies (the lines every question of the page shares, such as `Answer:`, are said once above the table), the gold choice, and for each run its pick with a check or a cross, and its margin. With two runs, the last column is the gap between their margins.
+Each doc is one row: its id, the part of its question that varies (the lines every question of the list shares, such as `Answer:`, are left out), the gold choice, and for each run its pick with a check or a cross, and its margin. With two runs, the last column is the gap between their margins.
 
-A run's margin is its gold choice's score minus its best wrong choice's, in the task's primary metric: per character for `acc_per_char`, the log-probability for `acc_raw`. Above zero the run got the doc right, and the further from zero, the surer it was. A margin that rounds to zero can show either sign: the scorer picked in FP32, and the page computes in double precision. The tint follows the sign and grows with the margin. A task scored by `acc_greedy` ranks no choices, so its rows have no margin.
+A run's margin is its gold choice's score minus its best wrong choice's, in the task's primary metric: per character for `acc_per_char`, the log-probability for `acc_raw`. Above zero the run got the doc right, and the further from zero, the surer it was. A margin that rounds to zero can show either sign: the scorer picked in FP32, and Flock computes the margin in double precision. The tint follows the sign and grows with the margin. A task scored by `acc_greedy` ranks no choices, so its rows have no margin.
 
 By default the rows that tell most come first: with two runs, the biggest gap between their margins, and with one run, its surest docs, right or wrong. **Dataset order** switches back. Above the table, the task's score for each run, the difference in points and how many docs only one run got right show whether a net gain hides churn.
 
-Open a row and it grows in place: the whole question as scored, then a line per choice in the same columns, the gold one marked, with each run's share (a softmax of the metric's scores, a probability only for `acc_raw`), probability and log-probability. A run's pick has a solid bar and darker numbers.
+Open a row and it grows in place, one row at a time: the whole question as scored, then a line per choice in the same columns, the gold one marked, with each run's share (a softmax of the metric's scores, a probability only for `acc_raw`), probability and log-probability. A run's pick has a solid bar and darker numbers.
 
 Drag a column's edge to resize it, or double-click the edge to reset it; your browser remembers the widths. On the compare page, a table wider than the text grows toward the window's edge and then scrolls sideways.
+
+Move with the keys named under the list:
+
+| Key | Does |
+|---|---|
+| <kbd>J</kbd>, <kbd>K</kbd> | The next or previous doc, turning the page at its ends. With a doc open, open the next or previous one instead. |
+| <kbd>Enter</kbd> or <kbd>O</kbd> | Open the doc whose row has the focus. |
+| <kbd>Esc</kbd> | Close the open doc. |
+
+The page's address follows the list: the task, the group, the order, the page and the open doc. Copy it to send someone straight to that doc. A doc of a task on a private dataset opens for your organization's members only.
 
 Items are 20 to a page. Runs scored before predictions held text (results schema 10 and older) have no items: the Results tab says so, and the compare page keeps the doc ids of the docs only one run got right. Score the model again to read them.
 
