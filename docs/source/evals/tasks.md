@@ -156,6 +156,10 @@ A `tw_text` or `tw_text_v1` source is a suite of its domains, scored as their un
 
 [[autodoc]] eval.tasks.MCDoc
 
+[[autodoc]] eval.tasks.RowFields
+
+[[autodoc]] eval.tasks.SourceRow
+
 [[autodoc]] eval.tasks.Choice
 
 [[autodoc]] eval.tasks.cloze

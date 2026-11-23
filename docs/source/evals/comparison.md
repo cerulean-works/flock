@@ -111,3 +111,38 @@ The models may differ, and so may `max_length` and `add_bos`, which belong to th
 | `schema_version` | The layout of this JSON, bumped when a field changes. |
 
 In the dashboard, the same diff runs on Flock from two logged runs' files: check two eval runs in a project's table and click **Compare items** ([Eval results in the dashboard](../app/explore-runs#compare-two-eval-runs)).
+
+## Reading items
+
+The diff says how many docs each model got right. [`flock eval items`](commands#flock-eval-items) and [`~eval.items.items`] show which ones and why: each doc's question and choices from the [predictions](results#predictions), with what each run picked and how likely it found each choice. One run or two are read, and the JSON holds a list of runs per doc.
+
+`flock eval items --json` prints one [`~eval.items.Item.to_dict`] per line:
+
+```json
+{"task": "arc_easy", "metric": "acc_per_char", "id": "Mercury_7017010", "question": "Question: Which tools are needed to measure the effects of friction on a block of wood?\nAnswer:", "contexts": null, "choices": [" meter stick, spring scale", " balance, stopwatch", " balance, meter stick", " meter stick, stopwatch"], "gold": 0, "runs": [{"model": "allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf", "pick": 3, "correct": false, "logprob": [-11.73, -7.96, -9.27, -9.11], "prob": [0.014, 0.622, 0.167, 0.196], "share": [0.244, 0.252, 0.246, 0.258]}, {"model": "meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08", "pick": 0, "correct": true, ...}]}
+```
+
+| Field | Meaning |
+|---|---|
+| `task`, `id` | The task and the doc. |
+| `metric` | The task's primary metric, which `pick`, `correct` and `share` follow. |
+| `question`, `contexts`, `choices`, `gold` | The doc's text as scored and its correct choice, as in the [predictions](results#predictions). |
+| `runs` | Each run's answer, in the order the runs were given. |
+| `runs[].pick`, `runs[].correct` | The choice the metric picks, and whether it is gold. `pick` is `null` for `acc_greedy`, which ranks no choices. |
+| `runs[].logprob` | Each choice's summed log-probability. |
+| `runs[].prob` | Each choice's probability renormalized over the choices: the softmax of `logprob`. |
+| `source` | Where the doc comes from, from the first run's row: `split`, `source_index`, `doc_hash` and `prompt_hash`, and `native_id`, `subject` and `meta` where the task gives them (see [Predictions](results#predictions)). Empty for a run written before schema version 12. |
+| `runs[].share` | The softmax over the choices of the score the metric ranks them by: `logprob` for `acc_raw` (so it equals `prob`), `logprob` per token, character or byte (in bits) for the length-normalized accuracies, and `logprob` minus `logprob_uncond` for `acc_uncond`. `null` for `acc_greedy`. |
+
+`share` is not a probability under a length-normalized metric. It shows how the metric ranks the choices, and its values sit close together, since a score per character varies little between choices. OLMES and OLMo 3 define no per-choice share, so read `prob` for how likely the model found each choice, and `share` and `pick` for what the metric made of it. In the example, OLMo found choice 1 most likely but `acc_per_char` picked choice 3. `pick` is the scorer's own, from its FP32 scores, while `share` is computed from the rows in double precision, so at a tie or near tie its largest value can sit on another choice.
+
+### Reading failures with an agent
+
+The JSON lines are made for a language model to read as well as a person. A useful pattern is to sample a model's failures, then ask an agent what they have in common:
+
+```bash
+uv run flock eval items results/olmo2-1b --task arc_easy --only wrong --limit 50 --seed 0 --json > wrong.jsonl
+uv run flock eval items results/olmo2-1b results/llama32-1b --task arc_easy --cell only_b --json > only-llama.jsonl
+```
+
+`--seed` makes the sample the same each time, so two people, or two agents, read the same docs. The few-shot examples every doc was shown are in the first line of the task's predictions file, not in the items.

@@ -23,6 +23,10 @@ uv run flock eval run \
 | `--batch-tokens` | `32768` | The most padded tokens in one forward pass. Lower it if the GPU runs out of memory. Compare only runs with the same value. See [Batching and precision](scoring#batching-and-precision). |
 | `--dtype` | `bfloat16` | The weights' dtype, `bfloat16` or `float32`. Log-softmax runs in float32 either way. Compare only runs with the same value. |
 | `--add-bos` | off | Start every non-empty context with the tokenizer's BOS token. Set it for Gemma models, as OLMES does. Compare only runs with the same value. See [Tokenizing a request](scoring#tokenizing-a-request). |
+| `--no-tokens` | off | Don't write each multiple-choice task's [per-token values](results#per-token-values) beside its predictions. They change no score, and they cost scoring time and disk: see the page. |
+| `--greedy-tokens` | off | Also write the first 32 tokens greedy decoding writes after each doc's context, for seeing where two models' outputs part. It added about half the scoring time in a measured run (see [Per-token values](results#per-token-values)). Not with `--no-tokens`. |
+| `--context-tokens` | off | Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. With every flag, a measured run took about twice as long and wrote three times the files (see [Per-token values](results#per-token-values)). Needs the per-token values, so not with `--no-tokens`. |
+| `--perplexity-tokens` | off | Write each perplexity task's [per-token values](results#per-token-values) beside its predictions: each token's loss and where it ends in the text, without token ids. On Paloma's WikiText-103 (61 docs, OLMo 2 1B, every flag on) it wrote 7.4 MB, and the task's scoring took 4.8 s against 3.1 s without per-token values. |
 | `--device` | `cuda` if available, else `cpu` | The torch device. |
 | `--wandb-project` | off | Also log the run to this project through the `wandb` SDK, with `results.json` and the predictions as files of the run. [Connect the SDK](../cli/sign-in#wandb-sdk) first so it goes to Flock. See [Tracker runs](#tracker-runs). |
 | `--verbose` | off | Print every metric of each task, primary first, with its speed and the start of its task hash, then each suite with its members. |
@@ -69,6 +73,27 @@ uv run flock eval diff results/olmo2-1b run:acme/model-evals/k3v9x2pa
 
 It exits with code 2 if the runs can't be compared: a missing or damaged results file, a run it can't read, or runs scored with another `dtype`, `batch_tokens`, `attention` or `sdpa_backend`. [Doc-by-doc diff](comparison#doc-by-doc-diff) lists which tasks it compares.
 
+## `flock eval items`
+
+Prints a task's docs with their question, choices and each run's answer: from one run, its wrong (or right, or all) docs; from two runs, one cell of their [doc-by-doc diff](comparison#doc-by-doc-diff). Use it to read what a model gets wrong, not only how often.
+
+```bash
+uv run flock eval items results/olmo2-1b --task arc_easy --limit 5
+uv run flock eval items results/olmo2-1b run:acme/model-evals/k3v9x2pa --task arc_easy --cell only_b --json
+```
+
+| Argument or flag | Default | Meaning |
+|---|---|---|
+| `RUNS` | required | One run or two, each a folder or `run:<entity>/<project>/<id>`, as for `flock eval diff`. |
+| `--task` | required | The task. Its primary metric must be an accuracy. |
+| `--only` | `wrong` | One run: print its `wrong`, `right` or `all` docs. |
+| `--cell` | required with two runs | Two runs: print the docs of `only_a`, `only_b`, `both_wrong` or `both_right`. |
+| `--limit` | all | Print at most this many docs, the first ones in doc order. |
+| `--seed` | none | With `--limit`, print a sample drawn with this seed instead, still in doc order. |
+| `--json` | off | Print one JSON object per doc instead of text. See [Reading items](comparison#reading-items) for its fields. |
+
+The text form prints, per doc, the task, id and metric, where the doc comes from (its split, its row's position and, where the task gives them, its dataset id and subject), each run's model, verdict and pick, the question, then one line per choice: each run's probability (`p`) and share (`s`), `*` on the gold choice and `<` on each run's pick. Two runs must be readable by `flock eval diff`, with the task under one hash in both. Runs written before schema version 11 hold no text, so the command refuses them: score the model again. It exits with code 2 on any refusal.
+
 ## `flock eval log`
 
 Logs a `results.json` written earlier to a tracker project, as written, without scoring anything. Use it for results scored without `--wandb-project`.
@@ -79,7 +104,7 @@ uv run flock eval log results/olmo2-1b/results.json --project model-evals
 
 | Argument or flag | Default | Meaning |
 |---|---|---|
-| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6 to 10. It goes on the run as `results.json`, whatever its name, and from schema version 9 on so do the predictions in the `predictions/` folder beside it. From schema version 9 on, the file must be named `results.json`, so the predictions beside it are its own. |
+| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6 to 12. It goes on the run as `results.json`, whatever its name, and from schema version 9 on so do the predictions in the `predictions/` folder beside it. From schema version 9 on, the file must be named `results.json`, so the predictions beside it are its own. |
 | `--project` | required | The tracker project. |
 
 It needs both sign-ins: `flock login` for the duplicate check, and the wandb SDK's key for the same server to log the run. [Sign in](../cli/sign-in) sets up both. The run goes to the server you signed in to with `flock login` and to your default organization, online, whatever the SDK's own settings and `WANDB_MODE` say. A `WANDB_API_KEY` set for another server fails with HTTP 401.
@@ -128,6 +153,6 @@ A run has its project's visibility, so anyone can read the predictions of a run 
 > [!WARNING]
 > A Flock server older than this release serves `private/` files like any other run file. On such a server, the private project is the only protection: don't make it public, and don't move its runs into a public project.
 
-`read_results` and `flock eval diff` read a private task's predictions from `private/predictions/<task>.jsonl` on a run, and from `predictions/` in a folder.
+`read_results`, `flock eval diff` and `flock eval items` read a private task's predictions from `private/predictions/<task>.jsonl` on a run, and from `predictions/` in a folder.
 
 When the config's `model` is a version stored in Flock (`flock:org/path@{number}`, or `flock:project:path@{number}` for a project's model) and its `model_digest` is that version's digest, Flock lists the run among the version's eval runs, in the run's own organization. A project's model is found by the config's `model_org`, `model_project` and `model_path`. See [Score a model stored in Flock](run-evaluation#score-a-model-stored-in-flock). The run's page shows its scores in a **Results** tab, and two runs can be compared doc by doc in the dashboard as `flock eval diff` compares them (see [Eval results in the dashboard](../app/explore-runs#eval-results)).

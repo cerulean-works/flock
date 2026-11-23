@@ -6,6 +6,7 @@ import json
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from types import NoneType
 from typing import Any
 
 import torch
@@ -118,6 +119,58 @@ def cloze(
 
 
 @dataclass(frozen=True, slots=True)
+class RowFields:
+    """
+    The dataset columns a task's prediction rows copy, by name, as OLMES's `native_id_field` names the column of a dataset's own id (`oe_eval/tasks/oe_eval_tasks/arc.py`). What a row records changes no request, so the task hash leaves it out.
+
+    Args:
+        native_id (`str`, *optional*):
+            The column holding the dataset's own id, written as a row's `native_id` where it differs from the doc's `id`.
+        subject (`str`, *optional*):
+            The column holding the row's subject or category, written as a row's `subject`.
+        meta (`tuple[str, ...]`, *optional*):
+            Columns of scalars (a string, a number, a bool or null) written under a row's `meta`, such as a difficulty level.
+    """
+
+    native_id: str | None = None
+    subject: str | None = None
+    meta: tuple[str, ...] = ()
+
+
+# What a row's `meta` holds: JSON scalars only, so a reader can show and filter them as they are,
+# as Inspect keeps sample summary metadata to scalars.
+type Scalar = str | int | float | bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class SourceRow:
+    """
+    Where a scored doc comes from in its dataset, as its prediction row records it.
+
+    Args:
+        split (`str`):
+            The dataset split the row is in.
+        index (`int`):
+            The row's position in `split`, before `keep` drops any.
+        doc_hash (`str`):
+            lm-evaluation-harness's `doc_hash` of the row as the dataset gives it, the sha256 of `json.dumps(row, indent=2, ensure_ascii=False)` (`lm_eval/evaluator.py`, v0.4.3), so a sample that harness logged for the same row joins on it.
+        native_id (`str`, *optional*):
+            The dataset's own id, where the task names its column and it differs from the doc's `id`.
+        subject (`str`, *optional*):
+            The row's subject or category, where the task names its column.
+        meta (`dict[str, Scalar]`, *optional*):
+            The values of the columns the task names, by column.
+    """
+
+    split: str
+    index: int
+    doc_hash: str
+    native_id: str | None = None
+    subject: str | None = None
+    meta: dict[str, Scalar] = dataclasses.field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class MCDoc:
     """
     One multiple-choice question.
@@ -131,6 +184,8 @@ class MCDoc:
             The index of the correct choice in `choices`.
         example (`str`, *optional*):
             The doc's text when another doc shows it as a few-shot example. Its gold choice's context and continuation if not set. Only for tasks whose examples read differently from the scored text, such as HumanEval's.
+        source (`SourceRow`, *optional*):
+            Where the doc comes from in its dataset. [`MultipleChoiceTask.load`] sets it on every scored doc, and `to_doc` leaves it unset.
 
     Raises:
         `ValueError`: naming the doc, if `choices` is empty, a choice's continuation is empty, `gold` isn't an index into it, or `example` is an empty string.
@@ -140,6 +195,7 @@ class MCDoc:
     choices: tuple[Choice, ...]
     gold: int
     example: str | None = None
+    source: SourceRow | None = None
 
     def __post_init__(self) -> None:
         if not self.choices:
@@ -179,12 +235,35 @@ class MCRequests:
             sha256 of exactly what is scored, as [Results files](results#the-task-hash) defines it.
         has_uncond (`bool`):
             Whether the unconditional requests for pointwise mutual information (PMI) follow the conditional ones.
+        description (`str`):
+            The task's text before the few-shot examples.
+        shots (`tuple[MCDoc, ...]`):
+            The task's few-shot examples, in order.
+        shown (`tuple[tuple[int, ...], ...]`):
+            Per doc, the indices in `shots` of the examples it was shown, in order. A doc's context is `description`, then `shots[i].example_text` and a blank line for each `i`, then its choice's context.
     """
 
     docs: tuple[MCDoc, ...]
     requests: tuple[Request, ...]
     hash: str
     has_uncond: bool
+    description: str
+    shots: tuple[MCDoc, ...]
+    shown: tuple[tuple[int, ...], ...]
+
+    @property
+    def context_requests(self) -> tuple[int, ...]:
+        """The index of each doc's first request with each of its distinct contexts, in order: one per doc where its choices share a context, one per choice where each has its own, as in Winogrande."""
+        found = []
+        start = 0
+        for doc in self.docs:
+            seen = set()
+            for offset, choice in enumerate(doc.choices):
+                if choice.context not in seen:
+                    seen.add(choice.context)
+                    found.append(start + offset)
+            start += len(doc.choices)
+        return tuple(found)
 
     def choice_scores(self, scores: Scores) -> ChoiceScores:
         """
@@ -304,6 +383,8 @@ class MultipleChoiceTask:
             The metrics the task reports, from [`~eval.metrics.multiple_choice`]'s names. Every metric the task computes if not set, which leaves out `acc_uncond` when PMI is skipped. `acc_greedy` is only for a [`GoldOnlyTask`].
         keep (`Callable[[dict], bool]`, *optional*):
             Which rows of the scored split are scored, applied before `limit` and `to_doc`, as lm-evaluation-harness's `process_docs` (`lm_eval/api/task.py`, v0.4.3). Every row if not set. Unlike `process_docs`, it doesn't filter the few-shot split: examples are picked by id, so a task lists only rows it wants shown. Like `to_doc`, it isn't in the task hash, but the docs it keeps are.
+        row_fields (`RowFields`, *optional*):
+            The columns each prediction row copies: the dataset's own id, a subject and scalars under `meta`. None if not set. It isn't in the task hash.
 
     Raises:
         `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, `fewshot.num_shots` is set on `ids` from a split other than the scored one, or the examples are the scored split's first rows.
@@ -318,6 +399,7 @@ class MultipleChoiceTask:
     unconditional_context: str | None = "Answer:"
     metrics: tuple[str, ...] | None = None
     keep: Callable[[dict[str, Any]], bool] | None = None
+    row_fields: RowFields = RowFields()
 
     def __post_init__(self) -> None:
         if self.metrics is not None:
@@ -379,22 +461,55 @@ class MultipleChoiceTask:
 
     def load(self, limit: int | None = None) -> tuple[list[MCDoc], list[MCDoc]]:
         """
-        Loads the scored split's rows that `keep` accepts, keeping the first `limit` (all if `None`), and the few-shot examples.
+        Loads the scored split's rows that `keep` accepts, keeping the first `limit` (all if `None`), and the few-shot examples. Each doc to score gets its `source`: its row's position, `doc_hash` and the columns `row_fields` names.
 
         Returns:
             `tuple[list[MCDoc], list[MCDoc]]`: the docs to score, then the few-shot examples.
 
         Raises:
-            `ValueError`: if `limit` is less than 1, or the few-shot split has fewer than `num_shots` rows.
-            `KeyError`: if a few-shot id isn't in its split.
+            `ValueError`: if `limit` is less than 1, the few-shot split has fewer than `num_shots` rows, or a `meta` column holds something other than a scalar.
+            `KeyError`: if a few-shot id isn't in its split, or a column `row_fields` names isn't in a row.
         """
         if limit is not None and limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
 
-        rows = self.dataset.load()
+        # Each row with its position in the split, which `keep` doesn't renumber.
+        rows = list(enumerate(self.dataset.load()))
         if self.keep is not None:
-            rows = [row for row in rows if self.keep(row)]
-        docs = [self.to_doc(row) for row in rows[:limit]]
+            rows = [(index, row) for index, row in rows if self.keep(row)]
+
+        docs = []
+        fields = self.row_fields
+        for index, row in rows[:limit]:
+            # Read before `to_doc`, which may change the row it is given.
+            # The row as the dataset gives it: `row_index` adds the index, which isn't a column.
+            original = dict(row)
+            if self.dataset.row_index:
+                del original["index"]
+            # `default=str` as lm-evaluation-harness's `handle_non_serializable` falls back, so a
+            # column JSON can't hold (a timestamp, bytes) doesn't stop scoring; rows of plain
+            # values hash exactly as there.
+            doc_hash = hashlib.sha256(
+                json.dumps(original, indent=2, ensure_ascii=False, default=str).encode()
+            ).hexdigest()
+            native_id = str(row[fields.native_id]) if fields.native_id is not None else None
+            subject = str(row[fields.subject]) if fields.subject is not None else None
+            meta = {column: row[column] for column in fields.meta}
+
+            doc = self.to_doc(row)
+            if any(type(value) not in (str, int, float, bool, NoneType) for value in meta.values()):
+                raise ValueError(
+                    f"{self.name}: doc {doc.id}: meta columns must hold scalars: {meta}"
+                )
+            source = SourceRow(
+                split=self.dataset.split,
+                index=index,
+                doc_hash=doc_hash,
+                native_id=native_id if native_id != doc.id else None,
+                subject=subject,
+                meta=meta,
+            )
+            docs.append(dataclasses.replace(doc, source=source))
 
         return docs, self._load_shots()
 
@@ -426,13 +541,14 @@ class MultipleChoiceTask:
 
     def requests(self, docs: Sequence[MCDoc], shots: Sequence[MCDoc]) -> MCRequests:
         """Builds every request needed to score `docs`, with a hash of exactly what is scored."""
-        conditional = []
+        conditional, shown = [], []
         for doc in docs:
             # `description`, then each example followed by a blank line.
             examples = self._shots_for(doc, shots)
-            head = self.description + "".join(f"{shot.example_text}\n\n" for shot in examples)
+            head = self.description + "".join(f"{shots[i].example_text}\n\n" for i in examples)
             for choice in doc.choices:
                 conditional.append(Request(head + choice.context, choice.continuation))
+            shown.append(tuple(examples))
 
         unconditional = []
         if self.unconditional_context is not None:
@@ -448,38 +564,43 @@ class MultipleChoiceTask:
             requests=requests,
             hash=self._hash(docs, requests),
             has_uncond=self.unconditional_context is not None,
+            description=self.description,
+            shots=tuple(shots),
+            shown=tuple(shown),
         )
 
-    def _shots_for(self, doc: MCDoc, shots: Sequence[MCDoc]) -> Sequence[MCDoc]:
+    def _shots_for(self, doc: MCDoc, shots: Sequence[MCDoc]) -> list[int]:
         """
-        Returns the examples `doc` is shown: those that aren't `doc` itself, and with `num_shots` only the first that many.
+        Returns the indices in `shots` of the examples `doc` is shown: those that aren't `doc` itself, and with `num_shots` only the first that many.
 
         An example from another split is `doc` itself if it shows the text `doc` would show as an example. lm-evaluation-harness drops an example only if its whole dataset row equals the doc's (`lm_eval/api/samplers.py`, v0.4.3), which misses a repeat with its choices reordered. An example from the scored split is `doc` itself only with `num_shots`, if it has the doc's id: OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
         """
+        shown = list(range(len(shots)))
         if self.fewshot is None:
-            return shots
+            return shown
 
         # A dataset may repeat a doc's question and answer in another split, possibly with the
         # choices reordered, which would show the doc its own answer. Ids aren't compared there:
         # they are unique within a split only.
         if self.fewshot.split is not None and self.fewshot.split != self.dataset.split:
             own = doc.example_text
-            shots = [shot for shot in shots if shot.example_text != own]
+            shown = [i for i in shown if shots[i].example_text != own]
         # Examples from the scored split are dropped only by `num_shots`: OLMES shows a curated
         # example even to its own doc. A split's first rows are already cut to `num_shots`.
         if self.fewshot.ids and self.fewshot.num_shots is not None:
-            shots = [shot for shot in shots if shot.id != doc.id][: self.fewshot.num_shots]
+            shown = [i for i in shown if shots[i].id != doc.id][: self.fewshot.num_shots]
 
-        return shots
+        return shown
 
     def _hash(self, docs: Sequence[MCDoc], requests: Sequence[Request]) -> str:
         """Returns the sha256 of the definition's data fields, every request and every gold index."""
         # `to_doc` and `keep` are functions and can't be serialized. What they produce is still
         # covered: every request and gold index below comes from the docs they make and keep.
+        # What a prediction row copies changes no request, and leaving it out keeps the hashes.
         fields = {
             field.name: getattr(self, field.name)
             for field in dataclasses.fields(self)
-            if field.name not in ("to_doc", "keep")
+            if field.name not in ("to_doc", "keep", "row_fields")
         }
         # Who may read the rows changes no request, and leaving it out keeps the hashes of tasks
         # defined before the field existed.

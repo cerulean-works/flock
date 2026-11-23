@@ -232,9 +232,9 @@ def write_run(
     folder: Path,
     tasks: dict[str, tuple[str, list[bool] | None]],
     provenance: Provenance = PROVENANCE,
-    schema: int = 10,
+    schema: int = 11,
 ) -> str:
-    """Writes a run whose tasks are read by `acc_raw`, each as `name: (task_hash, outcomes)`, with docs `d-0`, `d-1`, ..., and returns its folder. Outcomes of `None` write no predictions file."""
+    """Writes a run whose tasks are read by `acc_raw`, each as `name: (task_hash, outcomes)`, with docs `d-0`, `d-1`, ... of two choices, gold first, and returns its folder. Outcomes of `None` write no predictions file. From schema 11 the rows hold text and a pick, and the file a header."""
     results = []
     for name, (task_hash, outcomes) in tasks.items():
         right = sum(outcomes) / len(outcomes) if outcomes else 0.0
@@ -249,11 +249,24 @@ def write_run(
     for name, (_, outcomes) in tasks.items():
         if outcomes is None:
             continue
-        rows = []
+        rows: list[dict[str, Any]] = []
+        if schema >= 11:
+            rows.append({"prompt": {"description": "", "shots": []}})
         for i, right in enumerate(outcomes):
             row: dict[str, Any] = {"id": f"d-{i}", "gold": 0}
             if schema >= 9:
                 row["correct"] = right
+            if schema >= 11:
+                # A right doc puts gold first.
+                row |= {
+                    "pick": 0 if right else 1,
+                    "question": f"Question: {name} {i}?\nAnswer:",
+                    "choices": [" yes", " no"],
+                    "logprob": [-1.0, -2.0] if right else [-2.0, -1.0],
+                    "num_tokens": [1, 1],
+                    "num_chars": [4, 3],
+                    "num_bytes": [4, 3],
+                }
             rows.append(row)
         text = "".join(json.dumps(row) + "\n" for row in rows)
         (folder / "predictions" / f"{name}.jsonl").write_text(text)

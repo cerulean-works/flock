@@ -11,6 +11,8 @@ from flock.eval.tasks.base import (
     MCDoc,
     MCRequests,
     MultipleChoiceTask,
+    RowFields,
+    SourceRow,
     Truncation,
     cloze,
 )
@@ -32,6 +34,8 @@ __all__ = [
     "MCRequests",
     "MultipleChoiceTask",
     "PerplexityTask",
+    "RowFields",
+    "SourceRow",
     "Suite",
     "Task",
     "TextDoc",

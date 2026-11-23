@@ -135,7 +135,7 @@ def test_a_project_models_run_reads_back_with_its_scope(tmp_path: Path) -> None:
         model_path="sweeps/lr-3e-4",
     )
     written = read_results(write_run(tmp_path / "a", {"t": ("h", [True])}, provenance=scoped))
-    assert written.schema_version == 10
+    assert written.schema_version == 11
     assert written.provenance == scoped
 
 
@@ -265,7 +265,7 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
         read_results(str(tmp_path))
 
     a = write_run(tmp_path / "a", {"t": ("h", [True])}, schema=7)
-    with pytest.raises(ValueError, match="schema 7; only 8 to 10 are read"):
+    with pytest.raises(ValueError, match="schema 7; only 8 to 12 are read"):
         read_results(a)
 
     (tmp_path / "b").mkdir()
@@ -379,9 +379,12 @@ def test_an_unreachable_tracker_exits_2(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert "refused: Couldn't reach" in refused.output
 
 
-def test_the_reader_and_the_diff_import_no_torch() -> None:
+def test_the_reader_the_diff_and_the_items_import_no_torch() -> None:
     # The Flock app runs the diff, and its image has no torch (the app's stage 025, D186).
-    code = "import sys, flock.eval.diff; print(sorted(sys.modules.keys() & set(sys.argv[1:])))"
+    code = (
+        "import sys, flock.eval.diff, flock.eval.items; "
+        "print(sorted(sys.modules.keys() & set(sys.argv[1:])))"
+    )
     heavy = ["torch", "transformers", "datasets", "tokenizers", "wandb", "lance"]
     found = subprocess.run(
         [sys.executable, "-c", code, *heavy], capture_output=True, text=True, check=True
