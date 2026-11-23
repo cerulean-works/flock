@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import orjson
+import pyarrow as pa
+import pyarrow.parquet as pq
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -41,7 +43,7 @@ from app.api.src.core.evals import PairFiles, token_texts
 from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
 from flock.eval.diff import check_instrument, diff
 from flock.eval.items import CELLS, RANKED, Item, items
-from flock.eval.results import WrittenResults
+from flock.eval.results import WrittenResults, tokens_name
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
 # Item comparisons (025, D185) run here, never in the default executor: each waits on file reads
@@ -998,27 +1000,43 @@ async def run_item_tokens(
             # and aren't shown.
             # A sidecar is an uploaded file: one Parquet can't read leaves this run without
             # values, never the other run without its own.
+            # Its footer is read first: a file under the 64 MiB read limit can unpack to far more,
+            # so one past 256 MiB unpacked is refused before a row is decoded. The file is read
+            # once for both, named as `tokens` names it.
+            scoped = dataclasses.replace(written, read_bytes=cache(written.read_bytes))
+            name = tokens_name(task)
+            if any(t.task == task and t.dataset.private for t in written.tasks):
+                name = f"private/{name}" if written.source.startswith("run:") else name
             try:
-                rows = written.tokens(task, [doc]) or []
+                rows = []
+                data = scoped.read_bytes(name) if scoped.read_bytes else None
+                unpacked = 0
+                if data:
+                    footer = pq.read_metadata(pa.BufferReader(data))
+                    for i in range(footer.num_row_groups):
+                        unpacked += footer.row_group(i).total_byte_size
+                if unpacked <= 256 << 20:
+                    rows = scoped.tokens(task, [doc]) or []
             # (pyarrow's errors are these: `ArrowInvalid` a ValueError, `ArrowTypeError` a
             # TypeError, its I/O errors OSErrors.)
             except ValueError, TypeError, KeyError, OSError:
                 rows = []
-            by_choice = {r.get("choice"): r for r in rows if r.get("part") == "continuation"}
-            # A file that isn't the writer's (a choice or a column missing, arrays of other
-            # lengths or of other than numbers) counts as none.
+            # A file that isn't the writer's counts as none: a choice missing or twice, or not a
+            # whole number; a column missing; arrays of other lengths or of other than numbers.
+            continuation = [r for r in rows if r.get("part") == "continuation"]
+            by_choice = {r.get("choice"): r for r in continuation}
             fields = ("token_ids", "logprob", "rank", "entropy")
-            whole = True
+            whole = len(by_choice) == len(continuation) and all(type(k) is int for k in by_choice)
             for k in range(len(found.choices)):
                 row = by_choice.get(k, {})
                 lists = [row[f] for f in fields if isinstance(row.get(f), list)]
                 if len(lists) < len(fields) or len({len(a) for a in lists}) != 1:
                     whole = False
                     continue
-                # As the writer writes them: token ids and ranks whole numbers (ids from 0, ranks
-                # from 1), log-probabilities and entropies finite.
+                # As the writer writes them: token ids and ranks whole numbers (ids from 0 within
+                # its 32-bit column, ranks from 1), log-probabilities and entropies finite.
                 ids, logprobs, ranks, entropies = lists
-                if not all(type(v) is int and v >= 0 for v in ids):
+                if not all(type(v) is int and 0 <= v < 1 << 31 for v in ids):
                     whole = False
                 if not all(type(v) is int and v >= 1 for v in ranks):
                     whole = False

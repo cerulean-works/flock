@@ -6,7 +6,7 @@ import functools
 from dataclasses import dataclass
 
 import httpx
-from huggingface_hub import constants, hf_hub_url
+from huggingface_hub import HfApi, constants, hf_hub_url
 from huggingface_hub.utils import build_hf_headers
 from tokenizers import Tokenizer
 
@@ -55,9 +55,15 @@ class PairFiles:
 def _tokenizer(name: str, revision: str | None) -> Tokenizer:
     """The tokenizer ``name`` from the Hub at ``revision``, the last few kept once fetched: the API
     decodes one doc's tokens at a time, and a fetch costs a round trip. Fetched into memory, never
-    the disk, and refused past ``FILE_BYTES``: the name comes from an uploaded run."""
+    the disk, and refused past ``FILE_BYTES``: the name comes from an uploaded run.
+
+    Only a repo anyone can see is read: the server's own token, if it has one, then opens a gated
+    one such as Llama's, never a private one a viewer couldn't read."""
     if constants.HF_HUB_OFFLINE:
         raise ValueError("the Hub is offline here")
+    # Asked without a token: a private repo answers as if it didn't exist.
+    if HfApi().model_info(name, revision=revision, token=False).private:
+        raise ValueError(f"{name} isn't a public repo")
     url = hf_hub_url(name, "tokenizer.json", revision=revision)
     data = bytearray()
     with httpx.stream("GET", url, headers=build_hf_headers(), follow_redirects=True) as answer:

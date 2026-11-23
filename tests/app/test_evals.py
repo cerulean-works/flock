@@ -697,6 +697,19 @@ def test_a_sidecar_parquet_cant_read_costs_only_its_own_run(
     assert theirs == {"choices": None, "note": "run:flock/p/b has no per-token values for t"}
 
 
+def test_a_private_tokenizer_repo_is_never_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The name comes from an uploaded run: a repo the Hub lists as private is refused before any fetch, so the server's own token never opens one for a viewer (030)."""
+
+    class Hub:
+        def model_info(self, name: str, revision: str | None, token: bool) -> Any:
+            assert token is False  # asked without the server's token
+            return dataclasses.make_dataclass("Info", ["private"])(True)
+
+    monkeypatch.setattr(evals, "HfApi", Hub)
+    with pytest.raises(ValueError, match="secret/tok isn't a public repo"):
+        evals._tokenizer.__wrapped__("secret/tok", None)
+
+
 def test_a_choice_too_long_to_name_keeps_its_values_without_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
