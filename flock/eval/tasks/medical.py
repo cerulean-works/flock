@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, cloze
+from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, RowFields, cloze
 
 
 def medmcqa_doc(row: dict[str, Any]) -> MCDoc:
@@ -47,6 +47,9 @@ MEDMCQA = MultipleChoiceTask(
             "771ffafb-2b91-4beb-8839-1f0d49290cc3",
         ),
     ),
+    # The medical subject (21 over the validation rows), the exam a question comes from where
+    # given (`topic_name`, such as AIIMS 2019) and whether it has one answer or several.
+    row_fields=RowFields(subject="subject_name", meta=("topic_name", "choice_type")),
 )
 
 MEDQA_EN = MultipleChoiceTask(
@@ -65,4 +68,6 @@ MEDQA_EN = MultipleChoiceTask(
     fewshot=Fewshot(split="train", ids=("7220", "1914", "122", "1485", "9539")),
     # OLMES's `MedQAEn.unconditioned_prompt` is `None`, so it reports no PMI.
     unconditional_context=None,
+    # The USMLE step, `step1` or `step2&3`.
+    row_fields=RowFields(meta=("meta_info",)),
 )

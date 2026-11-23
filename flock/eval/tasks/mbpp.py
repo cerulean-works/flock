@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, Fewshot, GoldOnlyTask, MCDoc
+from flock.eval.tasks.base import Choice, Dataset, Fewshot, GoldOnlyTask, MCDoc, RowFields
 from flock.eval.tasks.suite import Suite
 
 LANGUAGES = (
@@ -81,6 +81,8 @@ MT_MBPP_TASKS = tuple(
         ),
         to_doc=mt_mbpp_doc,
         fewshot=_SHOTS,
+        # The programming language, as MMLU's rows name their subject.
+        row_fields=RowFields(subject="language"),
     )
     for language in LANGUAGES
 )

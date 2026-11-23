@@ -11,6 +11,7 @@ from flock.eval.tasks.base import (
     Fewshot,
     MCDoc,
     MultipleChoiceTask,
+    RowFields,
     cloze,
 )
 from flock.eval.tasks.suite import Suite
@@ -105,6 +106,7 @@ def exam_task(
     repo: str,
     revision: str,
     private: bool,
+    row_fields: RowFields,
     keep: Callable[[dict[str, Any]], bool] | None = None,
 ) -> MultipleChoiceTask:
     """
@@ -121,6 +123,8 @@ def exam_task(
             The repo's commit.
         private (`bool`):
             Whether the repo is private, as [`~eval.tasks.Dataset`] reads it.
+        row_fields (`RowFields`):
+            The task's `row_fields`: metadata columns only, never the item's text.
         keep (`Callable[[dict[str, Any]], bool]`, *optional*):
             The task's `keep`. Every row if not set.
     """
@@ -146,6 +150,7 @@ def exam_task(
         description=description,
         unconditional_context=unconditional_context,
         keep=keep,
+        row_fields=row_fields,
     )
 
 
@@ -272,6 +277,26 @@ TW_MOCK_EXAMS_TASKS = tuple(
         revision="e62f9adf374da2e0fcd0095428f6339da980f020",
         private=True,
         keep=scored,
+        # The paper (`source`) and passage group a question is in, its number and section, then
+        # the paper's exam, organizer, year (ROC calendar), contents and rights, and two flags
+        # `scored` keeps both values of. The other flags and `type` are constant on scored rows;
+        # `group_title` can hold a group's instructions, which are item text.
+        row_fields=RowFields(
+            subject="doc_subject",
+            meta=(
+                "source",
+                "group_id",
+                "number",
+                "section",
+                "doc_exam",
+                "doc_organizer",
+                "doc_roc_year",
+                "doc_content",
+                "rights",
+                "reading_comprehension",
+                "ocr_uncertain",
+            ),
+        ),
     )
     for subject in SUBJECTS
 )

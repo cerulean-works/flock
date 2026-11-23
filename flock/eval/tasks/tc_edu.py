@@ -1,5 +1,6 @@
 """Taiwanese junior-high and senior-high questions from publishers' question banks (tc-edu): nine subjects of single-answer questions in the mock exams' format, one task each, read from a private dataset."""
 
+from flock.eval.tasks.base import RowFields
 from flock.eval.tasks.suite import Suite
 from flock.eval.tasks.tw_mock_exams import Subject, exam_task
 
@@ -116,6 +117,21 @@ TC_EDU_TASKS = tuple(
         repo="cerulean-works/tc-edu-exams",
         revision="66c8db07fa379e9ee88af646debd3d22aed6a49e",
         private=True,
+        # The question bank's own id (`uid`; the doc's id is the row's `hash`), its record and
+        # number, then where it comes from and how it was extracted and checked.
+        row_fields=RowFields(
+            native_id="uid",
+            meta=(
+                "record_id",
+                "number",
+                "publisher",
+                "school_year_semester",
+                "source_dataset",
+                "extraction_method",
+                "rights",
+                "check",
+            ),
+        ),
     )
     for subject in SUBJECTS
 )

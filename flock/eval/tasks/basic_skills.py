@@ -3,7 +3,7 @@
 import random
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask
+from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask, RowFields
 from flock.eval.tasks.suite import Suite
 
 
@@ -54,6 +54,9 @@ BASIC_SKILLS_TASKS = tuple(
         # one token per continuation, so parity compares our `acc_raw` (stage file 003, D22).
         primary_metric="acc_per_token",
         fewshot=Fewshot(split="validation", ids=ids, num_shots=5),
+        # The skill, and its level or kind within it (`basic`, `advanced` or `complex` for
+        # arithmetic).
+        row_fields=RowFields(subject="domain", meta=("sub_domain",)),
     )
     for skill, ids in SHOT_IDS.items()
 )

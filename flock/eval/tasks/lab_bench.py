@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, cloze
+from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, RowFields, cloze
 
 
 def lab_bench_doc(row: dict[str, Any]) -> MCDoc:
@@ -31,6 +31,8 @@ def _lab_bench_task(subset: str, shot_ids: tuple[str, ...]) -> MultipleChoiceTas
         # scores, and never drops the doc itself (`fewshot_examples`). So these 3 docs see their
         # own answer, kept for parity (stage file 003, D17). Drawn once with OLMES's code.
         fewshot=Fewshot(split="train", ids=shot_ids),
+        # The kind of question within the subset, such as `gene_location_task-v1-public`.
+        row_fields=RowFields(subject="subtask"),
     )
 
 

@@ -1,7 +1,7 @@
 """CommonsenseQA (Talmor et al. 2019, 1811.00937): questions over ConceptNet relations."""
 
 from flock.eval.tasks.arc import arc_doc
-from flock.eval.tasks.base import Dataset, Fewshot, MultipleChoiceTask
+from flock.eval.tasks.base import Dataset, Fewshot, MultipleChoiceTask, RowFields
 
 CSQA = MultipleChoiceTask(
     name="csqa",
@@ -28,4 +28,6 @@ CSQA = MultipleChoiceTask(
             "6dc921840aa1e5dda3333b79007f630b",
         ),
     ),
+    # The ConceptNet concept the question was written about (785 over the validation rows).
+    row_fields=RowFields(meta=("question_concept",)),
 )

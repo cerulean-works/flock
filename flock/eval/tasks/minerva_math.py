@@ -43,8 +43,9 @@ MINERVA_MATH_TASKS = tuple(
         ),
         to_doc=minerva_doc,
         fewshot=Fewshot(rows=MINERVA_MATH_SHOTS),
-        # The problem's difficulty, "Level 1" to "Level 5", for slicing by it.
-        row_fields=RowFields(meta=("level",)),
+        # The subject as the dataset names it, and the problem's difficulty, "Level 1" to
+        # "Level 5", for slicing by it.
+        row_fields=RowFields(subject="type", meta=("level",)),
     )
     for subject in SUBJECTS
 )

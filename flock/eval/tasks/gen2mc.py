@@ -4,7 +4,15 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask, cloze
+from flock.eval.tasks.base import (
+    Choice,
+    Dataset,
+    Fewshot,
+    MCDoc,
+    MultipleChoiceTask,
+    RowFields,
+    cloze,
+)
 from flock.eval.tasks.shots.gen2mc import DROP_SHOTS, JEOPARDY_SHOTS, NATURALQS_SHOTS, SQUAD_SHOTS
 
 # Every gen2mc row names its gold choice by letter. OLMES looks the key up in its own list rather
@@ -86,6 +94,7 @@ def _gen2mc_task(
     revision: str,
     to_doc: Callable[[dict[str, Any]], MCDoc],
     fewshot: Fewshot | None,
+    row_fields: RowFields,
 ) -> MultipleChoiceTask:
     """OLMES's `<name>:rc::gen2mc:xlarge`, scored by accuracy per character on the one split its dataset has."""
     return MultipleChoiceTask(
@@ -99,6 +108,7 @@ def _gen2mc_task(
         to_doc=to_doc,
         primary_metric="acc_per_char",
         fewshot=fewshot,
+        row_fields=row_fields,
     )
 
 
@@ -110,6 +120,7 @@ COQA = _gen2mc_task(
     coqa_doc,
     # Zero-shot in OLMES: each prompt already holds a long story.
     None,
+    RowFields(),
 )
 DROP = _gen2mc_task(
     "drop",
@@ -118,6 +129,7 @@ DROP = _gen2mc_task(
     "33191ccb7014f77bc6dc3f59792acd43f658eb06",
     drop_doc,
     Fewshot(rows=DROP_SHOTS),
+    RowFields(),
 )
 JEOPARDY = _gen2mc_task(
     "jeopardy",
@@ -126,6 +138,9 @@ JEOPARDY = _gen2mc_task(
     "0bbd389863e56b304b22b66106caf72566144aa8",
     jeopardy_doc,
     Fewshot(rows=JEOPARDY_SHOTS),
+    # The dataset's coarse category (5, such as `world_history`), not the show's category in
+    # the clue, which the prompt shows.
+    RowFields(subject="category_original"),
 )
 NATURALQS = _gen2mc_task(
     "naturalqs",
@@ -134,6 +149,7 @@ NATURALQS = _gen2mc_task(
     "a7e553744f28cb673bf25b734513c41e3f413840",
     naturalqs_doc,
     Fewshot(rows=NATURALQS_SHOTS),
+    RowFields(),
 )
 SQUAD = _gen2mc_task(
     "squad",
@@ -142,4 +158,6 @@ SQUAD = _gen2mc_task(
     "e80f601243d8ed28732c5073cea1092aa4b8bc09",
     squad_doc,
     Fewshot(rows=SQUAD_SHOTS),
+    # The Wikipedia article a question is about (48 over the validation rows).
+    RowFields(subject="title_original"),
 )
