@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
-import type { EvalItem, ItemSummary, ItemSuites, ItemsMap, ItemsPage } from '#lib/types.ts';
+import type { EvalItem, ItemSummary, ItemSuites, ItemsPage } from '#lib/types.ts';
 import EvalItems from './EvalItems.svelte';
 
 const ITEM: EvalItem = {
@@ -52,40 +52,32 @@ const rows = (items: ItemSummary[], total = items.length, offset = 0): ItemsPage
 	items
 });
 
-/** The pair's one suite, `core`, holding both tasks. */
-const SUITES: ItemSuites = { suites: [{ suite: 'core', tasks: ['piqa', 'arc_easy'] }] };
-
-/** `core`'s square: piqa's 25 docs only B got right, `p-0` to `p-24`, none in the other cells. */
-const MAP: ItemsMap = {
-	suite: 'core',
-	tasks: [
+/** The pair's one suite square, `core`, holding both tasks: piqa's three docs only B got right. */
+const SUITES: ItemSuites = {
+	suites: [
 		{
-			task: 'piqa',
-			cells: [
-				{ keep: 'only_a', ids: [], margins: [] },
-				{
-					keep: 'only_b',
-					ids: Array.from({ length: 25 }, (_, i) => `p-${i}`),
-					margins: Array.from({ length: 25 }, (_, i) => [-0.5, 1 - i / 25])
-				},
-				{ keep: 'both_wrong', ids: [], margins: [] },
-				{ keep: 'both_right', ids: [], margins: [] }
+			suite: 'core',
+			tasks: ['piqa', 'arc_easy'],
+			counts: { only_a: 0, only_b: 3, both_wrong: 0, both_right: 0 },
+			dots: [
+				[-0.5, 0.5, 1],
+				[-0.2, 0.4, 1],
+				[-0.1, 0.9, 1]
 			]
 		}
 	]
 };
 
 /**
- * The dashboard's answers: `list` (or `list(offset)`) for a page of rows, SUITES and MAP for the squares (with
+ * The dashboard's answers: `list` (or `list(offset)`) for a page of rows, SUITES for the squares (with
  * `status`, as the list), and ITEM, or a doc of that id, for a doc. The URLs asked for are in its
  * calls.
  */
 function answer(status: number, list: unknown | ((offset: number) => unknown)) {
 	const fetch = vi.fn(async (input: string) => {
 		const url = new URL(input, 'https://flock.test');
-		if (url.pathname.endsWith('/items/suites') || url.pathname.endsWith('/items/map')) {
-			const squares = url.pathname.endsWith('/items/map') ? MAP : SUITES;
-			const body = status === 200 ? squares : list;
+		if (url.pathname.endsWith('/items/suites')) {
+			const body = status === 200 ? SUITES : list;
 			return new Response(JSON.stringify(body), { status });
 		}
 		if (url.pathname.endsWith('/item')) {
@@ -290,58 +282,31 @@ describe('eval items', () => {
 			.toHaveTextContent('4');
 	});
 
-	it('draws a square per suite and opens a clicked dot’s doc in its task, at its page', async () => {
-		// The second page of piqa's only_b holds p-20 to p-24.
-		const page = (offset: number) =>
-			rows(
-				MAP.tasks[0].cells[1].ids.slice(offset, offset + 20).map((id) => ({ ...ROW, id })),
-				25,
-				offset
-			);
-		const fetch = answer(200, page);
+	it('draws a square per suite whose quadrants lift and pick the list’s cells', async () => {
+		const fetch = answer(200, rows([ROW], 21));
 		const onview = vi.fn();
 		render(EvalItems, { ...PAIR, onview });
 
-		const square = screen.getByRole('img', {
-			name: /^core: 25 docs, 0 only A got right, 25 only B/
-		});
+		const square = screen.getByRole('img', { name: /^core: Only A right 0, Only B right 3/ });
 		await expect.element(square).toBeVisible();
-		const urls = asked(fetch).filter((url) => url.pathname.includes('/items/'));
-		expect(urls.map((url) => url.pathname)).toEqual([
-			'/api/projects/acme/evals/runs/r1/items/suites',
-			'/api/projects/acme/evals/runs/r1/items/map'
-		]);
-		expect(Object.fromEntries(urls[1].searchParams)).toEqual({
-			suite: 'core',
-			with: 'acme/evals/r2'
-		});
+		const suites = asked(fetch).find((url) => url.pathname.endsWith('/items/suites'))!;
+		expect(suites.pathname).toBe('/api/projects/acme/evals/runs/r1/items/suites');
+		expect(Object.fromEntries(suites.searchParams)).toEqual({ with: 'acme/evals/r2' });
 
-		// p-21 sits at A's margin -0.5 across and B's 0.16 up, on axes reaching the 98th percentile
-		// of the suite's absolute margins, edge to edge of the square.
-		const sizes = MAP.tasks[0].cells[1].margins
-			.flat()
-			.map((m) => Math.abs(m!))
-			.sort((x, y) => x - y);
-		const scale = sizes[Math.floor((sizes.length - 1) * 0.98)];
+		// The top left quadrant is only B's: the pointer there lifts the list's button for it.
 		const side = square.element().getBoundingClientRect().width;
-		const place = (m: number) => (m / scale + 1) / 2;
-		await userEvent.click(square, {
-			position: { x: place(-0.5) * side, y: (1 - place(0.16)) * side }
-		});
-		// The list moves from arc_easy to the dot's task and cell, on its page, the doc open.
-		await expect
-			.element(screen.getByRole('button', { name: 'p-21', exact: true }))
-			.toHaveAttribute('aria-expanded', 'true');
-		await expect.element(screen.getByRole('button', { name: 'p-21', exact: true })).toHaveFocus();
+		const onlyB = screen.getByRole('radio', { name: /Only B right/ });
+		await userEvent.hover(square, { position: { x: side / 4, y: side / 4 } });
+		await expect.element(onlyB).toHaveClass('bg-muted');
+		await expect.element(screen.getByText('Only B right 3', { exact: true })).toBeVisible();
+
+		// A click there shows that cell of the task shown (the suite holds arc_easy), page 1.
+		await userEvent.click(square, { position: { x: side / 4, y: side / 4 } });
+		await vi.waitFor(() => expect(lists(fetch).at(-1)!.searchParams.get('keep')).toBe('only_b'));
 		const last = lists(fetch).at(-1)!.searchParams;
-		expect([last.get('task'), last.get('keep'), last.get('offset')]).toEqual([
-			'piqa',
-			'only_b',
-			'20'
-		]);
-		expect(docs(fetch).at(-1)!.searchParams.get('doc')).toBe('p-21');
+		expect([last.get('task'), last.get('offset')]).toEqual(['arc_easy', '0']);
 		expect(onview).toHaveBeenLastCalledWith(
-			expect.objectContaining({ task: 'piqa', keep: 'only_b', page: 2, item: 'p-21' })
+			expect.objectContaining({ task: 'arc_easy', keep: 'only_b', page: undefined })
 		);
 	});
 

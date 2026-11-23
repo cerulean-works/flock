@@ -369,71 +369,57 @@ def with_suites(
     return folder
 
 
-def test_the_squares_are_the_pairs_accuracy_suites_with_their_tasks(
-    api: Client, tmp_path: Path
-) -> None:
-    """A suite gets a square when both runs recorded it under one hash and it holds a task of its own; its tasks are every task under it, nested suites' too, both runs scored under one hash. A suite that only groups others, or holds no such task, gets none (029)."""
-    tasks = {"t": ("h", [True]), "u": ("h", [True]), "x": ("h", [True])}
-    suites = {"s": ["t", "sub"], "sub": ["u", "x"], "group": ["s"], "other": ["x"], "moved": ["t"]}
-    a = with_suites(write_run(tmp_path / "a", tasks), suites)
-    b_tasks = tasks | {"x": ("changed", [True])}
-    b = with_suites(write_run(tmp_path / "b", b_tasks), suites, {"moved": "another"})
-    log_run(api, "p", "a", a)
-    log_run(api, "p", "b", b)
-
-    found = api.get(f"{P}/p/runs/a/items/suites", **{"with": "flock/p/b"})
-    assert found.status == 200, found.body
-    # x was scored under another hash; `group` only groups; `moved` has another suite hash.
-    assert found.json() == {
-        "suites": [{"suite": "s", "tasks": ["t", "u"]}, {"suite": "sub", "tasks": ["u"]}]
-    }
-    assert api.get(f"{P}/p/runs/a/items/suites").status == 422
-
-
-def test_a_square_holds_every_doc_of_its_tasks_by_cell_in_the_lists_order(
+def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     flock: FlockServer, api: Client, tmp_path: Path
 ) -> None:
-    """A suite's map holds each of its tasks' docs for two runs, a cell at a time in eval's order, each cell's ids in the order the list shows them by default and each run's margin rounded to 4 decimals; a task the viewer can't read the predictions of (a private dataset's, outside the organization) is left out, and a suite that isn't listed is refused (029)."""
-    tasks_a = {"t": ("h", [True, False, False, True, True]), "exam": ("e", [True, False])}
-    tasks_b = {"t": ("h", [True, True, False, False, True]), "exam": ("e", [False, False])}
-    a = with_suites(write_run(tmp_path / "a", tasks_a), {"s": ["t", "exam"]})
-    b = with_suites(write_run(tmp_path / "b", tasks_b), {"s": ["t", "exam"]})
-    keep_private(a, "exam")
-    keep_private(b, "exam")
+    """A suite gets a square when both runs recorded it under one hash and it holds a task of its own; its tasks are every task under it, nested suites' too, both runs scored under one hash. A square counts its docs per cell and holds them as dots of both margins and their cell; a task the viewer can't read (a private dataset's, outside the organization) is left out (029)."""
+    a_tasks = {"t": ("h", [True, False, False, True, True]), "u": ("h", [True]), "x": ("h", [True])}
+    a_tasks["exam"] = ("e", [True, False])
+    b_tasks = a_tasks | {"t": ("h", [True, True, False, False, True]), "x": ("changed", [True])}
+    b_tasks["exam"] = ("e", [False, False])
+    suites = {"s": ["t", "sub"], "sub": ["u", "x", "exam"], "group": ["s"], "moved": ["t"]}
+    a = with_suites(write_run(tmp_path / "a", a_tasks), suites)
+    b = with_suites(write_run(tmp_path / "b", b_tasks), suites, {"moved": "another"})
+    for folder in (a, b):
+        keep_private(folder, "exam")
     log_run(api, "p", "a", a)
     log_run(api, "p", "b", b)
-    route = f"{P}/p/runs/a/items/map"
+    route = f"{P}/p/runs/a/items/suites"
 
-    found = api.get(route, suite="s", **{"with": "flock/p/b"})
+    found = api.get(route, **{"with": "flock/p/b"})
     assert found.status == 200, found.body
-    assert [t["task"] for t in found.json()["tasks"]] == ["t", "exam"]
-    for task in found.json()["tasks"]:
-        assert [c["keep"] for c in task["cells"]] == list(CELLS)
-        for cell in task["cells"]:
-            query: dict[str, Any] = {
-                "task": task["task"],
-                "keep": cell["keep"],
-                "with": "flock/p/b",
-            }
-            rows = api.get(f"{P}/p/runs/a/items", **query).json()["items"]
-            assert cell["ids"] == [r["id"] for r in rows], cell["keep"]
-            assert cell["margins"] == [[round(r["margin"], 4) for r in row["runs"]] for row in rows]
-    assert sum(len(c["ids"]) for c in found.json()["tasks"][0]["cells"]) == 5
+    # x was scored under another hash; `group` only groups; `moved` has another suite hash.
+    rows = {row["suite"]: row for row in found.json()["suites"]}
+    assert list(rows) == ["s", "sub"]
+    assert rows["s"]["tasks"] == ["t", "u", "exam"]
+    # t: A right on d-0, d-3, d-4; B on d-0, d-1, d-4. u: both right. exam: A right on d-0 only.
+    assert rows["s"]["counts"] == {"only_a": 2, "only_b": 1, "both_wrong": 2, "both_right": 3}
+    assert len(rows["s"]["dots"]) == 8
+    # Each dot is the list's margins for a doc of its cell, rounded to 3 decimals.
+    listed = api.get(f"{P}/p/runs/a/items", task="t", keep="only_b", **{"with": "flock/p/b"})
+    margins = [round(m["margin"], 3) for m in listed.json()["items"][0]["runs"]]
+    assert [*margins, 1] in rows["s"]["dots"]
 
-    # Refused: one run, a suite not listed, a run before schema 11.
-    assert api.get(route, suite="s").status == 422
-    unknown = api.get(route, suite="nope", **{"with": "flock/p/b"})
-    assert unknown.status == 409 and "nope" in unknown.json()["error"]
-    old = with_suites(write_run(tmp_path / "old", {"t": ("h", [True])}, schema=10), {"s": ["t"]})
-    log_run(api, "p", "old", old)
-    stale = api.get(f"{P}/p/runs/old/items/map", suite="s", **{"with": "flock/p/a"})
-    assert stale.status == 409 and "schema 10" in stale.json()["error"]
+    # The same pair again is the kept answer, byte for byte.
+    assert api.get(route, **{"with": "flock/p/b"}).body == found.body
+    assert api.get(route).status == 422
 
-    # On the public project, an outsider gets the public task's dots and not the exam's.
+    # On the public project, an outsider's squares leave the private exam out.
     assert api.patch(f"{P}/p", {"visibility": "public"}).status == 200
-    outside = flock.anonymous().get(route, suite="s", **{"with": "flock/p/b"})
+    outside = flock.anonymous().get(route, **{"with": "flock/p/b"})
     assert outside.status == 200, outside.body
-    assert [t["task"] for t in outside.json()["tasks"]] == ["t"]
+    counts = {row["suite"]: row["counts"] for row in outside.json()["suites"]}
+    assert counts["s"] == {"only_a": 1, "only_b": 1, "both_wrong": 1, "both_right": 3}
+
+
+def test_the_row_is_refused_as_the_list_is(api: Client, tmp_path: Path) -> None:
+    """A run before schema 11 has no items to draw: eval's refusal, as the list gives it (029)."""
+    new = with_suites(write_run(tmp_path / "new", {"t": ("h", [True])}), {"s": ["t"]})
+    old = with_suites(write_run(tmp_path / "old", {"t": ("h", [True])}, schema=10), {"s": ["t"]})
+    log_run(api, "p", "new", new)
+    log_run(api, "p", "old", old)
+    stale = api.get(f"{P}/p/runs/new/items/suites", **{"with": "flock/p/old"})
+    assert stale.status == 409 and "schema 10" in stale.json()["error"]
 
 
 def test_items_are_refused_as_eval_refuses_them(api: Client, tmp_path: Path) -> None:

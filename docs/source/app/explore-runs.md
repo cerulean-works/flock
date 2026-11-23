@@ -45,7 +45,7 @@ Tasks that can't be compared are listed below with the reason, such as another t
 
 ### Read the items[[read-eval-items]]
 
-With two runs, a map of every doc of the task sits above the table: one small mark per doc, grouped as the four groups are and in the table's order, A's margin on its top half and B's on the bottom, green above zero and red below. The color is full at the task's 90th percentile of absolute margins, shown in the legend. Hover a mark to see its doc and margins, and click it to open that doc in the table, on its page.
+With two runs, a scatter plot of every doc of the task sits above the table: each dot is a doc, at A's margin across and B's margin up. The zero lines split it into the four groups, each corner naming its group and count, and the dashed diagonal is where both runs were equally sure, so a dot far from it is a doc they disagree on. The docs only one run got right are blue. Both axes reach the task's 98th percentile of absolute margins, shown at their ends. Hover a dot to see its doc and margins, and click it to open that doc in the table, on its page.
 
 Each doc is one row: its id, the part of its question that varies (the lines every question of the list shares, such as `Answer:`, are left out), the gold choice, and for each run its pick with a check or a cross, and its margin. With two runs, the last column is the gap between their margins.
 
