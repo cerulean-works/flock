@@ -55,6 +55,8 @@ HELLASWAG = MultipleChoiceTask(
 
 `row_fields` changes no request, so it isn't in the task hash, and adding it to a task keeps the task's past results comparable.
 
+The built-in tasks name the columns their datasets hold: a dataset's own id where the doc's `id` is a row position or a hash, a subject or category column, and plain values worth slicing by, such as MATH's level or MedMCQA's exam. Text passages, lists and objects stay out, and a private exam set names only its metadata, never the item's text. A benchmark whose subject is its dataset configuration, such as TMMLU+, has no subject column: its task name and suite give the subject and category.
+
 ## The task hash
 
 Each result records the task's [hash](results#the-task-hash), so results from before and after a change to the task never share one.
