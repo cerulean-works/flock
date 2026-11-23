@@ -998,7 +998,7 @@ async def run_item_tokens(
             # and aren't shown.
             rows = written.tokens(task, [doc]) or []
             by_choice = {r["choice"]: r for r in rows if r["part"] == "continuation"}
-            if len(by_choice) < len(found.choices):
+            if any(k not in by_choice for k in range(len(found.choices))):
                 note = f"{written.source} has no per-token values for {task}"
                 answers.append({"choices": None, "note": note})
                 continue

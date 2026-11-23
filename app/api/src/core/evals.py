@@ -48,10 +48,10 @@ class PairFiles:
         return data
 
 
-@functools.cache
+@functools.lru_cache(maxsize=8)
 def _tokenizer(name: str, revision: str | None) -> Tokenizer:
-    """The tokenizer ``name`` from the Hub at ``revision``, kept once fetched: the API decodes one
-    doc's tokens at a time, and a fetch costs a round trip."""
+    """The tokenizer ``name`` from the Hub at ``revision``, the last few kept once fetched: the API
+    decodes one doc's tokens at a time, and a fetch costs a round trip."""
     return Tokenizer.from_file(hf_hub_download(name, "tokenizer.json", revision=revision))
 
 

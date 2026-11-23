@@ -32,7 +32,13 @@
 		if (heat === 'surprisal') return ['--primary', Math.min(-mine.logprob[i] / 8, 1)];
 		if (heat === 'rank') return ['--primary', Math.min(Math.log2(mine.rank[i]) / 10, 1)];
 		if (heat === 'entropy') return ['--primary', Math.min(mine.entropy[i] / 6, 1)];
-		const same = mine.text && theirs?.text && mine.text.join('\0') === theirs.text.join('\0');
+		// Equal pieces are the same tokens only when none is empty: an empty piece ends inside a
+		// character, and two tokenizers can split that character at different bytes.
+		const same =
+			mine.text &&
+			theirs?.text &&
+			!mine.text.includes('') &&
+			mine.text.join('\0') === theirs.text.join('\0');
 		if (!same || !theirs) return ['--primary', 0];
 		const gap = mine.logprob[i] - theirs.logprob[i];
 		return [gap >= 0 ? '--state-finished' : '--destructive', Math.min(Math.abs(gap) / 3, 1)];
