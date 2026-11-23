@@ -820,6 +820,7 @@ def _accuracy_suites(a: WrittenResults, b: WrittenResults) -> dict[str, list[str
 # missing a task a run is still uploading isn't kept.
 SQUARES = ThreadPoolExecutor(max_workers=1, thread_name_prefix="squares")
 SQUARE_ANSWERS: OrderedDict[tuple[str, ...], bytes] = OrderedDict()
+SQUARES_RUNNING: dict[tuple[str, ...], asyncio.Future[tuple[bytes, bool]]] = {}
 
 
 @public.get("/projects/{entity}/{project}/runs/{run}/items/suites")
@@ -904,8 +905,15 @@ async def run_items_suites(
             rows.append({"suite": suite, "tasks": shown, "counts": counts, "dots": dots})
         return orjson.dumps({"suites": rows}), whole
 
+    # Two first visits to one pair share one computation, rather than both queueing for the
+    # worker; shielded, so one visitor leaving doesn't stop the other's.
+    running = SQUARES_RUNNING.get(key)
+    if running is None:
+        running = loop.run_in_executor(SQUARES, read)
+        SQUARES_RUNNING[key] = running
+        running.add_done_callback(lambda _: SQUARES_RUNNING.pop(key, None))
     try:
-        answer, whole = await loop.run_in_executor(SQUARES, read)
+        answer, whole = await asyncio.shield(running)
     except FileNotFoundError as exc:
         raise APIError(404, str(exc)) from exc
     except ValueError as exc:
