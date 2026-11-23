@@ -201,9 +201,7 @@ chunk. Short documents then leave most positions as padding. Pass `packing=True`
 several chunks in one row:
 
 ```python
-chunks = TokenChunkDataset(
-    cache_dir=".training-cache/documents", chunk_length=4096, packing=True
-)
+chunks = TokenChunkDataset(cache_dir=".training-cache/documents", chunk_length=4096, packing=True)
 ```
 
 When you open the cache, it groups the chunks into rows of `chunk_length - 1` positions
