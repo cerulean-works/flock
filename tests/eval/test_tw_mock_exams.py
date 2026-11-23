@@ -22,8 +22,19 @@ def row(id: str, stem: str, options: list[str], answer: str, **fields: Any) -> d
     """A dataset row as the private repo holds it, scored unless `fields` says otherwise."""
     return {
         "hash": id,
+        "source": "112/112-paper",
+        "group_id": f"112/112-paper#{id}",
+        "number": 1,
+        "section": "一、單選題",
+        "doc_exam": "學測模擬考",
+        "doc_organizer": "organizer",
+        "doc_roc_year": 112,
+        "doc_content": "試題",
         "doc_subject": "歷史",
         "rights": "school_exam",
+        "reading_comprehension": False,
+        "ocr_uncertain": False,
+        "group_title": "1-2 為題組",
         "type": "單選",
         "passage": "",
         "stem": stem,
@@ -75,6 +86,12 @@ def test_only_eligible_rows_are_scored_whatever_their_rights(history: MultipleCh
     assert [shot.id for shot in shots] == ["s1", "s2"]
     # The filter applies before the limit.
     assert [doc.id for doc in history.load(limit=3)[0]] == ["t1", "t2", "t3"]
+    # Rows copy the metadata columns, never the item's text or a group title.
+    assert docs[0].source is not None
+    assert docs[0].source.subject == "歷史"
+    assert docs[0].source.meta["rights"] == "publisher_copyright"
+    assert docs[0].source.meta["group_id"] == "112/112-paper#t1"
+    assert "group_title" not in docs[0].source.meta
 
 
 def test_an_answer_that_is_not_exactly_one_label_names_the_doc() -> None:
