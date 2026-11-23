@@ -92,7 +92,7 @@ describe('eval scores', () => {
 });
 
 describe('reading a results file', () => {
-	it('takes a whole file of schema 8 to 11, and any other schema for its note', () => {
+	it('takes a whole file of schema 8 to 12, and any other schema for its note', () => {
 		const file = results([['core', 1]], [['arc', 'acc_raw', 1]]);
 		expect(isEvalResults(file)).toBe(true);
 		const scoped = {
@@ -108,7 +108,7 @@ describe('reading a results file', () => {
 		};
 		expect(isEvalResults(scoped)).toBe(true);
 		expect(isEvalResults({ schema_version: 10 })).toBe(false);
-		expect(isEvalResults({ schema_version: 12 })).toBe(true);
+		expect(isEvalResults({ schema_version: 13 })).toBe(true);
 	});
 
 	it('refuses what the pages would crash on', () => {

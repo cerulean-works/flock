@@ -131,6 +131,7 @@ def test_one_runs_docs_are_kept_by_outcome_cut_and_sampled(tmp_path: Path) -> No
                 "share": pytest.approx([1 / (1 + math.exp(-1)), 1 / (1 + math.exp(1))]),
             }
         ],
+        "source": {},  # a schema 11 row says nothing of its source
     }
 
 

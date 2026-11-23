@@ -106,9 +106,10 @@ def exam_task(
     revision: str,
     private: bool,
     keep: Callable[[dict[str, Any]], bool] | None = None,
+    fewshot: Fewshot | None = None,
 ) -> MultipleChoiceTask:
     """
-    A subject's task in the mock exams' format: a header, the subject's 5 examples, then the test question. 英文 takes OLMES's MMLU header and PMI context, the others TMMLU+'s (009.D3).
+    A subject's task in the mock exams' format: a header, the examples (the subject's 5 by default), then the test question. 英文 takes OLMES's MMLU header and PMI context, the others TMMLU+'s (009.D3).
 
     Args:
         subject (`Subject`):
@@ -123,6 +124,8 @@ def exam_task(
             Whether the repo is private, as [`~eval.tasks.Dataset`] reads it.
         keep (`Callable[[dict[str, Any]], bool]`, *optional*):
             The task's `keep`. Every row if not set.
+        fewshot (`Fewshot`, *optional*):
+            The examples, such as a many-shot task's prefix of a long list. The subject's `shots` from `dev` if not set.
     """
     # The one place the format is chosen: the header, the prefixes and the PMI context together.
     if subject.chinese_name == "英文":
@@ -142,7 +145,7 @@ def exam_task(
         to_doc=to_doc,
         # As TMMLU+ and OLMES's MMLU.
         primary_metric="acc_per_char",
-        fewshot=Fewshot(split="dev", ids=subject.shots),
+        fewshot=fewshot or Fewshot(split="dev", ids=subject.shots),
         description=description,
         unconditional_context=unconditional_context,
         keep=keep,
