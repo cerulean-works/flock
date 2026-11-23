@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
-import type { EvalItem, ItemSummary, ItemsPage } from '#lib/types.ts';
+import type { EvalItem, ItemSummary, ItemsMap, ItemsPage } from '#lib/types.ts';
 import EvalItems from './EvalItems.svelte';
 
 const ITEM: EvalItem = {
@@ -52,13 +52,32 @@ const rows = (items: ItemSummary[], total = items.length, offset = 0): ItemsPage
 	items
 });
 
+/** The pair's map of arc_easy: 25 docs only A got right, `a-0` to `a-24`, none in the other cells. */
+const MAP: ItemsMap = {
+	cells: [
+		{
+			keep: 'only_a',
+			ids: Array.from({ length: 25 }, (_, i) => `a-${i}`),
+			margins: Array.from({ length: 25 }, (_, i) => [1 - i / 25, -0.5])
+		},
+		{ keep: 'only_b', ids: [], margins: [] },
+		{ keep: 'both_wrong', ids: [], margins: [] },
+		{ keep: 'both_right', ids: [], margins: [] }
+	]
+};
+
 /**
- * The dashboard's answers: `list` (or `list(offset)`) for a page of rows, and ITEM, or a doc of
- * that id, for a doc. The URLs asked for are in its calls.
+ * The dashboard's answers: `list` (or `list(offset)`) for a page of rows, MAP for the map (with
+ * `status`, as the list), and ITEM, or a doc of that id, for a doc. The URLs asked for are in its
+ * calls.
  */
 function answer(status: number, list: unknown | ((offset: number) => unknown)) {
 	const fetch = vi.fn(async (input: string) => {
 		const url = new URL(input, 'https://flock.test');
+		if (url.pathname.endsWith('/items/map')) {
+			const body = status === 200 ? MAP : list;
+			return new Response(JSON.stringify(body), { status });
+		}
 		if (url.pathname.endsWith('/item')) {
 			const id = url.searchParams.get('doc');
 			return new Response(JSON.stringify({ ...ITEM, id }), { status: 200 });
@@ -259,6 +278,44 @@ describe('eval items', () => {
 		await expect
 			.element(screen.getByRole('radio', { name: /Only B right/ }))
 			.toHaveTextContent('4');
+	});
+
+	it('maps every doc of the task and opens the one clicked at its page of the list', async () => {
+		// The second page of only_a holds a-20 to a-24.
+		const page = (offset: number) =>
+			rows(
+				MAP.cells[0].ids.slice(offset, offset + 20).map((id) => ({ ...ROW, id })),
+				25,
+				offset
+			);
+		const fetch = answer(200, page);
+		const onview = vi.fn();
+		render(EvalItems, { ...PAIR, onview });
+
+		const canvas = screen.getByRole('img', { name: 'Only A right: 25 docs' });
+		await expect.element(canvas).toBeVisible();
+		const map = asked(fetch).find((url) => url.pathname.endsWith('/items/map'))!;
+		expect(map.pathname).toBe('/api/projects/acme/evals/runs/r1/items/map');
+		expect(Object.fromEntries(map.searchParams)).toEqual({
+			task: 'arc_easy',
+			with: 'acme/evals/r2'
+		});
+		// The empty cells draw nothing.
+		expect(screen.getByRole('img').all()).toHaveLength(1);
+
+		// a-21 is the 22nd mark: 9 px apart for a task this small, two runs' halves to a row.
+		const perRow = canvas.element().getBoundingClientRect().width / 9;
+		const position = { x: (21 % perRow) * 9 + 4, y: Math.floor(21 / perRow) * 18 + 4 };
+		await userEvent.click(canvas, { position });
+		await expect
+			.element(screen.getByRole('button', { name: 'a-21', exact: true }))
+			.toHaveAttribute('aria-expanded', 'true');
+		await expect.element(screen.getByRole('button', { name: 'a-21', exact: true })).toHaveFocus();
+		expect(lists(fetch).at(-1)!.searchParams.get('offset')).toBe('20');
+		expect(docs(fetch).at(-1)!.searchParams.get('doc')).toBe('a-21');
+		expect(onview).toHaveBeenLastCalledWith(
+			expect.objectContaining({ keep: 'only_a', page: 2, item: 'a-21' })
+		);
 	});
 
 	it('names each run in a refusal, even when one run’s path starts the other’s', async () => {

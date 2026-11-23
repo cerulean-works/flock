@@ -810,6 +810,17 @@ export interface ItemsPage {
 	items: ItemSummary[];
 }
 
+/** Every doc of a task for two runs, a cell of their diff at a time (`GET …/runs/{run}/items/map`). */
+export interface ItemsMap {
+	/** Eval's cells in its order, each in the order the items list shows it by default. */
+	cells: {
+		keep: ItemKeep;
+		ids: string[];
+		/** Each doc's A and B margins (as `ItemRunSummary.margin`), rounded to 4 decimals. */
+		margins: (number | null)[][];
+	}[];
+}
+
 /** Where a link leaves the items list (028): each part only when it isn't the default. */
 export interface ItemsView {
 	task?: string;

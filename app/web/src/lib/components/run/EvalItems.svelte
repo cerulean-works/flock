@@ -9,10 +9,11 @@
 	import PageNumbers from '#lib/components/PageNumbers.svelte';
 	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
 	import ItemChoiceRow from './ItemChoiceRow.svelte';
+	import ItemsMap from './ItemsMap.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { typedIn } from '#lib/evals.ts';
-	import type { EvalItem, ItemKeep, ItemsPage, ItemsView } from '#lib/types.ts';
+	import type { EvalItem, ItemKeep, ItemsPage, ItemSummary, ItemsView } from '#lib/types.ts';
 	import { ITEM_W, readWidth, saveWidth } from '#lib/widths.ts';
 
 	/**
@@ -20,8 +21,9 @@
 	 * per run whether it was right (icon and word, not colour alone), its signed margin and its
 	 * pick. Flock lists the most telling rows first (D198). One row opens at a time, to the whole
 	 * question and every choice's share, probability and log-probability per run, fetched then
-	 * (028). j and k move through the docs, Enter opens, Esc closes. A caller that changes the runs
-	 * remounts it (`{#key}`).
+	 * (028). j and k move through the docs, Enter opens, Esc closes. With two runs, a map of every
+	 * doc of the task sits above the list, and a click on it opens that doc here (029). A caller
+	 * that changes the runs remounts it (`{#key}`).
 	 */
 	interface Props {
 		/** The run read, A when there are two. */
@@ -88,9 +90,13 @@
 	let open = $state<string | null>(untrack(() => view.item ?? null));
 	let detail = $state<EvalItem | null>(null);
 	let detailRefusal = $state<string | null>(null);
-	// Where j or k land once the page they turned to arrives, and whether they open it. Only that
-	// page's answer lands there: any other change of view drops it.
-	let landing: { page: string; end: 'first' | 'last'; open: boolean } | null = null;
+	// Where j, k or a click on the map land once the page they turned to arrives, and whether they
+	// open it. Only that page's answer lands there: any other change of view drops it.
+	let landing: {
+		page: string;
+		row: (rows: ItemSummary[]) => ItemSummary | undefined;
+		open: boolean;
+	} | null = null;
 	let root = $state<HTMLElement>();
 	// An item open on another page or before a re-sort doesn't fade this page's rows.
 	const opened = $derived(found?.items.some((item) => item.id === open) ?? false);
@@ -186,9 +192,10 @@
 					return;
 				}
 				found = page;
-				const to = landing && page.items[landing.end === 'first' ? 0 : page.items.length - 1];
+				const to = landing?.row(page.items);
 				if (!landing || !to) return;
-				// j or k turned the page: on to its first or last doc, opened if one was.
+				// j or k turned the page, on to its first or last doc, opened if one was; or the
+				// map did, on to the doc clicked.
 				if (landing.open) open = to.id;
 				landing = null;
 				tell();
@@ -233,6 +240,24 @@
 		tell();
 	}
 
+	// A mark of the map: its cell's list in the default order, at the page that holds the doc,
+	// with the doc open.
+	function openAt(cell: ItemKeep, index: number, id: string) {
+		const page = Math.floor(index / SIZE) + 1;
+		const shown = keep === cell && sort === 'margin' && at === page && found !== null;
+		open = id;
+		if (shown) {
+			tell();
+			return focus(id);
+		}
+		if (keep !== cell) total = null;
+		keep = cell;
+		sort = 'margin';
+		at = page;
+		landing = { page: query, row: (rows) => rows.find((r) => r.id === id), open: true };
+		tell();
+	}
+
 	// After the rows render: the doc's toggle takes the focus, which scrolls it into view.
 	function focus(id: string) {
 		void tick().then(() =>
@@ -261,7 +286,8 @@
 		} else if (step && at + step >= 1 && at + step <= pages) {
 			// Past the page's end: the next page's first doc, or the previous page's last.
 			at += step;
-			landing = { page: query, end: step > 0 ? 'first' : 'last', open: open !== null };
+			const end = (rows: ItemSummary[]) => rows[step > 0 ? 0 : rows.length - 1];
+			landing = { page: query, row: end, open: open !== null };
 			open = null;
 			tell();
 		} else {
@@ -390,6 +416,10 @@
 	</div>
 	{#if summary}
 		<p class="text-xs text-muted-foreground tabular-nums">{summary}</p>
+	{/if}
+
+	{#if other}
+		<ItemsMap {path} {task} {other} {keeps} onopen={openAt} />
 	{/if}
 
 	{#if refusal}
