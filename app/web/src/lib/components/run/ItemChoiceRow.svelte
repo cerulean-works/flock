@@ -5,7 +5,7 @@
 	/**
 	 * One choice of an opened eval item, a row in the items table's own columns (027): the choice
 	 * as scored, the gold mark, and each run's share bar and numbers for it, then its tokens as
-	 * that run cut them, tinted by `heat` (029).
+	 * that run cut them, tinted by `heat` (030).
 	 */
 	interface Props {
 		item: EvalItem;

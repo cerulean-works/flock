@@ -33,7 +33,7 @@ Results schema 12 writes, beside each task's predictions, a Parquet sidecar with
 
 The sidecar holds token ids, not text (text would double its size and, for a private task, its exposure). The API decodes the opened doc's ids itself.
 
-- **The tokenizer** is the one the results file names (`provenance.tokenizer`), its `tokenizer.json` fetched from the Hub with `huggingface_hub` at the model's revision when the tokenizer is the model's own repo, and kept for the server's life. `tokenizers` joins the API's dependencies; torch and transformers stay out.
+- **The tokenizer** is the one the results file names (`provenance.tokenizer`), its `tokenizer.json` fetched from the Hub with `huggingface_hub` at the model's revision when the tokenizer is the model's own repo. The last eight fetched are kept, so a fetch is paid once per tokenizer while a reader browses, and memory doesn't grow with every checkpoint opened. `tokenizers` joins the API's dependencies; torch and transformers stay out.
 - **A token's text is the difference between decoding its prefix and the one before**, so a byte-level token that ends inside a character (common in Chinese) has an empty piece and the character goes to the token that completes it.
 - **Checked by giving the choice back**: the pieces, joined and stripped, must equal the choice as scored. `provenance.tokenizer_hash` can't serve as the check: it hashes the tokenizer as transformers serializes it, which differs from the raw `tokenizer.json` for OLMo 2 and Qwen 3.5 (it matches for Llama 3.2 and Gemma 4). Giving the text back checks what the reader sees.
 - **A tokenizer that can't be fetched or doesn't give the choice back** (a local path such as TAIDE's SentencePiece model, a gated repo without a token, no network) leaves the values without text, with a `note` saying why; the tokens show as dots with their numbers.
@@ -42,7 +42,7 @@ The sidecar holds token ids, not text (text would double its size and, for a pri
 
 - **Surprisal** (minus the log-probability) by default, then **rank**, **entropy** and **A vs B**, one switch above the choices, kept from doc to doc.
 - One hue, the reading blue, for the first three, as strong as the value over a fixed scale: 8 nats of surprisal, rank 1,024 (log scale) and 6 nats of entropy are full. Fixed, not per doc, so two docs read alike; hovering a token gives its three numbers.
-- **A vs B** tints each token by its run's log-probability minus the other's, green where this run was surer and red where less, full at 3 nats, only where both runs cut the choice into the same tokens. Elsewhere tokens don't line up, so nothing is tinted.
+- **A vs B** tints each token by its run's log-probability minus the other's, green where this run was surer and red where less, full at 3 nats, only where both runs cut the choice into the same tokens and no token ends inside a character (an empty piece): two tokenizers can split one character at different bytes and still show equal pieces. Elsewhere tokens don't line up, so nothing is tinted.
 - Tokens show whitespace as cut, with a newline as ↵.
 
 ---
@@ -58,6 +58,7 @@ The sidecar holds token ids, not text (text would double its size and, for a pri
 - `token_texts` lives in `app/api/src/core/evals.py` beside `PairFiles`; the Hub fetch is a cached `_tokenizer`, so tests replace it with a stand-in that decodes bytes as a byte-level tokenizer does.
 - `ItemChoiceRow`, made its own component in 027 for this, shows each run's tokens in that run's column under its numbers. `tint` returns a colour token and a strength, drawn with `color-mix` as the list's margins are.
 - `EvalItems` fetches the tokens beside the doc; a failed fetch leaves the doc without tokens.
+- Review asked for three changes, made: a sidecar must hold every choice's index, not only as many rows (a stale file numbered from 1 gave a 500), the tokenizer cache is bounded (eight), and A vs B skips a choice with an empty piece. Decoding a prefix at a time stays: continuations are short, and decoding each token alone drops a SentencePiece decoder's spaces.
 
 ## 5. Known gaps
 

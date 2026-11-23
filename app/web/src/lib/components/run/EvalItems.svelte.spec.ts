@@ -68,7 +68,7 @@ const SUITES: ItemSuites = {
 	]
 };
 
-/** ITEM's tokens: A's with text, cut as B cut them; B's without a sidecar. */
+/** ITEM's tokens: A's with text, one token per choice; B has no sidecar. */
 const TOKENS: ItemTokens = {
 	runs: [
 		{

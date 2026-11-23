@@ -981,7 +981,7 @@ async def run_item_tokens(
         str | None, Query(alias="with", description="the other run, as entity/project/id")
     ] = None,
 ) -> Response:
-    """Each run's per-token values over each choice of one doc, from its sidecar (schema 12, ``predictions/<task>.tokens.parquet``): log-probability, rank and entropy per token, and each token's text from the run's tokenizer. What an opened row of ``.../items`` shows as heat (029).
+    """Each run's per-token values over each choice of one doc, from its sidecar (schema 12, ``predictions/<task>.tokens.parquet``): log-probability, rank and entropy per token, and each token's text from the run's tokenizer. What an opened row of ``.../items`` shows as heat (030).
 
     Per run, in order: ``choices`` (one entry per choice, its ``text`` pieces, ``logprob``, ``rank`` and ``entropy``) and ``note``. A run without values for the task (written before schema 12, or without them) has ``choices`` null and says why in ``note``; a run whose tokenizer can't be fetched, or doesn't give back the choices' text, has its values with ``text`` null, and ``note`` says why. Read and refused as ``.../item`` is."""
     loop = asyncio.get_running_loop()
@@ -994,7 +994,7 @@ async def run_item_tokens(
             return None
         answers: list[dict[str, Any]] = []
         for written in runs:
-            # Only each choice's continuation: context and greedy rows come by flags (044, 045)
+            # Only each choice's continuation: context and greedy rows come by flags (045.D3)
             # and aren't shown.
             rows = written.tokens(task, [doc]) or []
             by_choice = {r["choice"]: r for r in rows if r["part"] == "continuation"}
@@ -1004,8 +1004,8 @@ async def run_item_tokens(
                 continue
             values = [by_choice[k] for k in range(len(found.choices))]
 
-            # Schema 12 names the tokenizer; it is at the model's revision when it is the model's
-            # own repo.
+            # Schema 12 names the tokenizer (else the model's repo stands in); it is at the
+            # model's revision when it is the model's own repo.
             name, _, revision = written.provenance.model.partition("@")
             tokenizer = written.provenance.tokenizer or name
             note = None

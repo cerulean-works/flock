@@ -1,4 +1,5 @@
-"""Reading two eval runs' files for an item comparison (025, D185)."""
+"""Reading two eval runs' files for an item comparison (025, D185), and naming the tokens of
+their per-token values (030)."""
 
 import asyncio
 import functools
@@ -58,10 +59,13 @@ def _tokenizer(name: str, revision: str | None) -> Tokenizer:
 def token_texts(
     tokenizer: str, revision: str | None, ids: list[list[int]], choices: list[str]
 ) -> list[list[str]]:
-    """Each choice's continuation token ids as text, a piece per token, decoded with the run's tokenizer (``tokenizer.json`` from the Hub at ``revision``). A token that ends inside a character has an empty piece; the character goes to the token that completes it.
+    """Each choice's continuation token ids as text, a piece per token, decoded with the run's
+    tokenizer (``tokenizer.json`` from the Hub at ``revision``). A token that ends inside a
+    character has an empty piece; the character goes to the token that completes it.
 
     Raises:
-        ValueError: if the tokenizer can't be fetched, or its pieces don't give back each choice's text, so the ids weren't made by it."""
+        ValueError: if the tokenizer can't be fetched, or its pieces don't give back each
+            choice's text, so the ids weren't made by it."""
     try:
         decoder = _tokenizer(tokenizer, revision)
     # Whatever stops the fetch (a local path, a gated or missing repo, no network) leaves the
@@ -80,7 +84,8 @@ def token_texts(
                 continue
             pieces.append(now[len(done) :])
             done = now
-        # Leading space aside (SentencePiece drops it when decoding), the pieces are the choice.
+        # Whitespace at the ends aside (SentencePiece drops a leading space when decoding), the
+        # pieces are the choice.
         if "".join(pieces).strip() != choice.strip():
             raise ValueError(f"{tokenizer} doesn't give back the text of {choice.strip()!r}")
         texts.append(pieces)

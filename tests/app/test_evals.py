@@ -561,7 +561,7 @@ def with_tokens(folder: str, task: str, ids: dict[int, list[int]], private: bool
 def test_an_opened_doc_has_each_runs_token_values_named_by_its_tokenizer(
     flock: FlockServer, api: Client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A doc's tokens route answers each run's continuation values per choice from its sidecar, each token named by the run's tokenizer at the model's revision; a run without a sidecar, or whose tokenizer can't be fetched or doesn't give back the choice, says why; a private task's tokens reach members only (029)."""
+    """A doc's tokens route answers each run's continuation values per choice from its sidecar, each token named by the run's tokenizer at the model's revision; a run without a sidecar, or whose tokenizer can't be fetched or doesn't give back the choice, says why; a private task's tokens reach members only (030)."""
     fetched = []
 
     def tokenizer(name: str, revision: str | None) -> Bytes:
