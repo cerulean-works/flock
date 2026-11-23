@@ -2,6 +2,7 @@
 
 import dataclasses
 import hashlib
+import inspect
 import itertools
 import json
 import logging
@@ -575,6 +576,12 @@ class ScoringModel:
         return hashlib.sha256(data).hexdigest()
 
     @property
+    def decodes(self) -> bool:
+        """Whether [`score_contexts`] can write greedy tokens: only a transformers model whose forward takes `past_key_values`, the key-value cache decoding steps through. A [`FlockCausalLM`] keeps no cache, and a state-space model such as Mamba keeps its own `cache_params`."""
+        forward = inspect.signature(self.model.forward).parameters
+        return isinstance(self.model, PreTrainedModel) and "past_key_values" in forward
+
+    @property
     def sdpa_backend(self) -> str | None:
         """The SDPA kernel scoring is pinned to, `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, else `None`: the CPU has no such kernel, and other attention never calls SDPA."""
         if self.device.type == "cuda" and self.attention == "sdpa":
@@ -745,7 +752,7 @@ class ScoringModel:
 
         Decoding has no stop: end-of-sequence tokens are written like any other. A model whose `max_length` isn't above `num_tokens` writes `max_length - 1`. A context longer than `max_length` less the tokens written loses tokens from the left, as scoring cuts one, and its values cover what is left but its first token, which nothing predicts. Both run under scoring's kernel pin, longest first: the values in one pass that keeps every position's logits, in batches of `batch_tokens`, and decoding in a pass of its own, in batches of 8 times `batch_tokens`.
 
-        A [`FlockCausalLM`] keeps no key-value cache to decode with, and decoding without one would read each context `num_tokens` times over: it writes no greedy tokens, and keeps its contexts' whole room.
+        A model that keeps no key-value cache to decode with (see [`decodes`]) can't write greedy tokens: decoding without one would read each context `num_tokens` times over. It reads its contexts' values with `num_tokens` 0.
 
         Args:
             contexts (`Sequence[list[int]]`):
@@ -756,14 +763,16 @@ class ScoringModel:
                 Also return each context's per-token values.
 
         Raises:
-            `ValueError`: if `num_tokens` is below 0, or `max_length` is 1, which leaves no room for a context.
+            `ValueError`: if `num_tokens` is below 0, `max_length` is 1, which leaves no room for a context, or `num_tokens` is above 0 and the model doesn't decode.
         """
         if num_tokens < 0 or self.max_length < 2:
             raise ValueError(f"can't decode {num_tokens} tokens after up to {self.max_length}")
-        # A model without a key-value cache decodes nothing, so its contexts keep their room.
+        if num_tokens > 0 and not self.decodes:
+            raise ValueError(
+                f"{type(self.model).__name__} keeps no key-value cache to decode greedy tokens "
+                "with; ask for num_tokens 0"
+            )
         num_tokens = min(num_tokens, self.max_length - 1)
-        if not isinstance(self.model, PreTrainedModel):
-            num_tokens = 0
         if num_tokens == 0 and not values:
             return ContextScores(greedy=None, values=None)
 
@@ -1187,15 +1196,17 @@ def _target_logprobs(
 
         # Min-K%++'s mu and sigma are the mean and standard deviation of log p under p itself
         # (Zhang et al. 2024, arXiv 2404.02936, eq. 3); mu is minus the entropy. A token of
-        # probability 0 adds nothing, where `0 * -inf` would be NaN. A few positions at a time,
-        # so the copies these take stay bounded however long one row is.
+        # probability 0 adds nothing, where `0 * -inf` would be NaN. Only those are masked: a NaN
+        # logit makes its position's probabilities NaN, and its entropy stays NaN, not a certain
+        # 0. A few positions at a time, so the copies these take stay bounded however long one
+        # row is.
         for start_position in range(0, chunk.shape[1], chunk_positions):
             cut = slice(start_position, start_position + chunk_positions)
             logprobs = chunk[:, cut] - normalizer[:, cut, None]
             probs = logprobs.exp()
-            entropy = -torch.where(probs > 0, probs * logprobs, 0.0).sum(-1)
+            entropy = -torch.where(probs == 0, 0.0, probs * logprobs).sum(-1)
             deviation = (logprobs + entropy[..., None]).square()
-            spread = torch.where(probs > 0, probs * deviation, 0.0).sum(-1).sqrt()
+            spread = torch.where(probs == 0, 0.0, probs * deviation).sum(-1).sqrt()
             stats["entropy"][rows, cut] = entropy
             stats["logprob_std"][rows, cut] = spread
             stats["top1_logprob"][rows, cut] = chunk[:, cut].amax(-1) - normalizer[:, cut]

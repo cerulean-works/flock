@@ -82,7 +82,7 @@ class EvalConfig:
         context_tokens (`bool`, *optional*, defaults to `False`):
             Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. It needs `tokens`. They are read from each distinct context once, in a pass apart from scoring that keeps the logits of every position.
         greedy_tokens (`bool`, *optional*, defaults to `False`):
-            Also write the first 32 tokens greedy decoding writes after each distinct context, for first-divergence views. It needs `tokens`. Off by default: decoding 32 tokens one step at a time took a run about half as long again as scoring it.
+            Also write the first 32 tokens greedy decoding writes after each distinct context, for first-divergence views. It needs `tokens`, and a model that decodes with a key-value cache (see [`~eval.model.ScoringModel.decodes`]); any other fails before scoring. Off by default: decoding 32 tokens one step at a time took a run about half as long again as scoring it.
         perplexity_tokens (`bool`, *optional*, defaults to `False`):
             With `out`, write each perplexity task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each token's loss and where it ends in the text's bytes, but no token ids (see [Per-token values](results#per-token-values)).
 
@@ -370,7 +370,7 @@ def score_task(
             With `out`, write a perplexity task's per-token values, as [`EvalConfig`]'s `perplexity_tokens`.
 
     Raises:
-        `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
+        `ValueError`: if `limit` is less than 1, a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`], `context_tokens` or `greedy_tokens` is set without `tokens`, or `greedy_tokens` is set and the model doesn't decode (see [`~eval.model.ScoringModel.decodes`]).
         `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
     prepared = prepare_task(model, task, limit)
@@ -446,10 +446,21 @@ def score_prepared(
             With `out`, write a perplexity task's per-token values, as [`EvalConfig`]'s `perplexity_tokens`. Off by default.
 
     Raises:
-        `ValueError`: if `model`'s tokenizer isn't the one the task was prepared with, or a multiple-choice task was prepared with another `add_bos`.
+        `ValueError`: if `model`'s tokenizer isn't the one the task was prepared with, a multiple-choice task was prepared with another `add_bos`, `context_tokens` or `greedy_tokens` is set without `tokens`, or `greedy_tokens` is set and the model doesn't decode (see [`~eval.model.ScoringModel.decodes`]), before anything is scored.
         `FileExistsError`: if the predictions file or the per-token values already exist, before anything is scored.
     """
     task = prepared.task
+    # As `EvalConfig` refuses them, so a training loop can't run every step and find no values.
+    if (context_tokens or greedy_tokens) and not tokens:
+        raise ValueError(
+            "context_tokens and greedy_tokens write into the per-token values, so they need tokens"
+        )
+    # Decoding runs after scoring, so a model that can't decode fails here, before any GPU time.
+    if greedy_tokens and not model.decodes:
+        raise ValueError(
+            f"{type(model.model).__name__} keeps no key-value cache to decode with, so "
+            "greedy_tokens can't be written; run without it"
+        )
     # The token ids are this tokenizer's: another one would score other tokens without an error.
     # Identity, not equality: comparing two vocabularies at every step would cost more than the
     # tokenizing this skips.

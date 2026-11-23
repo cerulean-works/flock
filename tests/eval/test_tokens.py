@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 import torch
 from click.testing import CliRunner
+from transformers import MambaConfig, MambaForCausalLM
 
 from flock.eval import run
 from flock.eval.cli import main
@@ -172,7 +173,7 @@ def test_a_long_context_is_cut_from_the_left_to_leave_room_for_the_tokens_writte
     assert read.greedy is None and read.values is not None
 
 
-def test_a_flock_model_writes_no_greedy_tokens_but_reads_its_contexts(
+def test_a_flock_model_decodes_no_greedy_tokens_but_reads_its_contexts(
     tokenizer: PreTrainedTokenizerFast,
 ) -> None:
     torch.manual_seed(0)
@@ -187,7 +188,10 @@ def test_a_flock_model_writes_no_greedy_tokens_but_reads_its_contexts(
     )
     scorer = ScoringModel(FlockCausalLM(Olmo2(config).eval()), tokenizer, name="flock:acme/m@1")
     contexts = contexts_of(scorer)
-    read = scorer.score_contexts(contexts, values=True)
+    assert not scorer.decodes
+    with pytest.raises(ValueError, match="FlockCausalLM keeps no key-value cache"):
+        scorer.score_contexts(contexts, values=True)
+    read = scorer.score_contexts(contexts, num_tokens=0, values=True)
 
     assert read.greedy is None
     assert read.values is not None
@@ -387,6 +391,39 @@ def test_a_flock_model_keeps_its_contexts_whole_and_skips_a_pass_it_doesnt_need(
     )
     scorer = ScoringModel(FlockCausalLM(Olmo2(config).eval()), tokenizer, name="flock:a/m@1")
     context = list(range(3, 123))  # longer than max_length less 32
-    assert scorer.score_contexts([context]) == ContextScores(greedy=None, values=None)
-    read = scorer.score_contexts([context], values=True)
+    assert scorer.score_contexts([context], num_tokens=0) == ContextScores(greedy=None, values=None)
+    read = scorer.score_contexts([context], num_tokens=0, values=True)
     assert read.values is not None and read.values.lengths == (len(context) - 1,)
+
+
+@pytest.mark.parametrize("flag", ["context_tokens", "greedy_tokens"])
+def test_score_task_and_score_prepared_refuse_a_token_flag_without_tokens(
+    scorer: ScoringModel, tmp_path: Path, flag: str
+) -> None:
+    with pytest.raises(ValueError, match="they need tokens"):
+        score_task(scorer, TASK, out=tmp_path / "task", **{flag: True})
+    prepared = prepare_task(scorer, TASK)
+    with pytest.raises(ValueError, match="they need tokens"):
+        score_prepared(scorer, prepared, out=tmp_path / "prepared", **{flag: True})
+    # Refused before anything is scored or written.
+    assert not (tmp_path / "task").exists() and not (tmp_path / "prepared").exists()
+
+
+def test_a_model_without_a_key_value_cache_refuses_greedy_tokens_before_scoring(
+    scorer: ScoringModel,
+    tokenizer: PreTrainedTokenizerFast,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    torch.manual_seed(0)
+    config = MambaConfig(vocab_size=len(tokenizer), hidden_size=16, num_hidden_layers=1)
+    mamba = ScoringModel(MambaForCausalLM(config).eval(), tokenizer, name="m@0", max_length=64)
+    assert scorer.decodes and not mamba.decodes
+
+    def scored(*args: object, **kwargs: object) -> None:
+        raise AssertionError("scored a batch")
+
+    monkeypatch.setattr(mamba, "_logprobs", scored)
+    with pytest.raises(ValueError, match="MambaForCausalLM keeps no key-value cache"):
+        score_task(mamba, TASK, out=tmp_path, tokens=True, greedy_tokens=True)
+    assert not (tmp_path / "predictions").exists()
