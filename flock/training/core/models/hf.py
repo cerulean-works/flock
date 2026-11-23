@@ -276,18 +276,26 @@ class HFCompatibleModel(BaseModel):
 
         Raises:
             `ValueError`: If IDs are not rank two, length is outside the configured
-                range, or the attention mask shape differs from the IDs.
+                range, the attention mask shape differs from the IDs, or the batch is
+                packed.
         """
-        input_ids, attention_mask, position_ids = self._check_batch(batch)
-        return self._forward(input_ids, attention_mask, position_ids)
+        return super().forward(batch)
 
     def _forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
+        *,
+        cu_seq_lens: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Run the `transformers` model with a 2-D boolean mask and no cache."""
+        """Run the `transformers` model with a 2-D boolean mask and no cache.
+
+        Packed batches are refused: `transformers` would see only the mask and attend
+        across documents.
+        """
+        if cu_seq_lens is not None:
+            raise ValueError(f"{type(self).__name__} does not support packed batches")
         output = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
