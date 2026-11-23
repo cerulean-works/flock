@@ -779,7 +779,7 @@ async def run_items(
 
 
 def _accuracy_suites(a: WrittenResults, b: WrittenResults) -> dict[str, list[str]]:
-    """The suites both runs recorded under one hash that hold a task of their own, each with every task under it, nested suites' too, that both scored under one hash and that an accuracy ranking choices is the primary metric of: what the compare page draws a square for (029). A suite that only groups others gets none: its groups have theirs."""
+    """The suites both runs recorded under one hash, scored by their tasks' own metrics, that hold a task of their own, each with every task under it, nested suites' too, that both scored under one hash and that an accuracy ranking choices is the primary metric of: what the compare page draws a square for (029). A suite that only groups others gets none: its groups have theirs."""
     check_instrument(a, b)
     suites = {s.suite: s for s in a.suites}
     hashes_b = {s.suite: s.suite_hash for s in b.suites}
@@ -791,7 +791,8 @@ def _accuracy_suites(a: WrittenResults, b: WrittenResults) -> dict[str, list[str
             ranked.add(t.task)
     found = {}
     for suite in a.suites:
-        if hashes_b.get(suite.suite) != suite.suite_hash:
+        # A suite scored by a metric of its own (`mmlu:bpb`) isn't about its tasks' accuracy.
+        if hashes_b.get(suite.suite) != suite.suite_hash or suite.metric is not None:
             continue
         if all(member in suites for member in suite.members):
             continue
