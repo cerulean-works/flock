@@ -26,9 +26,11 @@
 	interface Props {
 		/** Scroll the table to a column (shown by then). */
 		onjump: (key: string) => void;
+		/** An icon button, hidden columns marked with a dot (a group's crowded toolbar). */
+		compact?: boolean;
 	}
 
-	let { onjump }: Props = $props();
+	let { onjump, compact = false }: Props = $props();
 
 	const ws = getWorkspace();
 
@@ -368,18 +370,32 @@
 >
 	<Dialog.Trigger>
 		{#snippet child({ props })}
-			<Button
-				{...props}
-				variant={hiddenCount ? 'secondary' : 'outline'}
-				title={hiddenCount
-					? `${hiddenCount} of ${total} columns hidden`
-					: 'Show, hide, reorder or jump to columns'}
-			>
-				<Columns3Icon /> Columns
-				{#if hiddenCount}
-					<span class="font-normal text-muted-foreground tabular-nums">{hiddenCount} hidden</span>
-				{/if}
-			</Button>
+			{#if compact}
+				<Button
+					{...props}
+					variant={hiddenCount ? 'secondary' : 'outline'}
+					size="icon"
+					aria-label={hiddenCount ? `Columns, ${hiddenCount} hidden` : 'Columns'}
+					title={hiddenCount
+						? `Columns: ${hiddenCount} of ${total} hidden`
+						: 'Columns: show, hide, reorder or jump to them'}
+				>
+					<Columns3Icon />
+				</Button>
+			{:else}
+				<Button
+					{...props}
+					variant={hiddenCount ? 'secondary' : 'outline'}
+					title={hiddenCount
+						? `${hiddenCount} of ${total} columns hidden`
+						: 'Show, hide, reorder or jump to columns'}
+				>
+					<Columns3Icon /> Columns
+					{#if hiddenCount}
+						<span class="font-normal text-muted-foreground tabular-nums">{hiddenCount} hidden</span>
+					{/if}
+				</Button>
+			{/if}
 		{/snippet}
 	</Dialog.Trigger>
 	<Dialog.Content class="flex max-h-[min(85vh,46rem)] flex-col gap-0 p-0 sm:max-w-lg">

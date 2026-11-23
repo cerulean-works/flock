@@ -26,7 +26,7 @@ For CI and other machines nobody signs in on, use a person's CLI token, from `fl
 [Public projects and datasets](../share-publicly) can be read with no credential at all. These endpoints answer a request without an `Authorization` header as an outsider, and so does a signed-in user who isn't a member:
 
 - `GET /orgs/{org}` and `GET /projects?entity={org}`
-- on a public project: `GET /projects/{entity}/{project}`, `GET .../owners`, `GET .../columns`, `GET .../runs`, `POST .../runs/query`, `GET .../history`, `POST .../history/query`, `GET .../runs/{run}`, `GET .../runs/{run}/history`, `GET .../runs/{run}/logs`, `GET .../runs/{run}/files`, `GET .../runs/{run}/files/{name}`, `GET .../workspace` and `GET .../stream`
+- on a public project: `GET /projects/{entity}/{project}`, `GET .../owners`, `GET .../columns`, `GET .../runs`, `POST .../runs/query`, `GET .../history`, `POST .../history/query`, `GET .../runs/{run}`, `GET .../runs/{run}/history`, `GET .../runs/{run}/logs`, `GET .../runs/{run}/files`, `GET .../runs/{run}/files/{name}`, `GET .../workspace`, `GET .../stream`, and the reads of [run groups](projects#groups): `GET .../groups`, `GET .../groups/compare`, `GET .../groups/suggestions`, `GET .../groups/{group}`, `POST .../groups/{group}/runs/query`, `GET .../groups/{group}/new` and `GET .../groups/{group}/columns`
 - on a public dataset: `GET /orgs/{org}/datasets/info`, `rows`, `cell`, `versions` and `readme`
 
 Private projects and datasets answer 404, as unknown ones do. A credential that's present but invalid or expired still answers 401, rather than the public view, so a client knows to sign in again. A wandb key still answers 401. No client wraps anonymous reads: `wandb.Api()` and the `flock` command still need credentials.
@@ -79,6 +79,12 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's I
 | `GET .../runs/{run}/logs` | A run's console output. | [Projects](projects#run-logs) |
 | `GET .../runs/{run}/files`, `GET .../runs/{run}/files/{name}` | A run's files. | [Projects](projects#run-files) |
 | `GET .../runs/{run}/models` | The model versions a run made and evaluated. | [Projects](projects#run-models) |
+| `GET .../groups`, `POST .../groups`, `PUT .../groups/settings` | A project's run groups, and its best by column. | [Projects](projects#groups) |
+| `GET .../groups/{group}`, `PATCH ...`, `DELETE ...` | One group, and its runs. | [Projects](projects#groups) |
+| `POST .../groups/{group}/runs/query`, `GET .../groups/{group}/new`, `GET .../groups/{group}/columns` | A group's runs, new matches and column kinds. | [Projects](projects#groups) |
+| `GET .../groups/compare` | Each group's best against a reference run. | [Projects](projects#groups-compare) |
+| `GET .../groups/suggestions`, `POST .../groups/suggestions/dismiss` | Suggested groups. | [Projects](projects#groups-suggestions) |
+| `POST .../groups/assist` | One turn of the group assistant. | [Projects](projects#group-assistant) |
 | `GET .../columns` | The run table's columns. | [Queries](queries#get-columns) |
 | `GET .../runs`, `POST .../runs/query` | Filter, sort and page the run table. | [Queries](queries#the-run-table) |
 | `GET .../history`, `POST .../history/query` | Curves of many runs. | [Queries](queries#curves) |

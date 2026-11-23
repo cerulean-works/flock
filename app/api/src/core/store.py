@@ -2005,9 +2005,11 @@ class Store:
                 )
             pks = [row[0] for row in rows]
             await values.shift(conn, pks, source.pk, target.pk)
+            # A group belongs to one project: moved runs leave the source's groups (D183).
             await conn.execute(
                 "WITH usage AS (UPDATE gpu_usage SET project_pk = $2 WHERE run_pk = ANY($1)),"
-                " moved AS (UPDATE run_values SET project_pk = $2 WHERE run_pk = ANY($1)) "
+                " moved AS (UPDATE run_values SET project_pk = $2 WHERE run_pk = ANY($1)),"
+                " ungrouped AS (DELETE FROM run_group_runs WHERE run_pk = ANY($1)) "
                 "UPDATE runs SET project_pk = $2 WHERE pk = ANY($1)",
                 pks,
                 target.pk,

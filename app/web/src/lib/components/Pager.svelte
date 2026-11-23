@@ -7,7 +7,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import type { RunQuery } from '#lib/types.ts';
-	import { applyRunQuery, PAGE_SIZES, workspaceHref } from '#lib/workspace/url.ts';
+	import { applyRunQuery, PAGE_SIZES } from '#lib/workspace/url.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 
 	const ws = getWorkspace();
@@ -18,7 +18,7 @@
 	function href(changes: Partial<RunQuery>) {
 		const params = new URLSearchParams(page.url.search);
 		applyRunQuery(params, { ...q, ...changes });
-		return workspaceHref(ws.meta.entity, ws.meta.project, params);
+		return ws.href(params);
 	}
 
 	/** A new page size keeps the first run shown on screen: its page at the new size. */

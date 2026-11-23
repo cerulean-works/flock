@@ -4,13 +4,16 @@ import {
 	type ColumnFolder,
 	NO_COLUMN_PREFS,
 	arrangeColumns,
+	columnDrops,
 	columnTree,
 	filterTree,
 	folderIds,
 	folderState,
 	leafKeys,
+	listDrops,
 	moveColumn,
 	moveGroup,
+	nearestGap,
 	parseColumnPrefs,
 	parseHidden
 } from './columns.ts';
@@ -268,5 +271,90 @@ describe('moveGroup', () => {
 	it('is null when nothing moves', () => {
 		expect(moveGroup(COLUMNS, [], 'info', 0)).toBeNull();
 		expect(moveGroup(COLUMNS, [], 'summary', 9)).toBeNull();
+	});
+});
+
+describe('columnDrops', () => {
+	const tree = columnTree(COLUMNS);
+	const keys = COLUMNS.map((c) => c.key);
+
+	it('offers the gaps between a column and its siblings, a subfolder as one', () => {
+		expect(columnDrops(tree, keys, 'config.model.depth')).toEqual({
+			parent: 'config/model',
+			from: 0,
+			gaps: new Map([
+				[4, 0],
+				[5, 0],
+				[6, 1],
+				[7, 2]
+			])
+		});
+		expect(columnDrops(tree, keys, 'config.lr')?.gaps).toEqual(
+			new Map([
+				[3, 0],
+				[4, 0],
+				[7, 1]
+			])
+		);
+	});
+
+	it('keeps columns behind the locked ones, which never move', () => {
+		expect(columnDrops(tree, keys, 'state')).toBeNull();
+		expect(columnDrops(tree, keys, 'name')).toBeNull();
+		expect(columnDrops(tree, keys, 'created_at')).toEqual({
+			parent: 'info',
+			from: 2,
+			gaps: new Map([
+				[2, 2],
+				[3, 2]
+			])
+		});
+	});
+
+	it('skips hidden siblings, landing where moveColumn puts it', () => {
+		const shown = keys.filter((k) => k !== 'config.model.width');
+		const drops = columnDrops(tree, shown, 'config.model.depth')!;
+		expect(drops.gaps).toEqual(
+			new Map([
+				[4, 0],
+				[5, 1],
+				[6, 2]
+			])
+		);
+		const order = moveColumn(COLUMNS, [], drops.parent, drops.from, drops.gaps.get(6)!)!;
+		expect(order.slice(4, 7)).toEqual([
+			'config.model.width',
+			'config.model.encoder.heads',
+			'config.model.depth'
+		]);
+	});
+
+	it('knows nothing of keys outside the tree', () => {
+		expect(columnDrops(tree, keys, 'config.nope')).toBeNull();
+	});
+});
+
+describe('listDrops', () => {
+	it('maps each gap to the index to move to', () => {
+		expect(listDrops(3, 1)).toEqual(
+			new Map([
+				[0, 0],
+				[1, 1],
+				[2, 1],
+				[3, 2]
+			])
+		);
+	});
+});
+
+describe('nearestGap', () => {
+	it('picks the gap closest to x', () => {
+		const gaps = new Map([
+			[2, 0],
+			[5, 1]
+		]);
+		expect(nearestGap(gaps, (g) => g * 100, 320)).toBe(2);
+		expect(nearestGap(gaps, (g) => g * 100, 380)).toBe(5);
+		expect(nearestGap(new Map(), (g) => g, 0)).toBeNull();
 	});
 });

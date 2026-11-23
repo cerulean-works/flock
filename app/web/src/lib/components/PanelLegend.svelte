@@ -3,7 +3,10 @@
 
 	interface Props {
 		view: PanelView;
-		/** Only when it names the panel's metrics (the full-screen panel lists runs beside it). */
+		/**
+		 * Only when it names the panel's metrics, or a group's colors (the full-screen panel lists
+		 * runs beside it).
+		 */
 		metricsOnly?: boolean;
 		class?: string;
 	}
@@ -23,7 +26,21 @@
 	const legend = $derived.by(() => {
 		const show = view.config.legend;
 		const metrics = ws.byMetric(view);
-		if (show === false || (metricsOnly && !metrics)) return null;
+		if (show === false) return null;
+		// A group's charts name what their colors mean (its groups, or its Color by values),
+		// when there are few enough to read; full screen too, beside its list of runs.
+		const styled = ws.style?.legend;
+		if (styled?.length && !metrics) {
+			const entries = styled.map((e) => ({ ...e, key: `style:${e.key}`, row: null }));
+			if (show !== true && entries.length > 8) return null;
+			return {
+				metrics: false,
+				inline: true,
+				entries: entries.slice(0, MAX),
+				more: entries.length - MAX
+			};
+		}
+		if (metricsOnly && !metrics) return null;
 		const entries = metrics
 			? view.metrics.map((m, k) => ({
 					key: `metric:${m}`,
@@ -41,23 +58,26 @@
 			? entries.length <= 8
 			: entries.length <= 5 && ws.page.runs.length > 1 && view.metrics.length === 1;
 		if (!entries.length || (show !== true && !auto)) return null;
-		return { metrics, entries: entries.slice(0, MAX), more: entries.length - MAX };
+		return { metrics, inline: false, entries: entries.slice(0, MAX), more: entries.length - MAX };
 	});
 </script>
 
 {#if legend}
-	<!-- Metrics wrap in columns (a GPU chart names eight); runs are listed. -->
+	<!-- Metrics wrap in columns (a GPU chart names eight); runs are listed; a group's colors
+	     run on in a line. -->
 	<ul
 		class={[
 			'pl-1.5 text-xs',
 			legend.metrics
 				? 'grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-x-3 gap-y-0.5'
-				: 'flex flex-col gap-0.5',
+				: legend.inline
+					? 'flex flex-wrap gap-x-3.5 gap-y-0.5 text-muted-foreground'
+					: 'flex flex-col gap-0.5',
 			className
 		]}
 	>
 		{#each legend.entries as entry (entry.key)}
-			{@const row = entry.row}
+			{@const row = entry.row as number | null}
 			<li
 				class={[
 					'flex min-w-0 items-center gap-2 transition-opacity',

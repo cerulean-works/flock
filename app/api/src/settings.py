@@ -96,6 +96,16 @@ class Settings:
         doc="processes converting a Hugging Face dataset at once, and files of a model "
         "uploaded at once, per import",
     )
+    openai_api_key: str | None = field(
+        default=None,
+        doc="OpenAI API key for the run groups assistant (Decisions API); the assistant is off "
+        "when unset",
+    )
+    openai_proposal_model: str = field(
+        default="gpt-6.2-sol",
+        doc="OpenAI model that proposes groups on the Auto tab of New group (Responses API); "
+        "needs the API key",
+    )
     crash_timeout: float = field(
         default=600.0, doc="seconds without heartbeats before a running run is marked crashed"
     )
