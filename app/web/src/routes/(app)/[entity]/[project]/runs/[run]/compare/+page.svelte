@@ -55,6 +55,18 @@
 		b: docs ? (bothRight + onlyB) / docs : NaN
 	});
 
+	// The lead's tint at full strength: the table's largest lead either way, as the items tint
+	// their margins by the page's largest.
+	const widestLead = $derived(
+		Math.max(
+			1e-9,
+			...(data.diff?.tasks ?? []).map((t) => {
+				const { a, b } = score(t.both_right, t.only_a.length, t.only_b.length, t.num_docs);
+				return Number.isFinite(a - b) ? Math.abs(a - b) : 0;
+			})
+		)
+	);
+
 	// Clicking a task in the counts table opens its items above: the link takes the task (the
 	// reader's group and order kept, or the first group with docs) and the list starts over there.
 	let picked = $state(0);
@@ -161,9 +173,20 @@
 	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(a)}</td>
 	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(b)}</td>
 	<td class="px-3 py-1.5 text-right tabular-nums">
-		{Number.isFinite(a - b)
-			? `${a > b ? '+' : a < b ? '−' : ''}${Math.abs(100 * (a - b)).toFixed(1)}`
-			: '–'}
+		{#if Number.isFinite(a - b)}
+			<!-- A tint per sign, as strong as the lead is wide in the table: the items' margins'. -->
+			<span
+				class="rounded px-1"
+				style:background-color="color-mix(in srgb, var({a >= b
+					? '--state-finished'
+					: '--destructive'}) {Math.round(
+					(35 * Math.min(Math.abs(a - b), widestLead)) / widestLead
+				)}%, transparent)"
+				>{a > b ? '+' : a < b ? '−' : ''}{Math.abs(100 * (a - b)).toFixed(1)}</span
+			>
+		{:else}
+			–
+		{/if}
 	</td>
 {/snippet}
 
