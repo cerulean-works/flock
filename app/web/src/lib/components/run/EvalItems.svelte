@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
 	import ArrowDownWideNarrowIcon from '@lucide/svelte/icons/arrow-down-wide-narrow';
+	import FlameIcon from '@lucide/svelte/icons/flame';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
@@ -115,6 +116,15 @@
 	// The open item's per-token values, and what its tokens are tinted by, kept from doc to doc.
 	let tokens = $state<ItemTokens | null>(null);
 	let heat = $state<TokenHeat>('surprisal');
+	// The heat shown and the one a click turns to; A against B needs two runs.
+	const tint = $derived.by(() => {
+		const offered = HEATS.filter((h) => other || h.heat !== 'versus');
+		const at = Math.max(
+			0,
+			offered.findIndex((h) => h.heat === heat)
+		);
+		return { now: offered[at], next: offered[(at + 1) % offered.length] };
+	});
 	// Where j, k or a square's dot land once the page they turned to arrives, and whether they open
 	// it. Only that page's answer lands there: any other change of view drops it.
 	let landing: {
@@ -445,26 +455,18 @@
 				</button>
 			{/each}
 		</div>
-		<!-- What an opened doc's tokens are tinted by, for every doc of the list. -->
-		<Select.Root type="single" value={heat} onValueChange={(v) => (heat = v as TokenHeat)}>
-			<Select.Trigger
-				size="sm"
-				class="ml-auto border-none text-muted-foreground shadow-none"
-				aria-label="Tokens tinted by"
-			>
-				Tokens: {HEATS.find((h) => h.heat === heat)?.label}
-			</Select.Trigger>
-			<Select.Content>
-				{#each HEATS.filter((h) => other || h.heat !== 'versus') as h (h.heat)}
-					<Select.Item value={h.heat} label={h.label}>
-						<span class="grid">
-							<span>{h.label}</span>
-							<span class="text-xs text-muted-foreground">{h.hint}</span>
-						</span>
-					</Select.Item>
-				{/each}
-			</Select.Content>
-		</Select.Root>
+		<!-- What an opened doc's tokens are tinted by, for every doc of the list: each click the
+		     next, as the order's button turns. -->
+		<Button
+			variant="ghost"
+			size="sm"
+			class="ml-auto text-muted-foreground"
+			title="Tokens: {tint.now.hint}. Click for {tint.next.label}."
+			onclick={() => (heat = tint.next.heat)}
+		>
+			<FlameIcon />
+			{tint.now.label}
+		</Button>
 		<Button
 			variant="ghost"
 			size="sm"

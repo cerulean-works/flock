@@ -228,17 +228,15 @@ describe('eval items', () => {
 		// 4 nats of 8: half of the full tint.
 		expect(venus.element().getAttribute('style')).toContain('var(--primary) 30%');
 
-		// The toolbar's menu picks the heat for every doc.
-		await screen.getByRole('combobox', { name: 'Tokens tinted by' }).click();
-		await screen.getByRole('option', { name: /^Entropy/ }).click();
-		await expect
-			.element(screen.getByRole('combobox', { name: 'Tokens tinted by' }))
-			.toHaveTextContent('Tokens: Entropy');
+		// The toolbar's button turns the heat for every doc: rank, then entropy.
+		await screen.getByRole('button', { name: 'Surprisal' }).click();
+		await screen.getByRole('button', { name: 'Rank' }).click();
+		await expect.element(screen.getByRole('button', { name: 'Entropy' })).toBeVisible();
 		// 1.5 nats of 6.
 		expect(venus.element().getAttribute('style')).toContain('var(--primary) 15%');
 		// B has no tokens, so A vs B tints nothing.
-		await screen.getByRole('combobox', { name: 'Tokens tinted by' }).click();
-		await screen.getByRole('option', { name: /^A vs B/ }).click();
+		await screen.getByRole('button', { name: 'Entropy' }).click();
+		await expect.element(screen.getByRole('button', { name: 'A vs B' })).toBeVisible();
 		expect(venus.element().getAttribute('style')).toContain(' 0%');
 	});
 
