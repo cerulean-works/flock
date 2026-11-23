@@ -453,7 +453,7 @@ class MultipleChoiceTask:
             `tuple[list[MCDoc], list[MCDoc]]`: the docs to score, then the few-shot examples.
 
         Raises:
-            `ValueError`: if `limit` is less than 1, or a `meta` column holds something other than a scalar.
+            `ValueError`: if `limit` is less than 1, the few-shot split has fewer than `num_shots` rows, or a `meta` column holds something other than a scalar.
             `KeyError`: if a few-shot id isn't in its split, or a column `row_fields` names isn't in a row.
         """
         if limit is not None and limit < 1:
