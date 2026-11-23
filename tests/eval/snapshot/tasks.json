@@ -1969,6 +1969,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_uncond",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.arc.arc_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -1998,6 +2003,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.arc.arc_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -2028,6 +2038,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -2058,6 +2073,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -2088,6 +2108,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -2118,6 +2143,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -2148,6 +2178,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -2178,6 +2213,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -2207,6 +2247,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2236,6 +2281,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2265,6 +2315,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2294,6 +2349,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2323,6 +2383,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2352,6 +2417,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2381,6 +2451,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2410,6 +2485,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2439,6 +2519,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2468,6 +2553,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2497,6 +2587,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2526,6 +2621,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2555,6 +2655,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2584,6 +2689,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2613,6 +2723,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2642,6 +2757,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2671,6 +2791,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2700,6 +2825,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2729,6 +2859,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2758,6 +2893,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2787,6 +2927,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2816,6 +2961,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2845,6 +2995,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2874,6 +3029,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2903,6 +3063,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2932,6 +3097,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2961,6 +3131,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -2990,6 +3165,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3019,6 +3199,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3048,6 +3233,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3077,6 +3267,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3106,6 +3301,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3135,6 +3335,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3164,6 +3369,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3193,6 +3403,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3222,6 +3437,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3251,6 +3471,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3280,6 +3505,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3309,6 +3539,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3338,6 +3573,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3367,6 +3607,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3396,6 +3641,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3425,6 +3675,11 @@
       "keep": "flock.eval.tasks.zh_cn.keep_ceval_operating_system",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3454,6 +3709,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3483,6 +3743,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3512,6 +3777,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3541,6 +3811,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3570,6 +3845,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3599,6 +3879,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3628,6 +3913,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3657,6 +3947,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3686,6 +3981,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3715,6 +4015,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3744,6 +4049,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3773,6 +4083,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3802,6 +4117,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3831,6 +4151,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3860,6 +4185,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3889,6 +4219,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3918,6 +4253,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3947,6 +4287,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -3976,6 +4321,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4005,6 +4355,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4034,6 +4389,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4063,6 +4423,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4092,6 +4457,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4121,6 +4491,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4150,6 +4525,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4179,6 +4559,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4208,6 +4593,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4237,6 +4627,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4266,6 +4661,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4295,6 +4695,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4324,6 +4729,11 @@
       "keep": "flock.eval.tasks.zh_cn.keep_cmmlu_computer_science",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4353,6 +4763,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4382,6 +4797,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4411,6 +4831,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4440,6 +4865,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4469,6 +4899,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4498,6 +4933,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4527,6 +4967,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4556,6 +5001,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4585,6 +5035,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4614,6 +5069,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4643,6 +5103,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4672,6 +5137,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4701,6 +5171,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4730,6 +5205,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4759,6 +5239,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4788,6 +5273,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4817,6 +5307,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4846,6 +5341,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4875,6 +5375,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4904,6 +5409,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4933,6 +5443,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4962,6 +5477,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -4991,6 +5511,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5020,6 +5545,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5049,6 +5579,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5078,6 +5613,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5107,6 +5647,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5136,6 +5681,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5165,6 +5715,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5194,6 +5749,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5223,6 +5783,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5252,6 +5817,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5281,6 +5851,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5310,6 +5885,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5339,6 +5919,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5368,6 +5953,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5397,6 +5987,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5426,6 +6021,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5455,6 +6055,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5484,6 +6089,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5513,6 +6123,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5542,6 +6157,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5571,6 +6191,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5600,6 +6225,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5629,6 +6259,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -5647,6 +6282,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.gen2mc.coqa_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -5676,6 +6316,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_uncond",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.arc.arc_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -5703,6 +6348,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.drcd.drcd_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -5729,6 +6379,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.gen2mc.drop_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -5814,6 +6469,14 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [
+          "source_id",
+          "split_type"
+        ],
+        "native_id": "ind",
+        "subject": "activity_label"
+      },
       "to_doc": "flock.eval.tasks.hellaswag.hellaswag_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -5844,6 +6507,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.humaneval.humaneval_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -5870,6 +6538,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.gen2mc.jeopardy_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -5897,6 +6570,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.lab_bench.lab_bench_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -5924,6 +6602,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.lab_bench.lab_bench_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -5945,6 +6628,11 @@
         "bpb"
       ],
       "primary_metric": "acc_greedy",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.lambada.lambada_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -5974,6 +6662,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -6003,6 +6696,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.medical.medmcqa_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6032,6 +6730,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.medical.medqa_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": null
@@ -6060,6 +6763,13 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [
+          "level"
+        ],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -6088,6 +6798,13 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [
+          "level"
+        ],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -6116,6 +6833,13 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [
+          "level"
+        ],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -6144,6 +6868,13 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [
+          "level"
+        ],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -6172,6 +6903,13 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [
+          "level"
+        ],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -6200,6 +6938,13 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [
+          "level"
+        ],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -6228,6 +6973,13 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [
+          "level"
+        ],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -6257,6 +7009,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6286,6 +7043,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6315,6 +7077,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6344,6 +7111,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6373,6 +7145,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6402,6 +7179,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6431,6 +7213,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6460,6 +7247,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6489,6 +7281,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6518,6 +7315,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6547,6 +7349,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6576,6 +7383,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6605,6 +7417,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6634,6 +7451,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6663,6 +7485,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6692,6 +7519,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6721,6 +7553,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6750,6 +7587,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6779,6 +7621,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6808,6 +7655,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6837,6 +7689,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6866,6 +7723,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6895,6 +7757,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6924,6 +7791,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6953,6 +7825,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -6982,6 +7859,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7011,6 +7893,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7040,6 +7927,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7069,6 +7961,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7098,6 +7995,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7127,6 +8029,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7156,6 +8063,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7185,6 +8097,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7214,6 +8131,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7243,6 +8165,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7272,6 +8199,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7301,6 +8233,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7330,6 +8267,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7359,6 +8301,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7388,6 +8335,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7417,6 +8369,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7446,6 +8403,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7475,6 +8437,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7504,6 +8471,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7533,6 +8505,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7562,6 +8539,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7591,6 +8573,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7620,6 +8607,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7649,6 +8641,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7678,6 +8675,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7707,6 +8709,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7736,6 +8743,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7765,6 +8777,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7794,6 +8811,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7823,6 +8845,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7852,6 +8879,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7881,6 +8913,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": "subject"
+      },
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -7910,6 +8947,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -7939,6 +8981,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -7968,6 +9015,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -7997,6 +9049,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8026,6 +9083,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8055,6 +9117,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8084,6 +9151,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8113,6 +9185,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8142,6 +9219,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8171,6 +9253,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8200,6 +9287,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8229,6 +9321,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8258,6 +9355,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8287,6 +9389,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8316,6 +9423,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8345,6 +9457,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8374,6 +9491,11 @@
         "bpb"
       ],
       "primary_metric": "bpb",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
       "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
@@ -8400,6 +9522,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.gen2mc.naturalqs_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -12755,6 +13882,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.piqa.piqa_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -12784,6 +13916,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_raw",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.yesno.qasper_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -12813,6 +13950,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.sciq.sciq_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -12842,6 +13984,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_raw",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.yesno.sciriff_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -12871,6 +14018,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.socialiqa.socialiqa_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -12897,6 +14049,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.gen2mc.squad_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -12926,6 +14083,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -12955,6 +14117,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -12984,6 +14151,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13013,6 +14185,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.english_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -13042,6 +14219,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13071,6 +14253,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13100,6 +14287,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13129,6 +14321,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13158,6 +14355,487 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_32k_hs_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "hs_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 91,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_32k_jh_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 114,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_32k_jh_science": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_science"
+      },
+      "description": "以下是關於自然考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 228,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_32k_jh_social": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_social"
+      },
+      "description": "以下是關於社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 192,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_4k_jh_english": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_english"
+      },
+      "description": "The following are multiple choice questions (with answers) about English.\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 80,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.english_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "tc_edu_manyshot_4k_jh_math": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_math"
+      },
+      "description": "以下是關於數學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 42,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_4k_jh_science": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_science"
+      },
+      "description": "以下是關於自然考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 22,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_4k_jh_social": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_social"
+      },
+      "description": "以下是關於社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 19,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_hs_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "hs_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_jh_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_jh_english": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_english"
+      },
+      "description": "The following are multiple choice questions (with answers) about English.\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.english_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "tc_edu_manyshot_5shot_jh_math": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_math"
+      },
+      "description": "以下是關於數學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_jh_science": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_science"
+      },
+      "description": "以下是關於自然考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_5shot_jh_social": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_social"
+      },
+      "description": "以下是關於社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 5,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_8k_jh_chinese": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 17,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_8k_jh_science": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_science"
+      },
+      "description": "以下是關於自然考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 61,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tc_edu_manyshot_8k_jh_social": {
+      "dataset": {
+        "private": true,
+        "repo": "cerulean-works/tc-edu-exams",
+        "revision": "83677842ba8bd843c1163338a12af07eb6f4b095",
+        "row_index": false,
+        "split": "test",
+        "subset": "jh_social"
+      },
+      "description": "以下是關於社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [],
+        "num_shots": 46,
+        "rows": [],
+        "split": "long_context"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13187,6 +14865,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13216,6 +14899,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13245,6 +14933,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13273,6 +14966,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13302,6 +15000,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13331,6 +15034,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13360,6 +15068,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13389,6 +15102,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13418,6 +15136,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13447,6 +15170,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13476,6 +15204,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13505,6 +15238,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13534,6 +15272,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13563,6 +15306,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13591,6 +15339,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13620,6 +15373,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13649,6 +15407,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13678,6 +15441,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13707,6 +15475,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13736,6 +15509,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13765,6 +15543,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13794,6 +15577,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13823,6 +15611,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13852,6 +15645,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13880,6 +15678,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13909,6 +15712,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13938,6 +15746,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13967,6 +15780,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -13996,6 +15814,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14024,6 +15847,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14053,6 +15881,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14081,6 +15914,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14110,6 +15948,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14139,6 +15982,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14168,6 +16016,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14197,6 +16050,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14226,6 +16084,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14255,6 +16118,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14284,6 +16152,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14313,6 +16186,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14342,6 +16220,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14370,6 +16253,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14399,6 +16287,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14426,6 +16319,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14454,6 +16352,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14482,6 +16385,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14511,6 +16419,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14540,6 +16453,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14569,6 +16487,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14598,6 +16521,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14627,6 +16555,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14656,6 +16589,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14685,6 +16623,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14714,6 +16657,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14743,6 +16691,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14772,6 +16725,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14800,6 +16758,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14829,6 +16792,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14857,6 +16825,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14886,6 +16859,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14915,6 +16893,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14944,6 +16927,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -14972,6 +16960,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15001,6 +16994,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15030,6 +17028,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15059,6 +17062,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15088,6 +17096,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15117,6 +17130,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15146,6 +17164,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15175,6 +17198,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15204,6 +17232,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.english_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
@@ -15233,6 +17266,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15262,6 +17300,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15291,6 +17334,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15320,6 +17368,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -15349,6 +17402,11 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
@@ -16596,6 +18654,11 @@
       "keep": null,
       "metrics": null,
       "primary_metric": "acc_raw",
+      "row_fields": {
+        "meta": [],
+        "native_id": null,
+        "subject": null
+      },
       "to_doc": "flock.eval.tasks.winogrande.winogrande_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": null
