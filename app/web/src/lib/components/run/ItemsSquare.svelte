@@ -113,7 +113,7 @@
 	const label = (keep: ItemKeep) => keeps.find((k) => k.keep === keep)?.label ?? keep;
 </script>
 
-<figure class="grid flex-none gap-1" style:width="{SIDE}px">
+<figure class="grid flex-none snap-start gap-1" style:width="{SIDE}px">
 	<div class="relative">
 		<!-- Not reachable by keyboard: the task picker and the list's buttons do the same. -->
 		<canvas

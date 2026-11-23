@@ -24,9 +24,11 @@
 		onlift: (keep: ItemKeep | null) => void;
 		/** Told a clicked square's tasks and cell. */
 		onpick: (tasks: string[], keep: ItemKeep) => void;
+		/** On a `home` page: the row spans the page, as the list's table does. */
+		bleed?: boolean;
 	}
 
-	let { path, other, task, keeps, lifted, onlift, onpick }: Props = $props();
+	let { path, other, task, keeps, lifted, onlift, onpick, bleed = false }: Props = $props();
 
 	let suites = $state<ItemSuites['suites'] | null>(null);
 	let loading = $state(false);
@@ -53,7 +55,15 @@
 </script>
 
 {#if suites?.length}
-	<div class="flex gap-3 overflow-x-auto pb-1">
+	<!-- Padded so the marked square's ring isn't clipped by the scrolling box; with `bleed` it
+	     spans the page as the list's table does, starting under the text. A scroll comes to rest
+	     on a square's edge. -->
+	<div
+		class={[
+			'flex snap-x snap-proximity scroll-px-1 gap-3 overflow-x-auto p-1',
+			bleed ? 'bleed px-[max(0.25rem,calc((100cqw-70rem)/2))]' : '-mx-1'
+		]}
+	>
 		{#each suites as suite (suite.suite)}
 			<ItemsSquare
 				{suite}
@@ -67,7 +77,7 @@
 	</div>
 {:else if loading}
 	<!-- The row's place, kept while the suites are computed, so the list doesn't jump. -->
-	<div class="flex gap-3 overflow-hidden pb-1" aria-hidden="true">
+	<div class="flex gap-3 overflow-hidden p-1" aria-hidden="true">
 		{#each Array.from({ length: 8 }, (_, i) => i) as i (i)}
 			<div class="size-28 flex-none animate-pulse rounded-md bg-muted/40"></div>
 		{/each}

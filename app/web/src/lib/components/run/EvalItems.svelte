@@ -408,7 +408,16 @@
 	{/if}
 
 	{#if other}
-		<ItemsMap {path} {other} {task} {keeps} {lifted} onlift={(k) => (lifted = k)} onpick={pick} />
+		<ItemsMap
+			{path}
+			{other}
+			{task}
+			{keeps}
+			{lifted}
+			onlift={(k) => (lifted = k)}
+			onpick={pick}
+			{bleed}
+		/>
 	{/if}
 
 	{#if refusal}
