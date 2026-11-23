@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
-import type { EvalItem, ItemSummary, ItemSuites, ItemsPage } from '#lib/types.ts';
+import type { EvalItem, ItemSummary, ItemSuites, ItemsPage, ItemTokens } from '#lib/types.ts';
 import EvalItems from './EvalItems.svelte';
 
 const ITEM: EvalItem = {
@@ -68,14 +68,33 @@ const SUITES: ItemSuites = {
 	]
 };
 
+/** ITEM's tokens: A's with text, cut as B cut them; B's without a sidecar. */
+const TOKENS: ItemTokens = {
+	runs: [
+		{
+			note: null,
+			choices: ITEM.choices.map((c) => ({
+				text: [c],
+				logprob: [-4],
+				rank: [3],
+				entropy: [1.5]
+			}))
+		},
+		{ choices: null, note: 'run:acme/evals/r2 has no per-token values for arc_easy' }
+	]
+};
+
 /**
- * The dashboard's answers: `list` (or `list(offset)`) for a page of rows, SUITES for the squares (with
+ * The dashboard's answers: `list` (or `list(offset)`) for a page of rows, TOKENS for a doc's
+ * tokens, SUITES for the squares (with
  * `status`, as the list), and ITEM, or a doc of that id, for a doc. The URLs asked for are in its
  * calls.
  */
 function answer(status: number, list: unknown | ((offset: number) => unknown)) {
 	const fetch = vi.fn(async (input: string) => {
 		const url = new URL(input, 'https://flock.test');
+		if (url.pathname.endsWith('/item/tokens'))
+			return new Response(JSON.stringify(TOKENS), { status: 200 });
 		if (url.pathname.endsWith('/items/suites')) {
 			const body = status === 200 ? SUITES : list;
 			return new Response(JSON.stringify(body), { status });
@@ -187,6 +206,37 @@ describe('eval items', () => {
 		await expect
 			.element(screen.getByRole('cell', { name: /^B \(its pick\)/ }))
 			.toHaveAccessibleName('B (its pick): share 50.0% · prob 66.5% · logprob -1.00');
+	});
+
+	it('tints an opened doc’s tokens by the heat chosen and says why a run has none', async () => {
+		const fetch = answer(200, rows([ROW]));
+		render(EvalItems, PAIR);
+		await screen.getByRole('button', { name: 'Mercury_7017010' }).click();
+
+		const tokens = asked(fetch).find((url) => url.pathname.endsWith('/item/tokens'))!;
+		expect(tokens.pathname).toBe('/api/projects/acme/evals/runs/r1/item/tokens');
+		expect(Object.fromEntries(tokens.searchParams)).toEqual({
+			doc: 'Mercury_7017010',
+			task: 'arc_easy',
+			keep: 'only_a',
+			with: 'acme/evals/r2'
+		});
+		// A's token under each choice, with its numbers; B's reason, naming B as its column does.
+		const venus = screen.getByTitle('log p -4.00 · rank 3 · entropy 1.50').first();
+		await expect.element(venus).toHaveTextContent('Venus');
+		await expect
+			.element(screen.getByText('B: B has no per-token values for arc_easy'))
+			.toBeVisible();
+		// 4 nats of 8: half of the full tint.
+		expect(venus.element().getAttribute('style')).toContain('var(--primary) 30%');
+
+		await screen.getByRole('radio', { name: 'Entropy' }).click();
+		await expect.element(screen.getByRole('radio', { name: 'Entropy' })).toBeChecked();
+		// 1.5 nats of 6.
+		expect(venus.element().getAttribute('style')).toContain('var(--primary) 15%');
+		// B has no tokens, so A vs B tints nothing.
+		await screen.getByRole('radio', { name: 'A vs B' }).click();
+		expect(venus.element().getAttribute('style')).toContain(' 0%');
 	});
 
 	it('opens where a link left it, ignoring a part that doesn’t fit', async () => {

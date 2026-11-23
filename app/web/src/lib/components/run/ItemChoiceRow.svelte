@@ -1,11 +1,11 @@
 <script lang="ts">
 	import CheckIcon from '@lucide/svelte/icons/check';
-	import type { EvalItem } from '#lib/types.ts';
+	import type { EvalItem, ItemTokens, TokenHeat } from '#lib/types.ts';
 
 	/**
 	 * One choice of an opened eval item, a row in the items table's own columns (027): the choice
-	 * as scored, the gold mark, and each run's share bar and numbers for it. Its own component so
-	 * per-choice detail (per-token values, later) has one place to grow.
+	 * as scored, the gold mark, and each run's share bar and numbers for it, then its tokens as
+	 * that run cut them, tinted by `heat` (029).
 	 */
 	interface Props {
 		item: EvalItem;
@@ -15,9 +15,28 @@
 		sides: string[];
 		/** Whether the table has a Δ column, left empty here. */
 		delta: boolean;
+		/** Each run's per-token values over the item's choices, once Flock sends them. */
+		tokens?: ItemTokens | null;
+		heat?: TokenHeat;
 	}
 
-	let { item, choice, sides, delta }: Props = $props();
+	let { item, choice, sides, delta, tokens = null, heat = 'surprisal' }: Props = $props();
+
+	// A token's tint, its color token and strength from 0 to 1. The scales are fixed, so one doc
+	// reads like the next: 8 nats of surprisal, rank 1,024 and 6 nats of entropy are full. Two runs
+	// are compared where they cut the choice into the same tokens, full at 3 nats apart.
+	function tint(side: number, i: number): [string, number] {
+		const mine = tokens?.runs[side]?.choices?.[choice];
+		const theirs = tokens?.runs[1 - side]?.choices?.[choice];
+		if (!mine) return ['--primary', 0];
+		if (heat === 'surprisal') return ['--primary', Math.min(-mine.logprob[i] / 8, 1)];
+		if (heat === 'rank') return ['--primary', Math.min(Math.log2(mine.rank[i]) / 10, 1)];
+		if (heat === 'entropy') return ['--primary', Math.min(mine.entropy[i] / 6, 1)];
+		const same = mine.text && theirs?.text && mine.text.join('\0') === theirs.text.join('\0');
+		if (!same || !theirs) return ['--primary', 0];
+		const gap = mine.logprob[i] - theirs.logprob[i];
+		return [gap >= 0 ? '--state-finished' : '--destructive', Math.min(Math.abs(gap) / 3, 1)];
+	}
 
 	const percent = (v: number) => `${(100 * v).toFixed(1)}%`;
 </script>
@@ -44,6 +63,7 @@
 	</td>
 	{#each item.runs as answer, side (side)}
 		{@const picked = answer.pick === choice}
+		{@const own = tokens?.runs[side]?.choices?.[choice]}
 		<!-- The run's numbers for this choice, short enough for its column. -->
 		{@const said = [
 			answer.share ? `share ${percent(answer.share[choice])}` : null,
@@ -69,6 +89,23 @@
 				class={['mt-1 block text-[11px]', picked ? 'text-foreground' : 'text-muted-foreground']}
 				aria-hidden="true">{said}</span
 			>
+			{#if own}
+				<!-- The tokens as this run cut the choice; a dot where its tokenizer couldn't name one.
+				     Hover one for its numbers. -->
+				<span class="mt-1 flex flex-wrap gap-px font-mono text-[11px]">
+					{#each own.logprob as logprob, i (i)}
+						{@const [tone, strength] = tint(side, i)}
+						<span
+							class="rounded-sm px-0.5 whitespace-pre"
+							style:background-color="color-mix(in srgb, var({tone}) {Math.round(60 * strength)}%,
+							transparent)"
+							title="log p {logprob.toFixed(2)} · rank {own.rank[i]} · entropy {own.entropy[
+								i
+							].toFixed(2)}">{own.text?.[i].replaceAll('\n', '↵') ?? '·'}</span
+						>
+					{/each}
+				</span>
+			{/if}
 		</td>
 	{/each}
 	{#if delta}<td></td>{/if}

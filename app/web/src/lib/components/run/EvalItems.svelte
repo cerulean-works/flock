@@ -13,7 +13,15 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { signedMargin, typedIn } from '#lib/evals.ts';
-	import type { EvalItem, ItemKeep, ItemsPage, ItemSummary, ItemsView } from '#lib/types.ts';
+	import type {
+		EvalItem,
+		ItemKeep,
+		ItemsPage,
+		ItemSummary,
+		ItemTokens,
+		ItemsView,
+		TokenHeat
+	} from '#lib/types.ts';
 	import { ITEM_W, readWidth, saveWidth } from '#lib/widths.ts';
 
 	/**
@@ -65,6 +73,16 @@
 	}: Props = $props();
 
 	const SIZE = 20;
+	const HEATS: { heat: TokenHeat; label: string; hint: string }[] = [
+		{ heat: 'surprisal', label: 'Surprisal', hint: 'Darker: the run found the token less likely' },
+		{ heat: 'rank', label: 'Rank', hint: 'Darker: more tokens the run found likelier' },
+		{ heat: 'entropy', label: 'Entropy', hint: 'Darker: the run was less sure what came next' },
+		{
+			heat: 'versus',
+			label: 'A vs B',
+			hint: 'Green: this run found the token likelier than the other; only where both cut the choice into the same tokens'
+		}
+	];
 	// It starts where the link left it, else on the first keep and the first task with docs in it;
 	// the choice is the reader's from then on, so only the first values are read.
 	let keep = $state<ItemKeep>(
@@ -94,6 +112,9 @@
 	// The cell the pointer is on, on a button or in a square, which both lift.
 	let lifted = $state<ItemKeep | null>(null);
 	let detailRefusal = $state<string | null>(null);
+	// The open item's per-token values, and what its tokens are tinted by, kept from doc to doc.
+	let tokens = $state<ItemTokens | null>(null);
+	let heat = $state<TokenHeat>('surprisal');
 	// Where j, k or a square's dot land once the page they turned to arrives, and whether they open
 	// it. Only that page's answer lands there: any other change of view drops it.
 	let landing: {
@@ -236,6 +257,27 @@
 			.catch((err: Error) => {
 				if (!controller.signal.aborted) detailRefusal = err.message;
 			});
+		return () => controller.abort();
+	});
+
+	// Its per-token values, fetched beside it: a run without them, or a tokenizer that can't name
+	// them, says why, and a failed fetch leaves the item without tokens.
+	$effect(() => {
+		if (open === null) return;
+		const asked = new URLSearchParams({
+			doc: open,
+			task,
+			keep,
+			...(other ? { with: other } : {})
+		});
+		const controller = new AbortController();
+		tokens = null;
+		fetch(`/api/projects/${path}/item/tokens?${asked}`, { signal: controller.signal })
+			.then(async (res) => {
+				const body = res.ok ? ((await res.json()) as ItemTokens) : null;
+				if (!controller.signal.aborted) tokens = body;
+			})
+			.catch(() => {});
 		return () => controller.abort();
 	});
 
@@ -550,8 +592,36 @@
 						<!-- Opened: a row per choice in the same columns, so each run's numbers sit beside
 						     the choice they're for. -->
 						{#if item}
+							{#if tokens}
+								<!-- What the tokens under each choice are tinted by, and why a run has none. -->
+								<tr>
+									<td></td>
+									<td colspan={columns - 1} class="px-2 py-1 text-xs text-muted-foreground">
+										<div class="flex flex-wrap items-center gap-2">
+											<span>Tokens by</span>
+											<span class="flex gap-1" role="radiogroup" aria-label="Tokens tinted by">
+												{#each HEATS.filter((h) => other || h.heat !== 'versus') as h (h.heat)}
+													<button
+														type="button"
+														role="radio"
+														aria-checked={h.heat === heat}
+														title={h.hint}
+														class="rounded-md border px-2 py-0.5 hover:bg-muted aria-checked:border-ring aria-checked:bg-accent"
+														onclick={() => (heat = h.heat)}>{h.label}</button
+													>
+												{/each}
+											</span>
+											{#each tokens.runs as run, side (side)}
+												{#if run.note}
+													<span>{sides[side]}: {refused({ message: run.note }, 0)}</span>
+												{/if}
+											{/each}
+										</div>
+									</td>
+								</tr>
+							{/if}
 							{#each item.choices, k (k)}
-								<ItemChoiceRow {item} choice={k} {sides} delta={!!other} />
+								<ItemChoiceRow {item} choice={k} {sides} delta={!!other} {tokens} {heat} />
 							{/each}
 						{:else if shown}
 							<tr class="border-b border-divider">

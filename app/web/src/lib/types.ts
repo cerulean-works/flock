@@ -827,6 +827,30 @@ export interface ItemSuites {
 	}[];
 }
 
+/** One run's values per token over a choice's continuation, from its sidecar. */
+export interface ChoiceTokens {
+	/** Each token's text from the run's tokenizer, or null when it couldn't be named. */
+	text: string[] | null;
+	logprob: number[];
+	/** 1 for the token the run found likeliest. */
+	rank: number[];
+	/** The entropy of the run's next-token distribution, in nats. */
+	entropy: number[];
+}
+
+/**
+ * What an opened item's tokens are tinted by: how unlikely the run found each one (minus its
+ * log-probability), its rank, the run's entropy there, or the two runs' log-probabilities against
+ * each other where they cut the choice into the same tokens.
+ */
+export type TokenHeat = 'surprisal' | 'rank' | 'entropy' | 'versus';
+
+/** Each run's per-token values over one doc's choices (`GET …/runs/{run}/item/tokens`). */
+export interface ItemTokens {
+	/** One per run, in order: `choices` null when the run has none, and `note` says why. */
+	runs: { choices: ChoiceTokens[] | null; note: string | null }[];
+}
+
 /** Where a link leaves the items list (028): each part only when it isn't the default. */
 export interface ItemsView {
 	task?: string;
