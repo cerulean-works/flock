@@ -18,6 +18,7 @@ class EchoModel(BaseModel):
     ) -> torch.Tensor:
         self.received_mask = attention_mask
         self.received_positions = position_ids
+        self.received_boundaries = cu_seq_lens
         return input_ids
 
 
@@ -47,6 +48,21 @@ def test_base_model_prepares_unpadded_batch() -> None:
     model(batch)
     assert model.received_positions is batch["position_ids"]
     assert model.received_mask is batch["attention_mask"]
+    assert model.received_boundaries is None
+
+
+def test_base_model_passes_packed_boundaries() -> None:
+    model = EchoModel(max_position_embeddings=4)
+    batch: Batch = {
+        "input_ids": torch.tensor([[1, 2, 3]]),
+        "attention_mask": torch.ones(1, 3, dtype=torch.bool),
+        "labels": torch.tensor([[2, -100, 4]]),
+        "position_ids": torch.tensor([[0, 1, 0]]),
+        "cu_seq_lens": torch.tensor([0, 2, 3], dtype=torch.int32),
+    }
+    model(batch)
+    assert model.received_positions is batch["position_ids"]
+    assert model.received_boundaries is batch["cu_seq_lens"]
 
 
 def test_base_model_rejects_overlong_input_before_forward() -> None:

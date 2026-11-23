@@ -27,9 +27,8 @@ def test_packed_sdpa_matches_independent_documents(is_causal: bool) -> None:
     # First row: A A B B PAD. Second row: C D D D D.
     lengths = [(2, 2, 1), (1, 4)]
     boundaries = torch.tensor([0, 2, 4, 5, 6, 10], dtype=torch.int32)
-    prepare = AttentionInterface.get_packed_preparer("sdpa")
-    assert prepare is prepare_packed_sdpa_mask
-    mask = prepare(boundaries, batch_size=2, seq_len=5, is_causal=is_causal)
+    prepare = AttentionInterface.get_metadata_preparer("sdpa")
+    mask = prepare(None, batch_size=2, seq_len=5, is_causal=is_causal, cu_seq_lens=boundaries)
     torch.testing.assert_close(
         mask[0, 0, 2], torch.tensor([False, False, True, not is_causal, False])
     )

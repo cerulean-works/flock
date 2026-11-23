@@ -24,7 +24,11 @@ from flock.training.core.attention import (
 )
 from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
 from tests.training._reference import olmo2_training_parity
-from tests.training.test_olmo2 import make_batch
+from tests.training.test_olmo2 import (
+    assert_packed_matches_documents_alone,
+    assert_reads_nothing_back,
+    make_batch,
+)
 
 flash_module = importlib.import_module("flock.training.core.attention.flash_attention")
 
@@ -99,7 +103,8 @@ def math_varlen(
 def test_backend_registers_its_function_with_varlen_preparer(flash: Flash) -> None:
     assert AttentionInterface.get_interface(flash.backend) is flash.attend
     assert AttentionInterface.get_mask_preparer(flash.backend) is prepare_varlen_metadata
-    assert AttentionInterface.get_packed_preparer(flash.backend) is prepare_packed_varlen_metadata
+    preparer = AttentionInterface.get_metadata_preparer(flash.backend)
+    assert preparer.backend.packed_preparer is prepare_packed_varlen_metadata
 
 
 @pytest.mark.parametrize("kv_heads", [4, 2, 1])
@@ -612,3 +617,22 @@ def test_packed_documents_never_attend_across_boundaries(
     assert call.args[3] is cu and call.args[5] == width
     actual.sum().backward()
     assert all(tensor.grad is not None and tensor.grad.isfinite().all() for tensor in inputs)
+
+
+@pytest.mark.parametrize("kv_heads", [4, 2, 1])
+def test_packed_model_matches_documents_run_separately(
+    math_kernel: Mock, flash: Flash, config: Olmo2Config, kv_heads: int
+) -> None:
+    model = Olmo2(replace(config, attn_implementation=flash.backend, num_key_value_heads=kv_heads))
+    assert_packed_matches_documents_alone(model)
+    # Only the packed forward runs the varlen kernel, once per layer; each document
+    # alone is unpadded and takes the dense path.
+    assert math_kernel.call_count == config.num_hidden_layers
+
+
+def test_packed_model_reads_nothing_back_from_the_device(
+    math_kernel: Mock, flash: Flash, config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert_reads_nothing_back(
+        Olmo2(replace(config, attn_implementation=flash.backend)), monkeypatch
+    )

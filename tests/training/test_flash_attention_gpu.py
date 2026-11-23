@@ -27,6 +27,7 @@ from flock.training.core.distributed import DistributedRuntime
 from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
 from flock.training.core.trainer import Trainer
 from tests.training._reference import assert_parity, olmo2_training_parity, token_batch
+from tests.training.test_olmo2 import PACKED_ROWS, PACKED_WIDTH, make_batch, packed_batch
 
 pytestmark = [pytest.mark.gpu]
 
@@ -296,6 +297,62 @@ def test_packed_documents_match_each_document_alone(
                 fp32=fp32_reference.grad,
             )
         cudnn.assert_not_called()
+    finally:
+        if previous is None and attention.current_flash_attention_impl() == flash.name:
+            attention.restore_flash_attention_impl()
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_packed_model_matches_each_document_alone(
+    flash: Flash, config: Olmo2Config, cuda_device: torch.device, dtype: torch.dtype
+) -> None:
+    config = replace(config, hidden_size=256, intermediate_size=384)
+    model = Olmo2(replace(config, attn_implementation=flash.backend)).to(cuda_device, dtype)
+    reference = Olmo2(config).to(cuda_device, dtype)
+    reference.load_state_dict(model.state_dict(), strict=True)
+    fp32_reference = Olmo2(config).to(cuda_device)
+    fp32_reference.load_state_dict(model.state_dict(), strict=True)
+    packed = packed_batch(PACKED_ROWS, PACKED_WIDTH)
+    batch = {key: value.to(cuda_device) for key, value in packed.items()}
+    real = batch["attention_mask"]
+    previous = attention.current_flash_attention_impl()
+    assert previous in (None, flash.name)
+    try:
+        actual = model(batch)
+        upstream = torch.randn_like(actual).masked_fill(~real[:, :, None], 0)
+        actual.backward(upstream)
+        # Reference: each document alone in an unpadded row, through SDPA's math kernel.
+        expected, fp32_expected = [], []
+        for row, documents in enumerate(PACKED_ROWS):
+            start = 0
+            for document in documents:
+                stop = start + len(document)
+                alone = make_batch(torch.tensor([document], device=cuda_device))
+                with attention.sdpa_kernel(attention.SDPBackend.MATH):
+                    outputs = reference(alone), fp32_reference(alone)
+                for output in outputs:
+                    output.backward(upstream[row, start:stop][None].to(output.dtype))
+                expected.append(outputs[0][0])
+                fp32_expected.append(outputs[1][0])
+                start = stop
+        assert_parity(
+            actual[real],
+            torch.cat(expected),
+            dtype,
+            "logits",
+            "packed model",
+            fp32=torch.cat(fp32_expected),
+        )
+        for name, parameter in model.named_parameters():
+            assert_parity(
+                parameter.grad,
+                reference.get_parameter(name).grad,
+                dtype,
+                "gradients",
+                name,
+                fp32=fp32_reference.get_parameter(name).grad,
+            )
+        assert attention.current_flash_attention_impl() == flash.name
     finally:
         if previous is None and attention.current_flash_attention_impl() == flash.name:
             attention.restore_flash_attention_impl()

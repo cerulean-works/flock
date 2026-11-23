@@ -210,9 +210,9 @@ def test_step_cap_ends_the_run_and_its_schedule_at_the_cap(
     seen_batches = []
     forward = trainer.model._forward
 
-    def recording_forward(*args: Any) -> torch.Tensor:
+    def recording_forward(*args: Any, **kwargs: Any) -> torch.Tensor:
         seen_batches.append(args[0].detach().clone())
-        return forward(*args)
+        return forward(*args, **kwargs)
 
     monkeypatch.setattr(trainer.model, "_forward", recording_forward)
     trainer.train()
@@ -976,11 +976,13 @@ def test_checkpoint_resume_matches_uninterrupted_training(
         forward = trainer.model._forward
         seen_batches = []
 
-        def stochastic_forward(*args: Any) -> torch.Tensor:
+        def stochastic_forward(*args: Any, **kwargs: Any) -> torch.Tensor:
             # Exercise restoration of both Python and torch RNGs, including the
             # extra DataLoader iterator created when a process resumes.
             seen_batches.append(args[0].detach().clone())
-            return F.dropout(forward(*args), p=0.25, training=True) * (0.8 + random.random())
+            return F.dropout(forward(*args, **kwargs), p=0.25, training=True) * (
+                0.8 + random.random()
+            )
 
         monkeypatch.setattr(trainer.model, "_forward", stochastic_forward)
         return trainer, run, seen_batches
@@ -2127,6 +2129,7 @@ def test_dummy_batch_has_zero_loss_tokens_and_model_gradients(
     assert batch["attention_mask"].tolist() == [[True]]
     assert batch["attention_mask"].dtype == torch.bool
     assert batch["labels"].tolist() == [[-100]]
+    assert batch["position_ids"].tolist() == [[0]]
     model = Olmo2(config)
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
@@ -2547,3 +2550,63 @@ def test_chunk_cache_rejects_changed_special_token_policy(
     resumed, _, _ = trainer_factory(dataset=changed)
     with pytest.raises(ValueError, match="data"):
         resumed.validate_state_dict(checkpoint)
+
+
+def test_packed_chunk_training_trains_every_target_once_and_resumes(
+    trainer_factory: TrainerFactory,
+    tokenizer: TokenizersBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "packed-source.lance"
+    texts = ["a b c d a b c d a b [EOS]", "b c [EOS]", "d [EOS]", "a b [EOS]", "c d a [EOS]"]
+    lance.write_dataset(pa.table({"text": texts}), str(source))
+    chunks = TokenChunkDataset.prepare(
+        dataset=SafeLanceDataset(str(source), dataset_options={"version": 1}),
+        tokenizer=tokenizer,
+        input_column="text",
+        cache_dir=tmp_path / "tokens",
+        chunk_length=8,
+    )
+    packed = TokenChunkDataset(cache_dir=tmp_path / "tokens", chunk_length=8, packing=True)
+    assert len(packed) < len(chunks)
+    options: dict[str, Any] = {"batch_size": 2, "num_workers": 0, "prefetch_factor": None}
+    reference, _, _ = trainer_factory(
+        dataset=packed, output_dir=str(tmp_path / "reference"), **options
+    )
+    reference.train()
+    assert reference.total_steps == math.ceil(len(packed) / 2)
+    # Every original next-token target trains once, and padding adds none.
+    assert int(reference.state.total_tokens) == sum(
+        len(ids) - 1 for ids in tokenizer(texts, truncation=False)["input_ids"]
+    )
+
+    interrupted, _, _ = trainer_factory(
+        dataset=packed, output_dir=str(tmp_path / "interrupted"), save_steps=1, **options
+    )
+    save = interrupted.checkpoint_manager.save_model
+
+    def save_and_interrupt(*args: Any, **kwargs: Any) -> None:
+        save(*args, **kwargs)
+        if int(interrupted.state.step) == 1:
+            raise KeyboardInterrupt("completed first packed batch")
+
+    monkeypatch.setattr(interrupted.checkpoint_manager, "save_model", save_and_interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        interrupted.train()
+    # Reopening the cache packs the same rows, so the resumed sampler replays the same suffix.
+    resumed, _, _ = trainer_factory(
+        dataset=TokenChunkDataset(cache_dir=tmp_path / "tokens", chunk_length=8, packing=True),
+        output_dir=str(interrupted.output_dir),
+        **options,
+    )
+    resumed.train(resume_from_checkpoint=True)
+    assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
+    assert_nested_equal(resumed.state_dict(), reference.state_dict())
+
+    # Packed rows are different data, so a packed checkpoint must not resume unpacked.
+    unpacked, _, _ = trainer_factory(
+        dataset=chunks, output_dir=str(tmp_path / "unpacked"), **options
+    )
+    with pytest.raises(ValueError, match="data"):
+        unpacked.validate_state_dict(resumed.state_dict())
