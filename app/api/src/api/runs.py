@@ -1002,8 +1002,8 @@ async def run_item_tokens(
             # values, never the other run without its own.
             # Its footer is read first: a file under the 64 MiB read limit can unpack to far more,
             # so one holding more than 2^25 values (the bank's largest default sidecar holds 8.1
-            # million) is refused before a row is decoded. The file is read once for both, named
-            # as `tokens` names it.
+            # million) or more than 256 MiB unpacked is refused before a row is decoded. The file
+            # is read once for both, named as `tokens` names it.
             scoped = dataclasses.replace(written, read_bytes=cache(written.read_bytes))
             name = tokens_name(task)
             if any(t.task == task and t.dataset.private for t in written.tasks):
@@ -1011,13 +1011,14 @@ async def run_item_tokens(
             try:
                 rows = []
                 data = scoped.read_bytes(name) if scoped.read_bytes else None
-                values = 0
+                values = unpacked = 0
                 if data:
                     footer = pq.read_metadata(pa.BufferReader(data))
                     for i in range(footer.num_row_groups):
                         group = footer.row_group(i)
+                        unpacked += group.total_byte_size
                         values += sum(group.column(j).num_values for j in range(group.num_columns))
-                if values <= 1 << 25:
+                if values <= 1 << 25 and unpacked <= 256 << 20:
                     rows = scoped.tokens(task, [doc]) or []
             # (pyarrow's errors are these: `ArrowInvalid` a ValueError, `ArrowTypeError` a
             # TypeError, its I/O errors OSErrors.)
