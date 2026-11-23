@@ -828,7 +828,7 @@ async def run_items_suites(
     viewer: ViewerDep,
     other: Annotated[str, Query(alias="with", description="the other run, as entity/project/id")],
 ) -> Response:
-    """The compare page's row of suite squares for two runs (029): each suite both runs recorded alike that holds a task of its own, with its tasks (every accuracy task under it both scored under one hash), the number of docs in each cell of their diff, and up to 800 of its docs as ``[A's margin, B's margin, cell]`` (the cell an index into eval's ``CELLS``), taken evenly through each cell in the list's default order, margins rounded to 3 decimals.
+    """The compare page's row of suite squares for two runs (029): each suite both runs recorded alike that holds a task of its own, with its tasks (every accuracy task under it both scored under one hash), the number of docs in each cell of their diff, and up to 800 of its docs as ``[A's margin, B's margin, cell, task, place, id]`` (the cell an index into eval's ``CELLS``, the task one into ``tasks``, the place the doc's in that task's cell in the list's default order), taken evenly through each cell in the list's default order, margins rounded to 3 decimals.
 
     Each task is computed once for all its suites. A task a run has no predictions for, or whose predictions the viewer can't read (a private dataset's, outside the organization), is left out of its suites. The answer is kept for the last 8 pairs. 404 as ``.../items`` for a run unknown, unreadable or without results; 409 with eval's reason otherwise."""
     loop = asyncio.get_running_loop()
@@ -856,7 +856,8 @@ async def run_items_suites(
             if outsider:
                 private |= {t.task for t in written.tasks if t.dataset.private}
         whole = True
-        cells_of: dict[str, list[list[list[float | None]]]] = {}
+        # Each task's docs by cell, in the list's default order: id and both margins.
+        cells_of: dict[str, list[list[tuple[str, list[float | None]]]]] = {}
         for task in dict.fromkeys(t for tasks in suites.values() for t in tasks):
             # A task's files read once for its four cells, so they come from the same rows, and
             # let go before the next task.
@@ -865,16 +866,22 @@ async def run_items_suites(
                 whole = whole and task in private
                 continue
             cells_of[task] = [
-                [pair for _, pair in _with_margins(items(scoped, task, keep), "margin")]
+                [
+                    (item.id, pair)
+                    for item, pair in _with_margins(items(scoped, task, keep), "margin")
+                ]
                 for keep in CELLS
             ]
         rows = []
         for suite, tasks in suites.items():
             shown = [task for task in tasks if task in cells_of]
-            cells = [[], [], [], []]
-            for task in shown:
-                for k, pairs in enumerate(cells_of[task]):
-                    cells[k].extend(pairs)
+            # Each doc with where the list has it: its task's place in `shown` and its own in the
+            # cell's default order, so a dot opens its doc.
+            cells: list[list[tuple[int, int, str, list[float | None]]]] = [[], [], [], []]
+            for t, task in enumerate(shown):
+                for k, docs_in_cell in enumerate(cells_of[task]):
+                    for i, (doc_id, pair) in enumerate(docs_in_cell):
+                        cells[k].append((t, i, doc_id, pair))
             docs = sum(len(pairs) for pairs in cells)
             if not docs:
                 continue
@@ -882,10 +889,10 @@ async def run_items_suites(
             dots = []
             for k, pairs in enumerate(cells):
                 n = len(pairs) if docs <= 800 else len(pairs) * 800 // docs
-                for i in range(n):
-                    a, b = pairs[i * len(pairs) // n]
+                for j in range(n):
+                    t, i, doc_id, (a, b) = pairs[j * len(pairs) // n]
                     if a is not None and b is not None:
-                        dots.append([round(a, 3), round(b, 3), k])
+                        dots.append([round(a, 3), round(b, 3), k, t, i, doc_id])
             counts = {keep: len(pairs) for keep, pairs in zip(CELLS, cells, strict=True)}
             rows.append({"suite": suite, "tasks": shown, "counts": counts, "dots": dots})
         answer = orjson.dumps({"suites": rows})

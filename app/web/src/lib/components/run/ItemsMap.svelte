@@ -5,9 +5,10 @@
 	/**
 	 * Two runs' docs suite by suite (029): one row of equal squares, a small scatter plot per suite
 	 * both runs recorded that holds accuracy tasks, scrolling sideways when they don't fit. The one
-	 * holding the list's task is marked. Clicking a square's quadrant shows that suite and cell in
+	 * holding the list's task is marked (the last clicked, when several do). Clicking a square's
+	 * quadrant shows that suite and cell in
 	 * the list; the pointer on a quadrant lifts the list's button for its cell, and the pointer on a
-	 * button lifts the quadrant in the marked square.
+	 * button lifts the quadrant in the marked square. A clicked dot opens its doc in the list.
 	 */
 	interface Props {
 		/** Run A's path under `/api/projects/`. */
@@ -24,11 +25,20 @@
 		onlift: (keep: ItemKeep | null) => void;
 		/** Told a clicked square's tasks and cell. */
 		onpick: (tasks: string[], keep: ItemKeep) => void;
+		/** Told a clicked dot's task, cell, place in the cell's default order and id. */
+		onopen: (task: string, keep: ItemKeep, index: number, id: string) => void;
 	}
 
-	let { path, other, task, keeps, lifted, onlift, onpick }: Props = $props();
+	let { path, other, task, keeps, lifted, onlift, onpick, onopen }: Props = $props();
 
 	let suites = $state<ItemSuites['suites'] | null>(null);
+	// The square last clicked. Suites share tasks (`base_easy:qa_rc` holds all of MMLU), so one
+	// square is marked: the one clicked while it holds the task shown, else the first that does.
+	let clicked = $state<string | null>(null);
+	const marked = $derived.by(() => {
+		const holding = (suites ?? []).filter((s) => s.tasks.includes(task));
+		return (holding.find((s) => s.suite === clicked) ?? holding[0])?.suite ?? null;
+	});
 	let loading = $state(false);
 	let width = $state(0);
 
@@ -73,11 +83,18 @@
 			<ItemsSquare
 				{suite}
 				{side}
-				current={suite.tasks.includes(task)}
+				current={suite.suite === marked}
 				{lifted}
 				{keeps}
 				{onlift}
-				onpick={(keep) => onpick(suite.tasks, keep)}
+				onpick={(keep) => {
+					clicked = suite.suite;
+					onpick(suite.tasks, keep);
+				}}
+				onopen={(...dot) => {
+					clicked = suite.suite;
+					onopen(...dot);
+				}}
 			/>
 		{/each}
 	</div>

@@ -818,8 +818,12 @@ export interface ItemSuites {
 		tasks: string[];
 		/** How many of its docs are in each cell of the runs' diff. */
 		counts: Partial<Record<ItemKeep, number>>;
-		/** Up to 800 docs, taken evenly through each cell: A's margin, B's, the cell's index in eval's `CELLS`. */
-		dots: [number, number, number][];
+		/**
+		 * Up to 800 docs, taken evenly through each cell: A's margin, B's, the cell's index in eval's
+		 * `CELLS`, the task's index in `tasks`, the doc's place in that task's cell in the list's
+		 * default order, and its id.
+		 */
+		dots: [number, number, number, number, number, string][];
 	}[];
 }
 

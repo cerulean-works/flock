@@ -13,7 +13,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { signedMargin, typedIn } from '#lib/evals.ts';
-	import type { EvalItem, ItemKeep, ItemsPage, ItemsView } from '#lib/types.ts';
+	import type { EvalItem, ItemKeep, ItemsPage, ItemSummary, ItemsView } from '#lib/types.ts';
 	import { ITEM_W, readWidth, saveWidth } from '#lib/widths.ts';
 
 	/**
@@ -23,7 +23,8 @@
 	 * question and every choice's share, probability and log-probability per run, fetched then
 	 * (028). j and k move through the docs, Enter opens, Esc closes. With two runs, a row of small
 	 * scatter plots, one per suite, sits above the list; a click on a quadrant shows that suite and
-	 * cell here, and the pointer on a quadrant or a button lifts the other (029). A caller
+	 * cell here, a click on a dot opens its doc, and the pointer on a quadrant or a button lifts the
+	 * other (029). A caller
 	 * that changes the runs remounts it (`{#key}`).
 	 */
 	interface Props {
@@ -93,9 +94,13 @@
 	// The cell the pointer is on, on a button or in a square, which both lift.
 	let lifted = $state<ItemKeep | null>(null);
 	let detailRefusal = $state<string | null>(null);
-	// Where j or k land once the page they turned to arrives, and whether they open it. Only that
-	// page's answer lands there: any other change of view drops it.
-	let landing: { page: string; end: 'first' | 'last'; open: boolean } | null = null;
+	// Where j, k or a square's dot land once the page they turned to arrives, and whether they open
+	// it. Only that page's answer lands there: any other change of view drops it.
+	let landing: {
+		page: string;
+		row: (rows: ItemSummary[]) => ItemSummary | undefined;
+		open: boolean;
+	} | null = null;
 	let root = $state<HTMLElement>();
 	// An item open on another page or before a re-sort doesn't fade this page's rows.
 	const opened = $derived(found?.items.some((item) => item.id === open) ?? false);
@@ -191,9 +196,10 @@
 					return;
 				}
 				found = page;
-				const to = landing && page.items[landing.end === 'first' ? 0 : page.items.length - 1];
+				const to = landing?.row(page.items);
 				if (!landing || !to) return;
-				// j or k turned the page: on to its first or last doc, opened if one was.
+				// j or k turned the page, on to its first or last doc, opened if one was; or a
+				// square's dot did, on to its doc.
 				if (landing.open) open = to.id;
 				landing = null;
 				tell();
@@ -251,6 +257,26 @@
 		tell();
 	}
 
+	// A square's dot: its task and cell, in the default order, at the page that holds the doc, the
+	// doc open; the focus moves to its row once the page arrives.
+	function openAt(to: string, cell: ItemKeep, index: number, id: string) {
+		const page = Math.floor(index / SIZE) + 1;
+		const shown = task === to && keep === cell && sort === 'margin' && at === page && found;
+		open = id;
+		if (shown) {
+			tell();
+			focus(id);
+			return;
+		}
+		if (task !== to || keep !== cell) total = null;
+		task = to;
+		keep = cell;
+		sort = 'margin';
+		at = page;
+		landing = { page: query, row: (rows) => rows.find((r) => r.id === id), open: true };
+		tell();
+	}
+
 	// After the rows render: the doc's toggle takes the focus, which scrolls it into view.
 	function focus(id: string) {
 		void tick().then(() =>
@@ -279,7 +305,8 @@
 		} else if (step && at + step >= 1 && at + step <= pages) {
 			// Past the page's end: the next page's first doc, or the previous page's last.
 			at += step;
-			landing = { page: query, end: step > 0 ? 'first' : 'last', open: open !== null };
+			const end = step > 0 ? 0 : -1;
+			landing = { page: query, row: (rows) => rows.at(end), open: open !== null };
 			open = null;
 			tell();
 		} else {
@@ -400,7 +427,16 @@
 	{/if}
 
 	{#if other}
-		<ItemsMap {path} {other} {task} {keeps} {lifted} onlift={(k) => (lifted = k)} onpick={pick} />
+		<ItemsMap
+			{path}
+			{other}
+			{task}
+			{keeps}
+			{lifted}
+			onlift={(k) => (lifted = k)}
+			onpick={pick}
+			onopen={openAt}
+		/>
 	{/if}
 
 	{#if refusal}

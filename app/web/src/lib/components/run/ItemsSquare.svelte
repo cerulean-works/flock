@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { signedMargin } from '#lib/evals.ts';
 	import { scheme } from '#lib/theme.svelte.ts';
 	import type { ItemKeep, ItemSuites } from '#lib/types.ts';
 
@@ -6,7 +7,8 @@
 	 * One suite of two runs as a small square scatter plot (029): its docs at A's margin across and
 	 * B's up, so the zero lines split it into the diff's four cells and a dot far from the dashed
 	 * diagonal is a doc the runs disagree on; docs only one run got right are in the reading blue.
-	 * A quadrant under the pointer is lifted and named; a click on it picks that suite and cell.
+	 * A quadrant under the pointer is lifted and named, and a click on it picks that suite and cell;
+	 * a dot under the pointer names its doc, and a click on it opens that doc.
 	 */
 	interface Props {
 		suite: ItemSuites['suites'][number];
@@ -22,9 +24,11 @@
 		onlift: (keep: ItemKeep | null) => void;
 		/** Told a clicked cell. */
 		onpick: (keep: ItemKeep) => void;
+		/** Told a clicked dot's task, cell, place in the cell's default order and id. */
+		onopen: (task: string, keep: ItemKeep, index: number, id: string) => void;
 	}
 
-	let { suite, side, current, lifted, keeps, onlift, onpick }: Props = $props();
+	let { suite, side, current, lifted, keeps, onlift, onpick, onopen }: Props = $props();
 
 	// The cells by quadrant: A's sign picks the column, B's the row.
 	const QUADRANT: Partial<Record<ItemKeep, [number, number]>> = {
@@ -36,6 +40,8 @@
 	const CELLS: ItemKeep[] = ['only_a', 'only_b', 'both_wrong', 'both_right'];
 
 	let under = $state<ItemKeep | null>(null);
+	// The dot under the pointer, an index into `suite.dots`.
+	let near = $state<number | null>(null);
 	const shown = $derived(under ?? (current ? lifted : null));
 
 	// Both axes reach the suite's 98th percentile of absolute margins, the same either way so the
@@ -46,6 +52,8 @@
 		sizes.sort((x, y) => x - y);
 		return sizes[Math.floor((sizes.length - 1) * 0.98)] || 1;
 	});
+	// A margin's place along an axis, from 0 to 1.
+	const place = $derived((m: number) => (Math.max(-1, Math.min(1, m / scale)) + 1) / 2);
 
 	function draw(canvas: HTMLCanvasElement) {
 		$effect(() => {
@@ -89,7 +97,6 @@
 			ctx.setLineDash([]);
 
 			// See-through dots, so a crowd reads darker; the docs the runs split on last, on top.
-			const place = (m: number) => (Math.max(-1, Math.min(1, m / scale)) + 1) / 2;
 			for (const flips of [false, true]) {
 				ctx.fillStyle = flips ? flip : ink;
 				for (const [a, b, k] of suite.dots) {
@@ -101,7 +108,34 @@
 				}
 			}
 			ctx.globalAlpha = 1;
+
+			// The dot under the pointer, ringed.
+			if (near !== null) {
+				const [a, b] = suite.dots[near];
+				ctx.strokeStyle = css.getPropertyValue('--foreground').trim();
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.arc(place(a) * side, (1 - place(b)) * side, 3.5, 0, 2 * Math.PI);
+				ctx.stroke();
+			}
 		});
+	}
+
+	// The dot nearest a pointer event, within 4 px, or null.
+	function dotAt(e: MouseEvent): number | null {
+		const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const x = e.clientX - box.left;
+		const y = e.clientY - box.top;
+		let best = null;
+		let closest = 16; // 4 px, squared
+		suite.dots.forEach(([a, b], i) => {
+			const d = (place(a) * side - x) ** 2 + ((1 - place(b)) * side - y) ** 2;
+			if (d <= closest) {
+				closest = d;
+				best = i;
+			}
+		});
+		return best;
 	}
 
 	// The cell whose quadrant a pointer event is in.
@@ -130,6 +164,7 @@
 				', '
 			)}"
 			onmousemove={(e) => {
+				near = dotAt(e);
 				const keep = at(e);
 				if (keep === under) return;
 				under = keep;
@@ -137,11 +172,28 @@
 			}}
 			onmouseleave={() => {
 				under = null;
+				near = null;
 				onlift(null);
 			}}
-			onclick={(e) => onpick(at(e))}
+			onclick={(e) => {
+				const dot = dotAt(e);
+				if (dot === null) return onpick(at(e));
+				const [, , k, t, i, id] = suite.dots[dot];
+				onopen(suite.tasks[t], CELLS[k], i, id);
+			}}
 		></canvas>
-		{#if under}
+		{#if near !== null}
+			{@const [a, b, , t, , id] = suite.dots[near]}
+			<!-- The doc under the pointer: its task and id, then both margins. -->
+			<span
+				class="pointer-events-none absolute inset-x-1 bottom-1 grid rounded bg-popover/95 px-1 font-mono text-[10px] leading-tight shadow-sm"
+			>
+				<span class="truncate">{suite.tasks[t]} · {id}</span>
+				<span class="text-muted-foreground tabular-nums"
+					>A {signedMargin(a)} · B {signedMargin(b)}</span
+				>
+			</span>
+		{:else if under}
 			<span
 				class="pointer-events-none absolute inset-x-0 bottom-1 mx-auto w-fit rounded bg-popover/90 px-1 text-[11px] whitespace-nowrap tabular-nums shadow-sm"
 				>{label(under)} {suite.counts[under] ?? 0}</span

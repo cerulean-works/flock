@@ -401,10 +401,11 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     # t: A right on d-0, d-3, d-4; B on d-0, d-1, d-4. u: both right. exam: A right on d-0 only.
     assert rows["s"]["counts"] == {"only_a": 2, "only_b": 1, "both_wrong": 2, "both_right": 3}
     assert len(rows["s"]["dots"]) == 8
-    # Each dot is the list's margins for a doc of its cell, rounded to 3 decimals.
+    # A dot is a doc's margins as the list has them, rounded to 3 decimals, its cell, its task's
+    # place among the square's tasks, its place in the list and its id: t's d-1, only B right.
     listed = api.get(f"{P}/p/runs/a/items", task="t", keep="only_b", **{"with": "flock/p/b"})
     margins = [round(m["margin"], 3) for m in listed.json()["items"][0]["runs"]]
-    assert [*margins, 1] in rows["s"]["dots"]
+    assert [*margins, 1, 0, 0, "d-1"] in rows["s"]["dots"]
 
     # The same pair again is the kept answer, byte for byte.
     assert api.get(route, **{"with": "flock/p/b"}).body == found.body
