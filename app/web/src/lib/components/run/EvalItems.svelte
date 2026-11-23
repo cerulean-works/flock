@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
+	import ArrowDownWideNarrowIcon from '@lucide/svelte/icons/arrow-down-wide-narrow';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
@@ -21,8 +22,8 @@
 	 * per run whether it was right (icon and word, not colour alone), its signed margin and its
 	 * pick. Flock lists the most telling rows first (D198). One row opens at a time, to the whole
 	 * question and every choice's share, probability and log-probability per run, fetched then
-	 * (028). j and k move through the docs, Enter opens, Esc closes. With two runs, a map of every
-	 * doc of the task sits above the list, and a click on it opens that doc here (029). A caller
+	 * (028). j and k move through the docs, Enter opens, Esc closes. With two runs, a square scatter
+	 * plot per suite sits above the list, and a click on a dot opens that doc here (029). A caller
 	 * that changes the runs remounts it (`{#key}`).
 	 */
 	interface Props {
@@ -242,16 +243,17 @@
 
 	// A mark of the map: its cell's list in the default order, at the page that holds the doc,
 	// with the doc open.
-	function openAt(cell: ItemKeep, index: number, id: string) {
+	function openAt(to: string, cell: ItemKeep, index: number, id: string) {
 		const page = Math.floor(index / SIZE) + 1;
-		const shown = keep === cell && sort === 'margin' && at === page && found !== null;
+		const shown = task === to && keep === cell && sort === 'margin' && at === page && found;
 		open = id;
 		if (shown) {
 			tell();
 			focus(id);
 			return;
 		}
-		if (keep !== cell) total = null;
+		if (task !== to || keep !== cell) total = null;
+		task = to;
 		keep = cell;
 		sort = 'margin';
 		at = page;
@@ -300,24 +302,11 @@
 		e.preventDefault();
 	}
 
-	// The task's score per run and how many docs flipped, from the counts: a net gain can hide
-	// much churn either way.
+	// One run's score on the task, from the counts.
 	const summary = $derived.by(() => {
-		const { only_a = 0, only_b = 0, both_right = 0, both_wrong = 0, right = 0, all = 0 } = counts;
-		if (other) {
-			const docs = only_a + only_b + both_right + both_wrong;
-			if (!docs) return null;
-			const a = (both_right + only_a) / docs;
-			const b = (both_right + only_b) / docs;
-			const delta = 100 * (a - b);
-			const sign = delta > 0 ? '+' : delta < 0 ? '−' : '±';
-			return [
-				`A ${a.toFixed(4)}, B ${b.toFixed(4)}`,
-				`A ${sign}${Math.abs(delta).toFixed(1)} points`,
-				`${only_a} docs only A got right, ${only_b} only B`
-			].join(' · ');
-		}
-		if (!all) return null;
+		const { right = 0, all = 0 } = counts;
+		// Two runs' scores and flips are the counts table's, under the list (D202).
+		if (other || !all) return null;
 		return `${(right / all).toFixed(4)}: ${right} of ${all} docs right`;
 	});
 
@@ -399,6 +388,11 @@
 			variant="ghost"
 			size="sm"
 			class="ml-auto text-muted-foreground"
+			title={sort === 'margin'
+				? other
+					? 'The biggest gap between the runs’ margins first'
+					: 'The surest first, right or wrong'
+				: 'The dataset’s order'}
 			onclick={() => {
 				sort = sort === 'margin' ? 'doc' : 'margin';
 				at = 1;
@@ -406,8 +400,8 @@
 				tell();
 			}}
 		>
-			<ArrowDownUpIcon />
-			{sort === 'margin' ? (other ? 'Biggest margin gap first' : 'Surest first') : 'Dataset order'}
+			{#if sort === 'margin'}<ArrowDownWideNarrowIcon />{:else}<ArrowDownUpIcon />{/if}
+			{sort === 'margin' ? 'Margin' : 'Doc order'}
 		</Button>
 		<InfoHint label="About the items">
 			A run’s margin is its gold choice’s score minus its best wrong choice’s, in the task’s primary
@@ -422,7 +416,7 @@
 	{/if}
 
 	{#if other}
-		<ItemsMap {path} {task} {other} {keeps} onopen={openAt} />
+		<ItemsMap {path} {other} {task} onopen={openAt} />
 	{/if}
 
 	{#if refusal}

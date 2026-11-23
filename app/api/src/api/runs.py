@@ -36,8 +36,8 @@ from app.api.src.core.accounts import User
 from app.api.src.core.errors import NotFound
 from app.api.src.core.evals import PairFiles
 from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
-from flock.eval.diff import diff
-from flock.eval.items import CELLS, Item, items
+from flock.eval.diff import check_instrument, diff
+from flock.eval.items import CELLS, RANKED, Item, items
 from flock.eval.results import WrittenResults
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
@@ -777,17 +777,72 @@ async def run_items(
         raise APIError(409, str(exc)) from exc
 
 
+def _accuracy_suites(a: WrittenResults, b: WrittenResults) -> dict[str, list[str]]:
+    """The suites both runs recorded under one hash that hold a task of their own, each with every task under it, nested suites' too, that both scored under one hash and that an accuracy ranking choices is the primary metric of: what the compare page draws a square for (029). A suite that only groups others gets none: its groups have theirs."""
+    check_instrument(a, b)
+    suites = {s.suite: s for s in a.suites}
+    hashes_b = {s.suite: s.suite_hash for s in b.suites}
+    tasks_b = {t.task: t.task_hash for t in b.tasks}
+    # `acc_greedy` ranks no choices, so its docs have no margin to place.
+    ranked = set()
+    for t in a.tasks:
+        if t.primary_metric in RANKED and tasks_b.get(t.task) == t.task_hash:
+            ranked.add(t.task)
+    found = {}
+    for suite in a.suites:
+        if hashes_b.get(suite.suite) != suite.suite_hash:
+            continue
+        if all(member in suites for member in suite.members):
+            continue
+        tasks, todo = [], list(suite.members)
+        while todo:
+            name = todo.pop(0)
+            if name in suites:
+                todo.extend(suites[name].members)
+            elif name in ranked and name not in tasks:
+                tasks.append(name)
+        if tasks:
+            found[suite.suite] = tasks
+    return found
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/items/suites")
+async def run_items_suites(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    other: Annotated[str, Query(alias="with", description="the other run, as entity/project/id")],
+) -> Response:
+    """The suites the compare page draws a square for, with their tasks: each suite both runs recorded alike that holds a task of its own, and every accuracy task under it both scored under one hash (029). Reads the two results files only.
+
+    404 as ``.../items`` for a run unknown, unreadable or without results, 409 with eval's reason for another instrument."""
+    loop = asyncio.get_running_loop()
+    readers = await eval_readers(run, other, store, viewer)
+
+    def read() -> bytes:
+        a, b = (WrittenResults.read(source, reader) for source, reader in readers)
+        suites = _accuracy_suites(a, b)
+        return orjson.dumps({"suites": [{"suite": s, "tasks": t} for s, t in suites.items()]})
+
+    try:
+        return Response(await loop.run_in_executor(DIFFS, read), media_type="application/json")
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:
+        raise APIError(409, str(exc)) from exc
+
+
 @public.get("/projects/{entity}/{project}/runs/{run}/items/map")
 async def run_items_map(
     run: ReadableRunDep,
     store: StoreDep,
     viewer: ViewerDep,
-    task: Annotated[str, Query(description="the task whose docs are drawn")],
+    suite: Annotated[str, Query(description="a suite ``.../items/suites`` lists")],
     other: Annotated[str, Query(alias="with", description="the other run, as entity/project/id")],
 ) -> Response:
-    """Every doc of a task for two runs, a cell of their diff at a time, each cell in the order ``.../items`` lists it by default: each doc's id and both runs' margins, rounded to 4 decimals. What the compare page's map draws (029); a doc opens through ``.../item``.
+    """Every doc of a suite's tasks for two runs, a task at a time and in it a cell of their diff at a time, each cell in the order ``.../items`` lists it by default: each doc's id and both runs' margins, rounded to 4 decimals. What one square of the compare page draws (029); a doc opens through ``.../item``.
 
-    Read and refused as ``.../items`` is."""
+    A task a run has no predictions for, or whose predictions the viewer can't read (a private dataset's, outside the organization), is left out. 409 for a suite ``.../items/suites`` doesn't list; otherwise read and refused as ``.../items`` is."""
     loop = asyncio.get_running_loop()
     readers = await eval_readers(run, other, store, viewer)
 
@@ -795,14 +850,24 @@ async def run_items_map(
         # Each file read once for the four cells, so they're cut from the same rows (a file
         # replaced between two reads would put a doc in two cells or none) at a quarter the cost.
         runs = [WrittenResults.read(source, cache(reader)) for source, reader in readers]
-        cells = []
-        for keep in CELLS:
-            ids, margins = [], []
-            for item, pair in _with_margins(items(runs, task, keep), "margin"):
-                ids.append(item.id)
-                margins.append([None if m is None else round(m, 4) for m in pair])
-            cells.append({"keep": keep, "ids": ids, "margins": margins})
-        return orjson.dumps({"cells": cells})
+        tasks = _accuracy_suites(*runs).get(suite)
+        if tasks is None:
+            raise ValueError(f"{suite} isn't a suite of accuracy tasks both runs scored alike")
+        found = []
+        for task in tasks:
+            # A task whose predictions a run lacks, or this viewer can't read (a private
+            # dataset's, outside the organization), has no dots; read once here, as `items` will.
+            if any(run.predictions(task) is None for run in runs):
+                continue
+            cells = []
+            for keep in CELLS:
+                ids, margins = [], []
+                for item, pair in _with_margins(items(runs, task, keep), "margin"):
+                    ids.append(item.id)
+                    margins.append([None if m is None else round(m, 4) for m in pair])
+                cells.append({"keep": keep, "ids": ids, "margins": margins})
+            found.append({"task": task, "cells": cells})
+        return orjson.dumps({"suite": suite, "tasks": found})
 
     try:
         return Response(await loop.run_in_executor(DIFFS, read), media_type="application/json")

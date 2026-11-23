@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
-import type { EvalItem, ItemSummary, ItemsMap, ItemsPage } from '#lib/types.ts';
+import type { EvalItem, ItemSummary, ItemSuites, ItemsMap, ItemsPage } from '#lib/types.ts';
 import EvalItems from './EvalItems.svelte';
 
 const ITEM: EvalItem = {
@@ -52,30 +52,40 @@ const rows = (items: ItemSummary[], total = items.length, offset = 0): ItemsPage
 	items
 });
 
-/** The pair's map of arc_easy: 25 docs only A got right, `a-0` to `a-24`, none in the other cells. */
+/** The pair's one suite, `core`, holding both tasks. */
+const SUITES: ItemSuites = { suites: [{ suite: 'core', tasks: ['piqa', 'arc_easy'] }] };
+
+/** `core`'s square: piqa's 25 docs only B got right, `p-0` to `p-24`, none in the other cells. */
 const MAP: ItemsMap = {
-	cells: [
+	suite: 'core',
+	tasks: [
 		{
-			keep: 'only_a',
-			ids: Array.from({ length: 25 }, (_, i) => `a-${i}`),
-			margins: Array.from({ length: 25 }, (_, i) => [1 - i / 25, -0.5])
-		},
-		{ keep: 'only_b', ids: [], margins: [] },
-		{ keep: 'both_wrong', ids: [], margins: [] },
-		{ keep: 'both_right', ids: [], margins: [] }
+			task: 'piqa',
+			cells: [
+				{ keep: 'only_a', ids: [], margins: [] },
+				{
+					keep: 'only_b',
+					ids: Array.from({ length: 25 }, (_, i) => `p-${i}`),
+					margins: Array.from({ length: 25 }, (_, i) => [-0.5, 1 - i / 25])
+				},
+				{ keep: 'both_wrong', ids: [], margins: [] },
+				{ keep: 'both_right', ids: [], margins: [] }
+			]
+		}
 	]
 };
 
 /**
- * The dashboard's answers: `list` (or `list(offset)`) for a page of rows, MAP for the map (with
+ * The dashboard's answers: `list` (or `list(offset)`) for a page of rows, SUITES and MAP for the squares (with
  * `status`, as the list), and ITEM, or a doc of that id, for a doc. The URLs asked for are in its
  * calls.
  */
 function answer(status: number, list: unknown | ((offset: number) => unknown)) {
 	const fetch = vi.fn(async (input: string) => {
 		const url = new URL(input, 'https://flock.test');
-		if (url.pathname.endsWith('/items/map')) {
-			const body = status === 200 ? MAP : list;
+		if (url.pathname.endsWith('/items/suites') || url.pathname.endsWith('/items/map')) {
+			const squares = url.pathname.endsWith('/items/map') ? MAP : SUITES;
+			const body = status === 200 ? squares : list;
 			return new Response(JSON.stringify(body), { status });
 		}
 		if (url.pathname.endsWith('/item')) {
@@ -154,8 +164,8 @@ describe('eval items', () => {
 			''
 		]);
 		expect(docs(fetch)).toEqual([]);
-		// The task's scores and flips, from the counts.
-		await expect.element(screen.getByText(/docs only A got right/)).toBeVisible();
+		// Two runs' scores are the counts table's, not the list's.
+		expect(screen.getByText(/docs only A got right/).elements()).toEqual([]);
 
 		await row.getByRole('button', { name: 'Mercury_7017010' }).click();
 		// The doc asked for with the list's task, keep and pair; the whole question in the row, then
@@ -250,10 +260,10 @@ describe('eval items', () => {
 		const fetch = answer(200, rows([ROW]));
 		const onview = vi.fn();
 		render(EvalItems, { ...PAIR, onview });
-		await screen.getByRole('button', { name: 'Biggest margin gap first' }).click();
+		await screen.getByRole('button', { name: 'Margin' }).click();
 		await vi.waitFor(() => expect(lists(fetch)).toHaveLength(2));
 		expect(lists(fetch)[1].searchParams.get('sort')).toBe('doc');
-		await expect.element(screen.getByRole('button', { name: 'Dataset order' })).toBeVisible();
+		await expect.element(screen.getByRole('button', { name: 'Doc order' })).toBeVisible();
 		expect(onview).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'doc' }));
 	});
 
@@ -280,11 +290,11 @@ describe('eval items', () => {
 			.toHaveTextContent('4');
 	});
 
-	it('maps every doc of the task and opens the one clicked at its page of the list', async () => {
-		// The second page of only_a holds a-20 to a-24.
+	it('draws a square per suite and opens a clicked dot’s doc in its task, at its page', async () => {
+		// The second page of piqa's only_b holds p-20 to p-24.
 		const page = (offset: number) =>
 			rows(
-				MAP.cells[0].ids.slice(offset, offset + 20).map((id) => ({ ...ROW, id })),
+				MAP.tasks[0].cells[1].ids.slice(offset, offset + 20).map((id) => ({ ...ROW, id })),
 				25,
 				offset
 			);
@@ -292,36 +302,46 @@ describe('eval items', () => {
 		const onview = vi.fn();
 		render(EvalItems, { ...PAIR, onview });
 
-		const canvas = screen.getByRole('img', { name: /^25 docs: Only A right 25, Only B right 0/ });
-		await expect.element(canvas).toBeVisible();
-		const map = asked(fetch).find((url) => url.pathname.endsWith('/items/map'))!;
-		expect(map.pathname).toBe('/api/projects/acme/evals/runs/r1/items/map');
-		expect(Object.fromEntries(map.searchParams)).toEqual({
-			task: 'arc_easy',
+		const square = screen.getByRole('img', {
+			name: /^core: 25 docs, 0 only A got right, 25 only B/
+		});
+		await expect.element(square).toBeVisible();
+		const urls = asked(fetch).filter((url) => url.pathname.includes('/items/'));
+		expect(urls.map((url) => url.pathname)).toEqual([
+			'/api/projects/acme/evals/runs/r1/items/suites',
+			'/api/projects/acme/evals/runs/r1/items/map'
+		]);
+		expect(Object.fromEntries(urls[1].searchParams)).toEqual({
+			suite: 'core',
 			with: 'acme/evals/r2'
 		});
 
-		// a-21 sits at A's margin 0.16 across and B's -0.5 up, on axes reaching the 98th percentile
-		// of the task's absolute margins, inside 40 px on the left, 8 on the right and top, 22 below.
-		const sizes = MAP.cells[0].margins
+		// p-21 sits at A's margin -0.5 across and B's 0.16 up, on axes reaching the 98th percentile
+		// of the suite's absolute margins, edge to edge of the square.
+		const sizes = MAP.tasks[0].cells[1].margins
 			.flat()
 			.map((m) => Math.abs(m!))
 			.sort((x, y) => x - y);
 		const scale = sizes[Math.floor((sizes.length - 1) * 0.98)];
-		const width = canvas.element().getBoundingClientRect().width;
-		const position = {
-			x: 40 + ((0.16 / scale + 1) / 2) * (width - 48),
-			y: 8 + ((1 + 0.5 / scale) / 2) * (300 - 30)
-		};
-		await userEvent.click(canvas, { position });
+		const side = square.element().getBoundingClientRect().width;
+		const place = (m: number) => (m / scale + 1) / 2;
+		await userEvent.click(square, {
+			position: { x: place(-0.5) * side, y: (1 - place(0.16)) * side }
+		});
+		// The list moves from arc_easy to the dot's task and cell, on its page, the doc open.
 		await expect
-			.element(screen.getByRole('button', { name: 'a-21', exact: true }))
+			.element(screen.getByRole('button', { name: 'p-21', exact: true }))
 			.toHaveAttribute('aria-expanded', 'true');
-		await expect.element(screen.getByRole('button', { name: 'a-21', exact: true })).toHaveFocus();
-		expect(lists(fetch).at(-1)!.searchParams.get('offset')).toBe('20');
-		expect(docs(fetch).at(-1)!.searchParams.get('doc')).toBe('a-21');
+		await expect.element(screen.getByRole('button', { name: 'p-21', exact: true })).toHaveFocus();
+		const last = lists(fetch).at(-1)!.searchParams;
+		expect([last.get('task'), last.get('keep'), last.get('offset')]).toEqual([
+			'piqa',
+			'only_b',
+			'20'
+		]);
+		expect(docs(fetch).at(-1)!.searchParams.get('doc')).toBe('p-21');
 		expect(onview).toHaveBeenLastCalledWith(
-			expect.objectContaining({ keep: 'only_a', page: 2, item: 'a-21' })
+			expect.objectContaining({ task: 'piqa', keep: 'only_b', page: 2, item: 'p-21' })
 		);
 	});
 

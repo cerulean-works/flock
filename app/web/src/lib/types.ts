@@ -810,14 +810,24 @@ export interface ItemsPage {
 	items: ItemSummary[];
 }
 
-/** Every doc of a task for two runs, a cell of their diff at a time (`GET …/runs/{run}/items/map`). */
+/** The suites the compare page draws a square for, with their tasks (`GET …/runs/{run}/items/suites`). */
+export interface ItemSuites {
+	suites: { suite: string; tasks: string[] }[];
+}
+
+/** Every doc of a suite's tasks for two runs, by cell of their diff (`GET …/runs/{run}/items/map`). */
 export interface ItemsMap {
-	/** Eval's cells in its order, each in the order the items list shows it by default. */
-	cells: {
-		keep: ItemKeep;
-		ids: string[];
-		/** Each doc's A and B margins (as `ItemRunSummary.margin`), rounded to 4 decimals. */
-		margins: (number | null)[][];
+	suite: string;
+	/** The suite's tasks the viewer can read, each with eval's cells in eval's order. */
+	tasks: {
+		task: string;
+		/** Each in the order the items list shows it by default. */
+		cells: {
+			keep: ItemKeep;
+			ids: string[];
+			/** Each doc's A and B margins (as `ItemRunSummary.margin`), rounded to 4 decimals. */
+			margins: (number | null)[][];
+		}[];
 	}[];
 }
 
