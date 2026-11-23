@@ -1004,7 +1004,8 @@ async def run_item_tokens(
             # so one holding more than 2^25 values (the bank's largest default sidecar holds 8.1
             # million) or more than 256 MiB unpacked is refused before a row is decoded. The file
             # is read once for both, named as `tokens` names it.
-            scoped = dataclasses.replace(written, read_bytes=cache(written.read_bytes))
+            read = written.read_bytes
+            scoped = dataclasses.replace(written, read_bytes=cache(read)) if read else written
             name = tokens_name(task)
             if any(t.task == task and t.dataset.private for t in written.tasks):
                 name = f"private/{name}" if written.source.startswith("run:") else name
@@ -1030,7 +1031,9 @@ async def run_item_tokens(
             # Checked before any is a key: a list or struct isn't one.
             indices = [r.get("choice") for r in continuation]
             whole = all(type(k) is int for k in indices)
-            whole = whole and sorted(indices) == list(range(len(found.choices)))
+            n = len(found.choices)
+            whole = whole and len(indices) == n and len(set(indices)) == n
+            whole = whole and all(k in range(n) for k in indices)
             by_choice = {r["choice"]: r for r in continuation} if whole else {}
             fields = ("token_ids", "logprob", "rank", "entropy")
             for k in range(len(found.choices)):
