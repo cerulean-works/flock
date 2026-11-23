@@ -141,13 +141,11 @@ class BaseModel(nn.Module, ABC):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
         """Validate a collated batch and return the inputs `_forward` takes.
 
-        A batch's own `position_ids` are used when given, as packed batches give them.
-        Otherwise they are contiguous over each row's real tokens, so left padding
-        does not shift them.
+        Position IDs come from the batch, as the collator builds them.
 
         Args:
-            batch (`Batch`): Token IDs and a matching mask shaped `[batch, sequence]`.
-                Mask values `True` or `1` identify real tokens.
+            batch (`Batch`): Token IDs, a matching mask and position IDs, shaped
+                `[batch, sequence]`. Mask values `True` or `1` identify real tokens.
 
         Returns:
             `tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]`: The
@@ -172,24 +170,19 @@ class BaseModel(nn.Module, ABC):
             raise ValueError("attention_mask must have the same shape as input_ids")
 
         attention_mask = attention_mask.to(device=input_ids.device, dtype=torch.bool)
-        position_ids = batch.get("position_ids")
-        if position_ids is None:
-            position_ids = (attention_mask.long().cumsum(-1) - 1).clamp_min(0)
-        return input_ids, attention_mask, position_ids, batch.get("cu_seq_lens")
+        return input_ids, attention_mask, batch["position_ids"], batch.get("cu_seq_lens")
 
     def forward(self, batch: Batch) -> torch.Tensor:  # ty: ignore[invalid-mutable-override]
         """Return full-sequence logits for a collated batch.
 
         Labels in a batch are ignored: the trainer owns target alignment and loss.
-        In an unpacked batch, position IDs are contiguous over each row's real tokens.
         Subclasses prepare the backend's mask and causal flag in `_forward`.
 
-        A batch with `cu_seq_lens` is packed: its own `position_ids` restart in each
-        document, and `_forward` receives the boundaries.
+        A batch with `cu_seq_lens` is packed, and `_forward` receives the boundaries.
 
         Args:
-            batch (`Batch`): Token IDs and a matching mask shaped `[batch, sequence]`.
-                Mask values `True` or `1` identify real tokens.
+            batch (`Batch`): Token IDs, a matching mask and position IDs, shaped
+                `[batch, sequence]`. Mask values `True` or `1` identify real tokens.
 
         Returns:
             `torch.Tensor`: Logits shaped `[batch, sequence, vocabulary]`.

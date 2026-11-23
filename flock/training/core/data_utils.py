@@ -20,8 +20,9 @@ class Batch(TypedDict, closed=True):
         attention_mask (`torch.Tensor`): Boolean mask; `True` marks a real input token.
         labels (`torch.Tensor`): Next-token IDs already shifted relative to inputs.
             A target is `-100` if either its input or target position is padding.
-        position_ids (`torch.Tensor`, *optional*): Positions that restart at zero in
-            each document. Present only in packed batches.
+        position_ids (`torch.Tensor`): Each input's position in its sequence. They
+            count from each row's first real token, so left padding does not shift
+            them, and restart at zero in each document of a packed batch.
         cu_seq_lens (`torch.Tensor`, *optional*): int32 document boundaries in the
             flattened `[batch * sequence]` axis, from 0 to `batch * sequence`. They
             cover every position, and each row's padding is one more document.
@@ -31,7 +32,7 @@ class Batch(TypedDict, closed=True):
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
     labels: torch.Tensor
-    position_ids: NotRequired[torch.Tensor]
+    position_ids: torch.Tensor
     cu_seq_lens: NotRequired[torch.Tensor]
 
 
@@ -64,8 +65,8 @@ class LanceBatchCollator:
         Returns:
             `Batch`: Tensors of shape `[rows, padded_length - 1]`. Invalid targets
             use `-100`, including padding-to-text transitions with left padding.
-            Packed rows, which hold `_flock_chunks`, also give `position_ids` and
-            `cu_seq_lens`, padded to the row with the most inputs.
+            Packed rows, which hold `_flock_chunks`, also give `cu_seq_lens` and are
+            padded to the row with the most inputs.
 
         Raises:
             `KeyError`: If a row lacks the configured input column.
@@ -76,7 +77,9 @@ class LanceBatchCollator:
                 "input_ids": torch.full((1, 1), self.tokenizer.pad_token_id, dtype=torch.long),
                 "attention_mask": torch.ones((1, 1), dtype=torch.bool),
                 "labels": torch.full((1, 1), -100, dtype=torch.long),
+                "position_ids": torch.zeros((1, 1), dtype=torch.long),
             }
+        # Since the flock chunks is a packed representation, we use to check if the batch contains packed rows.
         if "_flock_chunks" in batch[0]:
             return self._collate_packed(batch)
 
@@ -103,11 +106,13 @@ class LanceBatchCollator:
         valid = mask[:, :-1] & mask[:, 1:]
         # PyTorch CE loss ignores labels of target -100
         labels.masked_fill_(~valid, -100)
+        input_mask = mask[:, :-1]
 
         return {
             "input_ids": input_ids[:, :-1],
-            "attention_mask": mask[:, :-1],
+            "attention_mask": input_mask,
             "labels": labels,
+            "position_ids": (input_mask.long().cumsum(-1) - 1).clamp_min(0),
         }
 
     def _collate_packed(self, batch: list[dict[str, Any]]) -> Batch:

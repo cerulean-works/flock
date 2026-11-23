@@ -500,7 +500,9 @@ page apply to OLMo 2 only: `HFCompatibleConfig.attn_implementation` names a
 `transformers` kernel instead.
 
 Pass a `[batch, sequence]` padding mask in `Batch["attention_mask"]`, with True/1
-for real tokens. OLMo 2 handles causality and prepares the backend's mask for you.
+for real tokens, and each input's position in `Batch["position_ids"]`, counting from
+the row's first real token. The collator builds both. OLMo 2 handles causality and
+prepares the backend's mask for you.
 
 ### Use FlashAttention-3 or FlashAttention-4
 

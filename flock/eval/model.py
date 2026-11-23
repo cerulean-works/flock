@@ -384,10 +384,14 @@ class FlockCausalLM(torch.nn.Module):
         logits_to_keep: int = 0,
     ) -> SimpleNamespace:
         """Returns the logits of the last `logits_to_keep` positions (every position for 0) as `.logits`."""
-        # A Flock model counts positions from each row's first real token, as `position_ids`
-        # does for the left-padded batches `ScoringModel` builds, and ignores `labels`.
+        # A Flock model ignores `labels`.
         logits = self.model(
-            {"input_ids": input_ids, "attention_mask": attention_mask, "labels": input_ids}
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "labels": input_ids,
+                "position_ids": position_ids,
+            }
         )
 
         return SimpleNamespace(logits=logits[:, -logits_to_keep:] if logits_to_keep else logits)

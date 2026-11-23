@@ -179,7 +179,12 @@ def test_fp32_weights_with_cuda_autocast(
     ids, mask = token_batch(padding, cuda_device)
     labels = ids[:, 1:].clone()
     labels.masked_fill_(~(mask[:, :-1] & mask[:, 1:]), -100)
-    batch = {"input_ids": ids[:, :-1], "attention_mask": mask[:, :-1], "labels": labels}
+    batch = {
+        "input_ids": ids[:, :-1],
+        "attention_mask": mask[:, :-1],
+        "labels": labels,
+        "position_ids": (mask[:, :-1].long().cumsum(-1) - 1).clamp_min(0),
+    }
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, cuda_device)
     trainer.torch_compile = False

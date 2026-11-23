@@ -37,7 +37,7 @@ def test_collator_shifts_targets_and_preserves_real_eos(
     batch = LanceBatchCollator(tokenizer, "body").collate_fn(
         [{"body": "a b [EOS]"}, {"body": "b [EOS]"}]
     )
-    assert set(batch) == {"input_ids", "attention_mask", "labels"}
+    assert set(batch) == {"input_ids", "attention_mask", "labels", "position_ids"}
     assert batch["input_ids"].tolist() == inputs
     assert batch["attention_mask"].tolist() == masks
     assert batch["attention_mask"].dtype == torch.bool

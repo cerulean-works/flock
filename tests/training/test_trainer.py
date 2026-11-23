@@ -339,14 +339,24 @@ def test_evaluation_scores_real_tasks_and_logs_at_training_step(
         for inputs, targets in [([1, 2, 3, 4], [2, 3, 4, 5]), ([1, 3], [3, 4])]:
             ids = torch.tensor([inputs])  # EOS=1 supplies the first token's context.
             logits = reference(
-                {"input_ids": ids, "attention_mask": torch.ones_like(ids), "labels": ids}
+                {
+                    "input_ids": ids,
+                    "attention_mask": torch.ones_like(ids),
+                    "labels": ids,
+                    "position_ids": torch.arange(ids.shape[1])[None],
+                }
             )
             total_nll += F.cross_entropy(
                 logits[0].float(), torch.tensor(targets), reduction="sum"
             ).item()
         ids = torch.tensor([[2]])  # Both choices have context "a".
         logits = reference(
-            {"input_ids": ids, "attention_mask": torch.ones_like(ids), "labels": ids}
+            {
+                "input_ids": ids,
+                "attention_mask": torch.ones_like(ids),
+                "labels": ids,
+                "position_ids": torch.zeros_like(ids),
+            }
         )
         logprob = logits[0, 0].float().log_softmax(-1)
         expected_accuracy = float(logprob[3] >= logprob[4])
@@ -2148,6 +2158,7 @@ def test_all_ignored_logging_windows_remain_finite(
         "input_ids": torch.tensor([[2, 3], [4, 5]]),
         "attention_mask": torch.ones(2, 2, dtype=torch.bool),
         "labels": torch.full((2, 2), -100, dtype=torch.long),
+        "position_ids": torch.arange(2).expand(2, 2),
     }
     monkeypatch.setattr(trainer, "_get_training_dataloader", lambda: [batch] * 3)
     trainer.train()

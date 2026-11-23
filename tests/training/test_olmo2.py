@@ -25,10 +25,12 @@ if TYPE_CHECKING:
 
 
 def make_batch(input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> Batch:
+    mask = torch.ones_like(input_ids) if attention_mask is None else attention_mask
     return {
         "input_ids": input_ids,
-        "attention_mask": torch.ones_like(input_ids) if attention_mask is None else attention_mask,
+        "attention_mask": mask,
         "labels": torch.full_like(input_ids, -100),
+        "position_ids": (mask.long().cumsum(-1) - 1).clamp_min(0),
     }
 
 

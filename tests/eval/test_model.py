@@ -252,7 +252,12 @@ def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(
         mask = torch.ones_like(ids)
         with torch.no_grad():
             logits = flock_model(
-                {"input_ids": ids[:, :-1], "attention_mask": mask[:, :-1], "labels": ids}
+                {
+                    "input_ids": ids[:, :-1],
+                    "attention_mask": mask[:, :-1],
+                    "labels": ids,
+                    "position_ids": torch.arange(ids.shape[1] - 1)[None],
+                }
             )
         logprobs = logits[0].float().log_softmax(-1)
         start = len(context) - 1
