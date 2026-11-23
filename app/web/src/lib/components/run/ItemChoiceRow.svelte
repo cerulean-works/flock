@@ -1,5 +1,6 @@
 <script lang="ts">
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import InfoHint from '#lib/components/InfoHint.svelte';
 	import type { EvalItem, ItemTokens, TokenHeat } from '#lib/types.ts';
 
 	/**
@@ -18,9 +19,19 @@
 		/** Each run's per-token values over the item's choices, once Flock sends them. */
 		tokens?: ItemTokens | null;
 		heat?: TokenHeat;
+		/** Why each run has no tokens, if it has none, said on the first choice's row. */
+		notes?: (string | null)[];
 	}
 
-	let { item, choice, sides, delta, tokens = null, heat = 'surprisal' }: Props = $props();
+	let {
+		item,
+		choice,
+		sides,
+		delta,
+		tokens = null,
+		heat = 'surprisal',
+		notes = []
+	}: Props = $props();
 
 	// A token's tint, its color token and strength from 0 to 1. The scales are fixed, so one doc
 	// reads like the next: 8 nats of surprisal, rank 1,024 and 6 nats of entropy are full. Two runs
@@ -95,6 +106,12 @@
 				class={['mt-1 block text-[11px]', picked ? 'text-foreground' : 'text-muted-foreground']}
 				aria-hidden="true">{said}</span
 			>
+			{#if choice === 0 && notes[side]}
+				<!-- No tokens for this run: why, behind an icon. -->
+				<span class="mt-1 flex text-muted-foreground">
+					<InfoHint label="Why {sides[side]} has no tokens">{notes[side]}</InfoHint>
+				</span>
+			{/if}
 			{#if own}
 				<!-- The tokens as this run cut the choice; a dot where its tokenizer couldn't name one.
 				     Hover one for its numbers. -->

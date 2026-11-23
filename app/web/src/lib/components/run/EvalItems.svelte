@@ -445,10 +445,30 @@
 				</button>
 			{/each}
 		</div>
+		<!-- What an opened doc's tokens are tinted by, for every doc of the list. -->
+		<Select.Root type="single" value={heat} onValueChange={(v) => (heat = v as TokenHeat)}>
+			<Select.Trigger
+				size="sm"
+				class="ml-auto border-none text-muted-foreground shadow-none"
+				aria-label="Tokens tinted by"
+			>
+				Tokens: {HEATS.find((h) => h.heat === heat)?.label}
+			</Select.Trigger>
+			<Select.Content>
+				{#each HEATS.filter((h) => other || h.heat !== 'versus') as h (h.heat)}
+					<Select.Item value={h.heat} label={h.label}>
+						<span class="grid">
+							<span>{h.label}</span>
+							<span class="text-xs text-muted-foreground">{h.hint}</span>
+						</span>
+					</Select.Item>
+				{/each}
+			</Select.Content>
+		</Select.Root>
 		<Button
 			variant="ghost"
 			size="sm"
-			class="ml-auto text-muted-foreground"
+			class="text-muted-foreground"
 			title={sort === 'margin'
 				? other
 					? 'The biggest gap between the runs’ margins first'
@@ -592,36 +612,16 @@
 						<!-- Opened: a row per choice in the same columns, so each run's numbers sit beside
 						     the choice they're for. -->
 						{#if item}
-							{#if tokens}
-								<!-- What the tokens under each choice are tinted by, and why a run has none. -->
-								<tr>
-									<td></td>
-									<td colspan={columns - 1} class="px-2 py-1 text-xs text-muted-foreground">
-										<div class="flex flex-wrap items-center gap-2">
-											<span>Tokens by</span>
-											<span class="flex gap-1" role="radiogroup" aria-label="Tokens tinted by">
-												{#each HEATS.filter((h) => other || h.heat !== 'versus') as h (h.heat)}
-													<button
-														type="button"
-														role="radio"
-														aria-checked={h.heat === heat}
-														title={h.hint}
-														class="rounded-md border px-2 py-0.5 hover:bg-muted aria-checked:border-ring aria-checked:bg-accent"
-														onclick={() => (heat = h.heat)}>{h.label}</button
-													>
-												{/each}
-											</span>
-											{#each tokens.runs as run, side (side)}
-												{#if run.note}
-													<span>{sides[side]}: {refused({ message: run.note }, 0)}</span>
-												{/if}
-											{/each}
-										</div>
-									</td>
-								</tr>
-							{/if}
 							{#each item.choices, k (k)}
-								<ItemChoiceRow {item} choice={k} {sides} delta={!!other} {tokens} {heat} />
+								<ItemChoiceRow
+									{item}
+									choice={k}
+									{sides}
+									delta={!!other}
+									{tokens}
+									{heat}
+									notes={tokens?.runs.map((r) => r.note && refused({ message: r.note }, 0))}
+								/>
 							{/each}
 						{:else if shown}
 							<tr class="border-b border-divider">

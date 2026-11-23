@@ -221,21 +221,24 @@ describe('eval items', () => {
 			keep: 'only_a',
 			with: 'acme/evals/r2'
 		});
-		// A's token under each choice, with its numbers; B's reason, naming B as its column does.
+		// A's token under each choice, with its numbers; B's reason behind an icon in its column.
 		const venus = screen.getByTitle('log p -4.00 · rank 3 · entropy 1.50').first();
 		await expect.element(venus).toHaveTextContent('Venus');
-		await expect
-			.element(screen.getByText('B: B has no per-token values for arc_easy'))
-			.toBeVisible();
+		await expect.element(screen.getByRole('button', { name: 'Why B has no tokens' })).toBeVisible();
 		// 4 nats of 8: half of the full tint.
 		expect(venus.element().getAttribute('style')).toContain('var(--primary) 30%');
 
-		await screen.getByRole('radio', { name: 'Entropy' }).click();
-		await expect.element(screen.getByRole('radio', { name: 'Entropy' })).toBeChecked();
+		// The toolbar's menu picks the heat for every doc.
+		await screen.getByRole('combobox', { name: 'Tokens tinted by' }).click();
+		await screen.getByRole('option', { name: /^Entropy/ }).click();
+		await expect
+			.element(screen.getByRole('combobox', { name: 'Tokens tinted by' }))
+			.toHaveTextContent('Tokens: Entropy');
 		// 1.5 nats of 6.
 		expect(venus.element().getAttribute('style')).toContain('var(--primary) 15%');
 		// B has no tokens, so A vs B tints nothing.
-		await screen.getByRole('radio', { name: 'A vs B' }).click();
+		await screen.getByRole('combobox', { name: 'Tokens tinted by' }).click();
+		await screen.getByRole('option', { name: /^A vs B/ }).click();
 		expect(venus.element().getAttribute('style')).toContain(' 0%');
 	});
 
