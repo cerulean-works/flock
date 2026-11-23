@@ -27,7 +27,8 @@ The item list shows twenty docs at a time. A reader comparing two runs can't see
 - **Two runs only**: `with` is required. One run's docs have no cells to draw, and a map of one run's margins tells little a sorted list doesn't.
 - **One formula.** The margins and their order come from `_with_margins`, which the list's route now calls too, so the map and the list can't disagree on where a doc sits.
 - Access and refusals are the list's: it reads through `eval_readers`, and a private task's map reaches the org's members only.
-- **Cost**, measured with eval's reader on two whole-bank runs (OLMo 2 1B and Llama 3.2 1B, schema 12): HellaSwag 2.45 s (four reads of the task, one per cell), ARC-Challenge 0.26 s (1,172 docs, 42 KB), MMLU college biology 0.04 s. No cache: each read is the list's own cost, four times.
+- **Each file is read once per request** for the four cells, so the cells are cut from the same rows: a predictions file replaced between two reads would otherwise put a doc in two cells or none.
+- **Cost**, measured with eval's reader on two whole-bank runs (OLMo 2 1B and Llama 3.2 1B, schema 12), reading the files once per cell: HellaSwag 2.45 s, ARC-Challenge 0.26 s (1,172 docs, 42 KB), MMLU college biology 0.04 s. One read instead of four leaves `items()`'s own work per cell.
 
 ### D204. One canvas per cell, a mark per doc, two halves per mark
 
@@ -56,8 +57,9 @@ The item list shows twenty docs at a time. A reader comparing two runs can't see
 - `run_items`' margin loop and sort moved, unchanged, into `_with_margins(found, sort)`; `run_items_map` calls it with the default order for each cell.
 - `ItemsMap` fetches the map when the task changes and draws each cell from an attachment that re-runs on the width, the task's scale or the theme. A failed or refused map draws nothing: the list under it says why.
 - The test checks each cell's ids and margins against the list's own default pages, so the two orders are one.
+- Review asked for the single read (`functools.cache` over each run's reader for the request) and for the map not to hold the grid at its old width after a narrowing (`contain: inline-size`). A cell's bitmap isn't split: the suite's largest cell, HellaSwag's 6,299 docs both runs got right, is about 2,000 px tall at phone width and twice the pixel density, under the 4,096 px some phones allow.
 
 ## 5. Known gaps
 
-- Each map reads the task four times; HellaSwag takes 2.45 s. Reading the predictions once for all cells needs a change to eval's `items()`, which is outside this stage.
+- `items()` still matches the two runs' rows once per cell; sharing that work across cells needs a change to eval, outside this stage.
 - The map has no text: a reader opens a doc to see it.

@@ -4,7 +4,7 @@ import mimetypes
 import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
+from functools import cache, partial
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -792,7 +792,9 @@ async def run_items_map(
     readers = await eval_readers(run, other, store, viewer)
 
     def read() -> bytes:
-        runs = [WrittenResults.read(source, reader) for source, reader in readers]
+        # Each file read once for the four cells, so they're cut from the same rows (a file
+        # replaced between two reads would put a doc in two cells or none) at a quarter the cost.
+        runs = [WrittenResults.read(source, cache(reader)) for source, reader in readers]
         cells = []
         for keep in CELLS:
             ranked = _with_margins(items(runs, task, keep), "margin")

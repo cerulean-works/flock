@@ -108,7 +108,9 @@
 	}
 </script>
 
-<div class="relative grid gap-2" bind:clientWidth={width} bind:this={root}>
+<!-- Its width is the page's, not its canvases': a canvas drawn wide must not keep the map from
+     narrowing, or the marks would never wrap again. -->
+<div class="relative grid gap-2 [contain:inline-size]" bind:clientWidth={width} bind:this={root}>
 	{#if map}
 		<p class="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
 			<span>Every doc: A’s margin on top, B’s below; click one to open it.</span>
