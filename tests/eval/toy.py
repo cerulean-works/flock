@@ -146,6 +146,8 @@ PROMPT_PATHS = (
         description="Science and geography.\n\n",
     ),
     dataclasses.replace(TASK, name="toy:rows", fewshot=Fewshot(rows=tuple(ROWS["train"]))),
+    # A split's first rows, in its order, as many-shot tasks take a prefix of a fixed list.
+    dataclasses.replace(TASK, name="toy:first_rows", fewshot=Fewshot("train", num_shots=2)),
     dataclasses.replace(TASK, name="toy:zero_shot", fewshot=None, unconditional_context=None),
     # Examples from another split: q-1 isn't shown `dev-1`, which shows its own answer.
     dataclasses.replace(TASK, name="toy:repeat", fewshot=Fewshot("dev", ("dev-1", "dev-2"))),
