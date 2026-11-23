@@ -10,6 +10,8 @@
 	 */
 	interface Props {
 		suite: ItemSuites['suites'][number];
+		/** Its width and height in px. */
+		side: number;
 		/** Whether it holds the task the list shows, which it marks. */
 		current: boolean;
 		/** A cell to lift from outside, as when the pointer is on the list's button for it. */
@@ -22,9 +24,8 @@
 		onpick: (keep: ItemKeep) => void;
 	}
 
-	let { suite, current, lifted, keeps, onlift, onpick }: Props = $props();
+	let { suite, side, current, lifted, keeps, onlift, onpick }: Props = $props();
 
-	const SIDE = 112;
 	// The cells by quadrant: A's sign picks the column, B's the row.
 	const QUADRANT: Partial<Record<ItemKeep, [number, number]>> = {
 		only_b: [0, 0],
@@ -54,12 +55,12 @@
 			const rule = css.getPropertyValue('--border').trim();
 			const flip = css.getPropertyValue('--primary').trim();
 			const dpr = Math.min(window.devicePixelRatio || 1, 2);
-			canvas.width = SIDE * dpr;
-			canvas.height = SIDE * dpr;
+			canvas.width = side * dpr;
+			canvas.height = side * dpr;
 			const ctx = canvas.getContext('2d');
 			if (!ctx) return;
 			ctx.scale(dpr, dpr);
-			const half = SIDE / 2;
+			const half = side / 2;
 
 			// The lifted quadrant, washed in the reading blue under its dots.
 			const quadrant = shown && QUADRANT[shown];
@@ -76,14 +77,14 @@
 			ctx.lineWidth = 1;
 			ctx.beginPath();
 			ctx.moveTo(half, 0);
-			ctx.lineTo(half, SIDE);
+			ctx.lineTo(half, side);
 			ctx.moveTo(0, half);
-			ctx.lineTo(SIDE, half);
+			ctx.lineTo(side, half);
 			ctx.stroke();
 			ctx.setLineDash([2, 2]);
 			ctx.beginPath();
-			ctx.moveTo(0, SIDE);
-			ctx.lineTo(SIDE, 0);
+			ctx.moveTo(0, side);
+			ctx.lineTo(side, 0);
 			ctx.stroke();
 			ctx.setLineDash([]);
 
@@ -95,7 +96,7 @@
 					if (k < 2 !== flips) continue;
 					ctx.globalAlpha = shown && CELLS[k] !== shown ? 0.12 : flips ? 0.75 : 0.3;
 					ctx.beginPath();
-					ctx.arc(place(a) * SIDE, (1 - place(b)) * SIDE, 1.25, 0, 2 * Math.PI);
+					ctx.arc(place(a) * side, (1 - place(b)) * side, 1.25, 0, 2 * Math.PI);
 					ctx.fill();
 				}
 			}
@@ -113,7 +114,7 @@
 	const label = (keep: ItemKeep) => keeps.find((k) => k.keep === keep)?.label ?? keep;
 </script>
 
-<figure class="grid flex-none snap-start gap-1" style:width="{SIDE}px">
+<figure class="grid flex-none snap-start gap-1" style:width="{side}px">
 	<div class="relative">
 		<!-- Not reachable by keyboard: the task picker and the list's buttons do the same. -->
 		<canvas
@@ -122,8 +123,8 @@
 				'block cursor-pointer rounded-md bg-muted/40',
 				current && 'ring-1 ring-ring/70 ring-offset-1 ring-offset-background'
 			]}
-			style:width="{SIDE}px"
-			style:height="{SIDE}px"
+			style:width="{side}px"
+			style:height="{side}px"
 			role="img"
 			aria-label="{suite.suite}: {CELLS.map((k) => `${label(k)} ${suite.counts[k] ?? 0}`).join(
 				', '

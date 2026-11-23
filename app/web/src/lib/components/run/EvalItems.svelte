@@ -408,16 +408,7 @@
 	{/if}
 
 	{#if other}
-		<ItemsMap
-			{path}
-			{other}
-			{task}
-			{keeps}
-			{lifted}
-			onlift={(k) => (lifted = k)}
-			onpick={pick}
-			{bleed}
-		/>
+		<ItemsMap {path} {other} {task} {keeps} {lifted} onlift={(k) => (lifted = k)} onpick={pick} />
 	{/if}
 
 	{#if refusal}
@@ -426,22 +417,23 @@
 	{:else if found && !found.items.length}
 		<p class="px-1 text-muted-foreground">No docs of {task} here.</p>
 	{:else if found}
-		<!-- Columns as wide as the reader dragged them; a table wider than its box scrolls sideways.
-		     With `bleed` the box spans the page (as the dataset rows do), padded so the table starts
-		     under the text (Home's 70rem column), so a wide table grows to the page's edges first. -->
-		<div class={['overflow-x-auto', bleed && 'bleed px-[max(0px,calc((100cqw-70rem)/2))]']}>
+		<!-- As wide as its box, the Question column taking what the others leave; never narrower
+		     than the columns as the reader dragged them, past which it scrolls sideways. With
+		     `bleed` the box spans the page, edge to edge, as the dataset rows do. -->
+		<div class={['overflow-x-auto', bleed && 'bleed']}>
 			<table
-				class="min-w-full table-fixed border-t border-divider text-[13px]"
-				style:width="{tableWidth}px"
+				class="w-full table-fixed border-t border-divider text-[13px]"
+				style:min-width="{tableWidth}px"
 			>
 				<colgroup>
 					<col style:width="{widths.doc}px" />
-					<col style:width="{widths.question}px" />
+					<!-- No width of its own: it takes the slack, its dragged width the least it gets. -->
+					<col />
 					<col style:width="{widths.gold}px" />
 					{#each sides as side (side)}<col style:width="{widths.run}px" />{/each}
 					{#if other}<col style:width="{DELTA_W}px" />{/if}
-					<!-- Takes whatever width the columns leave, so each renders at its dragged width. -->
-					<col />
+					<!-- The empty cell each row ends with, kept narrow now the Question column fills. -->
+					<col style:width="0px" />
 				</colgroup>
 				<thead class="border-b text-xs text-muted-foreground">
 					<tr>

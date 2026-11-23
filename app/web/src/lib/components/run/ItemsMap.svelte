@@ -24,14 +24,22 @@
 		onlift: (keep: ItemKeep | null) => void;
 		/** Told a clicked square's tasks and cell. */
 		onpick: (tasks: string[], keep: ItemKeep) => void;
-		/** On a `home` page: the row spans the page, as the list's table does. */
-		bleed?: boolean;
 	}
 
-	let { path, other, task, keeps, lifted, onlift, onpick, bleed = false }: Props = $props();
+	let { path, other, task, keeps, lifted, onlift, onpick }: Props = $props();
 
 	let suites = $state<ItemSuites['suites'] | null>(null);
 	let loading = $state(false);
+	let width = $state(0);
+
+	// As many squares as fit at about 112 px, sized so they fill the text's width exactly, a gap
+	// of 12 px between them: no square is cut at the edge until the row scrolls.
+	const GAP = 12;
+	const side = $derived.by(() => {
+		const room = width - 8; // inside the row's 4 px padding, which keeps the ring whole
+		const fit = Math.max(1, Math.floor((room + GAP) / (112 + GAP)));
+		return room > 0 ? Math.floor((room + GAP) / fit - GAP) : 112;
+	});
 
 	// Refused or failed, the row stays away: the list under it says why. A pair's first visit
 	// computes every suite (tens of seconds on a whole bank); Flock keeps the answer after.
@@ -55,18 +63,16 @@
 </script>
 
 {#if suites?.length}
-	<!-- Padded so the marked square's ring isn't clipped by the scrolling box; with `bleed` it
-	     spans the page as the list's table does, starting under the text. A scroll comes to rest
-	     on a square's edge. -->
+	<!-- Within the text's width, padded so the marked square's ring isn't clipped by the scrolling
+	     box. A scroll comes to rest on a square's edge. -->
 	<div
-		class={[
-			'flex snap-x snap-proximity scroll-px-1 gap-3 overflow-x-auto p-1',
-			bleed ? 'bleed px-[max(0.25rem,calc((100cqw-70rem)/2))]' : '-mx-1'
-		]}
+		class="-mx-1 flex snap-x snap-proximity scroll-px-1 gap-3 overflow-x-auto p-1"
+		bind:clientWidth={width}
 	>
 		{#each suites as suite (suite.suite)}
 			<ItemsSquare
 				{suite}
+				{side}
 				current={suite.tasks.includes(task)}
 				{lifted}
 				{keeps}
