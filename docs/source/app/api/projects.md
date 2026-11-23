@@ -202,10 +202,10 @@ Texts longer than 240 characters end with `…`. The answers are those of the [d
 
 ## Eval item suites[[run-items-suites]]
 
-`GET .../runs/{run}/items/suites?with={entity}/{project}/{run}` returns, for two runs, each suite of accuracy tasks both scored alike, with what the compare page draws for it. A suite is listed when both runs recorded it under the same suite hash, it's scored by its tasks' own metrics (not a `:bpb` suite) and it holds a task of its own. Its `tasks` are every task under it, nested suites included, that both runs scored under the same task hash with an accuracy as the primary metric. `counts` gives how many of its docs are in each group, and `dots` up to 800 of its docs as A's margin, B's margin and the group's index in `only_a`, `only_b`, `both_wrong`, `both_right`, taken evenly through each group.
+`GET .../runs/{run}/items/suites?with={entity}/{project}/{run}` returns, for two runs, each suite of accuracy tasks both scored alike, with what the compare page draws for it. A suite is listed when both runs recorded it under the same suite hash, it's scored by its tasks' own metrics (not a `:bpb` suite) and it holds a task of its own. Its `tasks` are every task under it, nested suites included, that both runs scored under the same task hash with an accuracy as the primary metric. `counts` gives how many of its docs are in each group, and `dots` up to 800 of its docs, taken evenly through each group: A's margin, B's margin, the group's index in `only_a`, `only_b`, `both_wrong`, `both_right`, the doc's task as an index into `tasks`, its place in that group in the [items list](#run-items)'s default order, and its id.
 
 ```json
-{"suites": [{"suite": "mmlu", "tasks": ["mmlu_abstract_algebra", ...], "counts": {"only_a": ..., "only_b": ..., "both_wrong": ..., "both_right": ...}, "dots": [[A margin, B margin, group], ...]}]}
+{"suites": [{"suite": "mmlu", "tasks": ["mmlu_abstract_algebra", ...], "counts": {"only_a": ..., "only_b": ..., "both_wrong": ..., "both_right": ...}, "dots": [[0.112, -0.05, 0, 3, 17, "Mercury_7017010"], ...]}]}
 ```
 
 A task whose predictions a run lacks, or that you can't read (a private dataset's, outside the organization), is left out. The first answer for a pair computes every suite and can take a minute on large runs; Flock keeps it for the last few pairs. It answers as [Eval items](#run-items) does.
