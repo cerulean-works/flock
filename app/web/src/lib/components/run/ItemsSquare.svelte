@@ -197,9 +197,19 @@
 				style:top="{pointer.y - 10}px"
 			>
 				<span class="truncate">{suite.tasks[t]} · {id}</span>
-				<span class="text-muted-foreground tabular-nums"
-					>A {signedMargin(a)} · B {signedMargin(b)}</span
-				>
+				<!-- Each margin tinted as the list tints it: by sign, as strong as it is wide here. -->
+				<span class="flex items-center gap-1 tabular-nums">
+					{#each [{ run: 'A', m: a }, { run: 'B', m: b }] as { run, m } (run)}
+						<span class="text-muted-foreground">{run}</span>
+						<span
+							class="rounded px-1"
+							style:background-color="color-mix(in srgb, var({m >= 0
+								? '--state-finished'
+								: '--destructive'}) {Math.round(35 * Math.min(Math.abs(m) / scale, 1))}%,
+							transparent)">{signedMargin(m)}</span
+						>
+					{/each}
+				</span>
 			</span>
 		{:else if under}
 			<span
