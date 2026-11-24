@@ -16,7 +16,7 @@ import torch
 from click.testing import CliRunner
 from sentencepiece import SentencePieceTrainer
 
-from flock.eval import cli, run
+from flock.eval import cli, metrics, run
 from flock.eval.metrics import ChoiceScores
 from flock.eval.model import ScoringModel
 from flock.eval.provenance import Provenance
@@ -201,6 +201,24 @@ def test_provenance_is_collected_before_scoring(
     evaluate(EvalConfig(model="tiny@0", tasks=("toy",)))
 
     assert events == ["provenance", "score"]
+
+
+def test_a_task_is_ranked_once_when_its_predictions_are_written(
+    offline_model: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = []
+    ranking_scores = metrics.ranking_scores
+
+    def counted(scores: ChoiceScores) -> dict[str, torch.Tensor]:
+        calls.append(scores)
+        return ranking_scores(scores)
+
+    monkeypatch.setattr(metrics, "ranking_scores", counted)
+    monkeypatch.setattr(run, "ranking_scores", counted)
+
+    evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
+
+    assert len(calls) == 1
 
 
 OTHER = dataclasses.replace(TASK, name="other", primary_metric="acc_raw")

@@ -493,7 +493,11 @@ def score_prepared(
         )
     scores = requests.choice_scores(request_scores)
     reported = task.reported_metrics
-    per_doc = {name: values for name, values in multiple_choice(scores).items() if name in reported}
+    # Ranked once: the metrics read it, and so does the pick written beside the predictions.
+    ranked = ranking_scores(scores)
+    per_doc = {
+        name: values for name, values in multiple_choice(scores, ranked).items() if name in reported
+    }
     # One host copy for every metric's mean. It also waits for the GPU, so `seconds` times the
     # scoring.
     means = torch.stack(list(per_doc.values())).mean(dim=1).tolist()
@@ -508,8 +512,8 @@ def score_prepared(
         primary = per_doc[task.primary_metric]
         correct = primary if scale(task.primary_metric) == "accuracy" else None
         # The choice that metric picks, when it ranks choices (`acc_greedy` and `bpb` don't).
-        ranked = ranking_scores(scores).get(task.primary_metric)
-        pick = best_choice(ranked, scores.valid) if ranked is not None else None
+        primary_rank = ranked.get(task.primary_metric)
+        pick = best_choice(primary_rank, scores.valid) if primary_rank is not None else None
         write_predictions(predictions, requests, scores, correct, pick, task.dataset.private)
     if token_values is not None:
         write_tokens(token_values, requests, request_scores, contexts, task.dataset.private)

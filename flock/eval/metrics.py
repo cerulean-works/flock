@@ -144,7 +144,9 @@ def ranking_scores(scores: ChoiceScores) -> dict[str, torch.Tensor]:
     return ranked
 
 
-def multiple_choice(scores: ChoiceScores) -> dict[str, torch.Tensor]:
+def multiple_choice(
+    scores: ChoiceScores, ranked: dict[str, torch.Tensor] | None = None
+) -> dict[str, torch.Tensor]:
     """
     Computes OLMES's multiple-choice metrics per doc (OLMES, sec. 3.3).
 
@@ -160,10 +162,17 @@ def multiple_choice(scores: ChoiceScores) -> dict[str, torch.Tensor]:
 
     `bpb` is the gold choice's bits per byte (see [`bits_per_byte`]), not an accuracy.
 
+    Args:
+        scores (`ChoiceScores`):
+            Every doc's answer-choice scores.
+        ranked (`dict[str, torch.Tensor]`, *optional*):
+            `ranking_scores(scores)`, passed by a caller that also needs each choice's ranking score, so it is computed once. Computed here if not given.
+
     Returns:
         `dict[str, torch.Tensor]`: float32 `[docs]` tensors, named as in `MULTIPLE_CHOICE_METRICS`.
     """
-    ranked = ranking_scores(scores)
+    if ranked is None:
+        ranked = ranking_scores(scores)
     metrics = {name: accuracy(score, scores.valid, scores.gold) for name, score in ranked.items()}
 
     # Each doc's gold column. Added last so the keys keep `MULTIPLE_CHOICE_METRICS`'s order,
