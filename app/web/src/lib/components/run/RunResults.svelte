@@ -167,7 +167,7 @@
 													: String(s.score)
 											)}
 										>
-											{formatScore(s.score)}
+											{formatScore(s.score, s.metric)}
 										</td>
 										<td
 											class="truncate px-3 py-1.5 text-muted-foreground"
@@ -221,7 +221,7 @@
 										class={['px-3 py-1.5 text-right tabular-nums', value == null && 'text-faint']}
 										{@attach hint(value == null ? 'Not a finite number' : String(value))}
 									>
-										{formatScore(value)}
+										{formatScore(value, t.primary_metric)}
 									</td>
 									<td
 										class="truncate px-3 py-1.5 text-muted-foreground"

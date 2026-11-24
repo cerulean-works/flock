@@ -120,7 +120,7 @@
 								class={['px-2 text-right tabular-nums', value == null && 'text-faint']}
 								{@attach hint(value == null ? undefined : String(value))}
 							>
-								{formatScore(value)}
+								{formatScore(value, row.metric)}
 							</td>
 						{/each}
 					</tr>

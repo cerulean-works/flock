@@ -221,8 +221,8 @@
 
 <!-- Each run's accuracy over the docs compared, and A's lead in points. -->
 {#snippet rates({ a, b }: { a: number; b: number })}
-	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(a)}</td>
-	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(b)}</td>
+	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(a, 'acc')}</td>
+	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(b, 'acc')}</td>
 	<td class="px-3 py-1.5 text-right tabular-nums">
 		{#if Number.isFinite(a - b)}
 			<!-- A tint per sign, as strong as the lead is wide in the table: the items' margins'. -->

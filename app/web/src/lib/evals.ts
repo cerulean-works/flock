@@ -119,11 +119,21 @@ export function evalRows(runs: ModelEvalRun[]): EvalRow[] {
 }
 
 /**
- * A score as the eval pages show it: four decimals, so a column of scores lines up and two runs
- * read digit by digit. The exact value is the cell's hover text.
+ * Whether a metric is a share of docs right (`acc_raw`, `acc_per_char`, `accuracy`), shown as a
+ * percent. A suite with no metric of its own averages its tasks' primary metrics, nearly always
+ * accuracies: it reads as one when its score lies in [0, 1].
  */
-export function formatScore(value: number | null | undefined): string {
-	return value == null || !Number.isFinite(value) ? '–' : value.toFixed(4);
+export const isAccuracy = (metric: string | null, value: number) =>
+	metric === null ? value >= 0 && value <= 1 : /^acc/.test(metric);
+
+/**
+ * A score as the eval pages show it: an accuracy as a percent to one decimal (`62.4%`), any other
+ * metric (`bpb`, `perplexity`) to four significant figures. The exact value is the hover hint.
+ */
+export function formatScore(value: number | null | undefined, metric: string | null): string {
+	if (value == null || !Number.isFinite(value)) return '–';
+	if (isAccuracy(metric, value)) return `${(100 * value).toFixed(1)}%`;
+	return String(+value.toPrecision(4));
 }
 
 /** Why eval's diff didn't compare a task, in words. */
