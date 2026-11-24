@@ -35,8 +35,13 @@
 			<FormError error={mutation.error} />
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-				<Button type="submit" variant="destructive" disabled={typed !== bucket || mutation.pending}>
-					{mutation.pending ? 'Deleting…' : 'Delete bucket'}
+				<Button
+					type="submit"
+					variant="destructive"
+					disabled={typed !== bucket || mutation.pending}
+					pending={mutation.pending}
+				>
+					Delete bucket
 				</Button>
 			</AlertDialog.Footer>
 		</form>

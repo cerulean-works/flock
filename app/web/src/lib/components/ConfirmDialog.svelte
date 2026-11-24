@@ -13,7 +13,6 @@
 		action: string;
 		fields: Record<string, string | number>;
 		confirm: string;
-		pending: string;
 		/** Toast once it's done. */
 		success: string;
 		/** Called once it's done, after the dialog closes. */
@@ -27,7 +26,6 @@
 		action,
 		fields,
 		confirm,
-		pending,
 		success,
 		done
 	}: Props = $props();
@@ -55,9 +53,7 @@
 			<FormError error={mutation.error} />
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-				<Button type="submit" variant="destructive" disabled={mutation.pending}>
-					{mutation.pending ? pending : confirm}
-				</Button>
+				<Button type="submit" variant="destructive" pending={mutation.pending}>{confirm}</Button>
 			</AlertDialog.Footer>
 		</form>
 	</AlertDialog.Content>

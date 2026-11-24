@@ -118,8 +118,9 @@
 							type="submit"
 							variant="outline"
 							disabled={displayName.trim() === data.org.display_name || naming.pending}
+							pending={naming.pending}
 						>
-							{naming.pending ? 'Saving…' : 'Save'}
+							Save
 						</Button>
 					</div>
 					<FormError error={naming.error} />
@@ -232,9 +233,9 @@
 									</Select.Content>
 								</Select.Root>
 							</div>
-							<Button type="submit" disabled={inviting.pending}>
+							<Button type="submit" pending={inviting.pending}>
 								<UserPlusIcon />
-								{inviting.pending ? 'Creating…' : 'Create invite link'}
+								Create invite link
 							</Button>
 						</div>
 						<FormError error={inviting.error} />

@@ -182,8 +182,8 @@
 		{#if superadmin}
 			{#if running}
 				<form method="POST" action="?/cancelImport" use:enhance={cancelling.enhance}>
-					<Button type="submit" variant="outline" disabled={cancelling.pending}>
-						{cancelling.pending ? 'Cancelling…' : 'Cancel import'}
+					<Button type="submit" variant="outline" pending={cancelling.pending}>
+						Cancel import
 					</Button>
 				</form>
 			{:else if !resuming}
@@ -218,8 +218,8 @@
 		<p class="text-[13px] text-muted-foreground">Runs already in {label} are skipped.</p>
 		<FormError error={starting.error} />
 		<div class="flex gap-2">
-			<Button type="submit" disabled={starting.pending}>
-				{starting.pending ? 'Starting…' : shown ? 'Resume import' : 'Start import'}
+			<Button type="submit" pending={starting.pending}>
+				{shown ? 'Resume import' : 'Start import'}
 			</Button>
 			<Button variant="outline" onclick={() => (resuming = false)}>Cancel</Button>
 		</div>

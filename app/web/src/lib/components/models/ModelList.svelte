@@ -234,9 +234,7 @@
 
 {#snippet footer()}
 	{#if cursor}
-		<Button variant="outline" disabled={loading} onclick={more}>
-			{loading ? 'Loading…' : 'Load more'}
-		</Button>
+		<Button variant="outline" onclick={more} pending={loading}>Load more</Button>
 	{/if}
 	{#if failed}
 		<span class="text-[13px] text-destructive" role="alert">{failed}</span>

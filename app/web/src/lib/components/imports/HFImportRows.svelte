@@ -1,5 +1,4 @@
 <script lang="ts">
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -64,10 +63,9 @@
 						<Button
 							variant="outline"
 							size="sm"
-							disabled={cancelling === job.id}
 							onclick={() => cancel(job)}
+							pending={cancelling === job.id}
 						>
-							{#if cancelling === job.id}<LoaderCircleIcon class="animate-spin" />{/if}
 							Cancel
 						</Button>
 					</div>

@@ -53,9 +53,7 @@
 				<p class="text-xs text-muted-foreground">At least 8 characters.</p>
 			</div>
 			<FormError error={form?.error ?? null} />
-			<Button type="submit" class="mt-2 h-10 w-full text-sm" disabled={pending}>
-				{pending ? 'Saving…' : 'Set password'}
-			</Button>
+			<Button type="submit" class="mt-2 h-10 w-full text-sm" {pending}>Set password</Button>
 		</form>
 	{/if}
 </AuthShell>

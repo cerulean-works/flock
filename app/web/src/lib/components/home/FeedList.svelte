@@ -28,8 +28,8 @@
 </ul>
 {#if pager.next}
 	<div class="mt-4 flex items-center gap-3">
-		<Button variant="outline" onclick={() => pager.more()} disabled={pager.loading}>
-			{pager.loading ? 'Loading…' : 'Show more'}
+		<Button variant="outline" onclick={() => pager.more()} pending={pager.loading}>
+			Show more
 		</Button>
 		{#if pager.failed}<span class="text-[13px] text-destructive">Couldn’t load more</span>{/if}
 	</div>

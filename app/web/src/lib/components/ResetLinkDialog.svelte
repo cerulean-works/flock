@@ -63,9 +63,7 @@
 							<Button {...props} variant="outline">Cancel</Button>
 						{/snippet}
 					</Dialog.Close>
-					<Button type="submit" disabled={mutation.pending}>
-						{mutation.pending ? 'Creating…' : 'Create reset link'}
-					</Button>
+					<Button type="submit" pending={mutation.pending}>Create reset link</Button>
 				</Dialog.Footer>
 			</form>
 		{/if}

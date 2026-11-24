@@ -328,8 +328,8 @@
 		</span>
 	{/if}
 	{#if cursor}
-		<Button variant="outline" size="sm" disabled={loading} onclick={() => load(true)}>
-			{loading ? 'Loading…' : 'Load more'}
+		<Button variant="outline" size="sm" onclick={() => load(true)} pending={loading}>
+			Load more
 		</Button>
 	{/if}
 {/snippet}

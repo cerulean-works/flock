@@ -59,8 +59,13 @@
 					aria-hidden="true"
 					onchange={() => input?.files?.length && form?.requestSubmit()}
 				/>
-				<Button variant="outline" disabled={busy} onclick={() => input?.click()}>
-					{uploading.pending ? 'Uploading…' : src ? 'Change picture' : 'Upload a picture'}
+				<Button
+					variant="outline"
+					disabled={busy}
+					onclick={() => input?.click()}
+					pending={uploading.pending}
+				>
+					{src ? 'Change picture' : 'Upload a picture'}
 				</Button>
 			</form>
 			{#if src}

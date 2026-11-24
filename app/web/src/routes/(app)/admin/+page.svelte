@@ -206,9 +206,7 @@
 						<Button {...props} variant="outline">Cancel</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={creation.pending}>
-					{creation.pending ? 'Creating…' : 'Create organization'}
-				</Button>
+				<Button type="submit" pending={creation.pending}>Create organization</Button>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>

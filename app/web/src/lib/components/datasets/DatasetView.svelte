@@ -361,7 +361,6 @@
 		title="Make {nameOf(path)} public?"
 		description="Anyone with the link will be able to see every version of this dataset. Check that none of them hold secrets."
 		confirm="Make public"
-		pending="Saving…"
 		success="{nameOf(path)} is now public"
 	/>
 	<form

@@ -83,9 +83,7 @@
 		<FormError {error} />
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-			<Button variant="destructive" disabled={pending} onclick={remove}>
-				{pending ? 'Deleting…' : 'Delete'}
-			</Button>
+			<Button variant="destructive" onclick={remove} {pending}>Delete</Button>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>

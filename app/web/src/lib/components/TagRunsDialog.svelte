@@ -113,9 +113,7 @@
 						<Button {...props} variant="outline">Cancel</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={mutation.pending}>
-					{mutation.pending ? 'Saving…' : 'Save tags'}
-				</Button>
+				<Button type="submit" pending={mutation.pending}>Save tags</Button>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>

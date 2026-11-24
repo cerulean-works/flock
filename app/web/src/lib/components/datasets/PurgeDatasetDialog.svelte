@@ -71,8 +71,9 @@
 					type="submit"
 					variant="destructive"
 					disabled={!entry || typed !== entry.path || pending}
+					{pending}
 				>
-					{pending ? 'Deleting…' : 'Delete for good'}
+					Delete for good
 				</Button>
 			</AlertDialog.Footer>
 		</form>

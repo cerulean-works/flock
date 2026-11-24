@@ -139,10 +139,13 @@
 					<Button type="button" onclick={() => (open = false)}>Close</Button>
 				{:else}
 					<AlertDialog.Cancel disabled={pending}>Cancel</AlertDialog.Cancel>
-					<Button type="submit" variant="destructive" disabled={typed !== expected || pending}>
-						{pending
-							? 'Deleting…'
-							: `Delete ${items.length === 1 ? (items[0].folder ? 'folder' : 'dataset') : count(items.length, 'item')}`}
+					<Button
+						type="submit"
+						variant="destructive"
+						disabled={typed !== expected || pending}
+						{pending}
+					>
+						{`Delete ${items.length === 1 ? (items[0].folder ? 'folder' : 'dataset') : count(items.length, 'item')}`}
 					</Button>
 				{/if}
 			</AlertDialog.Footer>

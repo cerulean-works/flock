@@ -138,9 +138,14 @@
 		</div>
 		<FormError error={mutation.error} />
 		<div>
-			<Button type="submit" variant="outline" disabled={mutation.pending || !org}>
+			<Button
+				type="submit"
+				variant="outline"
+				disabled={mutation.pending || !org}
+				pending={mutation.pending}
+			>
 				<KeyRoundIcon />
-				{mutation.pending ? 'Creating…' : 'Create S3 key'}
+				Create S3 key
 			</Button>
 		</div>
 	</form>

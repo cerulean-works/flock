@@ -64,8 +64,8 @@
 			</div>
 			<FormError error={invalid ?? creating.error} />
 			<Dialog.Footer>
-				<Button type="submit" disabled={creating.pending || !!invalid}>
-					{creating.pending ? 'Creating…' : 'Create bucket'}
+				<Button type="submit" disabled={creating.pending || !!invalid} pending={creating.pending}>
+					Create bucket
 				</Button>
 			</Dialog.Footer>
 		</form>

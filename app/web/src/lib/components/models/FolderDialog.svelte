@@ -1,5 +1,4 @@
 <script lang="ts">
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -162,8 +161,8 @@
 					type="submit"
 					variant={action === 'delete' ? 'destructive' : 'default'}
 					disabled={pending || (action === 'delete' && models > 0)}
+					{pending}
 				>
-					{#if pending}<LoaderCircleIcon class="animate-spin" />{/if}
 					{action === 'rename' ? 'Rename' : action === 'move' ? 'Move' : 'Delete'}
 				</Button>
 			</Dialog.Footer>

@@ -678,8 +678,8 @@
 		<div bind:offsetHeight={headH}>
 			{#if first > 0 && lines.length}
 				<div class="flex items-center gap-3 px-5 pt-3 pb-2 text-[13px] text-muted-foreground">
-					<Button variant="outline" size="sm" onclick={earlier} disabled={loading}>
-						{loading ? 'Loading…' : 'Show earlier lines'}
+					<Button variant="outline" size="sm" onclick={earlier} pending={loading}>
+						Show earlier lines
 					</Button>
 					{first.toLocaleString('en-US')} earlier{q ? ', not searched' : ''}
 				</div>
@@ -769,8 +769,8 @@
 			</div>
 			<div class="px-5 py-3 text-xs text-muted-foreground">
 				{#if laterCount > 0}
-					<Button variant="outline" size="sm" onclick={later} disabled={loadingLater}>
-						{loadingLater ? 'Loading…' : 'Show later lines'}
+					<Button variant="outline" size="sm" onclick={later} pending={loadingLater}>
+						Show later lines
 					</Button>
 					<span class="ml-2"
 						>{laterCount.toLocaleString('en-US')} later{q ? ', not searched' : ''}</span

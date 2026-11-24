@@ -192,12 +192,13 @@
 						Continue
 					</Button>
 				{:else}
-					<Button type="submit" variant="destructive" disabled={!ready || mutation.pending}>
-						{mutation.pending
-							? 'Deleting…'
-							: items.length
-								? `Delete project and ${count(items.length, 'item')}`
-								: 'Delete project'}
+					<Button
+						type="submit"
+						variant="destructive"
+						disabled={!ready || mutation.pending}
+						pending={mutation.pending}
+					>
+						{items.length ? `Delete project and ${count(items.length, 'item')}` : 'Delete project'}
 					</Button>
 				{/if}
 			</AlertDialog.Footer>

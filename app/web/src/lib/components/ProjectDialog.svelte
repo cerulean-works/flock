@@ -161,8 +161,8 @@
 						<Button {...props} variant="outline">Cancel</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={mutation.pending}>
-					{#if mutation.pending}Saving…{:else if project}Save{:else}Create project{/if}
+				<Button type="submit" pending={mutation.pending}>
+					{project ? 'Save' : 'Create project'}
 				</Button>
 			</Dialog.Footer>
 		</form>
@@ -177,7 +177,6 @@
 		title="Make {project.name} public?"
 		description="Anyone with the link will be able to see every run in this project, including configs, files and logs. Check that none of them hold secrets."
 		confirm="Make public"
-		pending="Saving…"
 		success="{project.name} is now public"
 		done={() => (open = false)}
 	/>

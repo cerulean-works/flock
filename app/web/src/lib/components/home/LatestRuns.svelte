@@ -103,8 +103,6 @@
 
 {#snippet none()}{empty}{/snippet}
 {#snippet more()}
-	<Button variant="outline" onclick={() => pager.more()} disabled={pager.loading}>
-		{pager.loading ? 'Loading…' : 'Show more'}
-	</Button>
+	<Button variant="outline" onclick={() => pager.more()} pending={pager.loading}>Show more</Button>
 	{#if pager.failed}<span class="text-[13px] text-destructive">Couldn’t load more</span>{/if}
 {/snippet}

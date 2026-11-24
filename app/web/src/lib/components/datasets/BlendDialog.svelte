@@ -2,7 +2,6 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import CircleHelpIcon from '@lucide/svelte/icons/circle-help';
 	import DicesIcon from '@lucide/svelte/icons/dices';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { untrack } from 'svelte';
@@ -512,14 +511,14 @@
 					>
 				{/if}
 				{#if step < 3}
-					<Button type="submit" disabled={!canNext}>
-						{#if checking}<LoaderCircleIcon class="animate-spin" />{/if}
-						Next
-					</Button>
+					<Button type="submit" disabled={!canNext} pending={checking}>Next</Button>
 				{:else}
-					<Button type="submit" disabled={pending || checking || !preview || problems.length > 0}>
-						{#if pending || checking}<LoaderCircleIcon class="animate-spin" />{/if}
-						{pending ? 'Starting…' : 'Create blend'}
+					<Button
+						type="submit"
+						disabled={pending || checking || !preview || problems.length > 0}
+						pending={pending || checking}
+					>
+						Create blend
 					</Button>
 				{/if}
 			</Dialog.Footer>
