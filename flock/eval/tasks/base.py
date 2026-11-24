@@ -251,20 +251,6 @@ class MCRequests:
     shots: tuple[MCDoc, ...]
     shown: tuple[tuple[int, ...], ...]
 
-    @property
-    def context_requests(self) -> tuple[int, ...]:
-        """The index of each doc's first request with each of its distinct contexts, in order: one per doc where its choices share a context, one per choice where each has its own, as in Winogrande."""
-        found = []
-        start = 0
-        for doc in self.docs:
-            seen = set()
-            for offset, choice in enumerate(doc.choices):
-                if choice.context not in seen:
-                    seen.add(choice.context)
-                    found.append(start + offset)
-            start += len(doc.choices)
-        return tuple(found)
-
     def choice_scores(self, scores: Scores) -> ChoiceScores:
         """
         Lays `scores` (one per request, in order) out per doc as `[docs, max_choices]`.

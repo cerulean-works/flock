@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     import torch
 
     from flock.eval.metrics import ChoiceScores
-    from flock.eval.requests import ContextScores, Scores, TokenValues
+    from flock.eval.requests import Scores
     from flock.eval.tasks.base import MCRequests
     from flock.eval.tasks.perplexity import TextDoc
 
@@ -207,13 +207,12 @@ def write_tokens(
     path: Path,
     requests: MCRequests,
     scores: Scores,
-    contexts: ContextScores | None = None,
     private: bool = False,
 ) -> None:
     """
     Writes a multiple-choice task's per-token values to `path`, a Parquet file beside its predictions, creating its directory if needed. With `private`, the file is readable by its owner only: token ids of a private dataset are its text.
 
-    Each row is one token sequence of one doc: its `id`, the `choice` it belongs to, its `part` and `token_ids`, and per token its `logprob`, `rank`, `entropy`, `top1_logprob` and `logprob_std` (see [`~eval.requests.TokenValues`]). Every doc has one `continuation` row per choice, from `scores.continuation_tokens`. From `contexts`, each of a doc's distinct contexts has, under its first choice, a `greedy` row with the tokens greedy decoding writes after it and no values, where the model decodes, and a `context` row with its tokens' values, where they were asked for. The rows of each part follow doc order.
+    Each row is one token sequence of one doc: its `id`, the `choice` it belongs to, its `part` and `token_ids`, and per token its `logprob`, `rank`, `entropy`, `top1_logprob` and `logprob_std` (see [`~eval.requests.TokenValues`]). Every doc has one `continuation` row per choice, from `scores.continuation_tokens`, in doc order.
 
     Args:
         path (`Path`):
@@ -222,8 +221,6 @@ def write_tokens(
             The scored docs and their requests.
         scores (`Scores`):
             The requests' scores, with `continuation_tokens`.
-        contexts (`ContextScores`, *optional*):
-            What [`~eval.model.ScoringModel.score_contexts`] read from the contexts of `requests.context_requests`, in that order.
         private (`bool`, *optional*, defaults to `False`):
             Whether the task's dataset is private.
 
@@ -243,8 +240,6 @@ def write_tokens(
         for choice in range(len(doc.choices)):
             doc_of.append(doc.id)
             choice_of.append(choice)
-    firsts = requests.context_requests
-    value_names = ("logprob", "rank", "entropy", "top1_logprob", "logprob_std")
     schema = pa.schema(
         [
             ("id", pa.string()),
@@ -260,85 +255,25 @@ def write_tokens(
         ]
     )
 
-    # The conditional requests come first, so their tokens are the arrays' first ones; a
-    # context's sequences follow `firsts`.
-    parts = [("continuation", range(len(doc_of)), scores.continuation_tokens)]
-    if contexts is not None and contexts.values is not None:
-        parts.append(("context", firsts, contexts.values))
-    tables = []
-    for part, selected, values in parts:
-        offsets = pa.array([0, *itertools.accumulate(values.lengths[: len(selected)])], pa.int32())
-        size = offsets[-1].as_py()
-        columns = {}
-        # One host copy per array.
-        for name in ("token_ids", *value_names):
-            flat = getattr(values, name)[:size].cpu().numpy()
-            columns[name] = pa.ListArray.from_arrays(
-                offsets, pa.array(flat, schema.field(name).type.value_type)
-            )
-        rows = {"id": [doc_of[i] for i in selected], "choice": [choice_of[i] for i in selected]}
-        tables.append(pa.table({**rows, "part": [part] * len(selected), **columns}, schema=schema))
-    if contexts is not None and contexts.greedy is not None:
-        written = contexts.greedy.cpu().numpy()
-        offsets = pa.array(range(0, written.size + 1, written.shape[1]), pa.int32())
-        greedy = {
-            "id": [doc_of[i] for i in firsts],
-            "choice": [choice_of[i] for i in firsts],
-            "part": ["greedy"] * len(firsts),
-            "token_ids": pa.ListArray.from_arrays(offsets, pa.array(written.ravel(), pa.int32())),
-        }
-        # Decoded tokens have no values of their own here.
-        for name in value_names:
-            greedy[name] = pa.nulls(len(firsts), schema.field(name).type)
-        tables.append(pa.table(greedy, schema=schema))
+    # The conditional requests come first, so their tokens are the arrays' first ones.
+    values = scores.continuation_tokens
+    offsets = pa.array([0, *itertools.accumulate(values.lengths[: len(doc_of)])], pa.int32())
+    size = offsets[-1].as_py()
+    columns = {}
+    # One host copy per array.
+    for name in ("token_ids", "logprob", "rank", "entropy", "top1_logprob", "logprob_std"):
+        flat = getattr(values, name)[:size].cpu().numpy()
+        columns[name] = pa.ListArray.from_arrays(
+            offsets, pa.array(flat, schema.field(name).type.value_type)
+        )
+    rows = {"id": doc_of, "choice": choice_of, "part": ["continuation"] * len(doc_of)}
+    table = pa.table({**rows, **columns}, schema=schema)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     # Created with its mode, as the predictions file is.
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if private else 0o666)
     with open(descriptor, "wb") as f:
-        pq.write_table(pa.concat_tables(tables), f, compression="zstd")
-
-
-def write_perplexity_tokens(
-    path: Path,
-    docs: Sequence[TextDoc],
-    values: TokenValues,
-    byte_ends: Sequence[Sequence[int]],
-    private: bool = False,
-) -> None:
-    """
-    Writes a perplexity task's per-token values to `path`, a Parquet file beside its predictions, creating its directory if needed: one `text` row per doc with its `id`, and per token its `byte_end` (from [`~eval.model.ScoringModel.byte_ends`]), `logprob` (its loss, negated), `rank`, `entropy`, `top1_logprob` and `logprob_std`. No token ids: they are the text, which a perplexity task's files never hold. With `private`, the file is readable by its owner only.
-
-    Raises:
-        `ValueError`: if `values` or `byte_ends` doesn't hold every doc's tokens.
-        `FileExistsError`: if `path` exists, so two runs never write one file.
-    """
-    # Imported here: only writing or reading per-token values needs it.
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-
-    lengths = [len(ends) for ends in byte_ends]
-    if len(lengths) != len(docs) or tuple(lengths) != values.lengths:
-        raise ValueError(f"{len(docs)} docs but token values of {len(values.lengths)} texts")
-    offsets = pa.array([0, *itertools.accumulate(lengths)], pa.int32())
-    columns = {
-        "id": [doc.id for doc in docs],
-        "part": ["text"] * len(docs),
-        "byte_end": pa.ListArray.from_arrays(
-            offsets, pa.array(list(itertools.chain.from_iterable(byte_ends)), pa.int32())
-        ),
-    }
-    # One host copy per array; ranks fit 32 bits, as a vocabulary's size does.
-    for name in ("logprob", "rank", "entropy", "top1_logprob", "logprob_std"):
-        kind = pa.int32() if name == "rank" else pa.float32()
-        flat = pa.array(getattr(values, name).cpu().numpy(), kind)
-        columns[name] = pa.ListArray.from_arrays(offsets, flat)
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # Created with its mode, as the predictions file is.
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if private else 0o666)
-    with open(descriptor, "wb") as f:
-        pq.write_table(pa.table(columns), f, compression="zstd")
+        pq.write_table(table, f, compression="zstd")
 
 
 def write_perplexity_predictions(
