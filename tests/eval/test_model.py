@@ -872,7 +872,7 @@ def recorded_windows(
     """The (context, continuation) windows `rolling_loglikelihood` scores, in order."""
     windows = []
 
-    def record(encoded: Sequence[Encoded], tokens: bool) -> tuple[torch.Tensor, torch.Tensor, None]:
+    def record(encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor, None]:
         windows.extend(encoded)
         return torch.zeros(len(encoded)), torch.ones(len(encoded), dtype=torch.bool), None
 
@@ -901,7 +901,7 @@ def test_rolling_windows_are_lm_eval_windows(
 def test_a_text_is_greedy_only_if_every_window_is(
     scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def score(encoded: Sequence[Encoded], tokens: bool) -> tuple[torch.Tensor, torch.Tensor, None]:
+    def score(encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor, None]:
         is_greedy = torch.ones(len(encoded), dtype=torch.bool)
         is_greedy[1] = False  # the first text's second window: windows run text by text
         return torch.zeros(len(encoded)), is_greedy, None
