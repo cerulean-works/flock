@@ -110,7 +110,7 @@
 	];
 	let order = $state<{ by: Column; desc: boolean } | null>(null);
 	const compared = $derived.by(() => {
-		const tasks = [...(data.diff?.tasks ?? [])];
+		const tasks = [...(diff?.tasks ?? [])];
 		if (!order) return tasks;
 		const { by, desc } = order;
 		const value = (t: (typeof tasks)[number]): number => {
@@ -141,7 +141,7 @@
 	const widestLead = $derived(
 		Math.max(
 			1e-9,
-			...(data.diff?.tasks ?? []).map((t) => {
+			...(diff?.tasks ?? []).map((t) => {
 				const { a, b } = score(t.both_right, t.only_a.length, t.only_b.length, t.num_docs);
 				return Number.isFinite(a - b) ? Math.abs(a - b) : 0;
 			})
