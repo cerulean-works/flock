@@ -20,9 +20,10 @@ from flock.eval import cli, run
 from flock.eval.metrics import ChoiceScores
 from flock.eval.model import ScoringModel
 from flock.eval.provenance import Provenance
+from flock.eval.requests import Request
 from flock.eval.results import Results, SuiteResult, prediction_rows, write_predictions
 from flock.eval.run import EvalConfig, evaluate, score_task
-from flock.eval.tasks import MCDoc, Suite, cloze
+from flock.eval.tasks import Choice, MCDoc, MCRequests, Suite, cloze
 from flock.eval.tokenizer import SentencePieceTokenizer
 
 from .toy import PROMPT_PATHS, PROVENANCE, TASK, TEXT_TASK, task_result
@@ -35,7 +36,6 @@ if TYPE_CHECKING:
     from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
 
     from flock.eval.model import Encoded, Scores
-    from flock.eval.requests import Request
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def test_evaluate_writes_results_and_predictions(offline_model: None, tmp_path: 
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 8
+    assert data["schema_version"] == 12
     assert data["provenance"]["model"] == "tiny@0"
     assert data["provenance"]["model_digest"] is None  # only a Flock version has one
     assert data["provenance"]["flock_commit"] == "abc123"
@@ -75,9 +75,14 @@ def test_evaluate_writes_results_and_predictions(offline_model: None, tmp_path: 
     assert data["suites"] == []
 
     lines = (tmp_path / "predictions" / "toy.jsonl").read_text().splitlines()
-    first, second = map(json.loads, lines)
+    header, first, second = map(json.loads, lines)
+    assert list(header) == ["prompt"]  # the text every context starts with, once
     assert (first["id"], first["gold"], len(first["logprob"])) == ("q-1", 0, 3)
+    assert len(first["choices"]) == 3 and isinstance(first["question"], str)
     assert len(second["logprob_uncond"]) == 4
+    # Each doc's outcome under the primary metric, which averages to its value.
+    assert type(first["correct"]) is bool
+    assert (first["correct"] + second["correct"]) / 2 == task["metrics"]["acc_per_char"]
 
     with pytest.raises(FileExistsError):  # a second run can't replace this one
         results.write(tmp_path)
@@ -97,7 +102,7 @@ def test_predictions_recompute_every_metric_and_the_truncation(
     monkeypatch.setattr(ScoringModel, "from_pretrained", lambda *args, **kwargs: short)
     [task] = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path)).tasks
     lines = (tmp_path / "predictions" / "toy.jsonl").read_text().splitlines()
-    rows = [json.loads(line) for line in lines]
+    rows = [json.loads(line) for line in lines[1:]]  # after the header
 
     def accuracy(score: Callable[[dict[str, Any], int], float]) -> float:
         hits = 0
@@ -118,6 +123,11 @@ def test_predictions_recompute_every_metric_and_the_truncation(
         "bpb": sum(bpb(row, row["gold"]) for row in rows) / len(rows),
     }
     assert recomputed == pytest.approx(task.metrics, abs=1e-6)
+    # `correct` is the primary metric's pick, `acc_per_char`, doc by doc.
+    for row in rows:
+        per_char = [row["logprob"][i] / row["num_chars"][i] for i in range(len(row["logprob"]))]
+        assert row["correct"] == (per_char.index(max(per_char)) == row["gold"])
+        assert row["pick"] == per_char.index(max(per_char))
 
     cuts = [row["tokens_cut"] + row["tokens_cut_uncond"] for row in rows]
     assert task.truncation.requests == sum(sum(n > 0 for n in cut) for cut in cuts) > 0
@@ -185,7 +195,7 @@ def test_provenance_is_collected_before_scoring(
     monkeypatch.setattr(
         scorer,
         "loglikelihood",
-        lambda *args: events.append("score") or loglikelihood(*args),
+        lambda *args, **kwargs: events.append("score") or loglikelihood(*args, **kwargs),
     )
 
     evaluate(EvalConfig(model="tiny@0", tasks=("toy",)))
@@ -203,6 +213,30 @@ GROUP = Suite("toys", (RC, BPB), scored=False)
 def toy_suites(offline_model: None, monkeypatch: pytest.MonkeyPatch) -> None:
     for suite in GROUP.suites:
         monkeypatch.setitem(run.SUITES, suite.name, suite)
+
+
+def test_a_local_folder_scores_under_the_id_digest_prints(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    lm: LlamaForCausalLM,
+    tokenizer: PreTrainedTokenizerFast,
+) -> None:
+    monkeypatch.setitem(run.TASKS, TASK.name, TASK)
+    lm.save_pretrained(tmp_path / "export")
+    tokenizer.save_pretrained(tmp_path / "export")
+
+    printed = CliRunner().invoke(cli.main, ["digest", str(tmp_path / "export")])
+    assert printed.exit_code == 0, printed.output
+    model_id = printed.output.strip()
+    digest = model_id.rpartition("@")[2]
+    for out in ("first", "second"):
+        evaluate(EvalConfig(model=model_id, tasks=("toy",), out=tmp_path / out, device="cpu"))
+
+    first, second = (
+        json.loads((tmp_path / out / "results.json").read_text()) for out in ("first", "second")
+    )
+    assert first["provenance"]["model"] == second["provenance"]["model"] == f"local:{digest}"
+    assert first["provenance"]["model_digest"] == digest
 
 
 def test_evaluate_scores_suites_and_each_task_once(toy_suites: None, tmp_path: Path) -> None:
@@ -299,11 +333,19 @@ def test_evaluate_rejects_two_suites_under_one_name(
         evaluate(EvalConfig(model="tiny@0", suites=("toys", "other")))
 
 
-def test_prediction_rows_drop_padded_choices(tmp_path: Path) -> None:
-    docs = [
+def test_prediction_rows_drop_padded_choices_and_carry_the_text(tmp_path: Path) -> None:
+    shot = MCDoc(id="s", choices=cloze("1 + 1?", ("2",)), gold=0)
+    docs = (
         MCDoc(id="a", choices=cloze("?", ("x", "y")), gold=1),
-        MCDoc(id="b", choices=cloze("?", ("x", "y", "z")), gold=0),
-    ]
+        # Each choice has its own context, as in Winogrande; and multi-byte text.
+        MCDoc(
+            id="b", choices=(Choice("貓", " 跑"), Choice("狗", " 跑"), Choice("鳥", " 跑")), gold=0
+        ),
+    )
+    # Doc b is shown no example, so its row says which it saw. Each row's `prompt_hash` is its
+    # first request's context.
+    scored = tuple(Request(c.context, c.continuation) for doc in docs for c in doc.choices)
+    requests = MCRequests(docs, scored, "hash", False, "Pick one.\n\n", (shot,), ((0,), ()))
     counts = torch.tensor([[1, 2, 0], [3, 4, 5]])
     scores = ChoiceScores(
         logprob=-counts.float(),
@@ -316,39 +358,82 @@ def test_prediction_rows_drop_padded_choices(tmp_path: Path) -> None:
         tokens_cut=counts + 30,
     )
 
-    rows = prediction_rows(docs, scores)
+    rows = prediction_rows(
+        requests, scores, correct=torch.tensor([1.0, 0.0]), pick=torch.tensor([1, 2])
+    )
 
     assert rows == [
         {
             "id": "a",
             "gold": 1,
+            "correct": True,
+            "pick": 1,
+            "question": "Question: ?\nAnswer:",
+            "choices": [" x", " y"],  # as scored, leading space included
             "logprob": [-1.0, -2.0],
             "num_tokens": [1, 2],
             "num_chars": [11, 12],
             "num_bytes": [21, 22],
             "is_greedy": [False, False],
             "tokens_cut": [31, 32],
+            "prompt_hash": hashlib.sha256(b"Question: ?\nAnswer:").hexdigest(),
         },
         {
             "id": "b",
             "gold": 0,
+            "correct": False,
+            "pick": 2,
+            "question": None,
+            "contexts": ["貓", "狗", "鳥"],
+            "choices": [" 跑", " 跑", " 跑"],
+            "shots": [],
             "logprob": [-3.0, -4.0, -5.0],
             "num_tokens": [3, 4, 5],
             "num_chars": [13, 14, 15],
             "num_bytes": [23, 24, 25],
             "is_greedy": [False, True, True],
             "tokens_cut": [33, 34, 35],
+            "prompt_hash": hashlib.sha256("貓".encode()).hexdigest(),
         },
     ]
 
+    short = dataclasses.replace(requests, docs=docs[:1], shown=((0,),))
     with pytest.raises(ValueError, match="1 docs but scores for 2"):
-        prediction_rows(docs[:1], scores)
+        prediction_rows(short, scores)
+    with pytest.raises(ValueError, match="2 docs but outcomes for 1"):
+        prediction_rows(requests, scores, correct=torch.tensor([1.0]))
+    with pytest.raises(ValueError, match="2 docs but picks for 1"):
+        prediction_rows(requests, scores, pick=torch.tensor([1]))
+    # Without an accuracy to follow, rows have no outcome and no pick.
+    rows = prediction_rows(requests, scores)
+    assert all("correct" not in row and "pick" not in row for row in rows)
+
+    # The header holds the prompt once; the text is written as UTF-8, not escaped.
+    path = tmp_path / "toy.jsonl"
+    write_predictions(path, requests, scores)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert json.loads(lines[0]) == {
+        "prompt": {
+            "description": "Pick one.\n\n",
+            "shots": [{"id": "s", "text": "Question: 1 + 1?\nAnswer: 2"}],
+        }
+    }
+    assert [json.loads(line) for line in lines[1:]] == rows
+    assert "貓" in lines[2]
 
     # A file another run wrote while this one scored is refused at write time, not replaced.
-    path = tmp_path / "toy.jsonl"
-    path.write_text("")
     with pytest.raises(FileExistsError):
-        write_predictions(path, docs, scores)
+        write_predictions(path, requests, scores)
+
+
+def test_a_private_tasks_predictions_are_readable_by_their_owner_only(
+    scorer: ScoringModel, tmp_path: Path
+) -> None:
+    private = dataclasses.replace(TASK, dataset=dataclasses.replace(TASK.dataset, private=True))
+    score_task(scorer, private, out=tmp_path)
+
+    # They hold the dataset's text from schema 11 on. A public task's file keeps the umask's mode.
+    assert (tmp_path / "predictions/toy.jsonl").stat().st_mode & 0o777 == 0o600
 
 
 def test_score_task_refuses_an_existing_predictions_file(
@@ -387,9 +472,9 @@ def test_score_task_averages_greedy_match_over_gold_only_docs(
     loglikelihood = scorer.loglikelihood
 
     def second_doc_greedy(
-        requests: Sequence[Request], encoded: Sequence[Encoded] | None = None
+        requests: Sequence[Request], encoded: Sequence[Encoded] | None = None, **kwargs: Any
     ) -> Scores:
-        scores = loglikelihood(requests, encoded)
+        scores = loglikelihood(requests, encoded, **kwargs)
         return dataclasses.replace(scores, is_greedy=torch.tensor([False, True]))
 
     monkeypatch.setattr(scorer, "loglikelihood", second_doc_greedy)
@@ -397,8 +482,19 @@ def test_score_task_averages_greedy_match_over_gold_only_docs(
 
     assert list(result.metrics) == ["acc_greedy", "bpb"]
     assert result.metrics["acc_greedy"] == 0.5  # one doc of two, read from its one request
-    lines = (tmp_path / "predictions" / "toy:gold_only.jsonl").read_text().splitlines()
+    lines = (tmp_path / "predictions" / "toy:gold_only.jsonl").read_text().splitlines()[1:]
     assert [json.loads(line)["is_greedy"] for line in lines] == [[False], [True]]
+    assert [json.loads(line)["correct"] for line in lines] == [False, True]  # acc_greedy's
+    assert all("pick" not in json.loads(line) for line in lines)  # it ranks no choices
+
+
+def test_a_task_read_first_by_bpb_writes_no_outcome(scorer: ScoringModel, tmp_path: Path) -> None:
+    by_bpb = dataclasses.replace(TASK, primary_metric="bpb")
+    score_task(scorer, by_bpb, out=tmp_path)
+
+    lines = (tmp_path / "predictions" / "toy.jsonl").read_text().splitlines()[1:]
+    assert all("correct" not in json.loads(line) for line in lines)
+    assert all("pick" not in json.loads(line) for line in lines)
 
 
 def test_score_task_reports_only_the_tasks_metrics(scorer: ScoringModel) -> None:

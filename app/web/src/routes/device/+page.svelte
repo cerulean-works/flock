@@ -60,14 +60,16 @@
 			<dd title={dateTime(request.created_at)}>{relativeTime(request.created_at, data.now)}</dd>
 			{#if data.user}
 				<dt class="text-muted-foreground">Account</dt>
-				<dd class="truncate">{data.user.name} · {data.user.email}</dd>
+				<dd class="truncate">
+					{data.user.name} <span class="ml-1 text-muted-foreground">{data.user.email}</span>
+				</dd>
 			{/if}
 		</dl>
 
 		<p
 			class="mt-6 rounded-lg bg-muted px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground"
 		>
-			Authorizing gives this machine access to your Flock account, as you. Only continue if you ran <code
+			Authorizing lets this machine act as you in Flock. Only continue if you ran <code
 				class="font-mono text-foreground">flock login</code
 			> yourself and your terminal shows the same code.
 		</p>
@@ -108,11 +110,11 @@
 					id="code"
 					name="code"
 					value={data.code}
-					placeholder="WDJB-MJHT"
+					placeholder="e.g., WDJB-MJHT"
 					autocomplete="off"
 					autocapitalize="characters"
 					spellcheck={false}
-					class="h-10 font-mono tracking-widest uppercase"
+					class="h-10 font-mono tracking-widest uppercase placeholder:font-sans placeholder:tracking-normal placeholder:normal-case"
 					required
 				/>
 			</div>

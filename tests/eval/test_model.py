@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
+import os
+import shutil
 from collections.abc import Callable
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
@@ -26,6 +30,7 @@ from flock.training.core.models import Olmo2, Olmo2Config
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
     from typing import Self
 
     from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
@@ -118,13 +123,13 @@ def test_model_ref_parses_flock_models(model_id: str, repo: str, revision: str) 
         "flock:acme",
         "flock:acme/",
         "flock:/m",
-        "flock:a/b/c",
+        "flock:a/b:c",
         "flock:a/b@",
         "flock:a/b@1@2",
     ],
 )
 def test_model_ref_refuses_malformed_flock_models(model_id: str) -> None:
-    with pytest.raises(ValueError, match=r"flock:org/name\[@version\]"):
+    with pytest.raises(ValueError, match=r"flock:org/path\[@version\]"):
         ModelRef.parse(model_id)
 
 
@@ -140,7 +145,7 @@ def test_model_ref_resolves_a_flock_version_to_its_number_and_digest(
     monkeypatch.setattr(model, "_flock_hub", lambda: SimpleNamespace(resolve=resolve))
     resolved = ModelRef.parse("flock:acme/olmo2-1b@checkpoint-12000").resolve()
     assert asked == ["acme/olmo2-1b@checkpoint-12000"]
-    assert resolved == ModelRef("acme/olmo2-1b", "12", "flock", "d" * 64)
+    assert resolved == ModelRef("acme/olmo2-1b", "12", "flock", "d" * 64, org="acme")
     assert str(resolved) == "flock:acme/olmo2-1b@12"
 
 
@@ -262,6 +267,187 @@ class FakeHub:
 
     def model_info(self, repo: str, revision: str) -> Self:
         return self
+
+
+@pytest.fixture
+def export(tmp_path: Path, lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast) -> Path:
+    """A tiny model saved as a training run exports one, weights, config and tokenizer."""
+    folder = tmp_path / "export-000040"
+    lm.save_pretrained(folder)
+    tokenizer.save_pretrained(folder)
+    return folder
+
+
+def test_folder_digest_is_the_registrys_digest_of_every_file(tmp_path: Path) -> None:
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "c").write_bytes(b"weights")
+    (tmp_path / "a-b").write_bytes(b"")
+    # The registry's digest (D98) over the same list, sorted as strings: "a-b" before "a/c".
+    lines = "".join(
+        f"{name}\t{len(data)}\t{hashlib.sha256(data).hexdigest()}\n"
+        for name, data in [("a-b", b""), ("a/c", b"weights")]
+    )
+    assert model.folder_digest(tmp_path) == hashlib.sha256(lines.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("target", ["shards", "shards/model-00001.safetensors"])
+def test_folder_digest_refuses_a_link(tmp_path: Path, target: str) -> None:
+    (tmp_path / "shards").mkdir()
+    (tmp_path / "shards" / "model-00001.safetensors").write_bytes(b"one")
+    (tmp_path / "export").mkdir()
+    (tmp_path / "export" / "config.json").write_text("{}")
+    (tmp_path / "export" / "linked").symlink_to(tmp_path / target)
+    with pytest.raises(ValueError, match="is a link"):
+        model.folder_digest(tmp_path / "export")
+
+
+@pytest.mark.parametrize("shard", ["../model-00001.safetensors", "/work/model-00001.safetensors"])
+def test_folder_digest_refuses_an_index_naming_a_shard_outside(tmp_path: Path, shard: str) -> None:
+    (tmp_path / "model-00001.safetensors").write_bytes(b"one")
+    index = {"weight_map": {"lm_head.weight": shard}}
+    (tmp_path / "model.safetensors.index.json").write_text(json.dumps(index))
+    with pytest.raises(ValueError, match="outside the folder"):
+        model.folder_digest(tmp_path)
+
+    index = {"weight_map": {"lm_head.weight": "./model-00001.safetensors"}}
+    (tmp_path / "model.safetensors.index.json").write_text(json.dumps(index))
+    model.folder_digest(tmp_path)
+
+
+def test_folder_digest_refuses_a_tokenizer_file_outside(tmp_path: Path) -> None:
+    # A listed version the tokenizer never saved is the loader's to skip, not a refusal.
+    config = {"fast_tokenizer_files": ["tokenizer.99.0.json", "../tokenizer.json"]}
+    (tmp_path / "tokenizer_config.json").write_text(json.dumps(config), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"\['../tokenizer.json'\]"):
+        model.folder_digest(tmp_path)
+
+    config["fast_tokenizer_files"] = ["tokenizer.99.0.json"]
+    config["eos_token"] = "<|結束|>"  # saved as UTF-8 whatever the locale
+    (tmp_path / "tokenizer_config.json").write_text(
+        json.dumps(config, ensure_ascii=False), encoding="utf-8"
+    )
+    model.folder_digest(tmp_path)
+
+
+def test_folder_digest_hashes_another_index_as_bytes(tmp_path: Path) -> None:
+    (tmp_path / "docs.index.json").write_text("[1, 2]")
+    model.folder_digest(tmp_path)
+
+
+def test_folder_digest_refuses_an_adapter(tmp_path: Path) -> None:
+    (tmp_path / "adapter_config.json").write_text('{"base_model_name_or_path": "/work/base"}')
+    with pytest.raises(ValueError, match="is an adapter"):
+        model.folder_digest(tmp_path)
+
+
+def test_folder_digest_refuses_a_pipe(tmp_path: Path) -> None:
+    os.mkfifo(tmp_path / "pipe")
+    with pytest.raises(ValueError, match="isn't a regular file"):
+        model.folder_digest(tmp_path)
+
+
+def test_folder_digest_refuses_an_unreadable_folder(tmp_path: Path) -> None:
+    (tmp_path / "config.json").write_text("{}")
+    (tmp_path / "hidden").mkdir()
+    (tmp_path / "hidden").chmod(0)
+    if os.access(tmp_path / "hidden", os.R_OK):  # root reads any folder
+        pytest.skip("this user can read a folder with no permissions")
+    try:
+        with pytest.raises(PermissionError):
+            model.folder_digest(tmp_path)
+    finally:
+        (tmp_path / "hidden").chmod(0o700)
+
+
+def test_folder_digest_refuses_control_characters_in_names_only(tmp_path: Path) -> None:
+    (tmp_path / "a\u00a0b").write_bytes(b"")  # a no-break space is a name like any other
+    model.folder_digest(tmp_path)
+    (tmp_path / "a\tb").write_bytes(b"")
+    with pytest.raises(ValueError, match="control character"):
+        model.folder_digest(tmp_path)
+
+
+def test_folder_digest_refuses_an_empty_folder(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="holds no files"):
+        model.folder_digest(tmp_path)
+
+
+def test_model_ref_parses_a_local_folder_and_prints_only_its_digest() -> None:
+    ref = ModelRef.parse(f"local:/work/run@1/export-000040@{'d' * 64}")
+    assert (ref.repo, ref.revision, ref.kind) == ("/work/run@1/export-000040", "d" * 64, "local")
+    assert str(ref) == f"local:{'d' * 64}"
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    ["local:", "local:folder", f"local:@{'d' * 64}", "local:f@abc", f"local:f@{'D' * 64}"],
+)
+def test_model_ref_refuses_a_local_folder_without_a_full_digest(model_id: str) -> None:
+    with pytest.raises(ValueError, match="local:folder@digest"):
+        ModelRef.parse(model_id)
+
+
+def test_a_local_folder_resolves_to_the_same_id_every_time(export: Path, tmp_path: Path) -> None:
+    digest = model.folder_digest(export)
+    resolved = ModelRef.parse(f"local:{export}@{digest}").resolve()
+    assert resolved == ModelRef(str(export.resolve()), digest, "local", digest)
+    # The same files elsewhere are the same model.
+    copy = shutil.copytree(export, tmp_path / "copy")
+    assert str(ModelRef.parse(f"local:{copy}@{digest}").resolve()) == str(resolved)
+
+
+def test_a_link_resolves_to_the_folder_it_points_to(export: Path, tmp_path: Path) -> None:
+    (tmp_path / "latest").symlink_to(export)
+    digest = model.folder_digest(export)
+    assert ModelRef.parse(f"local:{tmp_path / 'latest'}@{digest}").resolve().repo == str(
+        export.resolve()
+    )
+
+
+def test_a_folder_changed_while_it_loads_is_refused(
+    export: Path, lm: LlamaForCausalLM, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def rewrite_and_load(*args: Any, trust_remote_code: bool, **kwargs: Any) -> LlamaForCausalLM:
+        assert trust_remote_code is False  # code another repo names is never run
+        (export / "config.json").write_text("{}")
+        return lm
+
+    monkeypatch.setattr(
+        model, "AutoModelForCausalLM", SimpleNamespace(from_pretrained=rewrite_and_load)
+    )
+    with pytest.raises(ValueError, match="changed while it loaded"):
+        ScoringModel.from_pretrained(f"local:{export}@{model.folder_digest(export)}", device="cpu")
+
+
+def test_a_changed_weight_file_is_refused(export: Path) -> None:
+    digest = model.folder_digest(export)
+    weights = export / "model.safetensors"
+    data = bytearray(weights.read_bytes())
+    data[-1] ^= 1
+    weights.write_bytes(data)
+    with pytest.raises(ValueError, match=f"not {digest}"):
+        ModelRef.parse(f"local:{export}@{digest}").resolve()
+
+
+def test_a_local_folder_named_as_a_hub_repo_is_refused(export: Path) -> None:
+    digest = model.folder_digest(export)
+    with pytest.raises(ValueError, match=f"score it as local:{export}@{digest}"):
+        ModelRef(str(export), "a" * 40).resolve()
+
+
+@pytest.mark.parametrize("sharded", [False, True])
+def test_from_pretrained_loads_a_local_folder_under_its_digest(
+    export: Path, lm: LlamaForCausalLM, sharded: bool
+) -> None:
+    if sharded:
+        (export / "model.safetensors").unlink()
+        lm.save_pretrained(export, max_shard_size="20KB")
+        assert (export / "model.safetensors.index.json").exists()
+    digest = model.folder_digest(export)
+    scorer = ScoringModel.from_pretrained(f"local:{export}@{digest}", device="cpu")
+    assert (scorer.name, scorer.digest) == (f"local:{digest}", digest)
+    for loaded, saved in zip(scorer.model.parameters(), lm.parameters(), strict=True):
+        assert torch.equal(loaded.float(), saved.to(torch.bfloat16).float())
 
 
 def test_model_ref_resolve_keeps_commit_hash_offline(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -577,14 +763,14 @@ def test_target_logprobs_is_the_same_in_any_chunks(chunk_positions: int) -> None
     targets = torch.randint(7, (3, 5))
     targets[0, 0] = logits[0, 0].argmax()
 
-    chunked, is_argmax = model._target_logprobs(logits, targets, chunk_positions)
+    chunked, is_argmax, _ = model._target_logprobs(logits, targets, chunk_positions=chunk_positions)
 
     whole = logits.float().log_softmax(-1).gather(-1, targets[..., None]).squeeze(-1)
     assert chunked.dtype == torch.float32
     torch.testing.assert_close(chunked, whole)
     assert torch.equal(is_argmax, logits.argmax(-1) == targets)
     assert is_argmax[0, 0]
-    whole_chunk, whole_is_argmax = model._target_logprobs(logits, targets, 15)
+    whole_chunk, whole_is_argmax, _ = model._target_logprobs(logits, targets, chunk_positions=15)
     assert torch.equal(chunked, whole_chunk)
     assert torch.equal(is_argmax, whole_is_argmax)
 
@@ -592,9 +778,9 @@ def test_target_logprobs_is_the_same_in_any_chunks(chunk_positions: int) -> None
 def test_target_logprobs_breaks_argmax_ties_to_the_first_token() -> None:
     # As `torch.argmax` in OLMES: a target tied with an earlier token is not the argmax.
     logits = torch.tensor([[[1.0, 3.0, 3.0]]])
-    _, is_argmax = model._target_logprobs(logits, torch.tensor([[2]]))
+    _, is_argmax, _ = model._target_logprobs(logits, torch.tensor([[2]]))
     assert not is_argmax.item()
-    _, is_argmax = model._target_logprobs(logits, torch.tensor([[1]]))
+    _, is_argmax, _ = model._target_logprobs(logits, torch.tensor([[1]]))
     assert is_argmax.item()
 
 
@@ -616,7 +802,7 @@ def test_batched_rows_do_not_see_each_other(
 
     monkeypatch.setattr(scorer.model, "forward", embedded_forward)
     # `_score` runs one forward pass over all the requests, so there is exactly one input.
-    logprob, _ = scorer._score(scorer.encode_requests(REQUESTS))
+    logprob, _, _ = scorer._score(scorer.encode_requests(REQUESTS))
     [(embedded, attention_mask)] = inputs
 
     for i in range(len(REQUESTS)):
@@ -686,9 +872,9 @@ def recorded_windows(
     """The (context, continuation) windows `rolling_loglikelihood` scores, in order."""
     windows = []
 
-    def record(encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
+    def record(encoded: Sequence[Encoded], tokens: bool) -> tuple[torch.Tensor, torch.Tensor, None]:
         windows.extend(encoded)
-        return torch.zeros(len(encoded)), torch.ones(len(encoded), dtype=torch.bool)
+        return torch.zeros(len(encoded)), torch.ones(len(encoded), dtype=torch.bool), None
 
     monkeypatch.setattr(scorer, "_logprobs", record)
     scorer.rolling_loglikelihood(texts, window)
@@ -715,10 +901,10 @@ def test_rolling_windows_are_lm_eval_windows(
 def test_a_text_is_greedy_only_if_every_window_is(
     scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def score(encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
+    def score(encoded: Sequence[Encoded], tokens: bool) -> tuple[torch.Tensor, torch.Tensor, None]:
         is_greedy = torch.ones(len(encoded), dtype=torch.bool)
         is_greedy[1] = False  # the first text's second window: windows run text by text
-        return torch.zeros(len(encoded)), is_greedy
+        return torch.zeros(len(encoded)), is_greedy, None
 
     monkeypatch.setattr(scorer, "_logprobs", score)
 
@@ -848,3 +1034,16 @@ def test_rolling_loglikelihood_rejects_a_window_outside_max_length(
 def test_rolling_loglikelihood_rejects_an_empty_text(scorer: ScoringModel) -> None:
     with pytest.raises(ValueError, match="text has no tokens"):
         scorer.rolling_loglikelihood(["fox", ""], 8)
+
+
+@pytest.mark.parametrize("chunk_positions", [1, 2, 4096])
+def test_target_values_are_the_same_in_any_chunks_of_positions(chunk_positions: int) -> None:
+    # One row of 5 positions: chunks of 1 and 2 positions split it, 4096 keeps it whole.
+    torch.manual_seed(0)
+    logits = torch.randn(1, 5, 7)
+    targets = torch.randint(7, (1, 5))
+    _, _, chunked = model._target_logprobs(logits, targets, True, chunk_positions)
+    _, _, whole = model._target_logprobs(logits, targets, True, 4096)
+    assert chunked is not None and whole is not None
+    for name, value in whole.items():
+        torch.testing.assert_close(chunked[name], value)

@@ -1,5 +1,11 @@
 <script lang="ts">
+	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import CalendarIcon from '@lucide/svelte/icons/calendar';
+	import ClockIcon from '@lucide/svelte/icons/clock';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { enhance } from '$app/forms';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { deletedProjectName, deletedTotals, monthSpan } from '#lib/budget.ts';
@@ -12,15 +18,6 @@
 
 	const totals = $derived(deletedTotals(projects));
 	const fmt = (v: number) => money(v, currency);
-	const detail = (p: DeletedProject) =>
-		[
-			monthSpan(p.months),
-			`${hours(p.gpu_hours)} GPU h`,
-			count(p.runs, 'run'),
-			p.deleted_at && `deleted ${dateTime(p.deleted_at)}`
-		]
-			.filter(Boolean)
-			.join(' · ');
 	const changing = new Mutation<{ deleted: DeletedProject }>({
 		toastErrors: true,
 		success: ({ deleted }) =>
@@ -30,16 +27,16 @@
 	});
 </script>
 
-<p class="mt-2 max-w-[62ch] text-muted-foreground">
-	Deleting a project doesn’t give its spend back: its GPU hours still count in the budget of the
-	months they ran. Leave a project out to stop counting them, in every month; you can count it again
-	at any time.
+<p class="mt-2 text-muted-foreground">
+	Deleted projects still count toward the budget of the months they ran. Leave one out to stop
+	counting it, or count it again later.
 </p>
 
 {#if projects.length}
-	<p class="mt-4 text-[13px] text-muted-foreground">
-		{fmt(totals.counted)} counted · {fmt(totals.excluded)} left out
-	</p>
+	<MetaRow class="mt-4">
+		<span><span class="text-foreground tabular-nums">{fmt(totals.counted)}</span> counted</span>
+		<span><span class="text-foreground tabular-nums">{fmt(totals.excluded)}</span> left out</span>
+	</MetaRow>
 	<ul class="mt-2 border-t border-divider">
 		{#each projects as p (p.id)}
 			<li class="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-1 border-b border-divider py-2">
@@ -47,9 +44,16 @@
 					<p class={['truncate font-medium', p.excluded && 'text-muted-foreground line-through']}>
 						{deletedProjectName(p)}
 					</p>
-					<p class="truncate text-[13px] text-muted-foreground">
-						{detail(p)}
-					</p>
+					<MetaRow class="mt-0.5">
+						<MetaItem icon={CalendarIcon}>{monthSpan(p.months)}</MetaItem>
+						<MetaItem icon={ClockIcon}>{hours(p.gpu_hours)} GPU hours</MetaItem>
+						<MetaItem icon={ActivityIcon}>{count(p.runs, 'run')}</MetaItem>
+						{#if p.deleted_at}
+							<MetaItem icon={Trash2Icon}>
+								Deleted {dateTime(p.deleted_at)}
+							</MetaItem>
+						{/if}
+					</MetaRow>
 				</div>
 				{#if p.excluded}
 					<Badge

@@ -1,6 +1,8 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import EyeIcon from '@lucide/svelte/icons/eye';
+	import FootprintsIcon from '@lucide/svelte/icons/footprints';
 	import StarIcon from '@lucide/svelte/icons/star';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -19,7 +21,7 @@
 	import TagDialog from './TagDialog.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		info: ModelInfo;
 		/** The version the page shows, null while there is none. */
 		shown: number | null;
@@ -30,7 +32,7 @@
 		now: number;
 	}
 
-	let { org, info, shown, versionHref, onchange, now }: Props = $props();
+	let { scope, info, shown, versionHref, onchange, now }: Props = $props();
 	const name = $derived(info.name);
 
 	// Newest first, 100 a page.
@@ -45,7 +47,7 @@
 		failed = null;
 		try {
 			const page = await modelCall<ModelVersionsPage>(
-				modelApi(org, name, 'versions', { before: more ? cursor : null })
+				modelApi(scope, name, 'versions', { before: more ? cursor : null })
 			);
 			versions = more ? [...versions, ...page.versions] : page.versions;
 			cursor = page.cursor;
@@ -136,7 +138,10 @@
 								{v.run}
 							{/if}
 							{#if v.step !== null}
-								<span class="tabular-nums">· step {v.step.toLocaleString('en-US')}</span>
+								<span class="ml-2.5 inline-flex items-center gap-1 align-top tabular-nums">
+									<FootprintsIcon class="size-3.5 text-faint" aria-hidden="true" />
+									step {v.step.toLocaleString('en-US')}
+								</span>
 							{/if}
 						{:else if v.step !== null}
 							<span class="tabular-nums">Step {v.step.toLocaleString('en-US')}</span>
@@ -207,16 +212,22 @@
 
 <MakePrimaryDialog
 	bind:open={promoting.open}
-	{org}
+	{scope}
 	{name}
 	number={promoting.value?.number ?? 0}
 	current={promoting.value?.current ?? null}
 	onchanged={changed}
 />
-<TagDialog bind:open={tagging.open} {org} {name} version={tagging.value ?? 0} ontagged={changed} />
+<TagDialog
+	bind:open={tagging.open}
+	{scope}
+	{name}
+	version={tagging.value ?? 0}
+	ontagged={changed}
+/>
 <RemoveTagDialog
 	bind:open={removing.open}
-	{org}
+	{scope}
 	{name}
 	tag={removing.value?.tag ?? ''}
 	version={removing.value?.version ?? 0}
@@ -224,7 +235,7 @@
 />
 <DeleteVersionDialog
 	bind:open={deleting.open}
-	{org}
+	{scope}
 	version={deleting.value}
 	shown={deleting.value?.number === shown}
 	ondeleted={changed}

@@ -1,6 +1,8 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+	import GitForkIcon from '@lucide/svelte/icons/git-fork';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
@@ -16,11 +18,23 @@
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
-	import { DATASETS_BUCKET, datasetCall, datasetsApi, nameOf } from '#lib/datasets.ts';
+	import {
+		DATASETS_BUCKET,
+		datasetCall,
+		datasetsApi,
+		datasetsHref,
+		nameOf,
+		parentOf,
+		refScope
+	} from '#lib/datasets.ts';
 	import { objectHref } from '#lib/storage.ts';
 	import type { Access, DatasetInfo, S3Config } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
+	import type { BlendStart } from '#lib/forks.ts';
 	import AboutTab from './AboutTab.svelte';
+	import BlendDialog from './BlendDialog.svelte';
+	import ForkDialog from './ForkDialog.svelte';
+	import IndependentDialog from './IndependentDialog.svelte';
 	import ColumnsPicker from './ColumnsPicker.svelte';
 	import DeleteDatasetDialog from './DeleteDatasetDialog.svelte';
 	import RenameDialog from './RenameDialog.svelte';
@@ -31,7 +45,7 @@
 	import VersionsTab from './VersionsTab.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		path: string;
 		/** The dataset at the version shown; null when Lance couldn't read it (`failed` says why). */
 		info: DatasetInfo | null;
@@ -40,15 +54,30 @@
 		requested: string | null;
 		/** The S3 proxy, for the Access in S3 dialog. */
 		s3: S3Config;
+		/** Where it is in flock-datasets (under `-projects/` for a project's, D160). */
+		objectKey?: string;
 		/**
 		 * What the viewer may do: admins also make it public or private; from outside the org
 		 * (`public`) it's read-only, with nothing of S3 (D115).
 		 */
 		access?: Access;
 		now: number;
+		/** The org's projects, for the fork dialog's scope picker (023 across 022's scopes). */
+		projects?: readonly string[];
 	}
 
-	let { org, path, info, failed, requested, s3, access = 'member', now }: Props = $props();
+	let {
+		scope,
+		path,
+		info,
+		failed,
+		requested,
+		s3,
+		objectKey = path,
+		access = 'member',
+		now,
+		projects = []
+	}: Props = $props();
 
 	const isPublic = $derived(!!info?.public);
 
@@ -95,7 +124,7 @@
 		if (!info) return;
 		try {
 			const got = await datasetCall<DatasetInfo>(
-				datasetsApi(org, 'info', { path, version: info.version })
+				datasetsApi(scope, 'info', { path, version: info.version })
 			);
 			freshTags = got.tags;
 		} catch {
@@ -103,6 +132,34 @@
 		}
 	}
 
+	let forking = $state(false);
+	let blending = $state(false);
+	let independent = $state(false);
+	/** Datasets reading this one keep it in place (D177): Rename and Delete say so. */
+	const held = $derived(
+		info?.dependents?.count
+			? `Read by ${info.dependents.count} dataset${info.dependents.count === 1 ? '' : 's'}, so it can’t be renamed or deleted. See About.`
+			: null
+	);
+	/** "Blend again…" (D179): the same blend, with the next seed. */
+	const blendStart = $derived.by((): BlendStart | null => {
+		const o = info?.origin;
+		if (!o || o.kind !== 'blend') return null;
+		const fraction = o.spec.mode === 'fraction';
+		return {
+			sources: o.sources.map((s) => ({
+				path: s.path,
+				version: String(s.version),
+				amount: fraction ? String(Math.round((s.fraction ?? 0) * 10000) / 100) : String(s.rows)
+			})),
+			mode: fraction ? 'fraction' : 'rows',
+			total: o.spec.mode === 'fraction' ? String(o.spec.total) : undefined,
+			seed: o.seed + 1,
+			replace: o.replace,
+			columns: o.columns,
+			to: `${path}-${o.seed + 1}`
+		};
+	});
 	let accessing = $state(false);
 	let renaming = $state(false);
 	let deleting = $state(false);
@@ -116,24 +173,40 @@
 	let unpublish = $state<HTMLFormElement>();
 </script>
 
-<div class="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3">
+<div class="pt-3">
 	<h1 class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" title={path}>
 		{nameOf(path)}
 	</h1>
-	{#if isPublic}<PublicBadge what="every version of it" />{/if}
-	{#if info}
-		<VersionPicker {org} {path} version={info.version} {requested} tags={allTags} {versionHref} />
+	{#if info || isPublic}
+		<!-- The version and visibility, all at the picker's height so the row sits level. -->
+		<div class="mt-3 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-2">
+			{#if info}
+				<VersionPicker
+					{scope}
+					{path}
+					version={info.version}
+					{requested}
+					tags={allTags}
+					{versionHref}
+				/>
+			{/if}
+			{#if isPublic}
+				<PublicBadge
+					what="every version of it"
+					class="h-7 px-2.5 text-[13px] font-normal [&>svg]:size-3.5!"
+				/>
+			{/if}
+			{#if newer !== null}
+				<p class="ml-1 text-[13px] text-muted-foreground" role="status">
+					New version available.
+					<a class="text-link underline-offset-3 hover:underline" href={versionHref(String(newer))}>
+						View version {newer}
+					</a>
+				</p>
+			{/if}
+		</div>
 	{/if}
 </div>
-
-{#if newer !== null}
-	<p class="mt-3 text-[13px] text-muted-foreground" role="status">
-		New version available.
-		<a class="text-link underline-offset-3 hover:underline" href={versionHref(String(newer))}>
-			View version {newer}
-		</a>
-	</p>
-{/if}
 
 <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
 	<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
@@ -149,40 +222,27 @@
 			<span class="mx-1 h-5 w-px bg-border" aria-hidden="true"></span>
 		{/if}
 		{#if access !== 'public'}
+			{#if info}
+				<Button
+					variant="ghost"
+					size="sm"
+					class="text-muted-foreground"
+					onclick={() => (forking = true)}
+				>
+					<GitForkIcon /> Fork
+				</Button>
+			{/if}
 			<Button
 				variant="ghost"
 				size="sm"
 				class="text-muted-foreground"
-				onclick={() => (accessing = true)}
-			>
-				<PlugIcon /> Access in S3
-			</Button>
-			<Button
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground"
-				href={objectHref(org, DATASETS_BUCKET, `${path}/`)}
-			>
-				<FolderOpenIcon /> Browse files
-			</Button>
-			<Button
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground"
+				disabled={!!held}
+				title={held ?? undefined}
 				onclick={() => (renaming = true)}
 			>
 				<PencilIcon /> Rename
 			</Button>
-			<Button
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground hover:text-destructive"
-				onclick={() => (deleting = true)}
-			>
-				<Trash2Icon /> Delete
-			</Button>
-		{/if}
-		{#if access === 'admin' && info}
+			<!-- Reaching the files, visibility and deletion: less often, so tucked away. -->
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger>
 					{#snippet child({ props })}
@@ -198,16 +258,38 @@
 						</Button>
 					{/snippet}
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-44">
-					{#if isPublic}
-						<DropdownMenu.Item onSelect={() => unpublish?.requestSubmit()}>
-							<LockIcon /> Make private
-						</DropdownMenu.Item>
-					{:else}
-						<DropdownMenu.Item onSelect={() => (publishing = true)}>
-							<GlobeIcon /> Make public…
-						</DropdownMenu.Item>
+				<DropdownMenu.Content align="end" class="w-48">
+					<DropdownMenu.Item onSelect={() => (accessing = true)}>
+						<PlugIcon /> Access in S3
+					</DropdownMenu.Item>
+					<DropdownMenu.Item>
+						{#snippet child({ props })}
+							<a {...props} href={objectHref(scope.org, DATASETS_BUCKET, `${objectKey}/`)}>
+								<FolderOpenIcon /> Browse files
+							</a>
+						{/snippet}
+					</DropdownMenu.Item>
+					{#if access === 'admin' && info && scope.project === null}
+						<DropdownMenu.Separator />
+						{#if isPublic}
+							<DropdownMenu.Item onSelect={() => unpublish?.requestSubmit()}>
+								<LockIcon /> Make private
+							</DropdownMenu.Item>
+						{:else}
+							<DropdownMenu.Item onSelect={() => (publishing = true)}>
+								<GlobeIcon /> Make public…
+							</DropdownMenu.Item>
+						{/if}
 					{/if}
+					<DropdownMenu.Separator />
+					<DropdownMenu.Item
+						variant="destructive"
+						disabled={!!held}
+						title={held ?? undefined}
+						onSelect={() => (deleting = true)}
+					>
+						<Trash2Icon /> Delete…
+					</DropdownMenu.Item>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
 		{/if}
@@ -216,20 +298,29 @@
 
 <div class={tab === 'rows' ? 'mt-3' : 'mt-6'}>
 	{#if tab === 'about'}
-		<AboutTab {org} {path} {info} tags={tags.map((t) => t.name)} />
+		<AboutTab
+			{scope}
+			{path}
+			{info}
+			tags={tags.map((t) => t.name)}
+			onblendagain={access !== 'public' && blendStart ? () => (blending = true) : undefined}
+			onindependent={access !== 'public' && info?.origin && !info.origin.independent
+				? () => (independent = true)
+				: undefined}
+		/>
 	{:else if failed || !info}
 		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">
 			{failed ?? 'This dataset couldn’t be read.'}
 		</p>
 	{:else if tab === 'rows'}
 		{#key info.version}
-			<RowsTab {org} {path} {info} {hidden} />
+			<RowsTab {scope} {path} {info} {hidden} />
 		{/key}
 	{:else if tab === 'schema'}
 		<SchemaTab {info} />
 	{:else}
 		<VersionsTab
-			{org}
+			{scope}
 			{path}
 			shown={info.version}
 			{versionHref}
@@ -241,11 +332,27 @@
 </div>
 
 {#if access !== 'public'}
-	<S3AccessDialog bind:open={accessing} {path} {s3} />
-	<RenameDialog bind:open={renaming} {org} {path} />
-	<DeleteDatasetDialog bind:open={deleting} {org} {path} />
+	<S3AccessDialog bind:open={accessing} {scope} {path} {objectKey} {s3} />
+	<RenameDialog bind:open={renaming} {scope} {path} />
+	<DeleteDatasetDialog bind:open={deleting} {scope} {path} />
+	{#if info}
+		<ForkDialog bind:open={forking} {scope} {path} version={info.version} {projects} />
+		<IndependentDialog bind:open={independent} {scope} {path} size={info.data_size} />
+	{/if}
+	{#if blendStart}
+		<BlendDialog
+			bind:open={blending}
+			{scope}
+			folder={parentOf(path)}
+			start={blendStart}
+			onstarted={(job) => {
+				const where = refScope(scope.org, job.dest);
+				void goto(datasetsHref(where.scope, parentOf(where.path)));
+			}}
+		/>
+	{/if}
 {/if}
-{#if access === 'admin'}
+{#if access === 'admin' && scope.project === null}
 	<ConfirmDialog
 		bind:open={publishing}
 		action="?/visibility"

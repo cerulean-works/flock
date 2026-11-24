@@ -2,7 +2,36 @@
 
 Endpoints for the model registry in an organization's `flock-models` bucket, which `flock.hub.models`, the `flock models` command and the dashboard's Models tab use. Paths are relative to `/api/v1/orgs/{org}/models`. Every endpoint checks that you belong to the organization, and answers 404 otherwise, as it does when the server has no S3. For saving and loading models, see [Store and load models](../../hub/store-models).
 
-A model's `name` is one segment of up to 100 lowercase letters, digits, `.`, `-` and `_`, starting with a letter or digit, such as `olmo2-1b`. Users in answers (`created_by`, `deleted_by`, `primary_set_by`, `moved_by`, `user`) are briefs, `{"id", "name", "email", "avatar_url"}`, or `null` once the account is deleted.
+A model's `name` is its path: parts of up to 100 lowercase letters, digits, `.`, `-` and `_`, each starting with a letter or digit, joined by `/`, at most 255 characters in all, such as `eval/olmo2-1b`. A path is a model or a folder, never both. Users in answers (`created_by`, `deleted_by`, `primary_set_by`, `moved_by`, `user`) are briefs, `{"id", "name", "email", "avatar_url"}`, or `null` once the account is deleted.
+
+## Paths and projects[[paths-and-projects]]
+
+In the endpoints below, `{path}` is the model's path with its slashes, and `/-` separates it from what follows: `GET eval/olmo2-1b/-/versions`. The old one-segment form, such as `GET olmo2-1b/versions`, still works for the organization's models.
+
+Every endpoint takes a `project` query parameter: the name of one of the organization's projects, URL-encoded. Without it, the endpoint acts on the organization's own models. A project that doesn't exist answers 404. Every model and version answer has `org`, `project` (`null` for the organization's) and `model`, the model as refs write it: `acme/eval/olmo2-1b`, or `pretrain:eval/olmo2-1b` in a project. A new project model's `prefix` is `-projects/{project id}/{path}/`.
+
+## Folders[[folders]]
+
+`GET` on the models path itself, with `folder`, `project` and `cursor`, lists one level of a folder, 100 entries a page:
+
+```json
+{"kind": "folder", "folder": "eval", "project": "pretrain",
+ "models": [{"name": "eval/olmo2-1b", "model": "pretrain:eval/olmo2-1b", "...": "..."}],
+ "folders": [{"name": "sweeps", "path": "eval/sweeps", "models": 4}],
+ "cursor": null}
+```
+
+Models come first, then folders, each sorted by name. `folders[].models` counts the models anywhere under the folder. Pass `cursor` back for the next page. `folder` defaults to the top. When `folder` is a model, the answer is `{"kind": "model", "name", "project"}`. A folder exists while a model is under it, or once someone makes it empty. Any other folder answers 404.
+
+Members and admins make and delete empty folders, so a scope can have its layout before it has models:
+
+| Request | Does |
+| --- | --- |
+| `POST -/folders?project` | Makes the folder `{"path"}`, such as `eval/sweeps`. Answers 201 with `{"path", "project"}`. A folder that exists, a model's name (live or in the trash), or a path under a model answers 409 with `"taken": true`. The folder stays when the models in it are moved or deleted. |
+| `PATCH -/folders?project` | Renames or moves the folder `{"path", "to"}` with every model and made folder under it, in one step, and into another scope with `"project"` (a project's name, or `null` for the organization's). Answers `{"path", "project", "models"}`, where `models` counts the models moved. A taken `to` answers 409 with `"taken": true`, as for a model's rename, and so does an open upload or a running import into one of its models. A `to` inside the folder answers 422. |
+| `DELETE -/folders?path&project` | Deletes the folder made at `path`, with the folders made under it. A live model under it answers 409, so move or delete those first. A path nobody made a folder at answers 404. Answers 204. |
+
+A made folder's path is taken the same way a model's is: pushing a model or renaming one to that exact path answers 409. Saving a model inside it, such as `eval/sweeps/lr-3e-4`, works.
 
 ## Models and versions[[models-and-versions]]
 
@@ -10,11 +39,11 @@ A `ref` is a version number, a tag or `primary`. Without one, the primary versio
 
 | Endpoint | Meaning |
 |---|---|
-| `GET` (the models path itself) | `{"models": [...]}`, by name. Each has `name`, `model` (`org/name`), `prefix` (its folder in `flock-models`, such as `olmo2-1b/`), `created_at`, `created_by`, `versions` (how many are live), `latest` and `primary` (numbers, `null` before the first version), `size` (the primary's bytes) and `updated_at`. Creates `flock-models` first if the organization has none. |
-| `GET {name}` | The model: `name`, `model`, `prefix`, `created_at`, `created_by`, `versions`, `latest`, `primary`, `primary_set_by`, `primary_set_at` and `tags` (`[{"name", "version", "moved_by", "moved_at"}]`). |
-| `GET {name}/resolve?ref` | The version `ref` names, with its files, as below. A model with no versions answers 404. |
-| `GET {name}/versions?before&checkpoints` | Live versions, newest first, 100 a page: `{"versions": [...], "cursor"}`. Pass `cursor` as `before` for the next page. `cursor` is `null` on the last. With `checkpoints=true`, only versions with a `checkpoint-{step}` tag. |
-| `GET {name}/versions/{number}` | One version, with its files. |
+| `GET` (the models path itself, without `folder`) | `{"models": [...]}`: the top level's models, by name, as before folders. Each has `name`, `model` (`org/name`), `prefix` (its folder in `flock-models`, such as `olmo2-1b/`), `created_at`, `created_by`, `versions` (how many are live), `latest` and `primary` (numbers, `null` before the first version), `size` (the primary's bytes) and `updated_at`. Creates `flock-models` first if the organization has none. |
+| `GET {path}/-` | The model: `name`, `model`, `prefix`, `created_at`, `created_by`, `versions`, `latest`, `primary`, `primary_set_by`, `primary_set_at` and `tags` (`[{"name", "version", "moved_by", "moved_at"}]`). |
+| `GET {path}/-/resolve?ref` | The version `ref` names, with its files, as below. A model with no versions answers 404. |
+| `GET {path}/-/versions?before&checkpoints` | Live versions, newest first, 100 a page: `{"versions": [...], "cursor"}`. Pass `cursor` as `before` for the next page. `cursor` is `null` on the last. With `checkpoints=true`, only versions with a `checkpoint-{step}` tag. |
+| `GET {path}/-/versions/{number}` | One version, with its files. |
 
 A version has these fields:
 
@@ -26,8 +55,10 @@ A version has these fields:
 | `tags`, `primary` | Its tags, and whether it's the primary version. |
 | `run`, `step` | The run that made it, as `entity/project/id`, and the step. `null` when it wasn't saved from a run of the organization. |
 | `created_by`, `created_at` | Who pushed it, and when. |
+| `eval_runs` | How many eval runs scored it. Deleted runs aren't counted. |
 | `bucket`, `prefix` | `flock-models`, and the version's folder in it, such as `olmo2-1b/u/01JD3KQ8…/`. |
 | `files` | `[{"path", "size", "sha256"}]`, sorted by path. Only in `resolve` and `versions/{number}`. |
+| `evals` | The eval runs that scored it, as `entity/project/id`, leaving out deleted runs. Only in `resolve` and `versions/{number}`. |
 
 ## Tags and the primary version[[tags-and-primary]]
 
@@ -35,9 +66,9 @@ Members and admins can change these.
 
 | Endpoint | Meaning |
 |---|---|
-| `PUT {name}/primary` | Makes `{"version"}` the primary version, recording who and when. Answers the version, with `previous`, the number it replaced (`null` when it was already primary). |
-| `PUT {name}/tags/{tag}` | Puts the tag on `{"version"}`. If the tag is on another version, it answers 409 with that `version`, unless the body has `"move": true`. A `checkpoint-{step}` tag never moves, so it answers 409 even with `move`. Answers `{"tag", "version"}`. |
-| `DELETE {name}/tags/{tag}` | Removes the tag. The version stays. Answers 204. |
+| `PUT {path}/-/primary` | Makes `{"version"}` the primary version, recording who and when. Answers the version, with `previous`, the number it replaced (`null` when it was already primary). |
+| `PUT {path}/-/tags/{tag}` | Puts the tag on `{"version"}`. If the tag is on another version, it answers 409 with that `version`, unless the body has `"move": true`. A `checkpoint-{step}` tag never moves, so it answers 409 even with `move`. Answers `{"tag", "version"}`. |
+| `DELETE {path}/-/tags/{tag}` | Removes the tag. The version stays. Answers 204. |
 
 Tag names are up to 100 ASCII letters, digits, `.`, `-` and `_`, starting with a letter or digit. A name of only digits, or `primary` in any case, answers 422.
 
@@ -47,11 +78,11 @@ Members and admins can rename models.
 
 | Endpoint | Meaning |
 |---|---|
-| `PATCH {name}` | Renames the model to `{"name"}`. Answers the model, as `GET {name}` does. |
+| `PATCH {path}/-` | Renames the model to `{"name"}`, which may be in another folder, or moves it with `{"project"}`: a project's name, or `null` for the organization's models. Without `project`, the model stays where it is. Answers the model, as `GET {path}/-` does. |
 
 Only the name changes, so a rename is instant. The model's files stay in its folder, `prefix`, which keeps the name the model was created with. Uploads and downloads use `prefix`, so they keep working. The old name stops resolving at once, so `acme/olmo2-1b@3` answers 404, with no redirect. Runs keep their links to the model.
 
-The new name follows the rules for names above. A name another model has, live or in the trash, answers 409 with `"taken": true`. A rename answers 409 while an upload to the model is open, or a Hugging Face import into it is running.
+The new name follows the rules for names above. A name another model has, live or in the trash, a folder's path, or a path under a model answers 409 with `"taken": true`. Until the `0024_models_scope.contract.sql` migration is applied, model names are unique across the whole organization, so a project's model can't take the name of the organization's model, or of another project's. A rename answers 409 while an upload to the model is open, or a Hugging Face import into it is running.
 
 ## Deleting[[deleting]]
 
@@ -59,8 +90,8 @@ Members and admins can delete. A deleted version or model is gone from every oth
 
 | Endpoint | Meaning |
 |---|---|
-| `DELETE {name}/versions/{number}` | Deletes the version. The primary version answers 409, as does a version with a tag other than `checkpoint-{step}`. Its checkpoint tags go with it. Answers its trash entry. |
-| `DELETE {name}` | Deletes the model with every version in it, and aborts its open uploads. Answers its trash entry. |
+| `DELETE {path}/-/versions/{number}` | Deletes the version. The primary version answers 409, as does a version with a tag other than `checkpoint-{step}`. Its checkpoint tags go with it. Answers its trash entry. |
+| `DELETE {path}/-` | Deletes the model with every version in it, and aborts its open uploads. Answers its trash entry. |
 
 ## Uploads[[uploads]]
 
@@ -68,11 +99,11 @@ Members and admins can delete. A deleted version or model is gone from every oth
 
 | Endpoint | Meaning |
 |---|---|
-| `POST {name}/uploads` | Opens an upload, creating the model if it's new. The body has `files` (`[{"path", "size"}]`), and optionally `metadata`, `tags`, `primary`, `run` (`entity/project/id`), `step` and `dedupe_key`. Answers 201 with the upload: `ulid`, `bucket`, `prefix` (the folder to write to), `part_size` and the rest. If a live version has the `dedupe_key`, it answers 200 with that version instead. A `checkpoint-{step}` tag already on a version answers 409 with its `version`. |
-| `GET {name}/uploads?state` | Your uploads of the model in `state` (`open`, the default, `committed`, `aborted` or `expired`), oldest first: `{"uploads": [...]}`. |
-| `GET {name}/uploads/{ulid}` | An upload's state and declared files. |
-| `POST {name}/uploads/{ulid}/commit` | Makes the upload a version, given `{"files": [{"path", "sha256"}]}`. Only the user who opened it can commit it. Answers the version. Committing again answers the same version. |
-| `DELETE {name}/uploads/{ulid}` | Aborts the upload and deletes what it wrote. Its opener or an admin can. Answers 204. |
+| `POST {path}/-/uploads` | Opens an upload, creating the model if it's new. The body has `files` (`[{"path", "size"}]`), and optionally `metadata`, `tags`, `primary`, `run` (`entity/project/id`), `step` and `dedupe_key`. Answers 201 with the upload: `ulid`, `bucket`, `prefix` (the folder to write to), `part_size` and the rest. If a live version has the `dedupe_key`, it answers 200 with that version instead. A `checkpoint-{step}` tag already on a version answers 409 with its `version`. |
+| `GET {path}/-/uploads?state` | Your uploads of the model in `state` (`open`, the default, `committed`, `aborted` or `expired`), oldest first: `{"uploads": [...]}`. |
+| `GET {path}/-/uploads/{ulid}` | An upload's state and declared files. |
+| `POST {path}/-/uploads/{ulid}/commit` | Makes the upload a version, given `{"files": [{"path", "sha256"}]}`. Only the user who opened it can commit it. Answers the version. Committing again answers the same version. |
+| `DELETE {path}/-/uploads/{ulid}` | Aborts the upload and deletes what it wrote. Its opener or an admin can. Answers 204. |
 
 A commit that doesn't match what's in storage answers 409 with the paths, and the upload stays open:
 
@@ -88,11 +119,11 @@ A shard that isn't safetensors, or an index naming a tensor no shard holds, answ
 
 ## The trash[[trash]]
 
-Only organization admins can use these. Members get 403. The paths start with `-/`, which no model name can.
+Only organization admins can use these. Members get 403. The paths start with `-/`, which no model name can. A model is restored into the project it was deleted from.
 
 | Endpoint | Meaning |
 |---|---|
-| `GET -/trash` | `{"entries": [...]}`, newest first: deleted models, and deleted versions of live models. Every entry has `kind` (`model` or `version`), `id`, `name`, `model`, `deleted_by` (`null` for versions retention deleted), `deleted_at`, `expires_at`, `moved` (`false` while its files are still moving) and `bytes`. A model has `versions`, the number deleted with it. A version has `number` and `tags` (the checkpoint tags that went with it). |
+| `GET -/trash?project` | `{"entries": [...]}`, newest first: deleted models, and deleted versions of live models, of every project and the organization's, or only of `project`. Every entry has `project` (`null` for the organization's), `kind` (`model` or `version`), `id`, `name`, `model`, `deleted_by` (`null` for versions retention deleted), `deleted_at`, `expires_at`, `moved` (`false` while its files are still moving) and `bytes`. A model has `versions`, the number deleted with it. A version has `number`, `tags` (the checkpoint tags that went with it) and `eval_runs`. |
 | `POST -/trash/versions/{id}/restore` | Restores the version with its number, and its checkpoint tags if nobody has taken them since. A version of a deleted model answers 409. |
 | `POST -/trash/models/{id}/restore` | Restores the model with the versions deleted with it. A live model with its name answers 409 with `"taken": true`. |
 | `DELETE -/trash/versions/{id}`, `DELETE -/trash/models/{id}` | Deletes it for good. Answers 204. |
@@ -101,4 +132,4 @@ Restoring and deleting for good answer 409 while the files are still moving to t
 
 ## Retention[[retention]]
 
-An organization's `model_retention` keeps the newest N untagged versions of each model. Admins set it with [`PATCH /orgs/{org}`](orgs#organizations), and `null`, the default, keeps every version. When it's set, the sweep deletes older versions that aren't primary and have no tag other than `checkpoint-{step}`. They go to the trash like any deleted version.
+An organization's `model_retention` keeps the newest N untagged versions of each model. Admins set it with [`PATCH /orgs/{org}`](orgs#organizations), and `null`, the default, keeps every version. When it's set, the sweep deletes older versions that aren't primary, have no tag other than `checkpoint-{step}` and have no eval runs that aren't deleted. They go to the trash like any deleted version.

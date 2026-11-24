@@ -80,7 +80,7 @@
 				<Input
 					id="s3-key-name"
 					name="name"
-					placeholder="e.g. notebook"
+					placeholder="e.g., notebook"
 					autocomplete="off"
 					maxlength={128}
 				/>

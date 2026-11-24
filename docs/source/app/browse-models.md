@@ -2,7 +2,23 @@
 
 Use the dashboard's **Models** tab to see your organization's stored models, choose which version loads by default, tag versions, rename models and delete the ones you no longer need. To push and load models, see [Store and load models](../hub/store-models).
 
-**Models** is in the sidebar when the Flock server has S3 storage. It lists each model with its latest version, its primary version, the primary version's size and when it last changed. A model appears once its first upload starts, and its first version once that upload finishes.
+**Models** is in the sidebar when the Flock server has S3 storage. It lists each model with its latest version, its primary version, the primary version's size and when it last changed, then the folders, with how many models each holds. Open a folder to see the models in it. To set up folders before you have models in them, click **New folder** and enter a name: the folder is made inside the one shown and stays, even empty, until it's deleted. A folder's **⋯** menu renames it, moves it with its models (to a project too), or deletes it once it has no models in it. A model appears once its first upload starts, and its first version once that upload finishes.
+
+## A project's models
+
+Each project has its own models, apart from the organization's. Open the project from the sidebar: the sidebar slides over to the project's pages, **Runs**, **Datasets** and **Models**, with **Home** at the top to go back. Click **Models**. The page works like the organization's **Models** tab, with the project in its breadcrumbs and in the snippets it shows, such as `models.save_to_hub(model, "my-model", project="pretrain")`. Only the organization's members see a project's models and datasets, even in a public project.
+
+Deleting a project deletes its models and datasets for good. Its delete dialog says how many go with it, for example "3 datasets and 12 models (412 GB) are deleted with this project."
+
+## Move models
+
+Check the models to move and click **Move**, or use **Move…** in a model's **⋯** menu.
+
+1. Pick the destination under **Project**: the organization's models, shown as **Workspace**, or one of its projects. It starts at the place shown.
+2. Pick or type the folder. Each model keeps its last name: `sweeps/lr-3e-4` moved to `released` becomes `released/lr-3e-4`.
+3. Click **Move**.
+
+A move is instant, like a rename, and has the same effects: old refs stop working, and the files stay where they are in `flock-models`. A model moved out of a project becomes visible to the whole organization, and the dialog says where.
 
 ## Look at a model
 
@@ -18,6 +34,7 @@ The tabs show the version in more detail. The tab is kept in the URL as `?tab=`.
 |---|---|
 | **Overview** | The version's `README.md`, if it has one, and `config.json` and `flock.json` as tables, beside its size, file count, step, run, tags and digest. |
 | **Versions** | Every version, newest first, with its tags, size, the run and step it came from, and who pushed it and when. |
+| **Evals** | The eval runs that scored the version side by side, linked to the runs: each suite's score, then each task's primary metric, read from the runs' results files. Check two runs and click **Compare items** to [compare them doc by doc](explore-runs#compare-two-eval-runs). |
 | **Files** | Each file's path, size and sha256. |
 
 ## Make a version primary
@@ -49,6 +66,8 @@ The dialog refuses two kinds of version, and says what to do first:
 - **The primary version:** make another version primary.
 - **A version with a tag other than a checkpoint tag:** move or remove that tag. Checkpoint tags are deleted with their version.
 
+A version that eval runs scored can be deleted. The dialog says how many runs scored it, since their results will name a version that no longer loads.
+
 To delete a whole model with every version in it, click **Delete** in the model's header, or **Delete…** in the model's **⋯** menu in the list. Type its name, such as `acme/olmo2-1b`.
 
 To delete several models at once:
@@ -61,7 +80,7 @@ If one model can't be deleted, the rest still are, and the dialog lists the ones
 
 Every type-to-confirm prompt has a **Copy** button next to the text to type, so you can paste it instead.
 
-Files in `flock-models` can't be deleted from **Storage**, so a version can't lose files once it's saved.
+Files in `flock-models` can't be deleted from **Storage**, so a version can't lose files once it's saved, and its eval runs always name the bytes they scored.
 
 ## Rename a model
 
@@ -76,7 +95,7 @@ Only the name changes, so a rename is instant whatever the model's size. The mod
 
 ## Restore from the trash
 
-Deleted models and versions wait 14 days in the trash. Organization admins find them under **Deleted models** in the organization's settings:
+Deleted models and versions wait 14 days in the trash. Organization admins find them under **Deleted models** in the organization's settings, with the project of each one, empty for the organization's models. Restoring puts a model back where it was deleted from:
 
 - **Restore** brings a version back with its number and its checkpoint tags, or a model back with the versions deleted with it. A model can't be restored while another model has its name.
 - **Delete now** removes it for good, after you type its name. There is no undo.
@@ -85,10 +104,15 @@ Deleted models and versions wait 14 days in the trash. Organization admins find 
 
 Training saves many checkpoints, and most are never loaded again. An organization admin can turn on **Model retention** in the organization's settings: "Keep the newest N untagged versions of each model". It's off by default.
 
-When it's on, Flock deletes older versions that aren't primary, and have no tag other than a checkpoint tag. They go to **Deleted models** like any deleted version, so you have 14 days to restore one.
+When it's on, Flock deletes older versions that aren't primary, have no tag other than a checkpoint tag and have no eval runs. They go to **Deleted models** like any deleted version, so you have 14 days to restore one.
 
 To keep a checkpoint for good, tag it, for example `best`, or make it primary.
 
 ## Models on a run's page
 
-A run's **Overview** lists the model versions the run saved under **Checkpoints**, with their steps and tags. Each one links to the version in the Models tab. [Models API and CLI reference](../hub/models) · [Model registry endpoints](api/models)
+A run's **Overview** lists the model versions it's linked to:
+
+- **Checkpoints** are the versions the run saved, with their steps and tags.
+- **Models scored** are the versions an eval run evaluated.
+
+A project's model shows with its project, such as `pretrain:sweeps/lr-3e-4@7`. Each one links to the version in the Models tab. [Models API and CLI reference](../hub/models) · [Model registry endpoints](api/models)

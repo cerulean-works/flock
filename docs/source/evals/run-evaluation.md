@@ -57,6 +57,22 @@ uv run flock eval run \
 
 [Sign in](../cli/sign-in) first. The version is resolved to its number before anything loads, and the results record it as `flock:acme/olmo2-1b@12`, with the version's digest in `model_digest`. Moving the tag or the primary later doesn't change what the results say was scored. The tokenizer is the Hugging Face one that the model's config names in `hf_repo`, so a model saved without `hf_repo` can't be scored.
 
+## Score a local model folder
+
+A model saved in the Hugging Face format to a folder, such as a training run's export, is scored by the folder and a digest of its files with a `local:` prefix, written `local:{folder}@{digest}`. `flock eval digest` prints that id, so pass its output as `--model`:
+
+```bash
+model=$(uv run flock eval digest /work/acme/run-190m/export-000700)
+uv run flock eval run \
+  --model "$model" \
+  --task arc_easy \
+  --out results/run-190m-700
+```
+
+Keep the printed id with the run's notes: a later run of the same export passes the same id, and is refused if the files changed.
+
+The digest names every file in the folder, the weights, config and tokenizer alike, in the same form as a Flock version's digest. A folder holding a link, an adapter, or a weights index or tokenizer config that names a file outside the folder is refused, since the digest couldn't pin what loads. Before anything loads, the folder's files are hashed again, and a folder whose files no longer match the digest is refused. The results record the model as `local:{digest}`, with the digest in `model_digest`, so the same files scored from another folder compare as one model. The folder's path appears only in `command`. A folder passed as `repo@revision` is refused, since a revision can't pin a folder's files, and the message gives the `local:` id to use.
+
 ## Run where there is no network
 
 A job on a machine that can't reach the Hugging Face Hub reads its datasets from copies staged on shared disk. Each task's dataset is a Hugging Face repo pinned to a commit, and your organization keeps a private copy of that pin on Flock at `eval/<owner>/<name>`. The copy holds the configurations and splits the tasks read.
@@ -129,7 +145,9 @@ You can combine tasks and suites; overlapping tasks run once. A suite can report
 
 [Sign in](../cli/sign-in) and accept the wandb SDK setup. Add `--wandb-project model-evals` to the evaluation command. The SDK uses your default organization, just as a training script does.
 
-Open `model-evals` in [Cerulean's dashboard](https://flock.cerulean.works) and find the run with job type `eval`. Its summary contains task metrics and suite scores, while config records the evaluation provenance. The local `results.json` is still written. [Tracker fields](commands#tracker-runs) lists the details.
+Open `model-evals` in [Cerulean's dashboard](https://flock.cerulean.works) and find the run with job type `eval`. Its summary contains task metrics and suite scores, while config records the evaluation provenance. Its files hold `results.json` and the predictions, so each doc's outcome can be read back. The local `results.json` is still written. [Tracker fields](commands#tracker-runs) lists the details, including why a task on a private dataset needs a private project.
+
+To see which docs two models disagree on, run [`flock eval diff`](commands#flock-eval-diff) on their two runs.
 
 To log a `results.json` scored without `--wandb-project`, run `flock eval log` on it. See [`flock eval log`](commands#flock-eval-log).
 

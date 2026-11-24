@@ -20,14 +20,14 @@
 	});
 </script>
 
-<p class="mt-2 max-w-[62ch] text-muted-foreground">
-	When this is on, Flock deletes older versions that aren’t primary and have no tag other than a
-	checkpoint tag. They wait in Deleted models for {TRASH_DAYS} days.
+<p class="mt-2 text-muted-foreground">
+	When this is on, Flock deletes older versions that aren’t primary, have no tag other than a
+	checkpoint tag and have no eval runs. They wait in Deleted models for {TRASH_DAYS} days.
 </p>
 <form
 	method="POST"
 	action="?/modelRetention"
-	class="mt-4 grid max-w-160 gap-3"
+	class="mt-4 grid gap-3"
 	use:enhance={mutation.enhance}
 >
 	<input type="hidden" name="keep" value={on ? keep : ''} />

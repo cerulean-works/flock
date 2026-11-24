@@ -4,7 +4,30 @@ version = "0.1.0"
 description = "Cerulean's monorepo for model training, evaluation, and development tooling."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+# Everything the wheel's modules import, so a project that depends on `flock` can run every
+# `flock` command and import every module without adding anything itself. The app's server
+# dependencies stay in app/api/pyproject.toml: the app is deployed from source, not from the wheel.
+dependencies = [
+    "accelerate>=1.15.0",
+    "boto3>=1.43.118",
+    "click>=8.5.0",
+    "datasets>=5.1.0",
+    "httpx>=0.28.1",
+    "huggingface-hub>=2.2.0",
+    "numpy>=2.5.4",
+    "pyarrow>=26.0.0",
+    "pydantic>=2.14.1",
+    "pylance>=14.0.0",
+    "pyyaml>=6.0.3",
+    "safetensors>=0.8.0",
+    "sentencepiece>=0.2.3",
+    "tokenizers>=0.23.3",
+    "torch>=2.14.1",
+    "tqdm>=4.70.1",
+    "transformers>=5.20.1",
+    "typing-extensions>=4.15.0",
+    "wandb>=0.31.0",
+]
 
 [project.scripts]
 flock = "flock.cli.main:main"
@@ -15,27 +38,29 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = ""
-module-name = ["flock.cli", "flock.eval", "flock.hub", "flock.training", "app.api"]
+module-name = ["flock.cli", "flock.eval", "flock.hub", "flock.training"]
 wheel-exclude = ["pyproject.toml"]
 
 [tool.uv]
-default-groups = ["dev", "components", "gpu"]
+default-groups = ["dev", "gpu"]
 conflicts = [[{ group = "cpu-tests" }, { group = "gpu" }]]
 
 [tool.uv.workspace]
-members = ["flock/cli", "flock/eval", "flock/hub", "flock/training", "app/api", "tests"]
+members = ["app/api", "tests"]
 
 [tool.uv.sources]
 flock = { workspace = true }
-flock-cli = { workspace = true }
-flock-eval = { workspace = true }
-flock-hub = { workspace=true }
-flock-training = { workspace = true }
 torch = { index = "pytorch-cpu", group = "cpu-tests", marker = "sys_platform == 'linux'" }
+flash-attn-3 = { index = "pytorch-cu130" }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [tool.ruff]
@@ -64,22 +89,21 @@ markers = [
     "latency: tests that measure app response latency",
     "gpu: CUDA training parity tests (run explicitly on a GPU machine)",
     "fa3: FlashAttention-3 tests requiring Hopper and compatible FA3 kernels",
-    "fa4: FlashAttention-4 tests requiring Hopper or Blackwell and the FA4 CuTe kernels",
+    "fa4: FlashAttention-4 tests requiring Hopper or Blackwell and compatible FA4 kernels",
 ]
 addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency and not gpu", "-n", "auto", "--dist=loadgroup"]
 
 [dependency-groups]
-components = [
-    "flock-cli",
-    "flock-eval",
-    "flock-hub",
-    "flock-training",
-]
 dev = [
+    "modal>=1.5.2",
     "pytest>=9.1.1",
     "pytest-xdist>=3.8.0",
     "ruff>=0.17.1",
     "ty>=0.0.89",
 ]
 cpu-tests = ["torch==2.14.1"]
-gpu = ["torch>=2.14.1"]
+gpu = [
+    "torch>=2.14.1",
+    "flash-attn-3>=3.0.1; sys_platform == 'linux'",
+    "flash-attn-4[cu13]>=4.0.0b40; sys_platform == 'linux'",
+]

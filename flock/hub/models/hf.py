@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from flock.hub.models._common import ModelError, ModelVersion, Progress, Ref
+from flock.hub.models._common import ModelError, ModelVersion, Progress, parse_ref
 from flock.hub.models._upload_journal import STAGING_PREFIX, journals, uploads_root
 from flock.hub.models.files import FORMAT, INDEX, SINGLE, flock_commit
 from flock.hub.models.headers import (
@@ -327,6 +327,8 @@ def import_from_hf(
     revision: str | None = None,
     tags: Sequence[str] = (),
     primary: bool = False,
+    project: str | None = None,
+    org: str | None = None,
 ) -> ModelVersion:
     """
     Imports a Hugging Face model as a new version of `name`, creating the model if it's new.
@@ -348,7 +350,7 @@ def import_from_hf(
             A Hub repository, such as `Qwen/Qwen3-0.6B`, or a local folder holding one (for
             example one `hf download` filled), which is read in place.
         name (`str`):
-            The model, as `org/name`.
+            The model, as `org/path`, `project:path`, or a path with `project`.
         revision (`str`, *optional*):
             A branch, tag or commit of a Hub repository. Defaults to `main`.
         tags (`Sequence[str]`, *optional*):
@@ -356,6 +358,11 @@ def import_from_hf(
         primary (`bool`, *optional*, defaults to `False`):
             Make the new version primary once it's committed. A model's first version is
             primary anyway.
+        project (`str`, *optional*):
+            The project to import into, by name or as `org/project`. `name` is then a path
+            inside it.
+        org (`str`, *optional*):
+            The project's org. Defaults to your default org.
 
     Returns:
         [`~hub.models.ModelVersion`]: the new version.
@@ -376,7 +383,9 @@ def import_from_hf(
     model = models.load_from_hub("acme/qwen3-0.6b")
     ```
     """
-    return import_model(repo, name, revision=revision, tags=tags, primary=primary)
+    return import_model(
+        repo, name, revision=revision, tags=tags, primary=primary, project=project, org=org
+    )
 
 
 def import_model(
@@ -387,15 +396,17 @@ def import_model(
     tags: Sequence[str] = (),
     primary: bool = False,
     progress: Progress | None = None,
+    project: str | None = None,
+    org: str | None = None,
 ) -> ModelVersion:
     """[`import_from_hf`], reporting bytes sent to `progress`, as the CLI does."""
     from flock.hub.models.upload import push, resume_journal
 
-    ref = Ref.parse(name, version=False)
+    ref = parse_ref(name, version=False, project=project, org=org)
     found = snapshot(repo, revision)
     key = dedupe_key(found.repo, found.revision) if found.revision else None
     if key is not None:
-        for journal in journals(ref.model):
+        for journal in journals(ref):
             if journal.staged and journal.options.get("dedupe_key") == key:
                 return resume_journal(journal, progress)
     options = {

@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
-import type { Listing, ObjectDetails } from '#lib/types.ts';
-import Breadcrumbs from './Breadcrumbs.svelte';
+import type { Listing, ObjectDetails, ProjectInfo } from '#lib/types.ts';
+import Breadcrumbs from '../Breadcrumbs.svelte';
 import DeleteObjectsDialog from './DeleteObjectsDialog.svelte';
 import ObjectBrowser from './ObjectBrowser.svelte';
 import ObjectPreview from './ObjectPreview.svelte';
@@ -71,8 +71,8 @@ describe('ObjectBrowser', () => {
 			now: 1_790_000_100
 		});
 		const rows = () =>
-			[...document.querySelectorAll('tbody tr')].map((r) =>
-				r.querySelector('td:nth-child(2)')!.textContent!.trim()
+			[...document.querySelectorAll('[role=rowgroup] [role=row]')].map((r) =>
+				r.querySelector('[role=cell]:first-child a')!.textContent!.trim()
 			);
 		expect(rows()).toEqual(['v1/', 'a.txt', 'b.json', 'c.png']);
 		await expect.element(page.getByText('2.0 KB')).toBeInTheDocument();
@@ -95,7 +95,9 @@ describe('ObjectBrowser', () => {
 		});
 		render(ObjectBrowser, { org: 'acme', bucket: 'data', prefix: 'runs/', listing, now: 0 });
 		await page.getByRole('textbox', { name: 'Filter by name prefix' }).fill('b');
-		await vi.waitFor(() => expect(document.querySelectorAll('tbody tr').length).toBe(1));
+		await vi.waitFor(() =>
+			expect(document.querySelectorAll('[role=rowgroup] [role=row]').length).toBe(1)
+		);
 		expect(calls.at(-1)!.url).toBe('/api/storage/acme/data/objects?prefix=runs%2Fb&limit=200');
 	});
 
@@ -154,6 +156,47 @@ describe('ObjectBrowser in flock-models', () => {
 		await expect
 			.element(page.getByRole('toolbar').getByRole('button', { name: 'Delete' }))
 			.not.toBeInTheDocument();
+	});
+});
+
+describe('ObjectBrowser in -projects/ (D169)', () => {
+	const projects = [
+		{ id: 412, name: 'pretrain' },
+		{ id: 7, name: 'old' }
+	] as ProjectInfo[];
+	const listing: Listing = {
+		prefix: '-projects/',
+		folders: ['-projects/412/', '-projects/9/'],
+		objects: [],
+		cursor: null
+	};
+
+	it('links each project’s folder to its tab, and leaves unknown ids plain', async () => {
+		serve({});
+		const props = { org: 'acme', prefix: '-projects/', listing, now: 0, projects };
+		const { unmount } = render(ObjectBrowser, { ...props, bucket: 'flock-datasets' });
+		const link = page.getByRole('link', { name: 'pretrain in Datasets' });
+		expect(link.element().getAttribute('href')).toBe('/acme/pretrain/datasets');
+		await expect.element(page.getByText('9/')).toBeVisible();
+		expect(page.getByRole('link', { name: /old/ }).query()).toBeNull();
+		unmount();
+		render(ObjectBrowser, { ...props, bucket: 'flock-models' });
+		const models = page.getByRole('link', { name: 'pretrain in Models' });
+		expect(models.element().getAttribute('href')).toBe('/acme/pretrain/models');
+	});
+
+	it('links nothing in other buckets', async () => {
+		serve({});
+		render(ObjectBrowser, {
+			org: 'acme',
+			bucket: 'data',
+			prefix: '-projects/',
+			listing,
+			now: 0,
+			projects
+		});
+		await expect.element(page.getByText('412/')).toBeVisible();
+		expect(page.getByRole('link', { name: /pretrain/ }).query()).toBeNull();
 	});
 });
 

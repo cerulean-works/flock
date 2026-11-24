@@ -64,8 +64,8 @@
 			'group flex items-center gap-3 rounded-lg text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-muted',
 			compact ? 'p-1.5' : 'w-full px-2 py-2.5'
 		]}
-		aria-label="{label ?? 'No organization'} · {me.name}"
-		title={compact ? `${label ?? 'No organization'} · ${me.name}` : undefined}
+		aria-label="{label ?? 'No organization'}, signed in as {me.name}"
+		title={compact ? `${label ?? 'No organization'}, signed in as ${me.name}` : undefined}
 	>
 		<span class="relative flex-none">
 			{#if label}

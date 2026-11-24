@@ -1,10 +1,12 @@
 <script lang="ts">
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { untrack } from 'svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
+	import InfoHint from '#lib/components/InfoHint.svelte';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { Slider } from '#lib/components/ui/slider/index.js';
@@ -210,7 +212,7 @@
 			<Input
 				id="panel-{axis}-min"
 				value={min}
-				placeholder="Min: auto"
+				placeholder="Min (auto)"
 				inputmode="decimal"
 				autocomplete="off"
 				aria-label="{axis.toUpperCase()} minimum"
@@ -219,7 +221,7 @@
 			/>
 			<Input
 				value={max}
-				placeholder="Max: auto"
+				placeholder="Max (auto)"
 				inputmode="decimal"
 				autocomplete="off"
 				aria-label="{axis.toUpperCase()} maximum"
@@ -246,7 +248,9 @@
 			<Dialog.Header class="border-b border-divider px-5 pt-4 pb-3.5">
 				<Dialog.Title>{creating ? 'Add panel' : 'Edit panel'}</Dialog.Title>
 				<Dialog.Description class="truncate">
-					{def.section}{preview.title ? ` · ${preview.title}` : ''}
+					{def.section}{#if preview.title}<ChevronRightIcon
+							class="mx-1 inline size-3.5 align-[-2px] text-faint"
+						/>{preview.title}{/if}
 				</Dialog.Description>
 			</Dialog.Header>
 			<div class="flex min-h-0 flex-1 max-md:flex-col">
@@ -288,7 +292,14 @@
 									Data
 								</h3>
 								<div class="grid gap-2">
-									<Label for="panel-add-metric">Metrics</Label>
+									<div class="flex items-center gap-1.5">
+										<Label for="panel-add-metric">Metrics</Label>
+										<InfoHint label="About metrics">
+											Plot several metrics on one chart. Only {def.stream === 'system'
+												? 'system metrics'
+												: 'logged metrics'} share this x axis.
+										</InfoHint>
+									</div>
 									<ul class="flex flex-wrap gap-1.5" aria-label="Metrics plotted">
 										{#each draft.metrics as key, k (key)}
 											<li
@@ -321,33 +332,29 @@
 										bind:value={adding}
 										{options}
 										mono
-										placeholder="Add a metric…"
+										placeholder="Add a metric"
 										aria-label="Add a metric"
 										onPick={(o) => addMetric(o.value)}
 									/>
 									{#if errors.metrics}
 										<p class="text-xs text-destructive">{errors.metrics}</p>
-									{:else}
-										<p class="text-xs text-muted-foreground">
-											Plot several metrics on one chart. Only {def.stream === 'system'
-												? 'system metrics'
-												: 'logged metrics'} share this x axis.
-										</p>
 									{/if}
 								</div>
 								<div class="grid gap-2">
-									<Label>X axis</Label>
+									<div class="flex items-center gap-1.5">
+										<Label>X axis</Label>
+										{#if def.stream === 'system'}
+											<InfoHint label="About the x axis">
+												System metrics are sampled on a timer, so they plot against time.
+											</InfoHint>
+										{/if}
+									</div>
 									<XAxisPicker
 										value={draft.xAxis}
 										stream={def.stream}
 										inherit="Workspace ({workspaceAxis})"
 										onchange={setAxis}
 									/>
-									{#if def.stream === 'system'}
-										<p class="text-xs text-muted-foreground">
-											System metrics are sampled on a timer, so they plot against time.
-										</p>
-									{/if}
 								</div>
 								{@render range(
 									'x',

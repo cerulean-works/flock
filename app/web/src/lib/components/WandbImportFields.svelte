@@ -39,7 +39,7 @@
 			<div class="grid gap-1">
 				<Label for="{id}-on">Import runs from W&B</Label>
 				<p class="text-xs leading-relaxed text-muted-foreground">
-					Copy every project and run of a W&B team or user into it. It runs in the background.
+					Copies every project and run from a W&B team or user, in the background.
 				</p>
 			</div>
 			<Switch id="{id}-on" bind:checked={on} class="mt-0.5" />
@@ -54,7 +54,7 @@
 				id="{id}-entity"
 				name={WANDB_FIELDS.entity}
 				value={entity}
-				placeholder={org || 'e.g. cerulean-ml'}
+				placeholder={org || 'e.g., cerulean-ml'}
 				autocomplete="off"
 				spellcheck="false"
 				maxlength={128}
@@ -82,7 +82,7 @@
 					href="https://wandb.ai/authorize"
 					target="_blank"
 					rel="noreferrer">wandb.ai/authorize</a
-				>. Flock uses it for this import only, and doesn’t keep it.
+				>. It’s used for this import only and never stored.
 			</p>
 		</div>
 		<div class="grid gap-2">

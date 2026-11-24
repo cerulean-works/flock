@@ -1,6 +1,10 @@
 <script lang="ts">
+	import CalendarIcon from '@lucide/svelte/icons/calendar';
+	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { enhance } from '$app/forms';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { dismissedBy, warningText } from '#lib/budget.ts';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
@@ -15,9 +19,8 @@
 	const restoring = new Mutation({ toastErrors: true, success: () => 'Warning shown again' });
 </script>
 
-<p class="mt-2 max-w-[62ch] text-muted-foreground">
-	GPU time that can’t be priced: GPU types without a price, and runs whose GPUs aren’t known. Only
-	admins see these. Dismissing one hides it until it’s about something new.
+<p class="mt-2 text-muted-foreground">
+	GPU hours Flock can’t price, from GPU types without a price or runs with unknown GPUs.
 </p>
 
 <h3 class="mt-6 text-[13px] font-medium text-muted-foreground">
@@ -65,9 +68,10 @@
 			<li class="flex min-h-14 items-center gap-3 border-b border-divider py-2">
 				<div class="min-w-0 flex-1">
 					<p>{warningText(w)}</p>
-					<p class="text-[13px] text-muted-foreground">
-						{monthName(w.month)} · {dismissedBy(w, dateTime)}
-					</p>
+					<MetaRow class="mt-0.5">
+						<MetaItem icon={CalendarIcon}>{monthName(w.month)}</MetaItem>
+						<MetaItem icon={EyeOffIcon}>{dismissedBy(w, dateTime)}</MetaItem>
+					</MetaRow>
 				</div>
 				<form method="POST" action="?/restoreWarning" use:enhance={restoring.enhance}>
 					<input type="hidden" name="warning" value={w.id} />

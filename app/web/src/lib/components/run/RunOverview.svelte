@@ -4,6 +4,7 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import { toast } from 'svelte-sonner';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import MetaItem from '#lib/components/MetaItem.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { flatten } from '#lib/data/run.ts';
@@ -18,7 +19,7 @@
 		owner: { name: string; avatar_url: string | null } | null;
 		/** The org's, for the run's cost; null outside the org, where there's no cost (D113). */
 		currency: string | null;
-		/** The model versions it made; null when they can't be read. */
+		/** The model versions it made and scored; null when they can't be read. */
 		models?: RunModels | null;
 		now: number;
 	}
@@ -168,13 +169,28 @@
 				{/if}
 			</dd>
 		</div>
-		{@render field('GPUs', gpu && gpuSetByHand ? `${gpu} · set by hand` : gpu)}
-		{@render field(
-			'GPU hours',
-			run.gpu_hours
-				? `${hours(run.gpu_hours)}${currency && run.cost != null ? ` · ${money(run.cost, currency)}` : ''}`
-				: null
-		)}
+		{#if gpu}
+			<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-1">
+				<dt class="text-muted-foreground">GPUs</dt>
+				<dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+					<span class="break-words">{gpu}</span>
+					{#if gpuSetByHand}<MetaItem chip class="font-normal text-muted-foreground"
+							>Set by hand</MetaItem
+						>{/if}
+				</dd>
+			</div>
+		{/if}
+		{#if run.gpu_hours}
+			<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-1">
+				<dt class="text-muted-foreground">GPU hours</dt>
+				<dd class="flex min-w-0 flex-wrap items-baseline gap-x-2 tabular-nums">
+					{hours(run.gpu_hours)}
+					{#if currency && run.cost != null}<span class="text-muted-foreground"
+							>{money(run.cost, currency)}</span
+						>{/if}
+				</dd>
+			</div>
+		{/if}
 		{@render field('Host', run.host)}
 		{@render field('Group', run.group)}
 		{@render field('Job type', run.job_type)}
@@ -197,7 +213,11 @@
 	</dl>
 
 	{#if models?.made.length}
-		<RunModelsList versions={models.made} />
+		<RunModelsList title="Checkpoints" versions={models.made} />
+	{/if}
+	<!-- An API from before 025 answers no `scored`. -->
+	{#if models?.scored?.length}
+		<RunModelsList title="Models scored" versions={models.scored} />
 	{/if}
 
 	{#if run.notes || run.description}

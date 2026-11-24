@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { toast } from 'svelte-sonner';
@@ -22,13 +23,13 @@
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		items: readonly DatasetItem[];
 		/** Once the request answered: the items deleted leave the list. */
 		ondeleted: (results: DeleteResult[]) => void | Promise<void>;
 	}
 
-	let { open = $bindable(), org, items, ondeleted }: Props = $props();
+	let { open = $bindable(), scope, items, ondeleted }: Props = $props();
 
 	/** The names listed; the rest are counted. */
 	const LISTED = 10;
@@ -57,7 +58,7 @@
 		command = null;
 		try {
 			const { results } = await datasetCall<{ results: DeleteResult[] }>(
-				datasetsApi(org, 'delete'),
+				datasetsApi(scope, 'delete'),
 				{ method: 'POST', body: { paths: items.map((i) => i.path) } }
 			);
 			const deleted = results.filter((r) => r.deleted).length;
@@ -132,7 +133,7 @@
 				/>
 			{/if}
 			<FormError {error} />
-			{#if command}<CopyBlock code={command} />{/if}
+			{#if command}<CopyBlock code={command} lang="bash" />{/if}
 			<AlertDialog.Footer>
 				{#if failures.length}
 					<Button type="button" onclick={() => (open = false)}>Close</Button>

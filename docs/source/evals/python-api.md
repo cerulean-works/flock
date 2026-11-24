@@ -24,6 +24,8 @@ The entry points for running evaluations, and the model wrapper they score with.
 
 [[autodoc]] eval.model.ModelRef
 
+[[autodoc]] eval.model.folder_digest
+
 [[autodoc]] eval.model.FlockCausalLM
 
 [[autodoc]] eval.model.load_tokenizer
@@ -41,3 +43,15 @@ The entry points for running evaluations, and the model wrapper they score with.
 [[autodoc]] eval.compare.Comparison
 
 [[autodoc]] eval.compare.Breach
+
+[[autodoc]] eval.diff.diff
+
+[[autodoc]] eval.diff.ItemDiff
+
+[[autodoc]] eval.diff.TaskDiff
+
+[[autodoc]] eval.items.items
+
+[[autodoc]] eval.items.Item
+
+[[autodoc]] eval.items.Answer

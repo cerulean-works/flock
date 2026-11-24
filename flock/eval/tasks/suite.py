@@ -2,7 +2,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from flock.eval.hub import Pair
-from flock.eval.metrics import scale
+from flock.eval.results import scale
 from flock.eval.tasks.base import Dataset, MultipleChoiceTask
 from flock.eval.tasks.perplexity import PerplexityTask
 

@@ -34,6 +34,8 @@ A task is a [`~eval.tasks.MultipleChoiceTask`] or a [`~eval.tasks.PerplexityTask
 | `mt_mbpp_<language>` | [Multilingual MBPP](https://huggingface.co/datasets/allenai/multilingual_mbpp), one of 17 languages | `test` | 500 each | 3, from `prompt` | `bpb` of the code |
 | `tmmluplus_<subject>` (66) | [TMMLU+](https://huggingface.co/datasets/ikala/tmmluplus) v1.1, in Traditional Chinese | `test` | 19646 in all, 85 to 989 per subject | the subject's dev rows in file order: 5, or 3 or 4 for twelve subjects, and one fewer for the 14 test docs that repeat a dev row's question and answer | `acc_per_char` |
 | `tw_mock_exams_<subject>` (10) | Taiwanese senior-high mock exams for 學測 and 指考 (internal, private dataset), in Traditional Chinese, and English for 英文. The set is internal because Taiwan's Copyright Act art. 9 exempts exams held under law (official and school papers) but not publisher practice tests, and quoted passages keep their own copyright. | `test`, single-answer items answerable from the text | 18912 in all, 571 to 3713 per subject | the subject's 5 `dev` rows, its shortest self-contained items | `acc_per_char` |
+| `tc_edu_<subject>` (9) | Taiwanese junior-high (8 subjects) and senior-high Chinese questions from publishers' question banks (internal, private dataset), in Traditional Chinese, and English for `jh_english`. Internal because most items are publishers' copyrighted teaching material. | `test`, 1000 single-answer items per subject, each read and passed before the set was frozen | 9000 in all, 1000 per subject | the subject's 5 shortest self-contained `dev` items | `acc_per_char` |
+| `tc_edu_manyshot_<budget>_<subject>` (17) | The same items and format as `tc_edu_<subject>`, with many examples before each question: a long-context test of in-context learning (Agarwal et al. 2024). Budgets `4k`, `8k` and `32k` hold every complete request within 4,096, 8,192 and 32,768 tokens under each of nine reference tokenizers, for the subjects that fill them with at least 10 examples (`hs_chinese` 32k; `jh_chinese` 8k and 32k; `jh_science` and `jh_social` all three; `jh_english` and `jh_math` 4k). `5shot` is each of those six subjects' baseline. Compare a budget with its `5shot` task, not with `tc_edu_<subject>`. | `test`, as `tc_edu_<subject>` | 1000 per task | the first 5 to 228 rows of the subject's `long_context` split, a fixed order of held-out items that share no question group, passage, source file or near-duplicate with `dev` or `test` | `acc_per_char` |
 | `drcd_bpb` | [DRCD](https://huggingface.co/datasets/cerulean-works/drcd), in Traditional Chinese | `test` | 3493 | 1 from `validation`, `1172-3-2` | `bpb` of the first gold answer |
 | `ceval_<subject>` (52) | [C-Eval](https://huggingface.co/datasets/ceval/ceval-exam), in Simplified Chinese | `test` | 12341 in all, 108 to 497 per subject | the subject's 5 `dev` rows in file order, one fewer for the one test doc that repeats a dev row's question and answer | `acc_per_char` |
 | `cmmlu_<subject>` (67) | [CMMLU](https://huggingface.co/datasets/haonan-li/cmmlu) v1.0.1 (private mirror), in Simplified Chinese | `test` | 11581 in all, 105 to 411 per subject | the subject's 5 `dev` rows in file order, one fewer for the one test doc that repeats a dev row's question and answer | `acc_per_char` |
@@ -77,7 +79,7 @@ Every task scores its domain's whole `test` split in windows of 2048 tokens, wit
 
 The `fineweb` suite scores held-out web text in three languages, all in windows of 2048 tokens, which every model the project compares supports. `fineweb_en` reads the same 5,000 FineWeb-Edu documents as `fineweb_edu`. `fineweb_zh_hant` (3,383 documents) and `fineweb_zh_hans` (5,000) read FineWeb-2's held-out Chinese, split by script, from the private dataset `cerulean-works/fineweb-2-zh-dev`. [Scoring held-out web text in three languages](fineweb) defines each member and how to read it.
 
-`tw_text` scores Traditional Chinese text written in Taiwan and published from 2026-04-01 on, in Paloma's shape: one task per domain of each source, `tw_text_<source>__<domain>`, or `tw_text_<source>` for a source with one domain, each over its domain's rows of the `test` split in windows of 2048 tokens with `bits_per_byte` as its primary metric. Its 11 sources are `judicial`, `ly`, `gov_press`, `cna`, `pts`, `ltn`, `cnyes`, `twreporter`, `ptt`, `zhwiki` and `theses`, and `flock/eval/tasks/tw_text.py` lists their domains. `theses` is not held out in time: a thesis carries only its academic year (115, dated from 2026-08-01), so its text may predate the window. `judicial` covers 2026-04-01 to 2026-08-31 only. For `zhwiki`, the check for Simplified-only characters and mainland wording kept 40.3 percent of the pages fetched (2,317 of 5,755), and the sample holds only pages that passed it. The dataset, `cerulean-works/tw-text-v0`, is private. [Scoring Taiwan Traditional Chinese text](tw-text) describes the set and how to get access.
+`tw_text` and `tw_text_v1` score Traditional Chinese text written in Taiwan and published from 2026-04-01 on, in Paloma's shape: one task per domain of each source, `tw_text_<source>__<domain>` or `tw_text_v1_<source>__<domain>`, or `tw_text_<source>` and `tw_text_v1_<source>` for a source with one domain, each over its domain's rows of the `test` split in windows of 2048 tokens with `bits_per_byte` as its primary metric. `tw_text` reads the frozen `v0` of the private dataset `cerulean-works/tw-text-v0` (24 domains), and `tw_text_v1` the frozen `v1` of `cerulean-works/tw-text-v1` (63 domains, drawn from each source's own metadata and sampled equally). They are two measurements and never read together. Both have the same 11 sources, `judicial`, `ly`, `gov_press`, `cna`, `pts`, `ltn`, `cnyes`, `twreporter`, `ptt`, `zhwiki` and `theses`, and `flock/eval/tasks/tw_text.py` lists their domains at each revision. `theses` is not held out in time: a thesis carries only its academic year (115, dated from 2026-08-01), so its text may predate the window. `judicial` covers 2026-04-01 to 2026-08-31 only. [Scoring Taiwan Traditional Chinese text](tw-text) describes both sets, how they differ and how to get access.
 
 ## Suites
 
@@ -103,6 +105,10 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `tw_mock_exams` | the 10 `tw_mock_exams_<subject>` tasks | each task's primary metric (`acc_per_char`) | none |
 | `tw_mock_exams:bpb` | the 10 `tw_mock_exams_<subject>` tasks | `bpb` | none |
 | `tw_mock_exams:all` | `tw_mock_exams`, `tw_mock_exams:bpb` | unscored | none |
+| `tc_edu` | the 9 `tc_edu_<subject>` tasks | each task's primary metric (`acc_per_char`) | none |
+| `tc_edu:jh` | the 8 junior-high `tc_edu_jh_<subject>` tasks | each task's primary metric (`acc_per_char`) | none |
+| `tc_edu:bpb`, `tc_edu:jh:bpb` | the same tasks | `bpb` | none |
+| `tc_edu:all` | `tc_edu`, `tc_edu:jh`, `tc_edu:bpb`, `tc_edu:jh:bpb` | unscored | none |
 | `zh_tw` | `tmmluplus`, `tw_mock_exams` | each member suite's score | none |
 | `zh_tw:bpb` | `tmmluplus:bpb`, `drcd_bpb`, `tw_mock_exams:bpb` | `bpb` | none |
 | `ceval`, `cmmlu` | the benchmark's subject tasks | each task's primary metric (`acc_per_char`) | none |
@@ -117,6 +123,8 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `fineweb` | `fineweb_en`, `fineweb_zh_hant`, `fineweb_zh_hans` | `bits_per_byte` | none |
 | `tw_text:<source>` | the source's tasks | `bits_per_byte` | none |
 | `tw_text` | the 11 `tw_text:<source>` suites | `bits_per_byte` | none |
+| `tw_text_v1:<source>` | the source's tasks | `bits_per_byte` | none |
+| `tw_text_v1` | the 11 `tw_text_v1:<source>` suites | `bits_per_byte` | none |
 
 The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. In BF16, `lambada`'s `acc_greedy` can also differ by a few near-tie docs, since our argmax is taken over FP32 logits and OLMES's over its BF16 log-probabilities. See [Suites in results](results#suites) for when two suite scores compare.
 
@@ -134,7 +142,7 @@ Two docs are left out, because one of their wrong choices is a lone symbol that 
 
 A Paloma source is a suite of its domains, scored as their unweighted mean, as the paper averages a source's domains. OLMES instead reports a source's bits per byte over all of its docs together, so a source with several domains differs from OLMES's number. `paloma` has no score, since Paloma defines none over all sources.
 
-A `tw_text` source is a suite of its domains, scored as their unweighted mean, as a Paloma source is. Unlike `paloma`, `tw_text` has a score: the unweighted mean of its 11 sources, so each source counts once whatever its size.
+A `tw_text` or `tw_text_v1` source is a suite of its domains, scored as their unweighted mean, as a Paloma source is. Unlike `paloma`, each has a score: the unweighted mean of its 11 sources, so each source counts once whatever its size.
 
 ## Classes
 
@@ -147,6 +155,10 @@ A `tw_text` source is a suite of its domains, scored as their unweighted mean, a
 [[autodoc]] eval.tasks.Fewshot
 
 [[autodoc]] eval.tasks.MCDoc
+
+[[autodoc]] eval.tasks.RowFields
+
+[[autodoc]] eval.tasks.SourceRow
 
 [[autodoc]] eval.tasks.Choice
 

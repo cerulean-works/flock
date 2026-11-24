@@ -1,10 +1,11 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import { folderHref } from '#lib/models.ts';
 	import type { ModelVersionDetail } from '#lib/types.ts';
 	import { bytes } from '#lib/utils.ts';
 
-	let { org, version }: { org: string; version: ModelVersionDetail } = $props();
+	let { scope, version }: { scope: Scope; version: ModelVersionDetail } = $props();
 </script>
 
 <table class="w-full table-fixed border-collapse text-[13px]">
@@ -21,7 +22,7 @@
 				<td class="truncate px-2">
 					<a
 						class="flex items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-						href={folderHref(org, `${version.prefix}${file.path}`)}
+						href={folderHref(scope.org, `${version.prefix}${file.path}`)}
 					>
 						<FileIcon class="size-4 flex-none text-muted-foreground" />
 						<span class="truncate font-mono text-[12.5px]" title={file.path}>{file.path}</span>

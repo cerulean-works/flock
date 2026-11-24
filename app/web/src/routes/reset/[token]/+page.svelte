@@ -24,7 +24,7 @@
 	{:else}
 		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">Choose a new password</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
-			For <span class="text-foreground">{data.email}</span>. Other sessions are signed out.
+			Setting one for <span class="text-foreground">{data.email}</span> signs it out everywhere else.
 		</p>
 		<form
 			method="POST"

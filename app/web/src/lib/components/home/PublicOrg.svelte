@@ -1,5 +1,8 @@
 <script lang="ts">
 	import FolderIcon from '@lucide/svelte/icons/folder';
+	import PlayIcon from '@lucide/svelte/icons/play';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import type { ProjectInfo } from '#lib/types.ts';
 	import { count, dateTime, relativeTime } from '#lib/utils.ts';
 	import { projectHref } from '#lib/workspace/url.ts';
@@ -46,10 +49,10 @@
 						</p>
 					{/if}
 				</div>
-				<span class="text-right text-[13px] text-muted-foreground tabular-nums">
-					{count(p.run_count, 'run')} ·
-					<span title={dateTime(p.updated_at)}>{relativeTime(p.updated_at, now)}</span>
-				</span>
+				<MetaRow class="flex-nowrap justify-end gap-x-3">
+					<MetaItem icon={PlayIcon}>{count(p.run_count, 'run')}</MetaItem>
+					<MetaItem title={dateTime(p.updated_at)}>{relativeTime(p.updated_at, now)}</MetaItem>
+				</MetaRow>
 			</li>
 		{:else}
 			<li class="border-b border-divider px-5 py-6 text-muted-foreground">No public projects.</li>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
@@ -16,11 +17,12 @@
 	// before it starts.
 	interface Props {
 		open: boolean;
-		org: string;
+		/** Where the import lands (D159). */
+		scope: Scope;
 		onstarted: (job: HFImport) => void;
 	}
 
-	let { open = $bindable(), org, onstarted }: Props = $props();
+	let { open = $bindable(), scope, onstarted }: Props = $props();
 
 	let repo = $state('');
 	let revision = $state('main');
@@ -46,9 +48,10 @@
 		pending = true;
 		command = null;
 		try {
-			const job = await hfCall<HFImport>(hfApi(org), {
+			const job = await hfCall<HFImport>(hfApi(scope.org), {
 				method: 'POST',
 				body: {
+					project: scope.project,
 					kind: 'model',
 					repo: target,
 					revision: revision.trim() || 'main',
@@ -100,7 +103,7 @@
 				<Input
 					id="hf-model-repo"
 					class="font-mono text-[13px]"
-					placeholder="Qwen/Qwen3-0.6B"
+					placeholder="e.g., Qwen/Qwen3-0.6B"
 					bind:value={repo}
 					disabled={pending}
 					autocomplete="off"
@@ -113,6 +116,7 @@
 					<Input
 						id="hf-model-revision"
 						class="font-mono text-[13px]"
+						placeholder="e.g., main"
 						bind:value={revision}
 						disabled={pending}
 						autocomplete="off"
@@ -124,6 +128,7 @@
 					<Input
 						id="hf-model-name"
 						class="font-mono text-[13px]"
+						placeholder="e.g., qwen3-0.6b"
 						value={name}
 						oninput={(e) => (named = e.currentTarget.value.trim())}
 						disabled={pending}
@@ -136,6 +141,7 @@
 				<Label for="hf-model-tags">Tags</Label>
 				<Input
 					id="hf-model-tags"
+					placeholder="e.g., base, imported"
 					bind:value={tags}
 					disabled={pending}
 					autocomplete="off"
@@ -151,6 +157,7 @@
 				<Input
 					id="hf-model-token"
 					type="password"
+					placeholder="e.g., hf_…"
 					bind:value={token}
 					disabled={pending}
 					autocomplete="off"
@@ -160,7 +167,7 @@
 				</p>
 			</div>
 			<FormError {error} />
-			{#if command}<CopyBlock code={command} />{/if}
+			{#if command}<CopyBlock lang="bash" code={command} />{/if}
 			<Dialog.Footer>
 				<Button type="button" variant="outline" disabled={pending} onclick={() => (open = false)}>
 					Cancel

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
@@ -11,14 +12,14 @@
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		/** The model's name now. */
 		name: string;
 		/** Once renamed, in place of opening the model's new page (the list's row menu). */
 		onrenamed?: (to: string) => void | Promise<void>;
 	}
 
-	let { open = $bindable(), org, name, onrenamed }: Props = $props();
+	let { open = $bindable(), scope, name, onrenamed }: Props = $props();
 
 	// Reset once the dialog has closed, so its text stays put while it animates closed.
 	let to = $derived(name);
@@ -35,11 +36,11 @@
 		error = null;
 		pending = true;
 		try {
-			await modelCall(modelApi(org, name), { method: 'PATCH', body: { name: target } });
+			await modelCall(modelApi(scope, name), { method: 'PATCH', body: { name: target } });
 			toast.success(`Renamed to ${target}`);
 			open = false;
 			if (onrenamed) await onrenamed(target);
-			else await goto(modelsHref(org, target), { replace: true });
+			else await goto(modelsHref(scope, target), { replace: true });
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -79,6 +80,7 @@
 				<Label for="rename-model-name">New name</Label>
 				<Input
 					id="rename-model-name"
+					placeholder="e.g., olmo2-1b-sft"
 					class="font-mono text-[13px]"
 					bind:value={to}
 					disabled={pending}

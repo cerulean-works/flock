@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.src.api.datasets import ProjectQuery, scope_of
 from app.api.src.api.deps import (
     AdminOrgDep,
     APIError,
@@ -16,6 +17,7 @@ from app.api.src.api.deps import (
     UserDep,
     rest_user,
 )
+from app.api.src.core.datasets import Scope
 from app.api.src.core.models import Incomplete, Models, TagTaken, Taken
 from app.api.src.core.store import Store
 
@@ -78,7 +80,12 @@ class TagBody(VersionBody):
 class RenameBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(min_length=1, max_length=100, description="the new name")
+    name: str | None = Field(
+        None, min_length=1, max_length=255, description="the new path (default: the same)"
+    )
+    project: str | None = Field(
+        None, max_length=128, description="the scope to move to: a project, or null for global"
+    )
 
 
 def models(store: Store) -> Models:
@@ -108,10 +115,12 @@ async def with_user(store: Store, item: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("/-/trash")
-async def trash(org: AdminOrgDep, store: StoreDep) -> Response:
-    """The org's deleted models, and deleted versions of live models, newest first (admins).
-    Each waits 14 days before the sweep removes it."""
-    entries = await models(store).trash_entries(org)
+async def trash(org: AdminOrgDep, store: StoreDep, project: ProjectQuery = None) -> Response:
+    """The org's deleted models, and deleted versions of live models, newest first (admins),
+    each with its ``project`` (null: global); with ``project``, only that project's. Each
+    waits 14 days before the sweep removes it."""
+    scope = await scope_of(store, org, project) if project is not None else None
+    entries = await models(store).trash_entries(org, scope)
     return JSONResponse({"entries": await with_users(store, entries)})
 
 
@@ -146,118 +155,256 @@ async def delete_model_now(org: AdminOrgDep, pk: int, store: StoreDep) -> Respon
     return Response(status_code=204)
 
 
+# ---------------------------------------------------------------------- folders (D158)
+
+
+class FolderBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=255, description="the folder's path")
+
+
+@router.post("/-/folders", status_code=201)
+async def create_folder(
+    org: OrgDep, body: FolderBody, user: UserDep, store: StoreDep, project: ProjectQuery = None
+) -> Response:
+    """Make an empty folder, which stays until it's deleted. 409 with ``taken`` when the path
+    is a folder already, a model, live or deleted, or under a model."""
+    scope = await scope_of(store, org, project)
+    try:
+        made = await models(store).create_folder(org, user, body.path, scope)
+    except Taken as e:
+        raise APIError(409, e.message, taken=True) from None
+    return JSONResponse(made, status_code=201)
+
+
+class MoveFolderBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=255, description="the folder's path")
+    to: str = Field(min_length=1, max_length=255, description="its new path")
+    project: str | None = Field(
+        None, max_length=128, description="the scope to move to: a project, or null for global"
+    )
+
+
+@router.patch("/-/folders")
+async def move_folder(
+    org: OrgDep, body: MoveFolderBody, store: StoreDep, project: ProjectQuery = None
+) -> Response:
+    """Rename or move a folder with every model in it, to another scope with ``project``
+    (null: global; absent keeps it). 409 with ``taken`` as for a model's new path."""
+    source = await scope_of(store, org, project)
+    target = (
+        await scope_of(store, org, body.project) if "project" in body.model_fields_set else None
+    )
+    try:
+        moved = await models(store).move_folder(org, body.path, body.to, source, target)
+    except Taken as e:
+        raise APIError(409, e.message, taken=True) from None
+    return JSONResponse(moved)
+
+
+@router.delete("/-/folders", status_code=204)
+async def delete_folder(
+    org: OrgDep,
+    store: StoreDep,
+    path: Annotated[str, Query(min_length=1, max_length=255)],
+    project: ProjectQuery = None,
+) -> Response:
+    """Delete an empty folder, with the empty folders in it. 409 while a model is under it."""
+    await models(store).delete_folder(org, path, await scope_of(store, org, project))
+    return Response(status_code=204)
+
+
 # ---------------------------------------------------------------------- models and versions
 
 
 @router.get("")
-async def list_models(org: OrgDep, store: StoreDep) -> Response:
-    """The org's models by name, with their latest and primary version numbers. The org's
-    flock-models is created here if it's missing."""
+async def list_models(
+    org: OrgDep,
+    store: StoreDep,
+    folder: Annotated[str, Query(max_length=255, description="the folder to list")] = "",
+    project: ProjectQuery = None,
+    cursor: Annotated[str | None, Query(max_length=300)] = None,
+) -> Response:
+    """One level of a folder of models (D158): its models, with their latest and primary
+    version numbers, then its folders with how many models are under each, 100 a page.
+    ``{kind: "model"}`` when ``folder`` is a model. The org's flock-models is created here if
+    it's missing."""
+    scope = await scope_of(store, org, project)
     await models(store).bucket(org, ensure=True)
-    return JSONResponse({"models": await with_users(store, await models(store).list_models(org))})
+    found = await models(store).list_folder(org, folder, scope, cursor)
+    if found["kind"] == "folder":
+        found["models"] = await with_users(store, found["models"])
+    return JSONResponse(found)
 
 
-@router.get("/{name}")
-async def get_model(org: OrgDep, name: str, store: StoreDep) -> Response:
+def both(method: str, path: str, **options: Any) -> Any:
+    """Register a handler at the one-segment route ``/{name}{path}`` (global models, as before
+    022) and at ``/{name:path}/-{path}``, where the model's name may hold folders (D163)."""
+    route = getattr(router, method)
+
+    def register(handler: Any) -> Any:
+        route(f"/{{name}}{path}", **options)(handler)
+        return route(f"/{{name:path}}/-{path}", **options)(handler)
+
+    return register
+
+
+async def scope(store: Store, org: Any, project: str | None) -> Scope:
+    return await scope_of(store, org, project)
+
+
+@both("get", "")
+async def get_model(
+    org: OrgDep, name: str, store: StoreDep, project: ProjectQuery = None
+) -> Response:
     """A model: its primary version (and who made it primary), its latest and its tags."""
-    return JSONResponse(await with_user(store, await models(store).model_info(org, name)))
+    found = await models(store).model_info(org, name, await scope(store, org, project))
+    return JSONResponse(await with_user(store, found))
 
 
-@router.patch("/{name}")
-async def rename_model(org: OrgDep, name: str, body: RenameBody, store: StoreDep) -> Response:
-    """Rename a model. Only the name changes: its files stay in its folder (``prefix``), and
-    the old name stops resolving. 409 with ``taken`` when a model has the name, live or
-    deleted, and 409 while an upload to the model is open."""
+@both("patch", "")
+async def rename_model(
+    org: OrgDep, name: str, body: RenameBody, store: StoreDep, project: ProjectQuery = None
+) -> Response:
+    """Rename a model, move it to another folder, or to another scope with ``project`` (null:
+    global, D166). Only the registry changes: its files stay in its folder (``prefix``), and
+    the old name stops resolving. 409 with ``taken`` when the new path is a model, live or
+    deleted, a folder of models or under a model, and 409 while an upload to the model is
+    open."""
+    source = await scope(store, org, project)
+    target = await scope(store, org, body.project) if "project" in body.model_fields_set else None
     try:
-        info = await models(store).rename(org, name, body.name)
+        info = await models(store).rename(org, name, body.name or name, source, target)
     except Taken as e:
         raise APIError(409, e.message, taken=True) from None
     return JSONResponse(await with_user(store, info))
 
 
-@router.delete("/{name}")
-async def delete_model(org: OrgDep, name: str, user: UserDep, store: StoreDep) -> Response:
+@both("delete", "")
+async def delete_model(
+    org: OrgDep, name: str, user: UserDep, store: StoreDep, project: ProjectQuery = None
+) -> Response:
     """Delete a model with every version in it. Admins can restore it for 14 days."""
-    return JSONResponse(await with_user(store, await models(store).delete_model(org, name, user)))
+    found = await models(store).delete_model(org, name, user, await scope(store, org, project))
+    return JSONResponse(await with_user(store, found))
 
 
-@router.get("/{name}/resolve")
-async def resolve(org: OrgDep, name: str, store: StoreDep, ref: RefQuery = None) -> Response:
+@both("get", "/resolve")
+async def resolve(
+    org: OrgDep, name: str, store: StoreDep, ref: RefQuery = None, project: ProjectQuery = None
+) -> Response:
     """The version ``ref`` names (no ``ref``: the primary), with its files and their sha256:
     what a download needs. Use its ``number`` from then on."""
-    return JSONResponse(await with_user(store, await models(store).version(org, name, ref)))
+    found = await models(store).version(org, name, ref, await scope(store, org, project))
+    return JSONResponse(await with_user(store, found))
 
 
-@router.get("/{name}/versions")
+@both("get", "/versions")
 async def versions(
     org: OrgDep,
     name: str,
     store: StoreDep,
     before: Annotated[int | None, Query(ge=1, description="the cursor of the next page")] = None,
     checkpoints: Annotated[bool, Query(description="only versions with checkpoint tags")] = False,
+    project: ProjectQuery = None,
 ) -> Response:
     """Live versions, newest first, 100 a page."""
-    page = await models(store).versions(org, name, before, checkpoints)
+    found = await scope(store, org, project)
+    page = await models(store).versions(org, name, before, checkpoints, found)
     page["versions"] = await with_users(store, page["versions"])
     return JSONResponse(page)
 
 
-@router.get("/{name}/versions/{number}")
-async def get_version(org: OrgDep, name: str, number: int, store: StoreDep) -> Response:
-    """A version with its files."""
-    return JSONResponse(await with_user(store, await models(store).version(org, name, str(number))))
+@both("get", "/versions/{number}")
+async def get_version(
+    org: OrgDep, name: str, number: int, store: StoreDep, project: ProjectQuery = None
+) -> Response:
+    """A version with its files and eval runs."""
+    found = await models(store).version(org, name, str(number), await scope(store, org, project))
+    return JSONResponse(await with_user(store, found))
 
 
-@router.delete("/{name}/versions/{number}")
+@both("delete", "/versions/{number}")
 async def delete_version(
-    org: OrgDep, name: str, number: int, user: UserDep, store: StoreDep
+    org: OrgDep,
+    name: str,
+    number: int,
+    user: UserDep,
+    store: StoreDep,
+    project: ProjectQuery = None,
 ) -> Response:
     """Delete a version (409 for the primary, or one with a tag other than
     ``checkpoint-{step}``). Admins can restore it for 14 days."""
-    info = await models(store).delete_version(org, name, number, user)
+    found = await scope(store, org, project)
+    info = await models(store).delete_version(org, name, number, user, found)
     return JSONResponse(await with_user(store, info))
 
 
-@router.put("/{name}/primary")
+@both("put", "/primary")
 async def set_primary(
-    org: OrgDep, name: str, body: VersionBody, user: UserDep, store: StoreDep
+    org: OrgDep,
+    name: str,
+    body: VersionBody,
+    user: UserDep,
+    store: StoreDep,
+    project: ProjectQuery = None,
 ) -> Response:
     """Make ``version`` the primary: what loads when no version is given. ``previous`` is the
     number of the one it replaced."""
-    info = await models(store).set_primary(org, name, body.version, user)
+    found = await scope(store, org, project)
+    info = await models(store).set_primary(org, name, body.version, user, found)
     return JSONResponse(await with_user(store, info))
 
 
-@router.put("/{name}/tags/{tag}")
+@both("put", "/tags/{tag}")
 async def put_tag(
-    org: OrgDep, name: str, tag: str, body: TagBody, user: UserDep, store: StoreDep
+    org: OrgDep,
+    name: str,
+    tag: str,
+    body: TagBody,
+    user: UserDep,
+    store: StoreDep,
+    project: ProjectQuery = None,
 ) -> Response:
     """Tag ``version``. A tag on another version moves only with ``move``, and checkpoint tags
     never do: otherwise 409 says which version it's on."""
+    found = await scope(store, org, project)
     try:
-        out = await models(store).set_tag(org, name, tag, body.version, body.move, user)
+        out = await models(store).set_tag(org, name, tag, body.version, body.move, user, found)
     except TagTaken as e:
         raise APIError(409, e.message, version=e.version) from None
     return JSONResponse(out)
 
 
-@router.delete("/{name}/tags/{tag}", status_code=204)
-async def delete_tag(org: OrgDep, name: str, tag: str, store: StoreDep) -> Response:
+@both("delete", "/tags/{tag}", status_code=204)
+async def delete_tag(
+    org: OrgDep, name: str, tag: str, store: StoreDep, project: ProjectQuery = None
+) -> Response:
     """Remove a tag. The version it was on stays."""
-    await models(store).delete_tag(org, name, tag)
+    await models(store).delete_tag(org, name, tag, await scope(store, org, project))
     return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------- uploads (D100)
 
 
-@router.post("/{name}/uploads")
+@both("post", "/uploads")
 async def open_upload(
-    org: OrgDep, name: str, body: UploadBody, user: UserDep, store: StoreDep
+    org: OrgDep,
+    name: str,
+    body: UploadBody,
+    user: UserDep,
+    store: StoreDep,
+    project: ProjectQuery = None,
 ) -> Response:
-    """Open an upload of a new version, creating the model if it's new: 201 with the folder
-    to write the files to (``prefix`` of ``bucket``) and the part size. 200 with the version
-    instead when a live one has ``dedupe_key``."""
+    """Open an upload of a new version, creating the model if it's new (in ``project``, if
+    given): 201 with the folder to write the files to (``prefix`` of ``bucket``) and the part
+    size. 200 with the version instead when a live one has ``dedupe_key``. 409 with ``taken``
+    when a new model's path is a folder of models or under a model."""
+    found = await scope(store, org, project)
     try:
         opened, info = await models(store).open_upload(
             org,
@@ -270,34 +417,47 @@ async def open_upload(
             body.run,
             body.step,
             body.dedupe_key,
+            found,
         )
     except TagTaken as e:
         raise APIError(409, e.message, version=e.version) from None
+    except Taken as e:
+        raise APIError(409, e.message, taken=True) from None
     return JSONResponse(await with_user(store, info), status_code=201 if opened else 200)
 
 
-@router.get("/{name}/uploads")
+@both("get", "/uploads")
 async def list_uploads(
     org: OrgDep,
     name: str,
     user: UserDep,
     store: StoreDep,
     state: Literal["open", "committed", "aborted", "expired"] = "open",
+    project: ProjectQuery = None,
 ) -> Response:
     """Your uploads of the model in ``state``, oldest first."""
-    found = await models(store).uploads(org, name, user, state)
+    found = await models(store).uploads(org, name, user, state, await scope(store, org, project))
     return JSONResponse({"uploads": await with_users(store, found)})
 
 
-@router.get("/{name}/uploads/{ulid}")
-async def get_upload(org: OrgDep, name: str, ulid: str, store: StoreDep) -> Response:
+@both("get", "/uploads/{ulid}")
+async def get_upload(
+    org: OrgDep, name: str, ulid: str, store: StoreDep, project: ProjectQuery = None
+) -> Response:
     """An upload's state and declared files."""
-    return JSONResponse(await with_user(store, await models(store).get_upload(org, name, ulid)))
+    found = await models(store).get_upload(org, name, ulid, await scope(store, org, project))
+    return JSONResponse(await with_user(store, found))
 
 
-@router.post("/{name}/uploads/{ulid}/commit")
+@both("post", "/uploads/{ulid}/commit")
 async def commit(
-    org: OrgDep, name: str, ulid: str, body: CommitBody, user: UserDep, store: StoreDep
+    org: OrgDep,
+    name: str,
+    ulid: str,
+    body: CommitBody,
+    user: UserDep,
+    store: StoreDep,
+    project: ProjectQuery = None,
 ) -> Response:
     """Make the upload a version, given each file's sha256. 409 with the paths when the
     objects aren't the declared files (``missing``, ``extra``, ``resized``, ``uploading``) or a
@@ -307,8 +467,9 @@ async def commit(
     hashes = {f.path: f.sha256 for f in body.files}
     if len(hashes) != len(body.files):
         raise APIError(422, "a file is given twice")
+    found = await scope(store, org, project)
     try:
-        info = await models(store).commit(org, name, ulid, user, hashes)
+        info = await models(store).commit(org, name, ulid, user, hashes, found)
     except Incomplete as e:
         raise APIError(409, e.message, **e.paths) from None
     except TagTaken as e:
@@ -316,10 +477,10 @@ async def commit(
     return JSONResponse(await with_user(store, info))
 
 
-@router.delete("/{name}/uploads/{ulid}", status_code=204)
+@both("delete", "/uploads/{ulid}", status_code=204)
 async def abort_upload(
-    org: OrgDep, name: str, ulid: str, user: UserDep, store: StoreDep
+    org: OrgDep, name: str, ulid: str, user: UserDep, store: StoreDep, project: ProjectQuery = None
 ) -> Response:
     """Abort an open upload (its opener, or an admin) and remove what it wrote."""
-    await models(store).abort(org, name, ulid, user)
+    await models(store).abort(org, name, ulid, user, await scope(store, org, project))
     return Response(status_code=204)

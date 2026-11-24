@@ -17,7 +17,7 @@ from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import SUITES, TASKS, Dataset, PerplexityTask, Suite, TextDoc
 from flock.eval.tasks.paloma import PALOMA
 from flock.eval.tasks.suite import source_suite
-from flock.eval.tasks.tw_text import TW_TEXT
+from flock.eval.tasks.tw_text import SOURCES_V1, TW_TEXT, TW_TEXT_V1
 
 from .toy import DOMAIN_ROWS, PROVENANCE, TASK, TEXT_ROWS, TEXT_TASK
 
@@ -115,8 +115,10 @@ def test_perplexity_is_infinite_where_exp_overflows(
     # A diverged checkpoint: about 1e4 nats per token, far past `math.exp`'s limit.
     score = scorer.rolling_loglikelihood
 
-    def diverged(texts: list[str], window: int, token_ids: list[list[int]] | None = None) -> Scores:
-        scores = score(texts, window, token_ids)
+    def diverged(
+        texts: list[str], window: int, token_ids: list[list[int]] | None = None, **kwargs: bool
+    ) -> Scores:
+        scores = score(texts, window, token_ids, **kwargs)
         return dataclasses.replace(scores, logprob=-1e4 * scores.num_tokens.double())
 
     monkeypatch.setattr(scorer, "rolling_loglikelihood", diverged)
@@ -152,6 +154,11 @@ def test_task_hash_leaves_out_the_primary_metric_and_keeps_paloma_hashes() -> No
     assert isinstance(wikitext, PerplexityTask)
     reread = dataclasses.replace(wikitext, primary_metric="perplexity")
     assert reread.task_hash(docs) == wikitext.task_hash(docs)
+    # Nor whether its dataset is private.
+    private = dataclasses.replace(
+        wikitext, dataset=dataclasses.replace(wikitext.dataset, private=True)
+    )
+    assert private.task_hash(docs) == wikitext.task_hash(docs)
     # The hashes `main` gave before the field existed, so no bank or results file goes stale.
     assert wikitext.task_hash(docs) == (
         "889027a97129888e4050e8b3ae822dc53e6df5d65be1bcdf9bad6bd0af7b4846"
@@ -180,6 +187,7 @@ def test_score_task_writes_one_prediction_row_per_doc_and_never_replaces_it(
         assert row["windows"] == math.ceil(len(ids) / TEXT_TASK.window)
         assert row["logprob"] < 0
         assert row["is_greedy"] is False  # a random model doesn't predict a whole text
+        assert "correct" not in row  # perplexity has no per-doc outcome
 
     # A second run into the same directory is refused before anything is scored.
     monkeypatch.setattr(scorer, "rolling_loglikelihood", None)  # scoring would fail on None
@@ -344,6 +352,53 @@ def test_tw_text_is_scored_over_eleven_native_sources() -> None:
     board = TASKS["tw_text_ptt__Tech_Job"]
     assert isinstance(board, PerplexityTask)
     assert (board.dataset.subset, board.domain) == ("ptt", "Tech_Job")
+
+
+def test_tw_text_v1_is_its_own_suite_over_v1_with_v0_untouched() -> None:
+    assert SUITES["tw_text_v1"] == TW_TEXT_V1
+    # The same 11 sources in the same order, so a source's row in two tables lines up.
+    v0_sources = [suite.name.removeprefix("tw_text:") for suite in TW_TEXT.members]
+    assert [suite.name for suite in TW_TEXT_V1.members] == [
+        f"tw_text_v1:{source}" for source in v0_sources
+    ]
+    assert [suite.metric for suite in TW_TEXT_V1.suites] == ["bits_per_byte"] * 12
+    assert len(TW_TEXT_V1.tasks) == 63
+    pins = {
+        (task.dataset.repo, task.dataset.revision, task.dataset.split) for task in TW_TEXT_V1.tasks
+    }
+    assert pins == {
+        ("cerulean-works/tw-text-v1", "b60d46e622d3c9ce7f022831004aab0bef91b32d", "test")
+    }
+    assert {task.dataset.revision for task in TW_TEXT.tasks} == {
+        "1786e787a4ab786d1ed021994007ef3c9590e497"
+    }
+    # No name is shared, so a v0 number and a v1 number never land under one key.
+    v0_names = {item.name for item in (*TW_TEXT.tasks, *TW_TEXT.suites)}
+    assert not v0_names & {item.name for item in (*TW_TEXT_V1.tasks, *TW_TEXT_V1.suites)}
+
+    # An `other` that clears the floor is a domain like any other.
+    other = TASKS["tw_text_v1_judicial__other"]
+    assert isinstance(other, PerplexityTask)
+    assert (other.dataset.subset, other.domain, other.window) == ("judicial", "other", 2048)
+    assert TASKS["tw_text_v1_zhwiki"].dataset.subset == "zhwiki"
+
+
+def test_tw_text_v1_counts_each_domain_once_in_its_source_and_each_source_once() -> None:
+    # A source's first domain scores 1.0 and every other one 2.0, so a source with more domains
+    # moves its own mean only and the suite stays the mean of the sources' means.
+    metrics = {}
+    expected = []
+    for source, domains in SOURCES_V1.items():
+        names = [f"tw_text_v1_{source}__{domain}" for domain in domains]
+        if len(domains) == 1:
+            names = [f"tw_text_v1_{source}"]
+        for index, name in enumerate(names):
+            metrics[name] = {"bits_per_byte": 1.0 if index == 0 else 2.0}
+        expected.append((1.0 + 2.0 * (len(names) - 1)) / len(names))
+
+    assert TW_TEXT_V1.score(metrics) == pytest.approx(sum(expected) / 11)
+    judicial = SUITES["tw_text_v1:judicial"]
+    assert judicial.score(metrics) == pytest.approx((1.0 + 2.0 * 8) / 9)
 
 
 def test_fineweb_edu_is_the_labs_task_in_no_suite() -> None:

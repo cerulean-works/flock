@@ -183,7 +183,7 @@
 		aria-valuemin={MIN_PLOT_H}
 		aria-valuemax={MAX_PLOT_H}
 		tabindex="0"
-		title="Drag to resize · double-click to reset"
+		title="Drag to resize, or double-click to reset"
 		onpointerdown={startResize}
 		ondblclick={() => ws.setHeight(section, null)}
 		onkeydown={resizeKey}

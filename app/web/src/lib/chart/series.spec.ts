@@ -170,19 +170,63 @@ describe('smoothing methods', () => {
 		expect(Array.from(smoothed(new Series(v, x), { type: 'twema', param: 0 }))).toEqual([1, 5, 2]);
 	});
 
-	it('time weighted EMA matches the EMA on evenly logged steps', () => {
-		const v = ys(3, 1, 4, 1, 5, 9, 2, 6);
-		const even = timeWeightedEma(xs(0, 10, 20, 30, 40, 50, 60, 70), v, 0.7);
-		const plain = ema(v, 0.7);
-		for (let i = 0; i < v.length; i++) expect(even[i]).toBeCloseTo(plain[i], 5);
+	it("time weighted EMA is W&B's formula", () => {
+		// Decay sqrt(0.81) = 0.9 per thousandth of the x range (here 0..1000, so per step).
+		const out = timeWeightedEma(xs(0, 1, 3, 1000), ys(4, 2, 7, 1), 0.81);
+		let acc = 0;
+		let norm = 0;
+		const want = [
+			[0, 4],
+			[1, 2],
+			[2, 7],
+			[997, 1]
+		].map(([gap, v]) => {
+			acc = acc * 0.9 ** gap + v;
+			norm = norm * 0.9 ** gap + 1;
+			return acc / norm;
+		});
+		for (let i = 0; i < 4; i++) expect(out[i]).toBeCloseTo(want[i], 5);
+	});
+
+	it('time weighted EMA smooths a line the same however densely it was sampled', () => {
+		const steps = Array.from({ length: 4001 }, (_, i) => i);
+		const loss = steps.map((t) => 2 + 8 / Math.sqrt(t + 1));
+		const full = timeWeightedEma(Float64Array.from(steps), Float32Array.from(loss), 0.6);
+		const every = (k: number) => steps.filter((t) => t % k === 0);
+		const sampled = timeWeightedEma(
+			Float64Array.from(every(40)),
+			Float32Array.from(every(40), (t) => loss[t]),
+			0.6
+		);
+		// Late in the run, where the sampled line has caught up with its own debias.
+		for (const t of [2000, 3000, 4000]) expect(sampled[t / 40]).toBeCloseTo(full[t], 2);
+	});
+
+	it('EMA decays once per history row a sampled line stands for', () => {
+		const steps = Array.from({ length: 4001 }, (_, i) => i);
+		const loss = Float32Array.from(steps, (t) => 2 + 8 / Math.sqrt(t + 1));
+		const full = ema(loss, 0.9);
+		const kept = steps.filter((t) => t % 40 === 0);
+		const sampled = ema(
+			Float32Array.from(kept, (t) => loss[t]),
+			0.9,
+			loss.length
+		);
+		for (const t of [400, 2000, 4000]) expect(sampled[t / 40]).toBeCloseTo(full[t], 2);
+		// Without the rows, each sample would count as one row and lag far behind.
+		const naive = ema(
+			Float32Array.from(kept, (t) => loss[t]),
+			0.9
+		);
+		expect(naive[10] - full[400]).toBeGreaterThan(0.1);
 	});
 
 	it('time weighted EMA decays more across a longer gap', () => {
-		// The same values; the last point comes after a gap of five average steps.
+		// The same values over the same range; the last point comes after a gap of 3 or 997.
 		const v = ys(0, 0, 0, 0, 10);
-		const even = timeWeightedEma(xs(0, 1, 2, 3, 4), v, 0.8);
-		const gap = timeWeightedEma(xs(0, 1, 2, 3, 8), v, 0.8);
-		expect(gap[4]).toBeGreaterThan(even[4]);
+		const near = timeWeightedEma(xs(0, 994, 995, 997, 1000), v, 0.8);
+		const gap = timeWeightedEma(xs(0, 1, 2, 3, 1000), v, 0.8);
+		expect(gap[4]).toBeGreaterThan(near[4]);
 	});
 
 	it('running average is the mean of the last window points, skipping gaps', () => {

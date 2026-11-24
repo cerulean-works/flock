@@ -23,11 +23,6 @@ MULTIPLE_CHOICE_METRICS = (
 )
 
 
-def scale(metric: str) -> str:
-    """Returns the scale a metric's scores average on: `accuracy` for every `acc_*` metric, otherwise the metric's own name, such as `bpb`. A mean over two scales, an accuracy (higher is better) and a `bpb` (lower is better), has no meaning."""
-    return "accuracy" if metric.startswith("acc_") else metric
-
-
 @dataclass(frozen=True, slots=True)
 class ChoiceScores:
     """
@@ -96,11 +91,27 @@ def bits_per_byte(logprob: torch.Tensor, num_bytes: torch.Tensor) -> torch.Tenso
     return nats_per_byte / math.log(2)
 
 
-def accuracy(score: torch.Tensor, valid: torch.Tensor, gold: torch.Tensor) -> torch.Tensor:
+def best_choice(score: torch.Tensor, valid: torch.Tensor) -> torch.Tensor:
     """
-    Checks, per doc, whether the highest-scoring valid choice is gold.
+    Picks, per doc, the highest-scoring valid choice.
 
     Ties go to the first choice, as OLMES's `MCAccuracy` does with `list.index(max(...))` (`oe_eval/metrics/metric.py`).
+
+    Args:
+        score (`torch.Tensor`):
+            `[docs, max_choices]`, higher is better.
+        valid (`torch.Tensor`):
+            bool `[docs, max_choices]`, False in padded cells, which are never picked.
+
+    Returns:
+        `torch.Tensor`: int64 `[docs]`, the index of each doc's picked choice.
+    """
+    return score.masked_fill(~valid, -math.inf).argmax(dim=-1)
+
+
+def accuracy(score: torch.Tensor, valid: torch.Tensor, gold: torch.Tensor) -> torch.Tensor:
+    """
+    Checks, per doc, whether [`best_choice`] picks gold.
 
     Args:
         score (`torch.Tensor`):
@@ -113,9 +124,24 @@ def accuracy(score: torch.Tensor, valid: torch.Tensor, gold: torch.Tensor) -> to
     Returns:
         `torch.Tensor`: float32 `[docs]`, 1.0 where the pick is gold, else 0.0.
     """
-    predicted = score.masked_fill(~valid, -math.inf).argmax(dim=-1)
+    return (best_choice(score, valid) == gold).float()
 
-    return (predicted == gold).float()
+
+def ranking_scores(scores: ChoiceScores) -> dict[str, torch.Tensor]:
+    """
+    Returns the score each choice-ranking accuracy ranks choices by, `[docs, max_choices]` and higher is better, named as the metric (see [`multiple_choice`]). `acc_uncond` is only present when `logprob_uncond` is.
+    """
+    ranked = {
+        "acc_raw": scores.logprob,
+        "acc_per_token": scores.logprob / scores.num_tokens.clamp(min=1),
+        "acc_per_char": scores.logprob / scores.num_chars.clamp(min=1),
+        # Negated: lower bits per byte is better.
+        "acc_per_byte": -bits_per_byte(scores.logprob, scores.num_bytes),
+    }
+    if scores.logprob_uncond is not None:
+        ranked["acc_uncond"] = scores.logprob - scores.logprob_uncond
+
+    return ranked
 
 
 def multiple_choice(scores: ChoiceScores) -> dict[str, torch.Tensor]:
@@ -137,26 +163,14 @@ def multiple_choice(scores: ChoiceScores) -> dict[str, torch.Tensor]:
     Returns:
         `dict[str, torch.Tensor]`: float32 `[docs]` tensors, named as in `MULTIPLE_CHOICE_METRICS`.
     """
-    bpb = bits_per_byte(scores.logprob, scores.num_bytes)
-    per_token = scores.logprob / scores.num_tokens.clamp(min=1)
-    per_char = scores.logprob / scores.num_chars.clamp(min=1)
-
-    metrics = {
-        "acc_raw": accuracy(scores.logprob, scores.valid, scores.gold),
-        "acc_per_token": accuracy(per_token, scores.valid, scores.gold),
-        "acc_per_char": accuracy(per_char, scores.valid, scores.gold),
-        # Negated: `accuracy` picks the highest score, and lower bits per byte is better.
-        "acc_per_byte": accuracy(-bpb, scores.valid, scores.gold),
-    }
-
-    if scores.logprob_uncond is not None:
-        pmi = scores.logprob - scores.logprob_uncond
-        metrics["acc_uncond"] = accuracy(pmi, scores.valid, scores.gold)
+    ranked = ranking_scores(scores)
+    metrics = {name: accuracy(score, scores.valid, scores.gold) for name, score in ranked.items()}
 
     # Each doc's gold column. Added last so the keys keep `MULTIPLE_CHOICE_METRICS`'s order,
     # which results.json follows.
     gold = scores.gold[:, None]
     metrics["acc_greedy"] = scores.is_greedy.gather(-1, gold).squeeze(-1).float()
-    metrics["bpb"] = bpb.gather(-1, gold).squeeze(-1)
+    # The per-byte ranking score is negated bits per byte, so negating it back is exact.
+    metrics["bpb"] = (-ranked["acc_per_byte"]).gather(-1, gold).squeeze(-1)
 
     return metrics

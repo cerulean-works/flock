@@ -1,7 +1,9 @@
 """The `flock eval` command line."""
 
+import json
 import shlex
 import sys
+import unicodedata
 from pathlib import Path
 from typing import get_args
 
@@ -9,8 +11,10 @@ import click
 
 from flock.eval import hub
 from flock.eval.compare import Comparison, compare
-from flock.eval.model import DEFAULT_BATCH_TOKENS
-from flock.eval.results import Results
+from flock.eval.diff import ItemDiff, diff
+from flock.eval.items import CELLS, ONE_RUN, Item, items
+from flock.eval.model import DEFAULT_BATCH_TOKENS, folder_digest
+from flock.eval.results import Results, read_results
 from flock.eval.run import Dtype, EvalConfig, evaluate
 from flock.eval.tasks import SUITES, TASKS
 
@@ -21,7 +25,14 @@ def main() -> None:
 
 
 @main.command()
-@click.option("--model", required=True, help="Model as repo@revision or flock:org/name[@version].")
+@click.option(
+    "--model",
+    required=True,
+    help=(
+        "Model as repo@revision, flock:org/path[@version], flock:project:path[@version] "
+        "or local:folder@digest."
+    ),
+)
 @click.option(
     "--task",
     "tasks",
@@ -66,8 +77,31 @@ def main() -> None:
     is_flag=True,
     help="Start every non-empty context with the tokenizer's BOS token, as OLMES does for Gemma.",
 )
+@click.option(
+    "--no-tokens",
+    is_flag=True,
+    help="Don't write each task's per-token values beside its predictions.",
+)
+@click.option(
+    "--context-tokens",
+    is_flag=True,
+    help="Also write the per-token values of each doc's context, as Min-K%++ reads them.",
+)
+@click.option(
+    "--greedy-tokens",
+    is_flag=True,
+    help="Also write the first 32 tokens greedy decoding writes after each doc's context.",
+)
+@click.option(
+    "--perplexity-tokens",
+    is_flag=True,
+    help="Write each perplexity task's per-token loss and byte offsets beside its predictions.",
+)
 @click.option("--device", help="Torch device (default: cuda if available).")
-@click.option("--wandb-project", help="Also log the summary to this tracker project.")
+@click.option(
+    "--wandb-project",
+    help="Also log the summary to this tracker project, with results.json and predictions/.",
+)
 @click.option(
     "--verbose",
     is_flag=True,
@@ -82,6 +116,10 @@ def run(
     batch_tokens: int,
     dtype: Dtype,
     add_bos: bool,
+    no_tokens: bool,
+    context_tokens: bool,
+    greedy_tokens: bool,
+    perplexity_tokens: bool,
     device: str | None,
     wandb_project: str | None,
     verbose: bool,
@@ -97,6 +135,10 @@ def run(
             batch_tokens=batch_tokens,
             dtype=dtype,
             add_bos=add_bos,
+            tokens=not no_tokens,
+            context_tokens=context_tokens,
+            greedy_tokens=greedy_tokens,
+            perplexity_tokens=perplexity_tokens,
             device=device,
             wandb_project=wandb_project,
             # The program's name as invoked (`flock` for the script) and its arguments.
@@ -106,6 +148,17 @@ def run(
         raise click.UsageError(str(error)) from None
 
     click.echo(format_results(evaluate(config), verbose=verbose))
+
+
+@main.command(name="digest")
+@click.argument("folder", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def digest_command(folder: Path) -> None:
+    """Print the model id that scores a local folder: local:FOLDER@DIGEST, where the digest names every file in it."""
+    try:
+        click.echo(f"local:{folder}@{folder_digest(folder)}")
+    # A folder the digest refuses, or one it can't read.
+    except (ValueError, OSError) as error:
+        raise click.ClickException(str(error)) from None
 
 
 @main.command(name="compare")
@@ -124,11 +177,77 @@ def compare_command(banked: Path, new: Path) -> None:
     sys.exit(2 if comparison.changed else 1 if comparison.breaches else 0)
 
 
+@main.command(name="diff")
+@click.argument("a")
+@click.argument("b")
+@click.option("--json", "as_json", is_flag=True, help="Print the diff as JSON.")
+def diff_command(a: str, b: str, as_json: bool) -> None:
+    """Compare two runs doc by doc, each a folder holding results.json or a tracker run as run:ENTITY/PROJECT/ID, on every accuracy task both scored under the same task hash. Exits 2 if the runs can't be compared."""
+    try:
+        found = diff(read_results(a), read_results(b))
+    # A missing or damaged results file, another instrument, or a refused or unreachable run.
+    except (OSError, ValueError, click.ClickException) as error:
+        message = error.format_message() if isinstance(error, click.ClickException) else error
+        click.echo(f"refused: {message}", err=True)
+        sys.exit(2)
+
+    click.echo(json.dumps(found.to_dict(), indent=2) if as_json else format_diff(found))
+
+
+@main.command(name="items")
+@click.argument("runs", nargs=-1, required=True)
+@click.option("--task", required=True, help="The task whose docs to print.")
+@click.option(
+    "--only",
+    type=click.Choice(ONE_RUN),
+    help="One run: print its wrong (the default), right or all docs.",
+)
+@click.option("--cell", type=click.Choice(CELLS), help="Two runs: print this cell of their diff.")
+@click.option("--limit", type=click.IntRange(min=1), help="Print at most this many docs.")
+@click.option("--seed", type=int, help="Sample --limit docs with this seed, not the first ones.")
+@click.option("--json", "as_json", is_flag=True, help="Print one JSON object per doc.")
+def items_command(
+    runs: tuple[str, ...],
+    task: str,
+    only: str | None,
+    cell: str | None,
+    limit: int | None,
+    seed: int | None,
+    as_json: bool,
+) -> None:
+    """Print a task's docs with their question, choices and each run's pick and probabilities, from one run or two, each a folder holding results.json or a tracker run as run:ENTITY/PROJECT/ID. Two runs are compared as diff compares them. Exits 2 if the runs can't be read this way."""
+    if len(runs) > 2:
+        raise click.UsageError("give one run or two")
+    if len(runs) == 1 and cell is not None:
+        raise click.UsageError("--cell compares two runs; one run takes --only")
+    if len(runs) == 2 and only is not None:
+        raise click.UsageError("--only reads one run; two runs take --cell")
+    if len(runs) == 2 and cell is None:
+        raise click.UsageError(f"two runs need --cell, one of {', '.join(CELLS)}")
+
+    try:
+        found = items(
+            [read_results(run) for run in runs], task, cell or only or "wrong", limit, seed
+        )
+    # A missing or damaged file, another instrument, no text, or a refused or unreachable run.
+    except (OSError, ValueError, click.ClickException) as error:
+        message = error.format_message() if isinstance(error, click.ClickException) else error
+        # The message may quote a run's files.
+        click.echo(f"refused: {_escaped(str(message))}", err=True)
+        sys.exit(2)
+
+    if as_json:
+        for item in found:
+            click.echo(json.dumps(item.to_dict(), ensure_ascii=False))
+    else:
+        click.echo("\n\n".join(format_item(item) for item in found))
+
+
 @main.command(name="log")
 @click.argument("results", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--project", required=True, help="The tracker project to log to.")
 def log_command(results: Path, project: str) -> None:
-    """Log a written results.json to the tracker as written, in your default organization. Refuses a file whose model and start time already have a run in the project."""
+    """Log a written results.json to the tracker as written, in your default organization, with the predictions beside it from schema 9 on. Refuses a file whose model and start time already have a run in the project, and a private dataset's predictions for a public project."""
     # Imported here so the other commands don't import wandb.
     from wandb.errors import Error as WandbError
 
@@ -198,6 +317,63 @@ def format_comparison(comparison: Comparison) -> str:
         f"breaches {len(comparison.breaches)}"
     )
     return "\n".join(lines)
+
+
+def format_diff(found: ItemDiff) -> str:
+    """Formats the two models, one line per compared task with its four cell counts, then the tasks not compared with why."""
+    lines = [f"a  {found.a}", f"b  {found.b}"]
+
+    width = max([len("task")] + [len(task.task) for task in found.tasks])
+    lines.append(f"{'task':<{width}}  docs  both right  both wrong  only a  only b")
+    for task in found.tasks:
+        lines.append(
+            f"{task.task:<{width}}  {task.num_docs:>4}  {task.both_right:>10}  "
+            f"{task.both_wrong:>10}  {len(task.only_a):>6}  {len(task.only_b):>6}"
+        )
+
+    if found.not_compared:
+        names = ", ".join(f"{name} ({reason})" for name, reason in found.not_compared)
+        lines.append(f"not compared: {names}")
+    return "\n".join(lines)
+
+
+def format_item(item: Item) -> str:
+    """Formats a doc: its task, id and metric, where it comes from when the run says, each run's model and verdict, its question, then one line per choice with each run's probability and share, `*` on gold and `<` on each run's pick."""
+    letters = "ab"[: len(item.runs)]
+    lines = [f"{_escaped(item.task)}  {_escaped(item.id)}  {_escaped(item.metric)}"]
+    # The hashes and `meta` are for joining and filtering, and print with `--json`.
+    shown = [key for key in ("split", "source_index", "native_id", "subject") if key in item.source]
+    if shown:
+        lines.append("  ".join(f"{key} {_escaped(str(item.source[key]))}" for key in shown))
+    for letter, answer in zip(letters, item.runs, strict=True):
+        verdict = "right" if answer.correct else "wrong"
+        lines.append(f"{letter}  {_escaped(answer.model)}  {verdict}, picks {answer.pick}")
+    # Each choice's own context stands in for a shared question.
+    if item.question is not None:
+        lines.append(_escaped(item.question, keep="\n"))
+
+    # Per run, the probability then the share; a share is `-` where the metric ranks no choices.
+    header = "".join(f"  p {letter}    s {letter}  " for letter in letters)
+    lines.append(f"     {header}")
+    for i, choice in enumerate(item.choices):
+        cells = ""
+        for answer in item.runs:
+            share = "    -" if answer.share is None else f"{answer.share[i]:.3f}"
+            mark = "<" if answer.pick == i else " "
+            cells += f"  {answer.prob[i]:.3f}  {share} {mark}"
+        text = choice if item.contexts is None else item.contexts[i] + choice
+        gold = "*" if i == item.gold else " "
+        # One line per choice, so its own line breaks are escaped too.
+        lines.append(f"{gold}{i:>3} {cells}  {_escaped(text.strip())}")
+    return "\n".join(lines)
+
+
+def _escaped(text: str, keep: str = "") -> str:
+    """`text` with each control, format or line-separator character (`Cc`, `Cf`, `Zl`, `Zp`) but those in `keep` written as its escape, so text from a run's files can't move the cursor or reorder a line. Chinese text, its ideographic space included, stays as it is."""
+    hidden = ("Cc", "Cf", "Zl", "Zp")
+    return "".join(
+        repr(c)[1:-1] if c not in keep and unicodedata.category(c) in hidden else c for c in text
+    )
 
 
 def format_results(results: Results, verbose: bool = False) -> str:

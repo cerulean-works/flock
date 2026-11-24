@@ -72,6 +72,38 @@ From the shell, `flock models pull acme/olmo2-1b` downloads the primary version,
 
 To evaluate a stored model, give `flock eval run --model` the model with a `flock:` prefix, such as `flock:acme/olmo2-1b` or `flock:acme/olmo2-1b@checkpoint-12000`. The results record the version number it resolved to and the version's digest. See [Score a model stored in Flock](../evals/run-evaluation#score-a-model-stored-in-flock).
 
+## Organize models in folders and projects
+
+A model's name is a path, so it can sit in folders, such as `acme/eval/olmo2-1b` or `acme/eval/sweeps/lr-3e-4`. Saving to a path makes its folders, and a folder disappears once nothing is left in it. A path is a model or a folder, never both: once `acme/eval/olmo2-1b` exists, `acme/eval` can't be a model.
+
+Models belong to your organization, or to one of its projects. Keep models everyone uses at the organization's level, and put experiments in their project: they stay out of the organization's list, and they're deleted with the project. Pass `project=` and give the path inside the project:
+
+```python
+from flock.hub import models
+
+version = models.save_to_hub(model, "sweeps/lr-3e-4", project="pretrain", step=12000)
+print(version)  # pretrain:sweeps/lr-3e-4@1
+
+model = models.load_from_hub("sweeps/lr-3e-4@1", project="pretrain")
+```
+
+`pretrain:sweeps/lr-3e-4@1` is a shorthand for the same thing. Everything before the first `:` is the project, so project names with spaces or `@` work. The project is one of your default organization's. Pass `org="acme"`, or write `project="acme/pretrain"`, to name another organization's.
+
+When an experiment's model is worth keeping, move it out of the project. The move is instant, and its versions and tags come along:
+
+```python
+models.move("sweeps/lr-3e-4", "released/olmo2-1b-lr", project="pretrain", to_global=True)
+```
+
+```bash
+flock models move pretrain:sweeps/lr-3e-4 released/olmo2-1b-lr --to-global
+```
+
+The model is then `acme/released/olmo2-1b-lr`, and its old name stops loading. Move a model into a project with `to_project=`, or to another folder in the same place by giving only the new path.
+
+> [!WARNING]
+> Deleting a project deletes its models and datasets for good, without the trash. Move anything you want to keep out of it first.
+
 ## Choose the primary version
 
 Make a version primary when it should be what others get by default, for example the best checkpoint of a run or the one you're releasing.
@@ -186,6 +218,8 @@ Some versions can't be deleted until you change them:
 
 - **The primary version:** make another version primary first.
 - **A version with a tag** other than a checkpoint tag, such as `release`: move or remove the tag first. Checkpoint tags are deleted with their version.
+
+A version that has been evaluated can be deleted, after a warning that says how many eval runs scored it.
 
 [Browse and manage models](../app/browse-models) covers the rest of the Models tab: the version picker, the tabs and the trash.
 

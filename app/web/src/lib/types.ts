@@ -9,6 +9,8 @@ export const LIVE_STATES: ReadonlySet<string> = new Set(['running', 'preempting'
 
 /** A project, as Flock lists it. Times are seconds since the epoch. */
 export interface ProjectInfo {
+	/** Names its folder in flock-datasets and flock-models, `-projects/{id}/` (D160). */
+	id?: number;
 	entity: string;
 	name: string;
 	description: string | null;
@@ -201,9 +203,8 @@ export interface BucketDetail extends Bucket {
 // Datasets (013): the Lance datasets in an org's flock-datasets bucket.
 
 /**
- * A dataset in a folder's listing. The dashboard's server fills in `size` and, when the listing
- * can't tell it (manifests in Lance's old naming), `version` from each dataset's info; both stay
- * null when that can't be read.
+ * A dataset in a folder's listing. Asked with `details`, Flock fills in `size` and, for manifests
+ * in Lance's old naming, `version`. Both stay null when the dataset can't be read.
  */
 export interface DatasetEntry {
 	name: string;
@@ -211,6 +212,8 @@ export interface DatasetEntry {
 	version: number | null;
 	updated_at: number | null;
 	size?: number | null;
+	/** Made by Flock as a fork or a blend (023), for the listing's label. */
+	origin?: 'fork' | 'blend' | null;
 }
 
 /** A file in a folder's listing of flock-datasets. */
@@ -274,7 +277,123 @@ export interface DatasetInfo {
 	tags: { name: string; version: number }[];
 	/** Anyone with the link can open it (D115). */
 	public?: boolean;
+	/** Where it came from, when Flock made it as a fork or a blend (023, D179). */
+	origin?: DatasetOrigin | null;
+	/** The datasets reading it (D177), for members; null from outside the org. */
+	dependents?: { count: number; trashed: number; paths: string[] } | null;
 }
+
+/** A source of a blend, as its lineage records it. */
+export interface BlendSourceRecord {
+	path: string;
+	version: number;
+	rows: number;
+	live: number;
+	fraction?: number;
+}
+
+/** Where a fork or blend came from (`info.origin`). */
+export type DatasetOrigin = (
+	| { kind: 'fork'; source: { path: string; version: number } }
+	| {
+			kind: 'blend';
+			seed: number;
+			spec: { mode: 'rows' } | { mode: 'fraction'; total: number };
+			replace: boolean;
+			columns: BlendColumn[];
+			sources: BlendSourceRecord[];
+			version?: number;
+	  }
+) & {
+	/** Rewritten into its own files (D178): it reads no other dataset any more. */
+	independent?: boolean;
+	created_by: Person | null;
+	created_at: number;
+};
+
+/** Where an output column of a blend comes from in one source (D175). */
+export type ColumnFrom =
+	{ column: string; cast?: boolean } | { null: true } | { value: string | number | boolean };
+
+/** An output column of a blend and how each source gives it, keyed by the source's path. */
+export interface BlendColumn {
+	name: string;
+	type: string;
+	nullable: boolean;
+	from: Record<string, ColumnFrom>;
+}
+
+/** A source of a blend as the dialog asks for it. */
+export interface BlendSourceRequest {
+	path: string;
+	version?: string | number | null;
+	rows?: number;
+	fraction?: number;
+}
+
+/** What `POST …/datasets/blend/preview` answers. */
+export interface BlendPreview {
+	sources: {
+		path: string;
+		version: number;
+		live: number;
+		rows: number;
+		share: number | null;
+		schema: { name: string; type: string; nullable: boolean }[];
+	}[];
+	total: number;
+	columns: BlendColumn[];
+	automatic: boolean;
+	unused: Record<string, { name: string; type: string }[]>;
+	writes: { column: string; source: string; kind: 'cast' | 'copy' | 'value' }[];
+	/** Every problem refusing the blend. */
+	problems: string[];
+	/** Those of `problems` that are the column map's, for the Columns step. */
+	column_problems: string[];
+}
+
+/** A blend or a dataset made independent, run by the API (D176). */
+export interface DatasetJob {
+	id: number;
+	kind: 'blend' | 'independent';
+	dest: string;
+	options: Record<string, unknown>;
+	state: 'running' | 'finished' | 'failed' | 'cancelled' | 'interrupted';
+	phase: string | null;
+	rows_total: number;
+	rows_done: number;
+	progress: number;
+	result: { path: string; version: number; rows: number } | null;
+	error: string | null;
+	started_by: Person | null;
+	started_at: number;
+	finished_at: number | null;
+}
+
+/** Where a dataset is, or would be, in S3 (`GET …/datasets/location`, D163). */
+export interface DatasetLocation {
+	bucket: string;
+	/** The real key: `-projects/{pk}/{path}` for a project's dataset (D160). */
+	key: string;
+	uri: string;
+	path: string;
+	project: string | null;
+}
+
+/** What a page of a scope's datasets shows: a folder, or a dataset (D169). */
+export type DatasetsPath =
+	| { kind: 'folder'; path: string; folder: DatasetFolder; now: number }
+	| {
+			kind: 'dataset';
+			path: string;
+			info: DatasetInfo | null;
+			failed: string | null;
+			requested: string | null;
+			s3: S3Config;
+			/** Where it is in flock-datasets: its path when global, under `-projects/` otherwise. */
+			key: string;
+			now: number;
+	  };
 
 /** A cell, rendered by the API for display (D90). */
 export type Cell =
@@ -319,6 +438,8 @@ export interface DatasetVersion {
 	rows_delta: number | null;
 	/** `transaction_properties` the writer set, such as a message. */
 	properties: Record<string, string>;
+	/** How many forks and blends read this version, which keeps it from cleanup (D173). */
+	kept_for?: number;
 }
 
 export interface VersionsPage {
@@ -332,7 +453,10 @@ export interface TrashEntry {
 	id: number;
 	/** A dataset, or a folder deleted with everything in it (D132). */
 	kind: 'dataset' | 'folder';
+	/** Relative to its scope. */
 	path: string;
+	/** The project it was deleted from, null for global (D168). */
+	project?: string | null;
 	deleted_by: Person | null;
 	deleted_at: number;
 	/** Null while the move to the trash is unfinished. */
@@ -365,11 +489,15 @@ export interface DeleteResult {
 // ----------------------------------------------------------------------------------------------
 // Models (014): the model registry, in an org's flock-models bucket.
 
-/** A model in the org's list (`GET …/models`). */
+/** A model in a folder's listing (`GET …/models?folder=`). */
 export interface ModelEntry {
+	/** Its path, `eval/olmo2-1b` (D158). */
 	name: string;
-	/** `org/name`. */
+	/** How refs name it: `acme/eval/olmo2-1b`, or `pretrain:eval/olmo2-1b` in a project (D162). */
 	model: string;
+	org?: string;
+	/** Its project, null for global (D159). */
+	project?: string | null;
 	created_at: number;
 	created_by: Person | null;
 	/** Live versions. */
@@ -382,6 +510,16 @@ export interface ModelEntry {
 	updated_at: number;
 }
 
+/** How one model's move went (`PATCH …/models/{path}/-`, D166), as the Move dialog asked. */
+export interface ModelMove {
+	/** Its path before. */
+	name: string;
+	/** Its path after, in the scope it moved to. */
+	to: string;
+	moved: boolean;
+	error: string | null;
+}
+
 /** A tag of a model, with the version it's on. */
 export interface ModelTag {
 	name: string;
@@ -390,10 +528,42 @@ export interface ModelTag {
 	moved_at: number;
 }
 
-/** A model (`GET …/models/{name}`). */
+/** One level of a scope's models (`GET …/models?folder=&project=`, D158): models, then folders. */
+export interface ModelFolder {
+	kind: 'folder';
+	folder: string;
+	project: string | null;
+	models: ModelEntry[];
+	/** Each with the number of models under it. */
+	folders: { name: string; path: string; models: number }[];
+	cursor: string | null;
+}
+
+/** What `GET …/models?folder=` says of a path that is a model. */
+export interface ModelAt {
+	kind: 'model';
+	name: string;
+	project: string | null;
+}
+
+/** What a page of a scope's models shows: a folder, or a model (D169). */
+export type ModelsPath =
+	| { kind: 'folder'; path: string; folder: ModelFolder; now: number }
+	| {
+			kind: 'model';
+			path: string;
+			info: ModelInfo;
+			version: ModelVersionDetail | null;
+			requested: string | null;
+			now: number;
+	  };
+
+/** A model (`GET …/models/{path}/-`). */
 export interface ModelInfo {
 	name: string;
 	model: string;
+	org?: string;
+	project?: string | null;
 	created_at: number;
 	created_by: Person | null;
 	versions: number;
@@ -409,8 +579,12 @@ export interface ModelInfo {
 
 /** A version as the listings show it (`GET …/models/{name}/versions`). */
 export interface ModelVersion {
+	/** As refs name the model: `acme/eval/olmo2-1b`, or `pretrain:sweeps/lr-3e-4` (D162). */
 	model: string;
 	name: string;
+	org?: string;
+	/** The model's project, null for global. */
+	project?: string | null;
 	number: number;
 	digest: string;
 	total_bytes: number;
@@ -422,6 +596,8 @@ export interface ModelVersion {
 	run: string | null;
 	created_by: Person | null;
 	created_at: number;
+	/** Eval runs that scored it, deleted runs left out. */
+	eval_runs: number;
 	bucket: string;
 	/** Its folder in flock-models, ending in `/`. */
 	prefix: string;
@@ -433,9 +609,11 @@ export interface ModelFile {
 	sha256: string;
 }
 
-/** A version with its files (`GET …/versions/{number}`, `…/resolve`). */
+/** A version with its files and eval runs (`GET …/versions/{number}`, `…/resolve`). */
 export interface ModelVersionDetail extends ModelVersion {
 	files: ModelFile[];
+	/** The eval runs that scored it, as `entity/project/id`. */
+	evals: string[];
 }
 
 export interface ModelVersionsPage {
@@ -443,11 +621,142 @@ export interface ModelVersionsPage {
 	cursor: number | null;
 }
 
+/** An eval run of a version, with its scores (the dashboard's `…/evals`, 025 D183). */
+export interface ModelEvalRun {
+	/** `entity/project/id`. */
+	path: string;
+	entity: string;
+	project: string;
+	id: string;
+	display_name: string | null;
+	state: string;
+	created_at: number;
+	/** Its scores by row (`evalScores`), or null when it has no results file to read them from. */
+	scores: EvalScores | null;
+}
+
+/** One task of an eval run's `results.json` (eval's results file, schemas 8 to 10). */
+export interface EvalTask {
+	task: string;
+	task_hash: string;
+	dataset: {
+		repo: string;
+		revision: string;
+		subset: string | null;
+		split: string;
+		/** Schema 9 only. */
+		private?: boolean;
+	};
+	primary_metric: string;
+	/** A non-finite score is written as null. */
+	metrics: Record<string, number | null>;
+	num_docs: number;
+	limit: number | null;
+	truncation: { requests: number; docs: number; max_tokens_cut: number };
+}
+
+/** One suite of an eval run's `results.json`. */
+export interface EvalSuite {
+	suite: string;
+	suite_hash: string;
+	members: string[];
+	/** The metric read from each member, or null for each task's primary metric. */
+	metric: string | null;
+	/** Null for a suite that only groups others. */
+	score: number | null;
+}
+
+/** What produced an eval run (`results.json`'s `provenance`). */
+export interface EvalProvenance {
+	model: string;
+	model_digest?: string | null;
+	/** Schema 10 on: a Flock model's org, project (null when global) and path. */
+	model_org?: string | null;
+	model_project?: string | null;
+	model_path?: string | null;
+	flock_commit: string;
+	command: string | null;
+	device: string;
+	dtype: string;
+	batch_tokens: number;
+	max_length: number;
+	add_bos?: boolean;
+	attention: string;
+	sdpa_backend?: string | null;
+	torch: string;
+	transformers: string;
+	tokenizers: string;
+	datasets: string;
+	python: string;
+	created_at: string;
+}
+
+/** An eval run's `results.json`, as the Results tab reads it (025 D184). */
+export interface EvalResults {
+	schema_version: number;
+	provenance: EvalProvenance;
+	tasks: EvalTask[];
+	suites: EvalSuite[];
+}
+
+/** A row of the Evals tab: a suite's score, or a task's primary metric. */
+export interface EvalRow {
+	/** `suites/{suite}@{suite_hash}` or `{task}/{metric}@{task_hash}`. */
+	key: string;
+	kind: 'suite' | 'task';
+	name: string;
+	metric: string | null;
+	/** The suite or task hash its scores were made under. */
+	hash: string;
+}
+
+/** An eval run's scores, rows in its results file's order. */
+export interface EvalScores {
+	rows: EvalRow[];
+	values: Record<string, number | null>;
+}
+
+/** One task two eval runs both scored the same way (eval's `TaskDiff`). */
+export interface TaskDiff {
+	task: string;
+	task_hash: string;
+	metric: string;
+	num_docs: number;
+	both_right: number;
+	both_wrong: number;
+	/** Ids of the docs only run A got right, in A's order. */
+	only_a: string[];
+	only_b: string[];
+}
+
+/** Two eval runs compared doc by doc (`GET …/runs/{run}/diff`, eval's `ItemDiff` schema 1). */
+export interface ItemDiff {
+	/** Each run's model. */
+	a: string;
+	b: string;
+	tasks: TaskDiff[];
+	/** Every other task, with why: `only_a`, `only_b`, `task_hash`, `not_accuracy`, `no_predictions` or `no_outcome`. */
+	not_compared: [string, string][];
+	schema_version: number;
+}
+
+/** An eval run the compare page's picker offers (`GET /api/projects/…/eval-runs`). */
+export interface EvalRunChoice {
+	id: string;
+	display_name: string | null;
+	created_at: number;
+	state: string;
+	/** The model its config names, `flock:org/path@N`, if any. */
+	model: string | null;
+}
+
 /** A deleted model or version in the trash (`GET …/models/-/trash`), for org admins. */
 interface ModelTrashBase {
 	id: number;
 	name: string;
 	model: string;
+	/** The project it was deleted from, null for global (D168). */
+	project?: string | null;
 	deleted_by: Person | null;
 	deleted_at: number;
 	expires_at: number;
@@ -467,13 +776,15 @@ export interface ModelTrashVersion extends ModelTrashBase {
 	number: number;
 	/** The checkpoint tags that went with it. */
 	tags: string[];
+	eval_runs: number;
 }
 
 export type ModelTrashEntry = ModelTrashModel | ModelTrashVersion;
 
-/** The versions a run made (`GET …/runs/{run}/models`). */
+/** The versions a run made and those it scored (`GET …/runs/{run}/models`). */
 export interface RunModels {
-	made: ModelVersion[];
+	made: (ModelVersion & { evals: string[] })[];
+	scored: (ModelVersion & { evals: string[] })[];
 }
 
 /** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */
@@ -934,6 +1245,8 @@ export interface HFImport {
 	sha: string | null;
 	/** The dataset folder, or the model's name. */
 	dest: string;
+	/** The project it imports into, null for global. */
+	project?: string | null;
 	/** A dataset's configs, each with the splits imported. */
 	configs?: Record<string, string[]>;
 	/** A model version's tags, and whether it becomes primary. */
@@ -980,4 +1293,13 @@ export interface HFDatasetPreview {
 	default_config: string | null;
 	/** The largest import the server runs. */
 	max_bytes: number;
+}
+
+/** What deleting a project deletes with it (`GET projects/{entity}/{project}/storage`, D167). */
+export interface ProjectStorage {
+	datasets: number;
+	models: number;
+	bytes: number;
+	/** Each dataset and model by path with its bytes, datasets first. */
+	items: { kind: 'dataset' | 'model'; path: string; bytes: number }[];
 }

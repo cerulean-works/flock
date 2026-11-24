@@ -1,13 +1,14 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { modelApi, modelCall } from '#lib/models.ts';
+	import { modelApi, modelCall, modelRef } from '#lib/models.ts';
 	import FormError from '../FormError.svelte';
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		name: string;
 		/** The version to make primary. */
 		number: number;
@@ -16,7 +17,7 @@
 		onchanged: () => void;
 	}
 
-	let { open = $bindable(), org, name, number, current, onchanged }: Props = $props();
+	let { open = $bindable(), scope, name, number, current, onchanged }: Props = $props();
 
 	let pending = $state(false);
 	let error = $state<string | null>(null);
@@ -25,7 +26,7 @@
 		pending = true;
 		error = null;
 		try {
-			await modelCall(modelApi(org, name, 'primary'), {
+			await modelCall(modelApi(scope, name, 'primary'), {
 				method: 'PUT',
 				body: { version: number }
 			});
@@ -46,9 +47,9 @@
 			<AlertDialog.Title>Make version {number} primary?</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if current !== null && current !== number}
-					Loading {org}/{name} without a version will give version {number} instead of {current}.
+					Loading {modelRef(scope, name)} without a version will give version {number} instead of {current}.
 				{:else}
-					Loading {org}/{name} without a version will give version {number}.
+					Loading {modelRef(scope, name)} without a version will give version {number}.
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>

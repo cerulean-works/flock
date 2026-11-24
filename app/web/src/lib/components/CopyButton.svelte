@@ -31,7 +31,7 @@
 <Button
 	variant="ghost"
 	size="icon-sm"
-	class={['text-muted-foreground', className]}
+	class={[copied ? 'text-state-finished' : 'text-muted-foreground', className]}
 	aria-label={copied ? 'Copied' : label}
 	title={copied ? 'Copied' : label}
 	onclick={copy}

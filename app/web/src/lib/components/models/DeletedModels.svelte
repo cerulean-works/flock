@@ -1,4 +1,10 @@
 <script lang="ts">
+	import BoxIcon from '@lucide/svelte/icons/box';
+	import GitCommitVerticalIcon from '@lucide/svelte/icons/git-commit-vertical';
+	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { daysLeft } from '#lib/datasets.ts';
@@ -24,44 +30,67 @@
 		entry.kind === 'model' ? `Model with ${count(entry.versions, 'version')}` : 'Version';
 </script>
 
-<p class="mt-2 max-w-[62ch] text-muted-foreground">
+<p class="mt-2 text-muted-foreground">
 	Models and versions deleted from the Models tab stay here for {TRASH_DAYS} days, then they’re removed
 	for good.
 </p>
 
 {#if entries.length}
-	<ul class="mt-4 border-t border-divider">
-		{#each entries as entry (`${entry.kind}:${entry.id}`)}
-			<li class="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-1 border-b border-divider py-2">
-				<div class="min-w-0 flex-1">
-					<p class="truncate font-mono text-[13px]" title={label(entry)}>{label(entry)}</p>
-					<p class="truncate text-[13px] text-muted-foreground">
-						{what(entry)} · {bytes(entry.bytes)} · deleted {dateTime(
-							entry.deleted_at
-						)}{entry.deleted_by ? ` by ${entry.deleted_by.name}` : ''}
-					</p>
-				</div>
-				{#if !entry.moved}
-					<span class="text-[13px] text-muted-foreground">Still being moved</span>
-				{:else}
-					<span class="text-[13px] text-muted-foreground tabular-nums">{left(entry)}</span>
-					<div class="flex gap-1">
-						<Button variant="outline" size="sm" onclick={() => restoring.show(entry)}
-							>Restore</Button
-						>
-						<Button
-							variant="ghost"
-							size="sm"
-							class="text-muted-foreground hover:text-destructive"
-							onclick={() => purging.show(entry)}
-						>
-							Delete now
-						</Button>
-					</div>
-				{/if}
-			</li>
-		{/each}
-	</ul>
+	<table class="mt-4 w-full table-fixed border-collapse text-[13.5px]">
+		<thead>
+			<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
+				<th class="px-2 font-medium">Name</th>
+				<th class="hidden w-32 px-2 font-medium sm:table-cell">Project</th>
+				<th class="w-44 px-2 sm:w-64"><span class="sr-only">Actions</span></th>
+			</tr>
+		</thead>
+		<tbody>
+			{#each entries as entry (`${entry.kind}:${entry.id}`)}
+				<tr class="h-14 border-b border-divider">
+					<td class="px-2 py-2">
+						<p class="truncate font-mono text-[13px]" title={label(entry)}>{label(entry)}</p>
+						<MetaRow class="mt-0.5 flex-nowrap gap-x-3">
+							<MetaItem icon={entry.kind === 'model' ? BoxIcon : GitCommitVerticalIcon}>
+								{what(entry)}
+							</MetaItem>
+							<MetaItem icon={HardDriveIcon} title="Size">{bytes(entry.bytes)}</MetaItem>
+							<MetaItem icon={Trash2Icon} title="Deleted">
+								{dateTime(entry.deleted_at)}{entry.deleted_by ? ` by ${entry.deleted_by.name}` : ''}
+							</MetaItem>
+						</MetaRow>
+					</td>
+					<td
+						class="hidden truncate px-2 text-muted-foreground sm:table-cell"
+						title={entry.project ?? undefined}
+					>
+						{entry.project ?? ''}
+					</td>
+					<td class="px-2">
+						<div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+							{#if !entry.moved}
+								<span class="text-[13px] text-muted-foreground">Still being moved</span>
+							{:else}
+								<span class="text-[13px] text-muted-foreground tabular-nums">{left(entry)}</span>
+								<div class="flex gap-1">
+									<Button variant="outline" size="sm" onclick={() => restoring.show(entry)}
+										>Restore</Button
+									>
+									<Button
+										variant="ghost"
+										size="sm"
+										class="text-muted-foreground hover:text-destructive"
+										onclick={() => purging.show(entry)}
+									>
+										Delete now
+									</Button>
+								</div>
+							{/if}
+						</div>
+					</td>
+				</tr>
+			{/each}
+		</tbody>
+	</table>
 {:else}
 	<p class="mt-4 text-[13px] text-muted-foreground">No deleted models.</p>
 {/if}

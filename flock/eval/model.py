@@ -1,14 +1,18 @@
 """Batched loglikelihood scoring with a causal language model, kept on the model's device."""
 
+import dataclasses
+import hashlib
 import itertools
+import json
 import logging
+import posixpath
 import re
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Literal, NamedTuple
+from typing import Any, ClassVar, Literal, NamedTuple
 
 import torch
 from huggingface_hub import (
@@ -22,12 +26,13 @@ from huggingface_hub.errors import LocalEntryNotFoundError, RemoteEntryNotFoundE
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
-from flock.eval.requests import Request, Scores
+from flock.eval.requests import ContextScores, Request, Scores, TokenValues
 from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
 DEFAULT_BATCH_TOKENS = 32768
-# What a model id starts with when it names a version in the Flock registry.
+# What a model id starts with when it names a version in the Flock registry, or a local folder.
 FLOCK = "flock:"
+LOCAL = "local:"
 
 logger = logging.getLogger(__name__)
 
@@ -42,64 +47,123 @@ class Encoded(NamedTuple):
 @dataclass(frozen=True, slots=True)
 class ModelRef:
     """
-    A model to score: a Hugging Face model repo pinned to a revision, written `repo@revision`, or a version of a model in the Flock registry, written `flock:org/name@version`.
+    A model to score: a Hugging Face model repo pinned to a revision, written `repo@revision`, or a version of a model in the Flock registry, written `flock:org/path@version` for a global model, such as `flock:acme/eval/olmo2-1b@12`, or `flock:project:path@version` for a project's, such as `flock:pretrain:sweeps/lr-3e-4@12`, which is in your default org. A local folder pinned to its file digest is written `local:folder@digest`.
 
     Args:
         repo (`str`):
-            The Hugging Face repo, or the Flock model as `org/name`.
+            The Hugging Face repo, the Flock model as `org/path` or `project:path`, or the local folder.
         revision (`str`):
-            The Hugging Face revision, or the Flock version: a number, a tag or `primary`.
+            The Hugging Face revision, the Flock version (a number, a tag or `primary`), or the local folder's digest as given.
         kind (`str`, *optional*, defaults to `"hf"`):
-            `"hf"` for a Hugging Face model, `"flock"` for a Flock one.
+            `"hf"` for a Hugging Face model, `"flock"` for a Flock one, `"local"` for a folder.
         digest (`str`, *optional*):
-            The Flock version's digest, which names its exact files. Set by [`resolve`], and `None` for a Hugging Face model, whose commit hash already does that.
+            The digest of the Flock version or local folder, which names its exact files. Set by [`resolve`], and `None` for a Hugging Face model, whose commit hash already does that.
+        org (`str`, *optional*):
+            The Flock model's org. A project's model has none until [`resolve`] finds it, in your default org. `None` for a Hugging Face model or a local folder.
     """
 
     repo: str
     revision: str
-    kind: Literal["hf", "flock"] = "hf"
+    kind: Literal["hf", "flock", "local"] = "hf"
     digest: str | None = None
+    org: str | None = field(default=None, kw_only=True)
 
     @classmethod
     def parse(cls, model_id: str) -> ModelRef:
         """
-        Parses `repo@revision`, or `flock:org/name` with an optional `@version`. A Flock model without a version means its primary version.
+        Parses `repo@revision`, or `flock:org/path` or `flock:project:path` with an optional `@version`, or `local:folder@digest`. A Flock model without a version means its primary version.
+
+        A Flock id with a `:` before any `/` names a project of your default org: the project is everything before that `:`, so it may hold `@` and spaces. The version is everything after the path's first `@`, and paths can't hold `:` or `@`, as the hub's refs (D162).
 
         Raises:
-            `ValueError`: if a Hugging Face id has no revision, so an unpinned model can't be scored, or more than one `@`, or a Flock id isn't `org/name[@version]`.
+            `ValueError`: if a Hugging Face id has no revision, so an unpinned model can't be scored, or more than one `@`, or a Flock id isn't `org/path[@version]` or `project:path[@version]`, or a local id's digest is not 64 lowercase hex characters.
         """
-        if model_id.startswith(FLOCK):
-            name, at, version = model_id.removeprefix(FLOCK).partition("@")
-            org, _, model = name.partition("/")
-            if not org or not model or "/" in model or (at and not version) or "@" in version:
-                raise ValueError(f"model id {model_id!r} must be flock:org/name[@version]")
+        if model_id.startswith(LOCAL):
+            # The digest is the last `@`'s part, so a folder whose name has an `@` still parses.
+            folder, _, digest = model_id.removeprefix(LOCAL).rpartition("@")
+            if not folder or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ValueError(
+                    f"model id {model_id!r} must be local:folder@digest, with the digest "
+                    "`flock eval digest folder` prints"
+                )
 
-            return cls(name, version or "primary", "flock")
+            return cls(folder, digest, "local")
+
+        if model_id.startswith(FLOCK):
+            parts = _flock_parts(model_id.removeprefix(FLOCK))
+            if parts is None:
+                raise ValueError(
+                    f"model id {model_id!r} must be flock:org/path[@version] or "
+                    "flock:project:path[@version]"
+                )
+            org, project, path, version = parts
+            repo = f"{org}/{path}" if project is None else f"{project}:{path}"
+            return cls(repo, version or "primary", "flock", org=org)
 
         repo, _, revision = model_id.partition("@")
         if not repo or not revision or "@" in revision:
-            raise ValueError(f"model id {model_id!r} must be repo@revision or flock:org/name")
+            raise ValueError(
+                f"model id {model_id!r} must be repo@revision, flock:org/path[@version], "
+                "flock:project:path[@version] or local:folder@digest"
+            )
 
         return cls(repo, revision)
 
     def __str__(self) -> str:
+        # A folder's path isn't part of what was scored: the same files moved or copied are the
+        # same model, and the command in the provenance still says where they were.
+        if self.kind == "local":
+            return f"{LOCAL}{self.revision}"
         prefix = FLOCK if self.kind == "flock" else ""
         return f"{prefix}{self.repo}@{self.revision}"
 
+    @property
+    def project(self) -> str | None:
+        """The Flock model's project, or `None` for a global model or a Hugging Face one."""
+        parts = _flock_parts(self.repo) if self.kind == "flock" else None
+        return parts[1] if parts is not None else None
+
+    @property
+    def path(self) -> str | None:
+        """The Flock model's path in its scope, such as `eval/olmo2-1b`, or `None` for a Hugging Face model."""
+        parts = _flock_parts(self.repo) if self.kind == "flock" else None
+        return parts[2] if parts is not None else None
+
     def resolve(self) -> ModelRef:
         """
-        Returns this ref with its revision resolved to a commit hash, or its Flock version to a number and digest.
+        Returns this ref with its revision resolved to a commit hash, its Flock version to a number and digest, or its local folder checked against its digest.
 
-        A full hash is returned as is, without asking the Hub, so pinned models load offline from the cache. A Flock version is always resolved through the registry, which also gives its digest.
+        A full hash is returned as is, without asking the Hub, so pinned models load offline from the cache. A Flock version is always resolved through the registry, which also gives its digest. A local folder's files are hashed with [`folder_digest`] and must match the digest given.
 
         Raises:
-            `ValueError`: if the Hub doesn't report a commit hash for the revision.
+            `ValueError`: if the Hub doesn't report a commit hash for the revision, a local folder's files don't match its digest, or a Hugging Face id names a local folder, which only `local:folder@digest` scores.
             [`~hub.models.ModelError`]: if the registry has no such Flock version.
         """
         if self.kind == "flock":
             version = _flock_hub().resolve(f"{self.repo}@{self.revision}")
-            return ModelRef(
-                f"{version.org}/{version.name}", str(version.number), "flock", version.digest
+            project = getattr(version, "project", None)
+            repo = (
+                f"{version.org}/{version.name}" if project is None else f"{project}:{version.name}"
+            )
+            return ModelRef(repo, str(version.number), "flock", version.digest, org=version.org)
+
+        if self.kind == "local":
+            # The real path, so a link moved to another export after this check can't be loaded.
+            folder = Path(self.repo).resolve()
+            digest = folder_digest(folder)
+            if digest != self.revision:
+                raise ValueError(
+                    f"{self.repo} has the digest {digest}, not {self.revision}: its files changed, "
+                    "or the id names other weights"
+                )
+            return ModelRef(str(folder), self.revision, "local", digest)
+
+        # Transformers loads a folder of that name before the Hub, and a folder has no commit
+        # for the revision to pin, so nothing would say which weights were scored.
+        if Path(self.repo).is_dir():
+            raise ValueError(
+                f"{self.repo} is a local folder: score it as "
+                f"local:{self.repo}@{folder_digest(Path(self.repo))}"
             )
 
         # 40 lowercase hex characters is how the Hub writes a full commit hash.
@@ -113,13 +177,98 @@ class ModelRef:
         return ModelRef(self.repo, sha)
 
 
+def _flock_parts(ref: str) -> tuple[str | None, str | None, str, str] | None:
+    """A Flock ref (without `flock:`) as its org, project, path and version (`""` for none), or `None` when it isn't one. A `:` before any `/` makes it `project:path`, whose org is your default one."""
+    colon, slash = ref.find(":"), ref.find("/")
+    if colon >= 0 and (slash < 0 or colon < slash):
+        org, project, rest = None, ref[:colon], ref[colon + 1 :]
+        if not project:
+            return None
+    else:
+        org, _, rest = ref.partition("/")
+        project = None
+        if not org or "@" in org:
+            return None
+    path, at, version = rest.partition("@")
+    if any(s in ("", ".", "..") or ":" in s for s in path.split("/")):
+        return None
+    if at and (not version or any(c in version for c in "@:/")):
+        return None
+    return org, project, path, version
+
+
+def folder_digest(folder: Path) -> str:
+    """
+    The digest of every file in `folder`, computed as the Flock registry computes a version's: the sha256 of `{path}\t{size}\t{sha256}\n` per file, sorted by its path in the folder.
+
+    Raises:
+        `ValueError`: if `folder` isn't a folder, holds no files, holds a link or another file that isn't a regular file, has a file name with a control character, such as a tab, which the registry refuses too, names a weights shard or tokenizer file outside itself, or is an adapter, whose base model loads from elsewhere.
+        `OSError`: if a folder in it can't be read.
+    """
+    if not folder.is_dir():
+        raise ValueError(f"{folder} isn't a folder")
+
+    # A link can point outside the folder and change there under the same digest, an unreadable
+    # folder would drop out of the list unnoticed, and a pipe would hang the read. Exports have
+    # none of them.
+    errors: list[OSError] = []
+    files = {}
+    for root, folders, names in folder.walk(on_error=errors.append):
+        for name in [*folders, *names]:
+            if (root / name).is_symlink():
+                raise ValueError(f"{folder}: {root / name} is a link, which the digest can't pin")
+        for name in names:
+            if not (root / name).is_file():
+                raise ValueError(f"{folder}: {root / name} isn't a regular file")
+            files[(root / name).relative_to(folder).as_posix()] = root / name
+    if errors:
+        raise errors[0]
+    if not files:
+        raise ValueError(f"{folder} holds no files")
+    # Transformers loads an adapter's base model from wherever its config says.
+    if "adapter_config.json" in files:
+        raise ValueError(f"{folder} is an adapter, whose base model the digest can't pin")
+
+    # Transformers opens the shards a weights index names, and the tokenizer file a tokenizer
+    # config names, by joining them to the folder, so `../` or an absolute path reaches out. A
+    # missing name inside is left to the loader: a tokenizer lists versions it never saved.
+    named = []
+    for index in ("model.safetensors.index.json", "pytorch_model.bin.index.json"):
+        if index in files:
+            named += json.loads(files[index].read_bytes())["weight_map"].values()
+    if "tokenizer_config.json" in files:
+        config = json.loads(files["tokenizer_config.json"].read_bytes())
+        named += config.get("fast_tokenizer_files", [])
+    outside = []
+    for name in sorted(set(named)):
+        if posixpath.isabs(name) or posixpath.normpath(name).split("/")[0] == "..":
+            outside.append(name)
+    if outside:
+        raise ValueError(f"{folder}: its configs name {outside}, outside the folder")
+
+    lines = []
+    # Sorted as strings, as the registry sorts, which isn't `Path` order: `a-b` comes before `a/c`.
+    for name in sorted(files):
+        # A tab or newline in a name would let two file lists write the same lines. The
+        # registry refuses the same characters.
+        if any(ord(c) < 32 or ord(c) == 127 for c in name):
+            raise ValueError(f"{folder}: the file name {name!r} has a control character")
+        file_digest = hashlib.sha256()
+        with files[name].open("rb") as file:
+            while chunk := file.read(8 * 2**20):
+                file_digest.update(chunk)
+        lines.append(f"{name}\t{files[name].stat().st_size}\t{file_digest.hexdigest()}\n")
+
+    return hashlib.sha256("".join(lines).encode()).hexdigest()
+
+
 def _flock_hub() -> Any:
     """`flock.hub.models.cache`, which resolves and loads Flock models, imported only when one is scored."""
     try:
         from flock.hub.models import cache
     except ImportError as error:
         raise ImportError(
-            f"scoring a flock: model needs flock-hub[models] and flock-training: {error}"
+            f"scoring a flock: model needs torch, safetensors and flock.training: {error}"
         ) from error
 
     return cache
@@ -129,14 +278,13 @@ def _repo_file(ref: ModelRef, filename: str) -> Path | None:
     """
     The path of `filename` at the pinned revision, downloading it if needed, or `None` if the repo doesn't have it.
 
-    `ref.repo` is a local folder if one exists there, as for `AutoTokenizer`. Only the Hub's answer, or the cache's record of it, counts as "doesn't have it": a file that merely isn't cached doesn't.
+    A local model's files are read from its folder. Only the Hub's answer, or the cache's record of it, counts as "doesn't have it": a file that merely isn't cached doesn't.
 
     Raises:
         `LocalEntryNotFoundError`: if the Hub can't be reached and the cache doesn't know.
     """
-    folder = Path(ref.repo)
-    if folder.is_dir():
-        path = folder / filename
+    if ref.kind == "local":
+        path = Path(ref.repo) / filename
         return path if path.exists() else None
 
     if try_to_load_from_cache(ref.repo, filename, revision=ref.revision) is _CACHED_NO_EXIST:
@@ -155,7 +303,7 @@ def load_tokenizer(ref: ModelRef) -> Tokenizer:
 
     Args:
         ref (`ModelRef`):
-            The model, already resolved. Its repo can be a local folder.
+            The model, already resolved. A local one's repo is its folder.
 
     Raises:
         `ValueError`: if the repo has no `tokenizer.json` and `AutoTokenizer` gives a tokenizer class built on a SentencePiece model, which is a conversion, and whose ids the raw model may not match.
@@ -177,7 +325,11 @@ def load_tokenizer(ref: ModelRef) -> Tokenizer:
     if model_file is not None:
         return SentencePieceTokenizer(model_file)
 
-    tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
+    # Code from another repo, which an `auto_map` can name, is pinned by neither the revision
+    # nor a digest, so it is never run.
+    tokenizer = AutoTokenizer.from_pretrained(
+        ref.repo, revision=ref.revision, trust_remote_code=False
+    )
     assert tokenizer is not None  # The stubs allow None; loading raises instead.
 
     if tokenizer_json is None and any(
@@ -254,13 +406,15 @@ class ScoringModel:
         tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
             The model's tokenizer.
         name (`str`):
-            Labels the model in log messages. [`~eval.run.evaluate`] records it as the provenance's `model`, `repo@commit` or `flock:org/name@number`.
+            Labels the model in log messages. [`~eval.run.evaluate`] records it as the provenance's `model`, `repo@commit`, `flock:org/path@number`, `flock:project:path@number` or `local:digest`.
         max_length (`int`, *optional*):
             The longest input the model sees. Defaults to the `max_position_embeddings` of the config's text config, which for a multimodal model, such as Gemma 4, is a sub-config.
         batch_tokens (`int`, *optional*, defaults to 32768):
             The most padded tokens in one forward pass.
         digest (`str`, *optional*):
-            The digest of the Flock version the weights are, which [`~eval.run.evaluate`] records as the provenance's `model_digest`. `None` for any other model.
+            The digest of the Flock version or local folder the weights are, which [`~eval.run.evaluate`] records as the provenance's `model_digest`. `None` for a Hugging Face model.
+        flock_ref (`ModelRef`, *optional*):
+            The resolved Flock version the weights are, whose org, project and path [`~eval.run.evaluate`] records in the provenance. `None` for any other model.
         add_bos (`bool`, *optional*, defaults to `False`):
             Start every non-empty context with the tokenizer's beginning-of-sequence (BOS) token, as OLMES does for the models it configures with `add_bos_token`, all of them Gemma. A model trained to always see BOS, such as Gemma, scores poorly without it.
 
@@ -278,6 +432,7 @@ class ScoringModel:
         batch_tokens: int = DEFAULT_BATCH_TOKENS,
         digest: str | None = None,
         add_bos: bool = False,
+        flock_ref: ModelRef | None = None,
     ) -> None:
         if batch_tokens < 1:
             raise ValueError(f"batch_tokens must be at least 1, got {batch_tokens}")
@@ -302,6 +457,7 @@ class ScoringModel:
         self.batch_tokens = batch_tokens
         self.digest = digest
         self.add_bos = add_bos
+        self.flock_ref = flock_ref
 
     @classmethod
     def from_pretrained(
@@ -314,15 +470,15 @@ class ScoringModel:
         add_bos: bool = False,
     ) -> ScoringModel:
         """
-        Loads `repo@revision` from the Hugging Face Hub, or `flock:org/name@version` from the Flock registry.
+        Loads `repo@revision` from the Hugging Face Hub, `flock:org/path@version` or `flock:project:path@version` from the Flock registry, or `local:folder@digest` from a folder in the Hugging Face format.
 
-        The revision is resolved to its commit hash, which becomes the model's `name`, so a branch or tag in `model_id` is recorded as the exact weights that were scored. A Flock version (a tag, `primary`, or none for the primary) is resolved to its number, so the model's `name` is `flock:org/name@number`, and its `digest` is the version's.
+        The revision is resolved to its commit hash, which becomes the model's `name`, so a branch or tag in `model_id` is recorded as the exact weights that were scored. A Flock version (a tag, `primary`, or none for the primary) is resolved to its number, so the model's `name` is `flock:org/path@number` or `flock:project:path@number`, and its `digest` is the version's. A local folder is loaded only if [`folder_digest`] matches the digest given, and its `name` is `local:digest`, with that `digest`.
 
-        A Hugging Face model's tokenizer comes from [`load_tokenizer`]. A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names, through `AutoTokenizer`.
+        A Hugging Face model's or local folder's tokenizer comes from [`load_tokenizer`]. A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names, through `AutoTokenizer`.
 
         Args:
             model_id (`str`):
-                The model as `repo@revision`, for example `allenai/OLMo-2-0425-1B@main`, or as `flock:org/name[@version]`, for example `flock:acme/olmo2-1b@12`. Pin a full 40-character commit hash to load a Hugging Face model offline from the cache. A repo with `tokenizer.model` needs one earlier online load, which records whether it has `tokenizer.json`.
+                The model as `repo@revision`, for example `allenai/OLMo-2-0425-1B@main`, as `flock:org/path[@version]` or `flock:project:path[@version]`, for example `flock:acme/olmo2-1b@12`, or as `local:folder@digest`. Pin a full 40-character commit hash to load a Hugging Face model offline from the cache. A repo with `tokenizer.model` needs one earlier online load, which records whether it has `tokenizer.json`.
             device (`str` or `torch.device`, *optional*):
                 Where to put the weights. Defaults to CUDA when available, else the CPU.
             dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
@@ -333,7 +489,7 @@ class ScoringModel:
                 Passed to [`ScoringModel`].
 
         Raises:
-            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
+            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision`, `flock:org/path[@version]`, `flock:project:path[@version]` or `local:folder@digest`, a local folder's files don't match its digest, before or after loading, or a Hugging Face id names a local folder, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
             [`~hub.models.ModelError`]: if the Flock registry has no such version, or refuses to load it.
         """
         # `__init__` checks it too, but only after the weights have loaded.
@@ -345,7 +501,7 @@ class ScoringModel:
         if ref.kind == "flock":
             # By number, not as given, so a tag moved since resolving can't load other weights.
             flock_model = _flock_hub().load_from_hub(
-                f"{ref.repo}@{ref.revision}", device=device, dtype=dtype
+                f"{ref.repo}@{ref.revision}", device=device, dtype=dtype, org=ref.org
             )
             flock_tokenizer = flock_model.get_hf_tokenizer()
             if flock_tokenizer is None:
@@ -358,6 +514,7 @@ class ScoringModel:
                 batch_tokens=batch_tokens,
                 digest=ref.digest,
                 add_bos=add_bos,
+                flock_ref=ref,
             )
 
         tokenizer = load_tokenizer(ref)
@@ -365,10 +522,20 @@ class ScoringModel:
         if add_bos and tokenizer.bos_token_id is None:
             raise ValueError(f"{ref}: add_bos is set, but the tokenizer has no BOS token")
         model = AutoModelForCausalLM.from_pretrained(
-            ref.repo, revision=ref.revision, dtype=dtype, device_map=device
+            ref.repo, revision=ref.revision, dtype=dtype, device_map=device, trust_remote_code=False
         )
+        # Files rewritten between the check and the load would be scored under the old digest.
+        if ref.kind == "local" and folder_digest(Path(ref.repo)) != ref.digest:
+            raise ValueError(f"{ref.repo} changed while it loaded; score it again")
 
-        return cls(model, tokenizer, name=str(ref), batch_tokens=batch_tokens, add_bos=add_bos)
+        return cls(
+            model,
+            tokenizer,
+            name=str(ref),
+            batch_tokens=batch_tokens,
+            digest=ref.digest,
+            add_bos=add_bos,
+        )
 
     @property
     def device(self) -> torch.device:
@@ -392,6 +559,22 @@ class ScoringModel:
         return isinstance(self.tokenizer, SentencePieceTokenizer)
 
     @property
+    def tokenizer_name(self) -> str:
+        """Where the tokenizer was loaded from, its `name_or_path`: the repo or folder of a Hugging Face tokenizer, the model file of a [`~eval.tokenizer.SentencePieceTokenizer`]."""
+        return self.tokenizer.name_or_path
+
+    @property
+    def tokenizer_hash(self) -> str | None:
+        """The sha256 of the tokenizer's whole definition, so token ids written by a run can be checked against the tokenizer that made them: its `tokenizer.json` as the Tokenizers library serializes it, or the SentencePiece model's bytes. `None` for a tokenizer written in Python, with no Tokenizers backend: its vocabulary alone would not tell two tokenizations apart."""
+        if isinstance(self.tokenizer, SentencePieceTokenizer):
+            data = self.tokenizer.processor.serialized_model_proto()
+        elif hasattr(self.tokenizer, "backend_tokenizer"):
+            data = self.tokenizer.backend_tokenizer.to_str().encode()
+        else:
+            return None
+        return hashlib.sha256(data).hexdigest()
+
+    @property
     def sdpa_backend(self) -> str | None:
         """The SDPA kernel scoring is pinned to, `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, else `None`: the CPU has no such kernel, and other attention never calls SDPA."""
         if self.device.type == "cuda" and self.attention == "sdpa":
@@ -408,18 +591,24 @@ class ScoringModel:
 
     @torch.no_grad()  # Not inference_mode: buffers rebuilt here must stay usable in training.
     def loglikelihood(
-        self, requests: Sequence[Request], encoded: Sequence[Encoded] | None = None
+        self,
+        requests: Sequence[Request],
+        encoded: Sequence[Encoded] | None = None,
+        *,
+        tokens: bool = False,
     ) -> Scores:
         """
         Scores every request, in order, and counts the context tokens each lost to left truncation.
 
-        The model runs in eval mode, and each module is put back in the mode it was in. The scores stay on the model's device: nothing here waits for the GPU.
+        The model runs in eval mode, and each module is put back in the mode it was in. The scores stay on the model's device: nothing here waits for the GPU. Per-token values never change the scores.
 
         Args:
             requests (`Sequence[Request]`):
                 The requests to score.
             encoded (`Sequence[Encoded]`, *optional*):
                 The requests' token ids from [`encode_requests`] with this model's tokenizer and `add_bos`, to skip tokenizing them again. Tokenized here if not given.
+            tokens (`bool`, *optional*, defaults to `False`):
+                Also return each continuation's per-token values as the scores' `continuation_tokens`. They read only the distributions the scores read, so the model runs as it does without them. A context's values come from [`score_contexts`].
 
         Raises:
             `ValueError`: if a continuation has no tokens or is longer than `max_length` on its own, or, when `encoded` isn't given, [`encode_requests`] raises.
@@ -452,17 +641,23 @@ class ScoringModel:
         num_tokens = torch.tensor(
             [len(continuation) for _, continuation in encoded], dtype=torch.int64
         )
-        logprob, is_greedy = self._logprobs(encoded)
+        logprob, is_greedy, continuation_tokens = self._logprobs(encoded, tokens)
         return Scores(
             logprob,
             num_tokens.to(self.device, non_blocking=True),
             torch.tensor(tokens_cut, dtype=torch.int64).to(self.device, non_blocking=True),
             is_greedy,
+            continuation_tokens,
         )
 
     @torch.no_grad()  # As in `loglikelihood`.
     def rolling_loglikelihood(
-        self, texts: Sequence[str], window: int, token_ids: Sequence[list[int]] | None = None
+        self,
+        texts: Sequence[str],
+        window: int,
+        token_ids: Sequence[list[int]] | None = None,
+        *,
+        tokens: bool = False,
     ) -> Scores:
         """
         Scores each text whole, in disjoint windows of at most `window` tokens, as lm-evaluation-harness's `loglikelihood_rolling` does.
@@ -476,6 +671,8 @@ class ScoringModel:
                 The most tokens in one model input.
             token_ids (`Sequence[list[int]]`, *optional*):
                 The texts' token ids from [`tokenize`] with this model's tokenizer, to skip tokenizing them again. Tokenized here if not given.
+            tokens (`bool`, *optional*, defaults to `False`):
+                Also return each text's per-token values, one sequence per text, as the scores' `continuation_tokens`. Every token is predicted once, so a text's sequence is its tokens in order.
 
         Returns:
             `Scores`: per text, the FP64 sum of its windows' log-probabilities, its token count, `tokens_cut` all 0, since no token is cut, and whether every token is the greedy one.
@@ -517,7 +714,7 @@ class ScoringModel:
             rows.to(self.device, non_blocking=True),
             columns.to(self.device, non_blocking=True),
         )
-        window_logprob, window_is_greedy = self._logprobs(windows)
+        window_logprob, window_is_greedy, window_values = self._logprobs(windows, tokens)
         by_window[cells] = window_logprob.double()
         logprob = by_window.sum(-1)
         # Cells a text doesn't fill count as greedy, so a text is greedy if all its windows are.
@@ -525,15 +722,139 @@ class ScoringModel:
         greedy_by_window[cells] = window_is_greedy
 
         num_tokens = torch.tensor([len(ids) for ids in token_ids], dtype=torch.int64)
+        # A text's windows follow each other and predict its tokens in order, so the windows'
+        # values are the texts' values, counted per text.
+        values = None
+        if window_values is not None:
+            lengths = tuple(len(ids) for ids in token_ids)
+            values = dataclasses.replace(window_values, lengths=lengths)
         return Scores(
             logprob,
             num_tokens.to(self.device, non_blocking=True),
             torch.zeros(len(token_ids), dtype=torch.int64, device=self.device),
             greedy_by_window.all(-1),
+            values,
         )
 
-    def _logprobs(self, encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
-        """Each encoded request's summed continuation log-probability (FP32) and whether its continuation is the greedy one, in order on the model's device, scored longest first in batches of at most `batch_tokens` padded tokens."""
+    @torch.no_grad()  # As in `loglikelihood`.
+    def score_contexts(
+        self, contexts: Sequence[list[int]], num_tokens: int = 32, values: bool = False
+    ) -> ContextScores:
+        """
+        Reads each context alone: the first `num_tokens` tokens greedy decoding writes after it, and with `values` the per-token values of its tokens. A context is read once however many choices share it, apart from the scoring of requests, so neither changes a score.
+
+        Decoding has no stop: end-of-sequence tokens are written like any other. A model whose `max_length` isn't above `num_tokens` writes `max_length - 1`. A context longer than `max_length` less the tokens written loses tokens from the left, as scoring cuts one, and its values cover what is left but its first token, which nothing predicts. Both run under scoring's kernel pin, longest first: the values in one pass that keeps every position's logits, in batches of `batch_tokens`, and decoding in a pass of its own, in batches of 8 times `batch_tokens`.
+
+        A [`FlockCausalLM`] keeps no key-value cache to decode with, and decoding without one would read each context `num_tokens` times over: it writes no greedy tokens, and keeps its contexts' whole room.
+
+        Args:
+            contexts (`Sequence[list[int]]`):
+                Token ids, as [`encode_requests`] gives a request's context.
+            num_tokens (`int`, *optional*, defaults to 32):
+                How many tokens to decode. 0 decodes none, for the values alone.
+            values (`bool`, *optional*, defaults to `False`):
+                Also return each context's per-token values.
+
+        Raises:
+            `ValueError`: if `num_tokens` is below 0, or `max_length` is 1, which leaves no room for a context.
+        """
+        if num_tokens < 0 or self.max_length < 2:
+            raise ValueError(f"can't decode {num_tokens} tokens after up to {self.max_length}")
+        # A model without a key-value cache decodes nothing, so its contexts keep their room.
+        num_tokens = min(num_tokens, self.max_length - 1)
+        if not isinstance(self.model, PreTrainedModel):
+            num_tokens = 0
+        if num_tokens == 0 and not values:
+            return ContextScores(greedy=None, values=None)
+
+        kept = [context[-(self.max_length - num_tokens) :] for context in contexts]
+        greedy = None
+        buffer = None
+        backend = self.sdpa_backend
+        pin = sdpa_kernel(getattr(SDPBackend, backend)) if backend else nullcontext()
+        with _eval_mode(self.model), pin:
+            if values:
+                # Each context token but the first is predicted from the ones before it. Every
+                # position's logits are kept, so batches take scoring's budget.
+                buffer = _TokenBuffer([context[1:] for context in kept], self.device)
+                lengths = [len(context) for context in kept]
+                order = sorted(range(len(kept)), key=lambda i: -lengths[i])
+                for batch in self._batches(order, lengths):
+                    step_ids, mask, positions = self._left_padded([kept[i] for i in batch])
+                    width = step_ids.shape[1]
+                    # A batch of one-token contexts has nothing to predict.
+                    if width < 2:
+                        continue
+                    logits = self.model(
+                        input_ids=step_ids,
+                        attention_mask=mask,
+                        position_ids=positions,
+                        use_cache=False,
+                        logits_to_keep=0,
+                    ).logits
+                    targets = step_ids[:, 1:].to(logits.device)
+                    logprob, _, stats = _target_logprobs(logits[:, :-1], targets, True)
+                    assert stats is not None  # asked for
+                    stats["logprob"] = logprob
+                    # With weights on several devices, the logits come out on the last one.
+                    stats = {k: v.to(self.device, non_blocking=True) for k, v in stats.items()}
+                    buffer.write(batch, [width - 1] * len(batch), stats)
+                    # Released before the next batch's pass, so two batches' logits never coexist.
+                    del logits, stats
+
+            if num_tokens > 0:
+                greedy = self._decode(kept, num_tokens)
+
+        return ContextScores(greedy=greedy, values=buffer.values() if buffer is not None else None)
+
+    def _decode(self, contexts: list[list[int]], num_tokens: int) -> torch.Tensor:
+        """The first `num_tokens` tokens greedy decoding writes after each context, with the key-value cache, in batches of 8 times `batch_tokens`: decoding spends its time on one-token steps that cost about as much at any row count, and its first pass keeps one position's logits, so that many tokens' cache and activations take less memory than scoring's full-vocabulary logits."""
+        lengths = [len(context) + num_tokens for context in contexts]
+        order = sorted(range(len(contexts)), key=lambda i: -lengths[i])
+        greedy = torch.zeros(len(contexts), num_tokens, dtype=torch.int64, device=self.device)
+        for batch in self._batches(order, lengths, 8 * self.batch_tokens):
+            step_ids, mask, positions = self._left_padded([contexts[i] for i in batch])
+            index = torch.tensor(batch).to(self.device, non_blocking=True)
+            cache = None
+            for step in range(num_tokens):
+                output = self.model(
+                    input_ids=step_ids,
+                    attention_mask=mask,
+                    position_ids=positions,
+                    past_key_values=cache,
+                    use_cache=True,
+                    logits_to_keep=1,
+                )
+                step_ids = output.logits[:, -1].argmax(-1, keepdim=True)
+                greedy[index, step] = step_ids[:, 0].to(self.device)
+                if step == num_tokens - 1:
+                    break
+                cache = output.past_key_values
+                # The next input is the token just written, one position on.
+                mask = torch.cat([mask, mask.new_ones(len(batch), 1)], dim=-1)
+                positions = positions[:, -1:] + 1
+            # The batch's cache goes before the next batch fills its own.
+            del output, cache
+        return greedy
+
+    def _left_padded(
+        self, rows: list[list[int]]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """`rows` as one left-padded batch on the device: input ids, attention mask and positions counted from each row's first token, so every row's next token comes from its last position."""
+        width = max(len(row) for row in rows)
+        input_ids = [[0] * (width - len(row)) + row for row in rows]
+        mask = torch.tensor([[0] * (width - len(row)) + [1] * len(row) for row in rows])
+        positions = (mask.cumsum(-1) - 1).clamp(min=0)
+        return (
+            torch.tensor(input_ids).to(self.device),
+            mask.to(self.device),
+            positions.to(self.device),
+        )
+
+    def _logprobs(
+        self, encoded: Sequence[Encoded], tokens: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor, TokenValues | None]:
+        """Each encoded request's summed continuation log-probability (FP32) and whether its continuation is the greedy one, in order on the model's device, scored longest first in batches of at most `batch_tokens` padded tokens, and with `tokens` each continuation's per-token values."""
         # The model's input is the window without its last token, the window being at most
         # `max_length + 1` tokens (see `loglikelihood`).
         input_lengths = [
@@ -546,6 +867,10 @@ class ScoringModel:
 
         logprob = torch.zeros(len(encoded), dtype=torch.float32, device=self.device)
         is_greedy = torch.zeros(len(encoded), dtype=torch.bool, device=self.device)
+        # A continuation is never cut, so its tokens are its own.
+        values = None
+        if tokens:
+            values = _TokenBuffer([continuation for _, continuation in encoded], self.device)
         # Pinned to one kernel so BF16 scores repeat run to run: left to choose, PyTorch runs
         # cuDNN attention on some padded batches, and its results vary (023.D1, 023.D2). No
         # fallback: a model the kernel can't run fails here rather than mix kernels.
@@ -557,9 +882,14 @@ class ScoringModel:
                 # `non_blocking` on these small CPU tensors: the copy is staged at once and the
                 # host never waits for GPU work already queued.
                 index = torch.tensor(batch).to(self.device, non_blocking=True)
-                logprob[index], is_greedy[index] = self._score([encoded[i] for i in batch])
+                scored = self._score([encoded[i] for i in batch], tokens)
+                logprob[index], is_greedy[index] = scored.logprob, scored.is_greedy
+                if values is not None and scored.values is not None:
+                    # Right-aligned like the kept logits: a continuation fills its last columns.
+                    width = scored.values["logprob"].shape[1]
+                    values.write(batch, [width] * len(batch), scored.values)
 
-        return logprob, is_greedy
+        return logprob, is_greedy, values.values() if values is not None else None
 
     def encode_requests(self, requests: Sequence[Request]) -> list[Encoded]:
         """
@@ -618,6 +948,34 @@ class ScoringModel:
 
         return self.tokenizer(texts, add_special_tokens=False)["input_ids"]
 
+    def byte_ends(
+        self, texts: list[str], token_ids: Sequence[list[int]] | None = None
+    ) -> list[list[int]]:
+        """
+        Where each token of each text ends, in UTF-8 bytes from the text's start, for the texts' `token_ids` (from [`tokenize`] if not given) and as far as the tokenizer places its tokens: a token's bytes are those after the previous token's end. A token that holds only part of a character (a byte-level or byte-fallback piece) may end where the character ends, or where it starts, so some tokens span no bytes.
+
+        Raises:
+            `ValueError`: if the tokenizer places other tokens than `token_ids`, so no end could be paired with the wrong token.
+        """
+        if isinstance(self.tokenizer, SentencePieceTokenizer):
+            # SentencePiece places each piece in bytes of the text as given.
+            spans = self.tokenizer.processor.encode(texts, out_type="proto")
+            ends = [[piece.end for piece in text.pieces] for text in spans]
+            ids = [[piece.id for piece in text.pieces] for text in spans]
+        else:
+            encoded = self.tokenizer(texts, add_special_tokens=False, return_offsets_mapping=True)
+            ids = encoded["input_ids"]
+            ends = []
+            # Tokenizers place tokens in characters, so each end goes to its character's bytes.
+            for text, offsets in zip(texts, encoded["offset_mapping"], strict=True):
+                in_bytes = [0, *itertools.accumulate(len(c.encode()) for c in text)]
+                ends.append([in_bytes[end] for _, end in offsets])
+        if ids != list(token_ids if token_ids is not None else self.tokenize(texts)):
+            raise ValueError("the tokenizer placed other tokens than the ones scored")
+
+        # Never before the previous end: merged bytes can place a token's end inside another's.
+        return [list(itertools.accumulate(text_ends, max)) for text_ends in ends]
+
     def _prefix_token(self) -> int:
         """The token an empty context, or one with no ids, becomes, and a rolling text's first window starts from: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`. It isn't padding: the first scored token needs one real token to be predicted from."""
         prefix = self.tokenizer.bos_token_id
@@ -630,12 +988,15 @@ class ScoringModel:
 
         return prefix
 
-    def _batches(self, order: list[int], input_lengths: list[int]) -> Iterator[list[int]]:
-        """Splits `order` (longest first) into runs whose padded size fits `batch_tokens`, given each request's model-input length."""
+    def _batches(
+        self, order: list[int], input_lengths: list[int], budget: int | None = None
+    ) -> Iterator[list[int]]:
+        """Splits `order` (longest first) into runs whose padded size fits `budget` tokens, `batch_tokens` if not given, given each request's model-input length."""
+        budget = budget or self.batch_tokens
         batch: list[int] = []
         for i in order:
             # `batch[0]` is the batch's longest request, so every row pads to its length.
-            if batch and (len(batch) + 1) * input_lengths[batch[0]] > self.batch_tokens:
+            if batch and (len(batch) + 1) * input_lengths[batch[0]] > budget:
                 yield batch
                 batch = []
             batch.append(i)
@@ -643,8 +1004,8 @@ class ScoringModel:
         if batch:
             yield batch
 
-    def _score(self, encoded: list[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
-        """One batch's summed continuation log-probabilities, and whether each continuation is the greedy one."""
+    def _score(self, encoded: list[Encoded], values: bool = False) -> _BatchScores:
+        """One batch's summed continuation log-probabilities, whether each continuation is the greedy one, and with `values` the per-token values at every kept position."""
         batch = _pad_batch(encoded, self.max_length)
         device = self.device
 
@@ -667,15 +1028,77 @@ class ScoringModel:
         # With weights on several devices, the logits come out on the last one.
         targets = batch.targets.to(logits.device, non_blocking=True)
         scored = batch.scored.to(logits.device, non_blocking=True)
-        token_logprob, token_is_argmax = _target_logprobs(logits, targets)
+        token_logprob, token_is_argmax, stats = _target_logprobs(logits, targets, values)
 
         # `where`, not a product: logits at padding positions may not be finite.
         logprob = token_logprob.where(scored, 0.0).sum(-1)
         # Greedy only if every continuation token is the argmax, as OLMES's `is_greedy`
         # (`oe_eval/models/eleuther_huggingface.py`). Positions before the continuation don't count.
         is_greedy = (token_is_argmax | ~scored).all(-1)
+        if stats is not None:
+            stats = {name: value.to(device, non_blocking=True) for name, value in stats.items()}
+            stats["logprob"] = token_logprob.to(device, non_blocking=True)
 
-        return logprob.to(device, non_blocking=True), is_greedy.to(device, non_blocking=True)
+        return _BatchScores(
+            logprob.to(device, non_blocking=True), is_greedy.to(device, non_blocking=True), stats
+        )
+
+
+class _BatchScores(NamedTuple):
+    """What `ScoringModel._score` returns for one batch, on the model's device."""
+
+    # FP32 `[rows]`: each continuation's summed log-probability.
+    logprob: torch.Tensor
+    # bool `[rows]`: whether each continuation is the greedy one.
+    is_greedy: torch.Tensor
+    # Each per-token value of `TokenValues` but the ids, `[rows, kept positions]`, if asked for.
+    values: dict[str, torch.Tensor] | None
+
+
+class _TokenBuffer:
+    """Per-token values of many token sequences, filled batch by batch into flat arrays on the device, a sequence's tokens one after another. One slot past the end takes what the columns of other tokens write, so placing a batch's values never waits for the GPU."""
+
+    DTYPES: ClassVar[dict[str, torch.dtype]] = {
+        "logprob": torch.float32,
+        "rank": torch.int64,
+        "entropy": torch.float32,
+        "top1_logprob": torch.float32,
+        "logprob_std": torch.float32,
+    }
+
+    def __init__(self, token_ids: list[list[int]], device: torch.device) -> None:
+        self.lengths = [len(ids) for ids in token_ids]
+        self.starts = [0, *itertools.accumulate(self.lengths)]
+        self.token_ids = torch.tensor(
+            list(itertools.chain.from_iterable(token_ids)), dtype=torch.int64
+        )
+        self.arrays = {
+            name: torch.zeros(self.starts[-1] + 1, dtype=dtype, device=device)
+            for name, dtype in self.DTYPES.items()
+        }
+
+    def write(self, batch: list[int], ends: list[int], values: dict[str, torch.Tensor]) -> None:
+        """Copies each sequence of `batch` from its row of `values`, the columns that end at `ends[row]`."""
+        if not any(self.lengths[i] for i in batch):
+            return
+        width = values["logprob"].shape[1]
+        spare = self.starts[-1]
+        index = []
+        for i, end in zip(batch, ends, strict=True):
+            columns = [spare] * width
+            columns[end - self.lengths[i] : end] = range(self.starts[i], self.starts[i + 1])
+            index.append(columns)
+        index = torch.tensor(index).to(values["logprob"].device, non_blocking=True)
+        for name, array in self.arrays.items():
+            array[index] = values[name]
+
+    def values(self) -> TokenValues:
+        """The filled values, without the spare slot."""
+        return TokenValues(
+            lengths=tuple(self.lengths),
+            token_ids=self.token_ids,
+            **{name: array[:-1] for name, array in self.arrays.items()},
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -734,25 +1157,52 @@ def _pad_batch(encoded: list[Encoded], max_length: int) -> _PaddedBatch:
 
 
 def _target_logprobs(
-    logits: torch.Tensor, targets: torch.Tensor, chunk_positions: int = 4096
-) -> tuple[torch.Tensor, torch.Tensor]:
+    logits: torch.Tensor, targets: torch.Tensor, values: bool = False, chunk_positions: int = 4096
+) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor] | None]:
     """
-    The FP32 log-softmax of `logits` `[rows, positions, vocab]`, in any dtype, at the int64 `targets` `[rows, positions]`, and whether each target is its position's argmax, the first on a tie.
+    The FP32 log-softmax of `logits` `[rows, positions, vocab]`, in any dtype, at the int64 `targets` `[rows, positions]`, and whether each target is its position's argmax, the first on a tie. With `values`, also each target's rank and each position's entropy, top-1 log-probability and standard deviation of the log-probability, by name.
 
-    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). FP32 here is our choice, so BF16 rounding of the normalizer doesn't move scores, and the argmax is taken over the FP32 logits, which the normalizer doesn't reorder; in BF16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so an FP32 copy of all of it would double peak memory: rows are converted a few at a time, at most `chunk_positions` positions (rows times positions per row) and at least one row, about 1.6 GB in FP32 for a 100k vocabulary.
+    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). FP32 here is our choice, so BF16 rounding of the normalizer doesn't move scores, and the argmax is taken over the FP32 logits, which the normalizer doesn't reorder; in BF16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so an FP32 copy of all of it would double peak memory: rows are converted a few at a time, at most `chunk_positions` positions (rows times positions per row) and at least one row, about 1.6 GB in FP32 for a 100k vocabulary. The values take about four more such copies, of at most `chunk_positions` positions however long a row is. The chunks are the same with or without them, so asking for them can't change a reduction's order, and with it a score's last bit.
     """
     rows_per_chunk = max(1, chunk_positions // logits.shape[1])
     token_logprob = torch.empty(targets.shape, dtype=torch.float32, device=logits.device)
     token_is_argmax = torch.empty(targets.shape, dtype=torch.bool, device=logits.device)
+    stats = None
+    if values:
+        stats = {
+            name: torch.empty(targets.shape, dtype=dtype, device=logits.device)
+            for name, dtype in _TokenBuffer.DTYPES.items()
+            if name != "logprob"
+        }
 
     for start in range(0, len(logits), rows_per_chunk):
         rows = slice(start, start + rows_per_chunk)
         chunk = logits[rows].float()
         target_logits = chunk.gather(-1, targets[rows, :, None]).squeeze(-1)
-        token_logprob[rows] = target_logits - chunk.logsumexp(-1)
+        normalizer = chunk.logsumexp(-1)
+        token_logprob[rows] = target_logits - normalizer
         token_is_argmax[rows] = chunk.argmax(-1) == targets[rows]
+        if stats is None:
+            continue
 
-    return token_logprob, token_is_argmax
+        # Min-K%++'s mu and sigma are the mean and standard deviation of log p under p itself
+        # (Zhang et al. 2024, arXiv 2404.02936, eq. 3); mu is minus the entropy. A token of
+        # probability 0 adds nothing, where `0 * -inf` would be NaN. A few positions at a time,
+        # so the copies these take stay bounded however long one row is.
+        for start_position in range(0, chunk.shape[1], chunk_positions):
+            cut = slice(start_position, start_position + chunk_positions)
+            logprobs = chunk[:, cut] - normalizer[:, cut, None]
+            probs = logprobs.exp()
+            entropy = -torch.where(probs > 0, probs * logprobs, 0.0).sum(-1)
+            deviation = (logprobs + entropy[..., None]).square()
+            spread = torch.where(probs > 0, probs * deviation, 0.0).sum(-1).sqrt()
+            stats["entropy"][rows, cut] = entropy
+            stats["logprob_std"][rows, cut] = spread
+            stats["top1_logprob"][rows, cut] = chunk[:, cut].amax(-1) - normalizer[:, cut]
+            above = chunk[:, cut] > target_logits[:, cut, None]
+            stats["rank"][rows, cut] = above.sum(-1) + 1
+
+    return token_logprob, token_is_argmax, stats
 
 
 @contextmanager

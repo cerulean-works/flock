@@ -2,6 +2,7 @@
 	import './layout.css';
 	import touchIcon from '#lib/assets/apple-touch-icon.png';
 	import favicon from '#lib/assets/favicon.png';
+	import NavigationProgress from '#lib/components/NavigationProgress.svelte';
 	import { Toaster } from '#lib/components/ui/sonner/index.js';
 	import type { LayoutProps } from './$types';
 
@@ -14,6 +15,8 @@
 	<link rel="icon" href={favicon} type="image/png" sizes="64x64" />
 	<link rel="apple-touch-icon" href={touchIcon} />
 </svelte:head>
+
+<NavigationProgress />
 
 {@render children()}
 

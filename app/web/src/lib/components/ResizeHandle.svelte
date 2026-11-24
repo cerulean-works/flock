@@ -66,7 +66,7 @@
 	aria-valuemin={bounds.min}
 	aria-valuemax={bounds.max}
 	tabindex="0"
-	title="Drag to resize · double-click to reset"
+	title="Drag to resize, or double-click to reset"
 	class={[
 		'group/resize absolute inset-y-0 -right-[4px] z-10 w-[7px] cursor-col-resize touch-none outline-none',
 		className

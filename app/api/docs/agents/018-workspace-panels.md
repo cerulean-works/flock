@@ -87,8 +87,8 @@ plot settings and a panel's editor).
 | Method | Parameter | Notes |
 | --- | --- | --- |
 | No smoothing | none | |
-| Exponential moving average | weight, 0 to 0.99 | Today's debiased EMA, unchanged. The default for old saved settings. |
-| Time weighted EMA | weight, 0 to 0.99 | EMA whose decay scales with the gap between steps, so unevenly logged runs smooth the same as even ones. |
+| Exponential moving average | weight, 0 to 0.99 | Debiased EMA over the history's rows, as W&B scans the full history: a sampled line decays once per row each point stands for. The default for old saved settings. |
+| Time weighted EMA | weight, 0 to 0.99 | W&B's formula: decay `sqrt(weight)` per thousandth of the line's x range, so smoothing doesn't depend on how many points were logged or sampled. |
 | Running average | window, 1 to 100 points | Mean of the last `window` finite points. |
 | Gaussian | sigma, 0.1 to 100 points | Centered Gaussian kernel over the points, truncated at 3 sigma. |
 

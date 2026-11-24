@@ -51,9 +51,10 @@
 								]}
 							>
 								{#if upload.state === 'uploading'}
-									{bytes(upload.sent)} of {bytes(upload.size)}{upload.multipart
-										? ' · in parts'
-										: ''}
+									{bytes(upload.sent)} of {bytes(upload.size)}
+									{#if upload.multipart}
+										<span class="ml-2 text-faint">in parts</span>
+									{/if}
 								{:else}
 									{STATES[upload.state]}
 								{/if}

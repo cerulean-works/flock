@@ -548,7 +548,7 @@
 							aria-valuemin={ROWS_MIN}
 							aria-valuemax={rowsFor(count)}
 							tabindex="0"
-							title="Drag to show more or fewer rows · double-click to reset"
+							title="Drag to show more or fewer rows, or double-click to reset"
 							onpointerdown={(e) => resizeRows(e, sec.key, count)}
 							ondblclick={() => ws.setSectionRows(sec.key, null)}
 							onkeydown={(e) => rowsKey(e, sec.key, count)}

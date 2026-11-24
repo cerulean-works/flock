@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from flock.hub._scope import scope_params, split_project, split_shorthand
 from flock.hub.s3.client import S3Credentials, S3Error, _Api
 
 PART_SIZE = 64 * 2**20
@@ -59,33 +60,111 @@ def sha256_file(path: Path) -> str:
 
 @dataclass(frozen=True)
 class Ref:
-    """A model reference, `org/name` with an optional `@version` (a number, a tag or
-    `primary`)."""
+    """
+    A model reference (D162): a model's `name`, a path such as `eval/olmo2-1b`, in `org`'s
+    global scope or in its `project`, with an optional `version` (a number, a tag or
+    `primary`). Prints as `acme/eval/olmo2-1b@12`, or `pretrain:sweeps/lr-3e-4@12` in a project.
+    """
 
     org: str
     name: str
     version: str | None = None
+    project: str | None = None
 
     @classmethod
-    def parse(cls, ref: str, version: bool = True) -> Ref:
-        """Parses `org/name[@version]`; with `version=False`, `org/name` alone."""
-        model, at, number = ref.partition("@")
-        org, _, name = model.partition("/")
-        if not org or not name or "/" in name or (at and not number) or "@" in number:
-            example = "acme/olmo2-1b@12" if version else "acme/olmo2-1b"
-            raise ValueError(f"{ref!r} isn't a model reference such as {example}")
-        if at and not version:
-            raise ValueError(f"{ref!r} names a version: give the model alone, as {model}")
-        return cls(org, name, number or None)
+    def parse(
+        cls,
+        ref: str,
+        version: bool = True,
+        *,
+        project: str | None = None,
+        org: str | None = None,
+        default_org: Callable[[], str] | None = None,
+        folder: bool = False,
+    ) -> Ref:
+        """
+        Parses a model reference, `org/path[@version]`, or `project:path[@version]`, or with
+        `project` a path inside it, `path[@version]`. The version is everything after the
+        path's first `@`. Paths and versions can't hold `:` or `@`.
+
+        Args:
+            ref (`str`):
+                The reference.
+            version (`bool`, *optional*, defaults to `True`):
+                Allow a version. With `False`, the model alone.
+            project (`str`, *optional*):
+                The project, by name in `org` or the default org, or as `org/project`. Not
+                with the `project:path` shorthand.
+            org (`str`, *optional*):
+                The org of a project, for `project` or the shorthand.
+            default_org (`Callable[[], str]`, *optional*):
+                Called for the org when a project's ref doesn't say, once the ref is checked.
+            folder (`bool`, *optional*, defaults to `False`):
+                Parse a folder of models, whose path may be empty (a scope's root), and which
+                has no version.
+
+        Raises:
+            `ValueError`: when `ref` isn't a reference, or names an org that isn't `org`.
+        """
+        example = (
+            "acme/eval or pretrain:sweeps"
+            if folder
+            else "acme/olmo2-1b@12 or pretrain:sweeps/lr-3e-4@12"
+            if version
+            else "acme/olmo2-1b or pretrain:sweeps/lr-3e-4"
+        )
+        invalid = ValueError(f"{ref!r} isn't a model reference such as {example}")
+        owner: str | None
+        shorthand = split_shorthand(ref)
+        if shorthand is not None:
+            if project is not None:
+                raise ValueError(f"{ref!r} names its project, so project= can't be given too")
+            project, text = shorthand
+            if not project:
+                raise invalid
+            owner = org
+        elif project is not None:
+            owner, project = split_project(project, org)
+            text = ref
+        else:
+            owner, slash, text = ref.partition("/")
+            if not owner or "@" in owner or not (text or folder and not slash):
+                raise invalid
+            if org is not None and owner != org:
+                raise ValueError(
+                    f"{ref!r} is in the org {owner}, not {org}: a global model is org/path, "
+                    f"such as {org}/{ref}"
+                )
+        path, at, number = text.partition("@")
+        segments = path.split("/") if path or not folder else []
+        if any(s in ("", ".", "..") or ":" in s for s in segments) or not (segments or folder):
+            raise invalid
+        if at and (not number or any(c in number for c in "@:/")):
+            raise invalid
+        if at and (folder or not version):
+            raise ValueError(
+                f"{ref!r} names a version: give the model alone, as {ref[: -len(number) - 1]}"
+            )
+        if owner is None:
+            if default_org is None:
+                raise ValueError(f"{ref!r} needs an org: give org=")
+            owner = default_org()
+        return cls(owner, path, number or None, project)
 
     @property
     def model(self) -> str:
-        return f"{self.org}/{self.name}"
+        """The model as people write it: `org/path`, or `project:path` in a project."""
+        return f"{self.org}/{self.name}" if self.project is None else f"{self.project}:{self.name}"
 
     @property
     def path(self) -> str:
-        """The model's route under `/api/v1/`."""
-        return f"orgs/{self.org}/models/{self.name}"
+        """The model's route under `/api/v1/` (D163), with [`params`] beside it."""
+        return f"orgs/{self.org}/models/{self.name}/-"
+
+    @property
+    def params(self) -> dict[str, str]:
+        """The query parameters every route of the model takes: its project, if it has one."""
+        return scope_params(self.project)
 
     def __str__(self) -> str:
         return self.model if self.version is None else f"{self.model}@{self.version}"
@@ -104,13 +183,16 @@ class ModelFile:
 class ModelVersion:
     """
     A version of a model, as Flock answered when it was saved, resolved or listed. Prints as
-    `org/name@number`, such as `acme/olmo2-1b@12`.
+    `org/path@number`, such as `acme/eval/olmo2-1b@12`, or as `project:path@number`, such as
+    `pretrain:sweeps/lr-3e-4@7`, for a project's model.
 
     Attributes:
         org (`str`):
             The organization.
         name (`str`):
-            The model's name in it.
+            The model's path in its scope, such as `eval/olmo2-1b`.
+        project (`str`, *optional*):
+            The project the model belongs to, or `None` for a global model.
         number (`int`):
             The version number, which never changes or gets reused.
         digest (`str`):
@@ -136,6 +218,7 @@ class ModelVersion:
 
     org: str
     name: str
+    project: str | None = field(default=None, kw_only=True)
     number: int
     digest: str
     tags: tuple[str, ...] = ()
@@ -150,11 +233,13 @@ class ModelVersion:
 
     @classmethod
     def from_api(cls, info: dict[str, Any]) -> ModelVersion:
-        org, _, name = info["model"].partition("/")
+        # A server before 022 answers no `org`, and only global `org/name` models.
+        owner, _, name = info["model"].partition("/")
         files = info.get("files")
         return cls(
-            org=org,
-            name=name,
+            org=info.get("org") or owner,
+            name=info.get("name") or name,
+            project=info.get("project"),
             number=info["number"],
             digest=info["digest"],
             tags=tuple(info.get("tags", ())),
@@ -168,8 +253,31 @@ class ModelVersion:
             prefix=info.get("prefix", ""),
         )
 
+    @property
+    def ref(self) -> Ref:
+        """The version's reference, by number."""
+        return Ref(self.org, self.name, str(self.number), self.project)
+
+    @property
+    def model(self) -> str:
+        """The model, as `org/path` or `project:path`."""
+        return self.ref.model
+
     def __str__(self) -> str:
-        return f"{self.org}/{self.name}@{self.number}"
+        return str(self.ref)
+
+
+def default_org() -> str:
+    """Your default org, from Flock."""
+    with Registry() as registry:
+        return registry.default_org(None)
+
+
+def parse_ref(
+    ref: str, version: bool = True, *, project: str | None = None, org: str | None = None
+) -> Ref:
+    """[`Ref.parse`], asking Flock for your default org only when a project's ref needs it."""
+    return Ref.parse(ref, version, project=project, org=org, default_org=default_org)
 
 
 class Registry(_Api):
@@ -180,6 +288,20 @@ class Registry(_Api):
             super().__init__(None, None)
         except S3Error as error:
             raise ModelError(str(error)) from None
+
+    def model_call(
+        self,
+        method: str,
+        ref: Ref,
+        operation: str = "",
+        body: Any = None,
+        ok: int | Collection[int] = 200,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        """Calls the route `operation` of `ref`'s model (`orgs/{org}/models/{path}/-/{operation}`),
+        in its scope."""
+        route = f"{ref.path}/{operation}" if operation else ref.path
+        return self.call(method, route, body, ok, {**ref.params, **(params or {})} or None)
 
     def call(
         self,
@@ -197,7 +319,7 @@ class Registry(_Api):
     def resolve(self, ref: Ref) -> ModelVersion:
         """The version `ref` names, with its files."""
         params = {"ref": ref.version} if ref.version is not None else None
-        return ModelVersion.from_api(self.call("GET", f"{ref.path}/resolve", params=params))
+        return ModelVersion.from_api(self.model_call("GET", ref, "resolve", params=params))
 
 
 def s3_client(org: str, read_only: bool = False, pool: int | None = None) -> Any:

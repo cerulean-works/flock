@@ -91,7 +91,7 @@
 						id="run-tags"
 						name="tags"
 						value={run.tags}
-						placeholder="baseline, lr-sweep"
+						placeholder="e.g., baseline, lr-sweep"
 						autocomplete="off"
 					/>
 					<p class="text-xs text-muted-foreground">Separate tags with commas or spaces.</p>
@@ -115,7 +115,7 @@
 								id="run-gpu-type"
 								name="gpu_type"
 								value={gpu.type !== gpu.detected.type ? (gpu.type ?? '') : ''}
-								placeholder={gpu.detected.type ?? 'e.g. H100'}
+								placeholder={gpu.detected.type ?? 'e.g., H100'}
 								autocomplete="off"
 							/>
 						</div>
@@ -133,7 +133,9 @@
 						</div>
 					</div>
 					<p class="-mt-2 text-xs text-muted-foreground">
-						For its cost. Leave blank for what wandb detected{detected ? ` (${detected})` : ''}.
+						Prices the run. Leave blank to use what wandb detected{detected
+							? ` (${detected})`
+							: ''}.
 					</p>
 				{/if}
 				<div class="grid gap-2">

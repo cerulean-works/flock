@@ -1,7 +1,7 @@
 """The model registry (014): the managed flock-models bucket (D97), upload sessions and their
 commits (D99, D100), the proxy's write rule (D97, D101), resolving (D103), tags and the
 primary version (D107), deleting, the trash and retention (D109), the sweep (D102), and the
-links to training runs (D106).
+links to training and eval runs (D106).
 Files are written through the S3 proxy with boto3, as the client will write them."""
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.api.src.core.models import Models, digest
+from app.api.src.db.migrate import Migrations
 from tests.app.conftest import Client, Flocks, FlockServer, S3Flock
 from tests.conftest import S3Server
 
@@ -546,32 +547,202 @@ def test_training_runs_are_linked(flock: S3Flock, pusher: Pusher) -> None:
     assert unknown["run"] is None and unknown["number"] == 2
 
 
+def eval_links(flock: S3Flock) -> list[tuple[str, int]]:
+    """Every eval link, as (run, version number)."""
+    rows = sql(
+        flock,
+        "SELECT r.name, v.number FROM model_version_runs e JOIN runs r ON r.pk = e.run_pk "
+        "JOIN model_versions v ON v.pk = e.version_pk WHERE e.kind = 'eval' "
+        "ORDER BY r.name, v.number",
+    )
+    return [(name, number) for name, number in rows]
+
+
+def test_eval_runs_are_linked_from_their_config(flock: S3Flock, pusher: Pusher) -> None:
+    api = flock.client()
+    pusher.push("m")
+    two = pusher.push("m", files={**single(), "config.json": b'{"d_model": 16}'})
+    pusher.push("m", tags=["release"])
+    # As eval's log_to_tracker sends it: the provenance's fields, `model` and `model_digest` among
+    # them (025, D182).
+    config = {"model": "flock:flock/m@2", "model_digest": two["digest"], "flock_commit": "abc"}
+    created = api.create_run("evals", "e1", config=config)
+    assert created["inserted"]
+    assert eval_links(flock) == [("e1", 2)]
+    version = api.get(f"{MODELS}/m/versions/2").json()
+    assert version["evals"] == ["flock/evals/e1"] and version["eval_runs"] == 1
+    assert api.get(f"{MODELS}/m/resolve", ref="2").json()["evals"] == ["flock/evals/e1"]
+    # The SDK sends the config again as it changes: the link is made once, and stays when
+    # another version is named.
+    api.create_run("evals", "e1", config={**config, "limit": 10})
+    assert eval_links(flock) == [("e1", 2)]
+    one = api.get(f"{MODELS}/m/versions/1").json()
+    api.create_run(
+        "evals", "e1", config={**config, "model": "flock:flock/m@1", "model_digest": one["digest"]}
+    )
+    assert eval_links(flock) == [("e1", 1), ("e1", 2)]
+    # A bare value, as a client that doesn't wrap config entries sends it.
+    query = (
+        "mutation U($name: String, $project: String, $config: JSONString) { upsertBucket("
+        "input: {name: $name, modelName: $project, config: $config}) { inserted } }"
+    )
+    bare = {"model": "flock:flock/m@1", "model_digest": one["digest"]}
+    variables = {"name": "e2", "project": "evals", "config": json.dumps(bare)}
+    assert "errors" not in api.graphql(query, variables).json()
+    assert eval_links(flock) == [("e1", 1), ("e1", 2), ("e2", 1)]
+    # A name the org has no model by links nothing, even with a version's number and bytes.
+    renamed = {"model": "flock:flock/before-rename@2", "model_digest": two["digest"]}
+    api.create_run("evals", "e3", config=renamed)
+    assert eval_links(flock) == [("e1", 1), ("e1", 2), ("e2", 1)]
+
+
+def test_the_same_bytes_in_two_models_link_only_the_named_one(
+    flock: S3Flock, pusher: Pusher
+) -> None:
+    api = flock.client()
+    a, b = pusher.push("a"), pusher.push("b")
+    assert a["digest"] == b["digest"]  # one file list, so one digest
+
+    api.create_run("evals", "e1", config={"model": "flock:flock/b@1", "model_digest": b["digest"]})
+    # Another name links nothing, rather than a guess at one of the two.
+    api.create_run("evals", "e2", config={"model": "flock:flock/c@1", "model_digest": b["digest"]})
+
+    linked = sql(
+        flock,
+        "SELECT r.name, m.name FROM model_version_runs e JOIN runs r ON r.pk = e.run_pk "
+        "JOIN model_versions v ON v.pk = e.version_pk JOIN models m ON m.pk = v.model_pk",
+    )
+    assert [(row[0], row[1]) for row in linked] == [("e1", "b")]
+
+    # Nor after the named model is deleted: its run's config sent again doesn't move to the copy.
+    assert api.delete(f"{MODELS}/a").status == 200
+    api.create_run("evals", "e3", config={"model": "flock:flock/a@1", "model_digest": a["digest"]})
+    assert len(sql(flock, "SELECT 1 FROM model_version_runs")) == 1
+
+
+def test_schema_10_configs_link_a_projects_model_by_org_project_and_path(
+    flock: S3Flock,
+) -> None:
+    """From results schema 10 a config names its model by ``model_org``, ``model_project`` and
+    ``model_path`` beside ``model`` (025, D182)."""
+    api = flock.client()
+    project(flock)
+    # The same bytes in the project and in the org's global scope (a path is taken in one scope
+    # only).
+    ours = ScopedPusher(flock, "pretrain").push("sweeps/lr")
+    other = ScopedPusher(flock).push("eval/lr")
+    assert ours["digest"] == other["digest"]
+    fields = {"model_org": "flock", "model_project": "pretrain", "model_path": "sweeps/lr"}
+    named = {"model": "flock:pretrain:sweeps/lr@1", "model_digest": ours["digest"], **fields}
+    refused = [
+        {**named, "model_project": "nope"},  # no such project
+        {**named, "model_project": None},  # the fields and `model` disagree
+        {**named, "model_path": "sweeps/other"},
+        {**named, "model_org": "lab"},
+        {**named, "model_project": 3},
+        {**named, "model": "flock:pretrain:sweeps/lr@primary"},
+        # A global ref with only some of the fields, which contradict it.
+        {"model": "flock:flock/sweeps/lr@1", "model_digest": ours["digest"], "model_path": "x"},
+    ]
+    for i, config in enumerate(refused):
+        assert api.create_run("evals", f"r{i}", config=config)["inserted"], config
+    api.create_run("evals", "scoped", config=named)
+    unscoped = {"model": "flock:flock/eval/lr@1", "model_project": None, "model_path": "eval/lr"}
+    api.create_run("evals", "global", config={**named, **unscoped})
+
+    linked = sql(
+        flock,
+        "SELECT r.name, (SELECT name FROM projects WHERE pk = m.project_pk) "
+        "FROM model_version_runs e JOIN runs r ON r.pk = e.run_pk "
+        "JOIN model_versions v ON v.pk = e.version_pk JOIN models m ON m.pk = v.model_pk "
+        "ORDER BY r.name",
+    )
+    assert [(row[0], row[1]) for row in linked] == [("global", None), ("scoped", "pretrain")]
+    version = api.get(f"{MODELS}/sweeps/lr/-/versions/1", project="pretrain").json()
+    assert version["evals"] == ["flock/evals/scoped"]
+
+
+def test_eval_configs_that_name_no_live_version_link_nothing(
+    flock: S3Flock, pusher: Pusher
+) -> None:
+    api = flock.client()
+    one = pusher.push("m", tags=["release"])
+    two = pusher.push("m", files={**single(), "config.json": b'{"d_model": 16}'})
+    gone = pusher.push("gone", files={**single(), "config.json": b'{"d_model": 32}'})
+    api.delete(f"{MODELS}/m/versions/2")
+    api.delete(f"{MODELS}/gone")
+    refused = [
+        {"model": "flock:flock/m"},  # no version
+        {"model": "flock:flock/m@primary", "model_digest": one["digest"]},
+        {"model": "flock:flock/m@release", "model_digest": one["digest"]},  # a tag
+        {"model": "flock:flock/m@01", "model_digest": one["digest"]},
+        {"model": "flock:flock/m@3", "model_digest": one["digest"]},  # no such version
+        {"model": "flock:flock/m@99999999999999999999", "model_digest": one["digest"]},
+        {"model": "flock:flock/m@1"},  # no digest
+        {"model": "flock:flock/m@1", "model_digest": two["digest"]},  # another version's bytes
+        {"model": "flock:flock/m@1", "model_digest": one["digest"].upper()},
+        {"model": "flock:flock/m@1 ", "model_digest": one["digest"]},
+        {"model": "flock:flock/m@2", "model_digest": two["digest"]},  # deleted
+        {"model": "flock:flock/gone@1", "model_digest": gone["digest"]},  # a deleted model
+        {"model": "flock:lab/m@1", "model_digest": one["digest"]},  # another org's, same bytes
+        {"model": "flock:flock/Not A Name@1", "model_digest": one["digest"]},
+        {"model": "allenai/OLMo-2-0425-1B@main", "model_digest": one["digest"]},
+        {"model": 12, "model_digest": one["digest"]},
+        {"model": {"nested": "flock:flock/m@1"}, "model_digest": one["digest"]},
+    ]
+    for i, config in enumerate(refused):
+        created = api.create_run("evals", f"e{i}", config=config)
+        assert created["inserted"], config
+    api.create_run("evals", "no-model", config={"lr": 0.1})
+    # Another org's run naming this org's version.
+    assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
+    olga = flock.add_user("olga@lab.test", org="lab")
+    theirs = {"model": "flock:flock/m@1", "model_digest": one["digest"]}
+    other = olga.api.create_run("evals", "theirs", config=theirs)
+    assert other["bucket"]["project"]["entity"]["name"] == "lab"
+    assert eval_links(flock) == []
+    # Every run was stored as usual.
+    assert api.get("/api/v1/projects/flock/evals/runs").json()["total"] == len(refused) + 1
+
+
 def test_a_runs_versions(flock: S3Flock, pusher: Pusher) -> None:
     api = flock.client()
     api.create_run("train", "t1")
     pusher.push("m", run="flock/train/t1", step=100, tags=["checkpoint-100"])
-    pusher.push("m", run="flock/train/t1", step=200, tags=["checkpoint-200"])
+    two = pusher.push("m", run="flock/train/t1", step=200, tags=["checkpoint-200"])
     pusher.push("a", run="flock/train/t1", step=200)
-    pusher.push("m")  # made by no run
-    api.create_run("evals", "e1")
+    three = pusher.push("m")  # made by no run
+    scored = {"model": "flock:flock/m@2", "model_digest": two["digest"]}
+    api.create_run("evals", "e1", config=scored)
+    api.create_run("evals", "e2", config=scored)
+    api.create_run(
+        "evals", "e3", config={"model": "flock:flock/m@3", "model_digest": three["digest"]}
+    )
     runs = "/api/v1/projects/flock/{}/runs/{}/models"
 
     made = api.get(runs.format("train", "t1"))
     assert made.status == 200, made.body
     body = made.json()
-    assert list(body) == ["made"]
+    assert body["scored"] == []
     assert [(v["model"], v["number"], v["step"], v["tags"]) for v in body["made"]] == [
         ("flock/a", 1, 200, []),
         ("flock/m", 1, 100, ["checkpoint-100"]),
         ("flock/m", 2, 200, ["checkpoint-200"]),
     ]
+    assert [v["evals"] for v in body["made"]] == [[], [], ["flock/evals/e1", "flock/evals/e2"]]
     assert body["made"][0]["run"] == "flock/train/t1"
     assert body["made"][0]["created_by"]["email"] == flock.ADMIN_EMAIL
 
-    assert api.get(runs.format("evals", "e1")).json() == {"made": []}
+    scored = api.get(runs.format("evals", "e1")).json()
+    assert scored["made"] == []
+    assert [(v["model"], v["number"]) for v in scored["scored"]] == [("flock/m", 2)]
+    assert scored["scored"][0]["evals"] == ["flock/evals/e1", "flock/evals/e2"]
 
-    # A deleted version drops out.
+    # A deleted eval run drops out of `evals`, and a deleted version out of both lists.
+    assert api.delete("/api/v1/projects/flock/evals/runs/e2", force="true").status == 204
+    assert api.get(runs.format("evals", "e1")).json()["scored"][0]["evals"] == ["flock/evals/e1"]
     assert api.delete(f"{MODELS}/m/versions/2").status == 200
+    assert api.get(runs.format("evals", "e1")).json()["scored"] == []
     assert [v["number"] for v in api.get(runs.format("train", "t1")).json()["made"]] == [1, 1]
 
     assert api.get(runs.format("train", "nope")).status == 404
@@ -881,8 +1052,16 @@ def test_retention(flock: S3Flock, pusher: Pusher, wait_for: Callable[..., Any])
     api = flock.client()
     for step in range(1, 7):
         pusher.push("m", tags=[f"checkpoint-{step}"])
-    # 1 is the primary, 3 has a release tag; 2 and 4 to 6 are untagged checkpoints.
+    # 1 is the primary, 2 has an eval run, 3 a release tag; 4 to 6 are untagged checkpoints.
     api.request("PUT", f"{MODELS}/m/tags/release", body={"version": 3})
+    api.create_run("evals", "e1")
+    (run,) = sql(flock, "SELECT pk FROM runs WHERE name = 'e1'")
+    sql(
+        flock,
+        "INSERT INTO model_version_runs (version_pk, run_pk, kind) SELECT v.pk, $1, 'eval' "
+        "FROM model_versions v WHERE v.number = 2",
+        run["pk"],
+    )
     assert flock.call(models(flock).sweep())["retained"] == 0  # off by default
 
     alice = flock.add_user("alice@lab.test")
@@ -891,12 +1070,12 @@ def test_retention(flock: S3Flock, pusher: Pusher, wait_for: Callable[..., Any])
     set_ = api.patch("/api/v1/orgs/flock", {"model_retention": 1})
     assert set_.status == 200 and set_.json()["model_retention"] == 1
     done = flock.call(models(flock).sweep())
-    # Untagged, newest first: 6 (kept), then 5, 4 and 2.
-    assert done["retained"] == 3 and done["moved"] == 3
+    # Untagged, newest first: 6 (kept), then 5, 4 and 2. 2 has an eval run.
+    assert done["retained"] == 2 and done["moved"] == 2
     left = [v["number"] for v in api.get(f"{MODELS}/m/versions").json()["versions"]]
-    assert left == [6, 3, 1]
+    assert left == [6, 3, 2, 1]
     entries = api.get(f"{MODELS}/-/trash").json()["entries"]
-    assert sorted(e["number"] for e in entries) == [2, 4, 5]
+    assert sorted(e["number"] for e in entries) == [4, 5]
     assert all(e["deleted_by"] is None for e in entries)
     assert (
         api.patch("/api/v1/orgs/flock", {"model_retention": None}).json()["model_retention"] is None
@@ -920,6 +1099,33 @@ def test_the_dashboard_cant_write_files_into_flock_models(flock: S3Flock, pusher
     assert keys(flock, upstream_name(flock), version["prefix"]) != []
     # Reading it is still fine.
     assert api.get(f"{path}/objects", prefix=version["prefix"]).status == 200
+
+
+def test_deleted_eval_runs_dont_count(flock: S3Flock, pusher: Pusher) -> None:
+    """``eval_runs`` counts the runs ``evals`` lists, so a deleted run counts nowhere, and
+    retention no longer keeps a version for it."""
+    api = flock.client()
+    versions = [pusher.push("m", tags=[f"checkpoint-{step}"]) for step in (1, 2, 3)]
+    scored = {"model": "flock:flock/m@2", "model_digest": versions[1]["digest"]}
+    api.create_run("evals", "e1", config=scored)
+    api.create_run("evals", "e2", config=scored)
+    version = api.get(f"{MODELS}/m/versions/2").json()
+    assert version["eval_runs"] == 2 and len(version["evals"]) == 2
+
+    assert api.delete("/api/v1/projects/flock/evals/runs/e1", force="true").status == 204
+    version = api.get(f"{MODELS}/m/versions/2").json()
+    assert version["evals"] == ["flock/evals/e2"] and version["eval_runs"] == 1
+    listed = api.get(f"{MODELS}/m/versions").json()["versions"]
+    assert [v["eval_runs"] for v in listed] == [0, 1, 0]
+    # With e2 alive, retention keeps version 2 (1 is the primary, 3 the newest untagged).
+    assert api.patch("/api/v1/orgs/flock", {"model_retention": 1}).status == 200
+    assert flock.call(models(flock).sweep())["retained"] == 0
+
+    assert api.delete("/api/v1/projects/flock/evals/runs/e2", force="true").status == 204
+    assert api.get(f"{MODELS}/m/versions/2").json()["eval_runs"] == 0
+    assert flock.call(models(flock).sweep())["retained"] == 1
+    (entry,) = api.get(f"{MODELS}/-/trash").json()["entries"]
+    assert entry["number"] == 2 and entry["eval_runs"] == 0
 
 
 def test_a_non_member_gets_404(flock: S3Flock, pusher: Pusher) -> None:
@@ -1143,3 +1349,226 @@ def test_the_trash_and_restores_use_the_folder(
         assert f"{version['prefix']}config.json" in keys(flock, bucket, version["prefix"])
     assert api.get(f"{MODELS}/new/resolve", ref="1").json()["prefix"] == first["prefix"]
     assert api.get(f"{MODELS}/old/resolve").json()["prefix"] == other["prefix"]
+
+
+# ---------------------------------------------------------------------- folders and scopes (022)
+
+
+def project(flock: S3Flock, name: str = "pretrain") -> int:
+    made = flock.client().post("/api/v1/projects", {"entity": "flock", "name": name})
+    assert made.status == 201, made.body
+    return sql(flock, "SELECT pk FROM projects WHERE name = $1", name)[0][0]
+
+
+class ScopedPusher(Pusher):
+    """A pusher through the path routes (``{name}/-/…``), in ``project`` if given."""
+
+    def __init__(self, flock: S3Flock, project: str | None = None) -> None:
+        super().__init__(flock)
+        self.query = f"?project={project}" if project else ""
+
+    def url(self, name: str, rest: str = "") -> str:
+        return f"{MODELS}/{name}/-{rest}{self.query}"
+
+    def open(self, name: str, files: dict[str, bytes], **body: Any) -> Any:
+        declared = [{"path": p, "size": len(d)} for p, d in files.items()]
+        return self.api.post(self.url(name, "/uploads"), {"files": declared, **body})
+
+    def commit(self, name: str, ulid: str, files: dict[str, bytes]) -> Any:
+        body = {"files": [{"path": p, "sha256": sha(d)} for p, d in files.items()]}
+        return self.api.post(self.url(name, f"/uploads/{ulid}/commit"), body)
+
+
+def test_model_names_have_folders(flock: S3Flock) -> None:
+    api = flock.client()
+    scoped = ScopedPusher(flock)
+    version = scoped.push("eval/olmo2-1b")
+    assert (version["name"], version["model"]) == ("eval/olmo2-1b", "flock/eval/olmo2-1b")
+    assert version["prefix"].startswith("eval/olmo2-1b/u/")
+    scoped.push("eval/sweeps/a")
+    scoped.push("eval/sweeps/b")
+    scoped.push("top")
+
+    root = api.get(MODELS).json()
+    assert [m["name"] for m in root["models"]] == ["top"]
+    assert root["folders"] == [{"name": "eval", "path": "eval", "models": 3}]
+    level = api.get(MODELS, folder="eval").json()
+    assert [m["name"] for m in level["models"]] == ["eval/olmo2-1b"]
+    assert level["folders"] == [{"name": "sweeps", "path": "eval/sweeps", "models": 2}]
+    assert api.get(MODELS, folder="eval/olmo2-1b").json() == {
+        "kind": "model",
+        "name": "eval/olmo2-1b",
+        "project": None,
+    }
+    assert api.get(MODELS, folder="nope").status == 404
+    assert api.get(scoped.url("eval/olmo2-1b", "/resolve")).json()["number"] == 1
+
+    # A path is a model or a folder, never both (D158).
+    for name in ("eval", "eval/sweeps", "eval/olmo2-1b/x"):
+        refused = scoped.open(name, single())
+        assert refused.status == 409 and refused.json()["taken"] is True, name
+    assert api.patch(scoped.url("top"), {"name": "eval/sweeps"}).status == 409
+    moved = api.patch(scoped.url("top"), {"name": "eval/top"})
+    assert moved.status == 200 and moved.json()["model"] == "flock/eval/top"
+
+    # Paging: models first, then folders.
+    paged: list[str] = []
+    cursor = None
+    monkey = Models.PAGE
+    try:
+        Models.PAGE = 1
+        while True:
+            page = api.get(MODELS, folder="eval", **({"cursor": cursor} if cursor else {})).json()
+            paged += [m["name"] for m in page["models"]] + [f["path"] for f in page["folders"]]
+            if (cursor := page["cursor"]) is None:
+                break
+    finally:
+        Models.PAGE = monkey
+    assert paged == ["eval/olmo2-1b", "eval/top", "eval/sweeps"]
+
+
+def test_a_project_s_models(flock: S3Flock) -> None:
+    api = flock.client()
+    pk = project(flock, "pre train")
+    scoped = ScopedPusher(flock, "pre%20train")
+    version = scoped.push("sweeps/lr", tags=["checkpoint-10"])
+    assert (version["model"], version["project"]) == ("pre train:sweeps/lr", "pre train")
+    assert version["prefix"].startswith(f"-projects/{pk}/sweeps/lr/u/")
+    bucket = upstream_name(flock)
+    assert keys(flock, bucket, f"-projects/{pk}/sweeps/lr/u/")
+
+    # Scopes are apart: the same name globally, and nothing of the project's at the root.
+    assert api.get(MODELS).json()["folders"] == []
+    assert api.get(MODELS, project="pre train").json()["folders"][0]["path"] == "sweeps"
+    assert api.get(f"{MODELS}/sweeps/lr/-/resolve").status == 404
+    assert api.get(scoped.url("sweeps/lr", "/resolve")).json()["number"] == 1
+    assert api.get(f"{MODELS}/sweeps/lr/-", project="nope").status == 404
+
+    # Promote: one row update, the folder stays (D166).
+    promoted = api.patch(scoped.url("sweeps/lr"), {"name": "release/lr", "project": None})
+    assert promoted.status == 200, promoted.body
+    info = promoted.json()
+    assert (info["model"], info["project"], info["prefix"]) == (
+        "flock/release/lr",
+        None,
+        f"-projects/{pk}/sweeps/lr/",
+    )
+    assert api.get(scoped.url("sweeps/lr")).status == 404
+    resolved = api.get(f"{MODELS}/release/lr/-/resolve", ref="checkpoint-10").json()
+    assert resolved["prefix"] == version["prefix"]
+
+    # Another model of the project, then the project's deletion takes it, not the promoted one.
+    other = scoped.push("scratch")
+    storage = api.get("/api/v1/projects/flock/pre%20train/storage").json()
+    assert storage["models"] == 1 and storage["bytes"] == other["total_bytes"]
+    assert storage["items"] == [{"kind": "model", "path": "scratch", "bytes": other["total_bytes"]}]
+    assert api.delete("/api/v1/projects/flock/pre%20train", force="true").status == 204
+    flock.call(flock.store.flush())
+    assert keys(flock, bucket, f"-projects/{pk}/scratch/") == []
+    assert keys(flock, bucket, version["prefix"])
+    assert [r[0] for r in sql(flock, "SELECT name FROM models")] == ["release/lr"]
+
+
+def test_project_and_global_trash_entries(flock: S3Flock, wait_for: Callable[..., Any]) -> None:
+    api = flock.client()
+    project(flock)
+    ScopedPusher(flock).push("a")
+    # Until 0023's contract, names are unique across the org too (D170).
+    refused = ScopedPusher(flock, "pretrain").open("a", single())
+    assert refused.status == 409 and refused.json()["taken"] is True
+    applied = asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+    assert applied == ["0024_models_scope.contract"]
+    ScopedPusher(flock, "pretrain").push("a")
+    assert api.delete(f"{MODELS}/a/-", project="pretrain").status == 200
+    wait_for(lambda: all(e["moved"] for e in api.get(f"{MODELS}/-/trash").json()["entries"]))
+    entries = api.get(f"{MODELS}/-/trash").json()["entries"]
+    assert [(e["model"], e["project"]) for e in entries] == [("pretrain:a", "pretrain")]
+    assert api.get(f"{MODELS}/-/trash", project="pretrain").json()["entries"] == entries
+    restored = api.post(f"{MODELS}/-/trash/models/{entries[0]['id']}/restore", {})
+    assert restored.status == 200 and restored.json()["model"] == "pretrain:a"
+
+
+def test_strays_are_found_in_nested_folders(flock: S3Flock) -> None:
+    upload = ScopedPusher(flock).open("deep/er/model", single()).json()
+    s3 = flock.s3.client()
+    bucket = upstream_name(flock)
+    stray = upload["prefix"].replace(upload["ulid"], "0" * 26)
+    s3.put_object(Bucket=bucket, Key=f"{stray}config.json", Body=b"{}")
+    sql(flock, "UPDATE model_uploads SET state = 'aborted'")
+    s3.put_object(Bucket=bucket, Key=f"{upload['prefix']}config.json", Body=b"{}")
+    assert flock.call(models(flock)._sweep_strays()) == 1
+    assert keys(flock, bucket, upload["prefix"]) == []
+
+
+def test_empty_model_folders(flock: S3Flock) -> None:
+    api = flock.client()
+    project(flock)
+    folders = f"{MODELS}/-/folders"
+    made = api.post(folders, {"path": "eval/sweeps"})
+    assert made.status == 201 and made.json() == {"path": "eval/sweeps", "project": None}
+    assert api.post(f"{folders}?project=pretrain", {"path": "eval"}).status == 201
+
+    # Made folders list like any folder, with no models in them, and open (not 404).
+    assert api.get(MODELS).json()["folders"] == [{"name": "eval", "path": "eval", "models": 0}]
+    level = api.get(MODELS, folder="eval/sweeps").json()
+    assert level["models"] == [] and level["folders"] == []
+    assert api.get(MODELS, project="pretrain").json()["folders"][0]["path"] == "eval"
+    assert api.get(MODELS, project="pretrain", folder="eval/sweeps").status == 404
+
+    # A path is a model or a folder, never both (D158).
+    scoped = ScopedPusher(flock)
+    scoped.push("top")
+    for path in ("eval/sweeps", "eval", "top", "top/x"):
+        taken = api.post(folders, {"path": path})
+        assert taken.status == 409 and taken.json()["taken"] is True, path
+    refused = scoped.open("eval/sweeps", single())
+    assert refused.status == 409 and refused.json()["taken"] is True
+    assert api.patch(scoped.url("top"), {"name": "eval/sweeps"}).status == 409
+    inside = scoped.push("eval/sweeps/a")
+    assert inside["name"] == "eval/sweeps/a"
+    assert api.get(MODELS).json()["folders"] == [{"name": "eval", "path": "eval", "models": 1}]
+
+    # Deleting: refused while a model is under it, then the empty folders go.
+    assert api.delete(f"{folders}?path=eval").status == 409
+    assert api.patch(scoped.url("eval/sweeps/a"), {"name": "a"}).status == 200
+    assert api.delete(f"{folders}?path=eval").status == 204
+    assert api.get(MODELS).json()["folders"] == []
+    assert api.delete(f"{folders}?path=eval").status == 404
+    assert api.get(MODELS, project="pretrain").json()["folders"][0]["path"] == "eval"
+    assert api.delete(f"{folders}?path=eval&project=pretrain").status == 204
+
+
+def test_folders_rename_and_move_with_their_models(flock: S3Flock) -> None:
+    api = flock.client()
+    project(flock)
+    folders = f"{MODELS}/-/folders"
+    scoped = ScopedPusher(flock)
+    first = scoped.push("eval/sweeps/a")
+    scoped.push("eval/b")
+    scoped.push("evals")  # a sibling whose name starts the same stays put
+    assert api.post(folders, {"path": "eval/empty"}).status == 201
+
+    renamed = api.patch(folders, {"path": "eval", "to": "bench/eval"})
+    assert renamed.status == 200, renamed.body
+    assert renamed.json() == {"path": "bench/eval", "project": None, "models": 2}
+    names = sorted(r[0] for r in sql(flock, "SELECT name FROM models"))
+    assert names == ["bench/eval/b", "bench/eval/sweeps/a", "evals"]
+    level = api.get(MODELS, folder="bench/eval").json()
+    assert [f["path"] for f in level["folders"]] == ["bench/eval/empty", "bench/eval/sweeps"]
+    # The files stay where they are, as for a model's rename.
+    resolved = api.get(f"{MODELS}/bench/eval/sweeps/a/-/resolve").json()
+    assert resolved["prefix"] == first["prefix"]
+
+    # Refused: onto a model, inside itself, or nothing there.
+    assert api.patch(folders, {"path": "bench", "to": "evals"}).status == 409
+    assert api.patch(folders, {"path": "bench", "to": "bench/x"}).status == 422
+    assert api.patch(folders, {"path": "nope", "to": "x"}).status == 404
+
+    # Into a project, keeping its last name, and back.
+    moved = api.patch(folders, {"path": "bench/eval", "to": "eval", "project": "pretrain"})
+    assert moved.status == 200 and moved.json()["project"] == "pretrain", moved.body
+    assert api.get(MODELS).json()["folders"] == []
+    inside = api.get(MODELS, project="pretrain", folder="eval").json()
+    assert [m["name"] for m in inside["models"]] == ["eval/b"]
+    assert [f["path"] for f in inside["folders"]] == ["eval/empty", "eval/sweeps"]
+    assert api.get(f"{MODELS}/eval/sweeps/a/-/resolve", project="pretrain").status == 200

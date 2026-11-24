@@ -33,7 +33,7 @@
 		{#if named}
 			<Input
 				name="name"
-				placeholder="Name, e.g. cluster"
+				placeholder="Name, e.g., cluster"
 				class="h-8 w-64"
 				aria-label="Key name"
 				autocomplete="off"

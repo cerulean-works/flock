@@ -1,27 +1,20 @@
 import { error } from '@sveltejs/kit';
-import { relayDatasets, withDetails } from '#lib/server/datasets.ts';
-import type { DatasetFolder } from '#lib/types.ts';
+import { relayDatasets } from '#lib/server/datasets.ts';
 import type { RequestHandler } from './$types';
 
 /** The dataset routes the browser may reach through here (D94). */
 const ROUTES =
-	/^(at|info|rows|cell|versions|readme|public|delete|move|rename|trash|trash\/\d+(\/restore)?|tags\/[^/]+)$/;
+	/^(at|info|location|rows|cell|versions|readme|public|delete|move|rename|trash|trash\/\d+(\/restore)?|tags\/[^/]+|fork|blend|blend\/preview|independent|jobs|jobs\/\d+)$/;
 
 /**
  * The org's dataset routes, for the dataset page's tabs and dialogs and the org page's trash:
- * the browser never reaches Flock itself, so its calls come through here.
+ * the browser never reaches Flock itself, so its calls come through here. The scope's `project`
+ * comes along in the query.
  */
 const relay: RequestHandler = async ({ params, request }) => {
 	if (!ROUTES.test(params.op)) error(404, 'Not found');
 	const op = params.op.split('/').map(encodeURIComponent).join('/');
-	const res = await relayDatasets(params.org, op, request);
-	// A folder's later pages get the sizes and versions its first page had, unless only its
-	// folders are wanted (`details=0`, the Move dialog's folder picker).
-	const details = new URL(request.url).searchParams.get('details') !== '0';
-	if (op !== 'at' || request.method !== 'GET' || !res.ok || !details) return res;
-	const at = (await res.json()) as DatasetFolder | { kind: 'dataset' };
-	if (at.kind !== 'folder') return Response.json(at, { headers: res.headers });
-	return Response.json(await withDetails(params.org, at), { headers: res.headers });
+	return relayDatasets(params.org, op, request);
 };
 
 export const GET = relay;

@@ -31,10 +31,22 @@ describe('model URLs', () => {
 
 	it('names the dashboard’s endpoints', () => {
 		expect(modelsApi('acme', '-/trash')).toBe('/api/models/acme/-/trash');
-		expect(modelApi('acme', 'olmo2-1b')).toBe('/api/models/acme/olmo2-1b');
+		expect(modelApi('acme', 'olmo2-1b')).toBe('/api/models/acme/olmo2-1b/-');
 		expect(modelApi('acme', 'olmo2-1b', 'versions', { before: 50, checkpoints: null })).toBe(
-			'/api/models/acme/olmo2-1b/versions?before=50'
+			'/api/models/acme/olmo2-1b/-/versions?before=50'
 		);
+		// A path keeps its slashes; a project rides along as `project` (D163).
+		const run = { org: 'acme', project: 'my run' };
+		expect(modelApi(run, 'eval/olmo2-1b', 'versions')).toBe(
+			'/api/models/acme/eval/olmo2-1b/-/versions?project=my+run'
+		);
+	});
+
+	it('links a project’s models under the project (D169)', () => {
+		const run = { org: 'acme', project: 'pretrain' };
+		expect(modelsHref(run)).toBe('/acme/pretrain/models');
+		expect(modelsHref(run, 'eval/olmo2-1b')).toBe('/acme/pretrain/models/eval/olmo2-1b');
+		expect(modelsHref('acme', 'eval/a b')).toBe('/models/acme/eval/a%20b');
 	});
 });
 

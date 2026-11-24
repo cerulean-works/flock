@@ -294,6 +294,29 @@ def test_hash_tracks_what_is_scored(change: Callable[..., Any]) -> None:
     assert change(docs, shots).hash != TASK.requests(docs, shots).hash
 
 
+def test_hash_leaves_out_whether_the_dataset_is_private() -> None:
+    # Who may read the rows changes no request, so marking a dataset private keeps every hash.
+    docs, shots = TASK.load()
+    private = dataclasses.replace(TASK, dataset=dataclasses.replace(TASK.dataset, private=True))
+    assert private.requests(docs, shots).hash == TASK.requests(docs, shots).hash
+
+
+def test_tasks_reading_one_repo_agree_on_whether_it_is_private() -> None:
+    private_by_repo = {}
+    for task in TASKS.values():
+        private = private_by_repo.setdefault(task.dataset.repo, task.dataset.private)
+        assert task.dataset.private == private, task.name
+    # The repos that answer an anonymous read with 401 on the Hugging Face Hub (2026-11-21).
+    assert {repo for repo, private in private_by_repo.items() if private} == {
+        "cerulean-works/cmmlu",
+        "cerulean-works/fineweb-2-zh-dev",
+        "cerulean-works/tc-edu-exams",
+        "cerulean-works/tw-mock-exams",
+        "cerulean-works/tw-text-v0",
+        "cerulean-works/tw-text-v1",
+    }
+
+
 def test_registry_has_arc_easy_with_olmes_shots() -> None:
     assert TASKS["arc_easy"] is ARC_EASY
     assert ARC_EASY.fewshot is not None
@@ -331,7 +354,12 @@ def test_doc_rejects_bad_choices_or_gold(choices: tuple[()], gold: int, match: s
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
-        pytest.param({}, "either ids or rows", id="neither"),
+        pytest.param({}, "first num_shots rows", id="neither"),
+        pytest.param({"split": "train"}, "first num_shots rows", id="first-rows-without-count"),
+        pytest.param(
+            {"split": "", "num_shots": 1}, "first num_shots rows", id="first-rows-no-split"
+        ),
+        pytest.param({"split": "train", "num_shots": 0}, "at least 1", id="first-rows-zero"),
         pytest.param(
             {"split": "train", "ids": ("a",), "rows": ({"id": "b"},)}, "either", id="both"
         ),
@@ -363,6 +391,26 @@ def test_task_rejects_num_shots_from_another_split() -> None:
     fewshot = Fewshot("train", ("shot-1", "shot-2"), num_shots=1)
     with pytest.raises(ValueError, match="scored split 'test', not 'train'"):
         dataclasses.replace(TASK, fewshot=fewshot)
+
+
+def test_first_rows_of_another_split_are_the_examples_in_its_order() -> None:
+    task = dataclasses.replace(TASK, fewshot=Fewshot("train", num_shots=2))
+    docs, shots = task.load()
+
+    assert [shot.id for shot in shots] == ["shot-1", "shot-2"]
+    # Every doc sees the same prefix: nothing is dropped by id across splits.
+    built = task.requests(docs, shots)
+    assert built.requests[0].context.startswith("Question: Which gas do plants take in?")
+    assert built.requests[0].context.count("\n\n") == 2
+
+
+def test_first_rows_need_enough_rows_and_another_split() -> None:
+    task = dataclasses.replace(TASK, fewshot=Fewshot("train", num_shots=4))
+    with pytest.raises(ValueError, match="train has 3 rows, fewer than num_shots 4"):
+        task.load()
+    # The scored split's own first rows would show those docs themselves.
+    with pytest.raises(ValueError, match="first rows of the scored split"):
+        dataclasses.replace(TASK, fewshot=Fewshot("test", num_shots=1))
 
 
 def test_fewshot_rows_go_through_to_doc() -> None:

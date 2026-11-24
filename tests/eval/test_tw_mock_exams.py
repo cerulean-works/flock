@@ -9,11 +9,10 @@ import torch
 
 from flock.eval.requests import Scores
 from flock.eval.run import score_task
-from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot, MultipleChoiceTask
+from flock.eval.tasks import SUITES, TASKS, Choice, Fewshot, MultipleChoiceTask
 from flock.eval.tasks.tw_mock_exams import SUBJECTS, TW_MOCK_EXAMS, chinese_doc, english_doc
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from typing import Any
 
     from flock.eval.model import ScoringModel
@@ -59,15 +58,12 @@ TEST = [
 
 
 @pytest.fixture
-def history() -> Iterator[MultipleChoiceTask]:
+def history(rows_by_split: dict[str, list[dict]]) -> MultipleChoiceTask:
     """`tw_mock_exams_history` with two examples, reading the rows above by split."""
     base = TASKS["tw_mock_exams_history"]
     assert isinstance(base, MultipleChoiceTask)
-    task = dataclasses.replace(base, fewshot=Fewshot("dev", ("s1", "s2")))
-    rows = {"dev": SHOTS, "test": TEST}
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(Dataset, "load", lambda dataset, split=None: rows[split or dataset.split])
-        yield task
+    rows_by_split.update(dev=SHOTS, test=TEST)
+    return dataclasses.replace(base, fewshot=Fewshot("dev", ("s1", "s2")))
 
 
 def test_only_eligible_rows_are_scored_whatever_their_rights(history: MultipleChoiceTask) -> None:
