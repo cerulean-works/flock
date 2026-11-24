@@ -121,3 +121,12 @@ def test_each_ranking_score_gives_its_accuracy() -> None:
     for name, score in ranked.items():
         assert accuracy(score, choices.valid, choices.gold).equal(metrics[name]), name
     assert "acc_uncond" not in ranking_scores(scores())
+
+
+def test_multiple_choice_given_its_rankings_gives_the_same_metrics() -> None:
+    choices = scores(logprob_uncond=torch.tensor([[-9.0, -4.0]]))
+    given = multiple_choice(choices, ranking_scores(choices))
+
+    assert list(given) == list(multiple_choice(choices))
+    for name, values in multiple_choice(choices).items():
+        assert values.equal(given[name]), name
