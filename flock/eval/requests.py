@@ -75,19 +75,3 @@ class Scores:
     tokens_cut: torch.Tensor
     is_greedy: torch.Tensor
     continuation_tokens: TokenValues | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ContextScores:
-    """
-    What [`~eval.model.ScoringModel.score_contexts`] reads from contexts on their own, one per context, in order, on the model's device.
-
-    Args:
-        greedy (`torch.Tensor`, *optional*):
-            int64 `[contexts, tokens]`, the tokens greedy decoding writes after each context, or `None` for a model that can't decode.
-        values (`TokenValues`, *optional*):
-            Each context's per-token values, one sequence per context, if asked for.
-    """
-
-    greedy: torch.Tensor | None
-    values: TokenValues | None

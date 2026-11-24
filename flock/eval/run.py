@@ -22,7 +22,6 @@ from flock.eval.results import (
     scale,
     tokens_name,
     write_perplexity_predictions,
-    write_perplexity_tokens,
     write_predictions,
     write_tokens,
 )
@@ -79,15 +78,9 @@ class EvalConfig:
             Passed to [`~eval.model.ScoringModel`]. Set it for Gemma models, as OLMES does.
         tokens (`bool`, *optional*, defaults to `True`):
             With `out`, write each multiple-choice task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each choice's tokens with their values (see [Per-token values](results#per-token-values)).
-        context_tokens (`bool`, *optional*, defaults to `False`):
-            Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. It needs `tokens`. They are read from each distinct context once, in a pass apart from scoring that keeps the logits of every position.
-        greedy_tokens (`bool`, *optional*, defaults to `False`):
-            Also write the first 32 tokens greedy decoding writes after each distinct context, for first-divergence views. It needs `tokens`. Off by default: decoding 32 tokens one step at a time took a run about half as long again as scoring it.
-        perplexity_tokens (`bool`, *optional*, defaults to `False`):
-            With `out`, write each perplexity task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each token's loss and where it ends in the text's bytes, but no token ids (see [Per-token values](results#per-token-values)).
 
     Raises:
-        `ValueError`: if no task or suite is given, a task or suite repeats, `limit` or `batch_tokens` is less than 1, `dtype` is not `"bfloat16"` or `"float32"`, or `context_tokens` or `greedy_tokens` is set without `tokens`, before any model loads.
+        `ValueError`: if no task or suite is given, a task or suite repeats, `limit` or `batch_tokens` is less than 1, or `dtype` is not `"bfloat16"` or `"float32"`, before any model loads.
     """
 
     model: str
@@ -102,9 +95,6 @@ class EvalConfig:
     suites: tuple[str, ...] = ()
     add_bos: bool = False
     tokens: bool = True
-    context_tokens: bool = False
-    greedy_tokens: bool = False
-    perplexity_tokens: bool = False
 
     def __post_init__(self) -> None:
         if not self.tasks and not self.suites:
@@ -121,10 +111,6 @@ class EvalConfig:
             raise ValueError(f"batch_tokens must be at least 1, got {self.batch_tokens}")
         if self.dtype not in get_args(Dtype):
             raise ValueError(f"dtype must be bfloat16 or float32, got {self.dtype}")
-        if self.context_tokens and not self.tokens:
-            raise ValueError("context_tokens writes into the per-token values, so it needs tokens")
-        if self.greedy_tokens and not self.tokens:
-            raise ValueError("greedy_tokens writes into the per-token values, so it needs tokens")
 
 
 def evaluate(config: EvalConfig) -> Results:
@@ -216,9 +202,6 @@ def evaluate(config: EvalConfig) -> Results:
             config.limit,
             config.out,
             config.tokens,
-            config.context_tokens,
-            config.greedy_tokens,
-            config.perplexity_tokens,
         )
         for task in tasks
     ]
@@ -344,9 +327,6 @@ def score_task(
     limit: int | None = None,
     out: Path | None = None,
     tokens: bool = False,
-    context_tokens: bool = False,
-    greedy_tokens: bool = False,
-    perplexity_tokens: bool = False,
 ) -> TaskResult:
     """
     Scores one task with an already loaded model. A training loop that scores the same task at many steps calls [`prepare_task`] once and [`score_prepared`] at each step instead, which gives the same result.
@@ -362,21 +342,13 @@ def score_task(
             Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`. No `results.json` is written: that is [`evaluate`]'s job.
         tokens (`bool`, *optional*, defaults to `False`):
             With `out`, also write a multiple-choice task's per-token values, as [`EvalConfig`]'s `tokens`.
-        context_tokens (`bool`, *optional*, defaults to `False`):
-            With `tokens`, also write its contexts' values, as [`EvalConfig`]'s `context_tokens`.
-        greedy_tokens (`bool`, *optional*, defaults to `False`):
-            With `tokens`, also write its greedy tokens, as [`EvalConfig`]'s `greedy_tokens`.
-        perplexity_tokens (`bool`, *optional*, defaults to `False`):
-            With `out`, write a perplexity task's per-token values, as [`EvalConfig`]'s `perplexity_tokens`.
 
     Raises:
         `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
     prepared = prepare_task(model, task, limit)
-    return score_prepared(
-        model, prepared, out, tokens, context_tokens, greedy_tokens, perplexity_tokens
-    )
+    return score_prepared(model, prepared, out, tokens)
 
 
 def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> PreparedTask:
@@ -422,9 +394,6 @@ def score_prepared(
     prepared: PreparedTask,
     out: Path | None = None,
     tokens: bool = False,
-    context_tokens: bool = False,
-    greedy_tokens: bool = False,
-    perplexity_tokens: bool = False,
 ) -> TaskResult:
     """
     Scores a task from [`prepare_task`] with an already loaded model, as training loops do between steps. The result is the one [`score_task`] gives.
@@ -438,12 +407,6 @@ def score_prepared(
             Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`.
         tokens (`bool`, *optional*, defaults to `False`):
             With `out`, also write a multiple-choice task's per-token values, as [`EvalConfig`]'s `tokens`. Off by default, so a training loop pays for them only when it asks.
-        context_tokens (`bool`, *optional*, defaults to `False`):
-            With `tokens`, also write its contexts' values, as [`EvalConfig`]'s `context_tokens`.
-        greedy_tokens (`bool`, *optional*, defaults to `False`):
-            With `tokens`, also write its greedy tokens, as [`EvalConfig`]'s `greedy_tokens`.
-        perplexity_tokens (`bool`, *optional*, defaults to `False`):
-            With `out`, write a perplexity task's per-token values, as [`EvalConfig`]'s `perplexity_tokens`. Off by default.
 
     Raises:
         `ValueError`: if `model`'s tokenizer isn't the one the task was prepared with, or a multiple-choice task was prepared with another `add_bos`.
@@ -467,30 +430,20 @@ def score_prepared(
     predictions = out / "predictions" / f"{task.name}.jsonl" if out is not None else None
     if predictions is not None and predictions.exists():
         raise FileExistsError(f"{predictions} exists: {_ONE_RUN}")
-    # Per-token values are written only beside predictions, by each kind of task's own flag. One
-    # left by another run is refused whether or not this one writes its own, so no reader pairs
-    # them with these predictions.
+    # Per-token values are written only beside a multiple-choice task's predictions. One left by
+    # another run is refused whether or not this one writes its own, so no reader pairs them with
+    # these predictions.
     if out is not None and (out / tokens_name(task.name)).exists():
         raise FileExistsError(f"{out / tokens_name(task.name)} exists: {_ONE_RUN}")
-    wanted = perplexity_tokens if isinstance(prepared, PreparedPerplexity) else tokens
-    token_values = out / tokens_name(task.name) if out is not None and wanted else None
     if isinstance(prepared, PreparedPerplexity):
-        return _score_perplexity(model, prepared, predictions, token_values)
+        return _score_perplexity(model, prepared, predictions)
+    token_values = out / tokens_name(task.name) if out is not None and tokens else None
 
     requests = prepared.requests
     start = time.perf_counter()
     request_scores = model.loglikelihood(
         requests.requests, prepared.encoded, tokens=token_values is not None
     )
-    # Each distinct context is read once, inside the timed span, so `seconds` counts what the
-    # per-token values cost.
-    contexts = None
-    if token_values is not None and (context_tokens or greedy_tokens):
-        contexts = model.score_contexts(
-            [prepared.encoded[i].context for i in requests.context_requests],
-            num_tokens=32 if greedy_tokens else 0,
-            values=context_tokens,
-        )
     scores = requests.choice_scores(request_scores)
     reported = task.reported_metrics
     # Ranked once: the metrics read it, and so does the pick written beside the predictions.
@@ -516,7 +469,7 @@ def score_prepared(
         pick = best_choice(primary_rank, scores.valid) if primary_rank is not None else None
         write_predictions(predictions, requests, scores, correct, pick, task.dataset.private)
     if token_values is not None:
-        write_tokens(token_values, requests, request_scores, contexts, task.dataset.private)
+        write_tokens(token_values, requests, request_scores, task.dataset.private)
 
     return TaskResult(
         task=task.name,
@@ -532,12 +485,9 @@ def score_prepared(
 
 
 def _score_perplexity(
-    model: ScoringModel,
-    prepared: PreparedPerplexity,
-    predictions: Path | None,
-    token_values: Path | None = None,
+    model: ScoringModel, prepared: PreparedPerplexity, predictions: Path | None
 ) -> TaskResult:
-    """[`score_prepared`] for a perplexity task, writing its rows to `predictions` and its per-token values to `token_values` if given."""
+    """[`score_prepared`] for a perplexity task, writing its rows to `predictions` if given."""
     task, docs = prepared.task, prepared.docs
     texts = [doc.text for doc in docs]
     # Each whole text's UTF-8 bytes, as OLMES's `num_bytes` (`loglikelihood_rolling_verbose` in
@@ -545,14 +495,7 @@ def _score_perplexity(
     num_bytes = [len(text.encode()) for text in texts]
 
     start = time.perf_counter()
-    # Placed before scoring, so a tokenizer that can't place its tokens fails before any GPU time,
-    # and in the timed span, so `seconds` counts what the values cost.
-    byte_ends = None
-    if token_values is not None:
-        byte_ends = model.byte_ends(texts, prepared.token_ids)
-    scores = model.rolling_loglikelihood(
-        texts, task.window, prepared.token_ids, tokens=token_values is not None
-    )
+    scores = model.rolling_loglikelihood(texts, task.window, prepared.token_ids)
     # Summed over all of the task's docs before dividing, as Paloma defines bits per byte
     # (App. B) and OLMES computes it per domain (`PerplexityMetric`), so a doc counts by its
     # bytes, and the loss is averaged over tokens as a trainer averages it over a batch. Every
@@ -573,10 +516,6 @@ def _score_perplexity(
     if predictions is not None:
         write_perplexity_predictions(
             predictions, docs, scores, num_bytes, task.window, task.dataset.subset, task.domain
-        )
-    if token_values is not None and scores.continuation_tokens is not None and byte_ends:
-        write_perplexity_tokens(
-            token_values, docs, scores.continuation_tokens, byte_ends, task.dataset.private
         )
 
     return TaskResult(
