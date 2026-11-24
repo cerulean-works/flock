@@ -39,5 +39,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
 			return { diff: null, refusal: body?.error ?? `Flock responded ${res.status}` };
 		}
 	);
+	// SvelteKit catches a streamed promise only once it renders. A diff failing before then would
+	// be an unhandled rejection, which ends the server; the page still reads the failure.
+	compared.catch(() => {});
 	return { a, b, compared };
 };
