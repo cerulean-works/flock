@@ -175,8 +175,10 @@ describe('the compare page', () => {
 			data: {
 				a: run('r1', 'olmo'),
 				b: run('r2'),
-				diff: { ...DIFF, tasks: [...DIFF.tasks, piqa] },
-				refusal: null
+				compared: Promise.resolve({
+					diff: { ...DIFF, tasks: [...DIFF.tasks, piqa] },
+					refusal: null
+				})
 			}
 		} as never);
 		const order = () =>
