@@ -80,7 +80,7 @@ class EvalConfig:
             With `out`, write each multiple-choice task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each choice's tokens with their values (see [Per-token values](results#per-token-values)).
 
     Raises:
-        `ValueError`: if no task or suite is given, a task or suite repeats, `limit` or `batch_tokens` is less than 1, `dtype` is not `"bfloat16"` or `"float32"`, before any model loads.
+        `ValueError`: if no task or suite is given, a task or suite repeats, `limit` or `batch_tokens` is less than 1, or `dtype` is not `"bfloat16"` or `"float32"`, before any model loads.
     """
 
     model: str
