@@ -166,6 +166,54 @@ describe('the compare page', () => {
 		await expect.element(screen.getByRole('button', { name: /olmo/ })).toBeVisible();
 	});
 
+	it('sorts the counts by any column, its lead tinted by sign', async () => {
+		noText();
+		resetApp('http://flock.test/acme/evals/runs/r1/compare?with=acme%2Fevals%2Fr2');
+		// piqa: A 0.2, B 0.6, so B leads by 40 points; arc_easy: A leads by 20.
+		const piqa = { ...DIFF.tasks[0], task: 'piqa', only_a: [], only_b: ['p1', 'p2'] };
+		render(ComparePage, {
+			data: {
+				a: run('r1', 'olmo'),
+				b: run('r2'),
+				diff: { ...DIFF, tasks: [...DIFF.tasks, piqa] },
+				refusal: null
+			}
+		} as never);
+		const order = () =>
+			screen
+				.getByRole('row')
+				.all()
+				.map((r) => r.element().textContent!)
+				.filter((t) => /arc_easy|piqa/.test(t) && !t.includes('All compared'))
+				.map((t) => (t.includes('piqa') ? 'piqa' : 'arc_easy'));
+		await expect.element(screen.getByRole('button', { name: 'Δ points' })).toBeVisible();
+		expect(order()).toEqual(['arc_easy', 'piqa']);
+
+		// Largest first, then flipped; the header says which way.
+		await screen.getByRole('button', { name: 'Δ points' }).click();
+		expect(order()).toEqual(['arc_easy', 'piqa']);
+		const sorted = () =>
+			screen.getByRole('button', { name: 'Δ points' }).element().closest('th')!.ariaSort;
+		expect(sorted()).toBe('descending');
+		await screen.getByRole('button', { name: 'Δ points' }).click();
+		expect(order()).toEqual(['piqa', 'arc_easy']);
+		expect(sorted()).toBe('ascending');
+		// A task's name sorts A to Z first.
+		await screen.getByTitle('Click to sort').filter({ hasText: 'Task' }).click();
+		expect(order()).toEqual(['arc_easy', 'piqa']);
+
+		// A's lead tinted green, B's red, the larger the stronger.
+		const lead = (task: string) =>
+			screen
+				.getByRole('row')
+				.filter({ hasText: task })
+				.getByText(/^[+−]\d/)
+				.element()
+				.getAttribute('style')!;
+		expect(lead('arc_easy')).toContain('--state-finished');
+		expect(lead('piqa')).toContain('--destructive) 35%');
+	});
+
 	it('says why a pair can’t be compared', async () => {
 		const refusal = 'different instrument: provenance.dtype is float32 in a, bfloat16 in b';
 		render(ComparePage, {
