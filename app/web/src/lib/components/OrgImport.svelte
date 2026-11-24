@@ -17,6 +17,7 @@
 </script>
 
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import DownloadIcon from '@lucide/svelte/icons/download';
@@ -117,7 +118,10 @@
 					<span class="text-muted-foreground">on {shown.base_url}</span>
 				{/if}
 			</span>
-			<span class="ml-auto text-[13px] text-muted-foreground" title={dateTime(shown.started_at)}>
+			<span
+				class="ml-auto text-[13px] text-muted-foreground"
+				{@attach hint(dateTime(shown.started_at))}
+			>
 				{#if shown.finished_at}
 					Ended {relativeTime(shown.finished_at, now)}
 				{:else}

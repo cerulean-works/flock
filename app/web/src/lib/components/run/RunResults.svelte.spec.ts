@@ -196,7 +196,10 @@ describe('the compare page', () => {
 		expect(order()).toEqual(['piqa', 'arc_easy']);
 		expect(sorted()).toBe('ascending');
 		// A task's name sorts A to Z first.
-		await screen.getByTitle('Click to sort').filter({ hasText: 'Task' }).click();
+		await screen
+			.getByRole('columnheader')
+			.getByRole('button', { name: 'Task', exact: true })
+			.click();
 		expect(order()).toEqual(['arc_easy', 'piqa']);
 
 		// A's lead tinted green, B's red, the larger the stronger.

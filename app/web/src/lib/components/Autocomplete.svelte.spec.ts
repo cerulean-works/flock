@@ -13,7 +13,9 @@ const options = [
 ];
 
 const listed = () =>
-	[...document.querySelectorAll('[role="option"]')].map((o) => o.querySelector('span')!.title);
+	[...document.querySelectorAll('[role="option"]')].map((o) =>
+		o.querySelector('span')!.getAttribute('aria-description')
+	);
 
 describe('Autocomplete', () => {
 	it('lists every option on focus, as wide as the input', async () => {

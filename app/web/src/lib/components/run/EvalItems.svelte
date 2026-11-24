@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
 	import ArrowDownWideNarrowIcon from '@lucide/svelte/icons/arrow-down-wide-narrow';
 	import FlameIcon from '@lucide/svelte/icons/flame';
@@ -461,7 +462,7 @@
 			variant="ghost"
 			size="sm"
 			class="ml-auto text-muted-foreground"
-			title="Tokens: {tint.now.hint}. Click for {tint.next.label}."
+			{@attach hint(`Tokens: ${tint.now.hint}. Click for ${tint.next.label}.`)}
 			onclick={() => (heat = tint.next.heat)}
 		>
 			<FlameIcon />
@@ -471,11 +472,13 @@
 			variant="ghost"
 			size="sm"
 			class="text-muted-foreground"
-			title={sort === 'margin'
-				? other
-					? 'The biggest gap between the runs’ margins first'
-					: 'The surest first, right or wrong'
-				: 'The dataset’s order'}
+			{@attach hint(
+				sort === 'margin'
+					? other
+						? 'The biggest gap between the runs’ margins first'
+						: 'The surest first, right or wrong'
+					: 'The dataset’s order'
+			)}
 			onclick={() => {
 				sort = sort === 'margin' ? 'doc' : 'margin';
 				at = 1;
@@ -566,7 +569,7 @@
 									<ChevronRightIcon
 										class={['size-3.5 flex-none transition-transform', shown && 'rotate-90']}
 									/>
-									<span class="truncate" title={row.id}>{row.id}</span>
+									<span class="truncate" {@attach hint(row.id)}>{row.id}</span>
 								</button>
 							</td>
 							<td class="px-2 py-1.5">
@@ -579,7 +582,9 @@
 							{#each row.runs as answer, side (side)}
 								<td
 									class="px-2 py-1.5"
-									title="Gold choice’s probability {(100 * answer.gold_prob).toFixed(1)}%"
+									{@attach hint(
+										`Gold choice’s probability ${(100 * answer.gold_prob).toFixed(1)}%`
+									)}
 								>
 									<!-- Right or wrong by the icon's shape, then what the run picked. -->
 									<span class="flex items-start gap-1.5">

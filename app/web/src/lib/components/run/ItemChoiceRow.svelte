@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import InfoHint from '#lib/components/InfoHint.svelte';
 	import type { EvalItem, ItemTokens, TokenHeat } from '#lib/types.ts';
@@ -122,9 +123,11 @@
 							class="rounded-sm px-0.5 whitespace-pre"
 							style:background-color="color-mix(in srgb, var({tone}) {Math.round(60 * strength)}%,
 							transparent)"
-							title="log p {logprob.toFixed(2)} · rank {own.rank[i]} · entropy {own.entropy[
-								i
-							].toFixed(2)}">{own.text?.[i].replaceAll('\n', '↵') ?? '·'}</span
+							{@attach hint(
+								`log p ${logprob.toFixed(2)} · rank ${own.rank[i]} · entropy ${own.entropy[
+									i
+								].toFixed(2)}`
+							)}>{own.text?.[i].replaceAll('\n', '↵') ?? '·'}</span
 						>
 					{/each}
 				</span>

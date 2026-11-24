@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import type { ClassValue } from 'svelte/elements';
@@ -33,7 +34,7 @@
 	size="icon-sm"
 	class={[copied ? 'text-state-finished' : 'text-muted-foreground', className]}
 	aria-label={copied ? 'Copied' : label}
-	title={copied ? 'Copied' : label}
+	{@attach hint(copied ? 'Copied' : label)}
 	onclick={copy}
 >
 	{#if copied}<CheckIcon />{:else}<CopyIcon />{/if}

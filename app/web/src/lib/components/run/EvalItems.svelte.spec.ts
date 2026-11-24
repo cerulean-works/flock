@@ -222,7 +222,9 @@ describe('eval items', () => {
 			with: 'acme/evals/r2'
 		});
 		// A's token under each choice, with its numbers; B's reason behind an icon in its column.
-		const venus = screen.getByTitle('log p -4.00 · rank 3 · entropy 1.50').first();
+		const venus = screen.elementLocator(
+			document.querySelector('[aria-description="log p -4.00 · rank 3 · entropy 1.50"]')!
+		);
 		await expect.element(venus).toHaveTextContent('Venus');
 		await expect.element(screen.getByRole('button', { name: 'Why B has no tokens' })).toBeVisible();
 		// 4 nats of 8: half of the full tint.

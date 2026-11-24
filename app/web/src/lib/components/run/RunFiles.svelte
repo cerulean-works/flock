@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import { onMount } from 'svelte';
 	import type { ResolvedPathname } from '$app/types';
@@ -71,7 +72,7 @@
 								>
 								<td
 									class="px-3 py-2 text-right text-muted-foreground"
-									title={dateTime(f.updated_at)}
+									{@attach hint(dateTime(f.updated_at))}
 								>
 									{relativeTime(f.updated_at, now)}
 								</td>

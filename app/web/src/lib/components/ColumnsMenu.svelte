@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import Columns3Icon from '@lucide/svelte/icons/columns-3';
 	import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
@@ -238,7 +239,7 @@
 	{#if n.kind === 'leaf' && n.locked}
 		<span
 			class="grid size-5 flex-none place-items-center text-faint"
-			title="Always shown, always first"
+			{@attach hint('Always shown, always first')}
 		>
 			<LockIcon class="size-3" />
 		</span>
@@ -249,7 +250,7 @@
 			class="grid size-5 flex-none cursor-[inherit] touch-none place-items-center rounded text-faint outline-none hover:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
 			data-grip
 			aria-label="Move {label} (arrow keys)"
-			title="Drag to move"
+			{@attach hint('Drag to move')}
 			onkeydown={(e) => nudge(e, parent, n)}
 		>
 			<GripVerticalIcon class="size-3.5" />
@@ -340,14 +341,14 @@
 						disabled={n.locked}
 						onCheckedChange={(v) => ws.setColumnsHidden([n.key], !v)}
 						aria-label={n.locked ? `${n.key} is always shown` : `Show ${n.key}`}
-						title={n.locked ? 'Always shown' : undefined}
+						{@attach hint(n.locked ? 'Always shown' : undefined)}
 					/>
 					<button
 						class={[
 							'min-w-0 flex-1 truncate rounded text-left outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50',
 							!shown && 'text-muted-foreground'
 						]}
-						title="Jump to {n.key}"
+						{@attach hint(`Jump to ${n.key}`)}
 						onclick={() => jump(n.key)}
 					>
 						{n.name}
@@ -371,9 +372,11 @@
 			<Button
 				{...props}
 				variant={hiddenCount ? 'secondary' : 'outline'}
-				title={hiddenCount
-					? `${hiddenCount} of ${total} columns hidden`
-					: 'Show, hide, reorder or jump to columns'}
+				{@attach hint(
+					hiddenCount
+						? `${hiddenCount} of ${total} columns hidden`
+						: 'Show, hide, reorder or jump to columns'
+				)}
 			>
 				<Columns3Icon /> Columns
 				{#if hiddenCount}

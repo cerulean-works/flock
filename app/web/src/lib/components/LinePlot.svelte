@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import {
 		computeDomain,
 		drawBase,
@@ -591,7 +592,7 @@
 	{#if yLabel}
 		<span
 			class="absolute top-[calc(50%_-_var(--below)/2)] left-2 max-w-48 -translate-x-1/2 -translate-y-1/2 -rotate-90 truncate whitespace-nowrap text-foreground/80"
-			title={yLabel}>{yLabel}</span
+			{@attach hint(yLabel)}>{yLabel}</span
 		>
 	{/if}
 	<div
@@ -656,7 +657,7 @@
 			surface === 'grid' ? 'text-[10.5px] leading-[14px]' : 'text-[11.5px] leading-4',
 			config.xLabel ? 'text-foreground/80' : 'text-faint'
 		]}
-		title={xLabel}>{xLabel}</span
+		{@attach hint(xLabel)}>{xLabel}</span
 	>
 	{#if tip}
 		<!-- Remounted when it starts or stops floating: it moves between the document's end and

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import BriefcaseIcon from '@lucide/svelte/icons/briefcase';
 	import LayersIcon from '@lucide/svelte/icons/layers';
 	import TagIcon from '@lucide/svelte/icons/tag';
@@ -62,7 +63,7 @@
 					<!-- The state column is hidden on phones. -->
 					<span
 						class="size-1.5 flex-none animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none md:hidden"
-						title="Running"
+						{@attach hint('Running')}
 					></span>
 				{/if}
 			</div>
@@ -93,7 +94,7 @@
 		{:else if column === 'runtime'}
 			<span class="text-muted-foreground">{duration(run.runtime)}</span>
 		{:else}
-			<span class="text-muted-foreground" title={dateTime(item.at)}>
+			<span class="text-muted-foreground" {@attach hint(dateTime(item.at))}>
 				{relativeTime(item.at, now)}
 			</span>
 		{/if}

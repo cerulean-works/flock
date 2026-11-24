@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
@@ -82,7 +83,7 @@
 					disabled={!prevHref}
 					class="aria-disabled:pointer-events-none aria-disabled:opacity-40"
 					aria-label="Previous panel"
-					title="Previous panel (←)"
+					{@attach hint('Previous panel (←)')}
 					data-sveltekit-replacestate
 				>
 					<ChevronLeftIcon />
@@ -94,7 +95,7 @@
 					disabled={!nextHref}
 					class="aria-disabled:pointer-events-none aria-disabled:opacity-40"
 					aria-label="Next panel"
-					title="Next panel (→)"
+					{@attach hint('Next panel (→)')}
 					data-sveltekit-replacestate
 				>
 					<ChevronRightIcon />
@@ -105,7 +106,7 @@
 					href={closeHref}
 					onclick={onclose}
 					aria-label="Close full screen"
-					title="Close (Esc)"
+					{@attach hint('Close (Esc)')}
 				>
 					<XIcon />
 				</Button>
@@ -149,7 +150,7 @@
 									shown ? 'text-foreground' : 'text-faint'
 								]}
 								onclick={() => ws.togglePin(row)}
-								title={run.name}
+								{@attach hint(run.name)}
 							>
 								{run.name}
 							</button>

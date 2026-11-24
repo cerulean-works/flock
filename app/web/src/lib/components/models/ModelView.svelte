@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
@@ -78,7 +79,10 @@
 </script>
 
 <div class="pt-3">
-	<h1 class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" title={info.model}>
+	<h1
+		class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]"
+		{@attach hint(info.model)}
+	>
 		{info.name}
 	</h1>
 	{#if version}

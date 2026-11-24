@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -322,8 +323,8 @@
 			<Tabs.Root value={view} onValueChange={(v) => setView(v as View)}>
 				<!-- No counts, so the toggle keeps its width from project to project. -->
 				<Tabs.List aria-label="View">
-					<Tabs.Trigger value="table" title="Table (T)">Table</Tabs.Trigger>
-					<Tabs.Trigger value="charts" title="Charts (C)">Charts</Tabs.Trigger>
+					<Tabs.Trigger value="table" {@attach hint('Table (T)')}>Table</Tabs.Trigger>
+					<Tabs.Trigger value="charts" {@attach hint('Charts (C)')}>Charts</Tabs.Trigger>
 				</Tabs.List>
 			</Tabs.Root>
 			<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
@@ -359,7 +360,7 @@
 				<Button
 					variant="ghost"
 					size="icon"
-					title="Clear selection (Esc)"
+					{@attach hint('Clear selection (Esc)')}
 					aria-label="Clear selection"
 					onclick={() => ws.selected.clear()}
 				>
@@ -382,7 +383,7 @@
 				<Badge
 					variant="secondary"
 					class="focus-label max-w-[46%] text-muted-foreground"
-					title={focusPinned ? `${focusLabel} (pinned)` : focusLabel}
+					{@attach hint(focusPinned ? `${focusLabel} (pinned)` : focusLabel)}
 				>
 					{#if focusPinned}<PinIcon aria-label="Pinned" />{/if}
 					<span class="truncate">{focusLabel}</span>

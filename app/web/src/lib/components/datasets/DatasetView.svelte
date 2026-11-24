@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
@@ -174,7 +175,7 @@
 </script>
 
 <div class="pt-3">
-	<h1 class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" title={path}>
+	<h1 class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" {@attach hint(path)}>
 		{nameOf(path)}
 	</h1>
 	{#if info || isPublic}
@@ -237,7 +238,7 @@
 				size="sm"
 				class="text-muted-foreground"
 				disabled={!!held}
-				title={held ?? undefined}
+				{@attach hint(held ?? undefined)}
 				onclick={() => (renaming = true)}
 			>
 				<PencilIcon /> Rename
@@ -285,7 +286,7 @@
 					<DropdownMenu.Item
 						variant="destructive"
 						disabled={!!held}
-						title={held ?? undefined}
+						{@attach hint(held ?? undefined)}
 						onSelect={() => (deleting = true)}
 					>
 						<Trash2Icon /> Delete…

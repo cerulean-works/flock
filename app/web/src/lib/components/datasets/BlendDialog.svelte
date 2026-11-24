@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import CircleHelpIcon from '@lucide/svelte/icons/circle-help';
 	import DicesIcon from '@lucide/svelte/icons/dices';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
@@ -407,7 +408,7 @@
 								size="icon-sm"
 								class="size-8"
 								aria-label="Use a random seed"
-								title="Use a random seed"
+								{@attach hint('Use a random seed')}
 								disabled={pending}
 								onclick={() => (seed = String(randomSeed()))}
 							>

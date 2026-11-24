@@ -590,8 +590,8 @@ describe('a dataset’s visibility', () => {
 		view('member', true);
 		await expect.element(badge()).toBeVisible();
 		await expect
-			.element(screen.getByTitle('Anyone with the link can see every version of it'))
-			.toBeVisible();
+			.element(badge())
+			.toHaveAttribute('aria-description', 'Anyone with the link can see every version of it');
 	});
 
 	it('has no badge on a private one', async () => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
@@ -70,7 +71,9 @@
 				{#if gone}
 					<span
 						class="flex items-center gap-2 text-faint"
-						title="This bucket is being emptied and removed. Its name can be used again once that’s done."
+						{@attach hint(
+							'This bucket is being emptied and removed. Its name can be used again once that’s done.'
+						)}
 					>
 						<span class="truncate font-mono text-[13px]">{bucket.name}</span>
 						<span class="flex-none text-[12px]">being deleted</span>
@@ -87,9 +90,11 @@
 							<Badge
 								variant="secondary"
 								class="text-muted-foreground"
-								title={bucket.managed === 'models'
-									? 'Flock created this bucket for the Models tab'
-									: 'Flock created this bucket for the Datasets tab'}
+								{@attach hint(
+									bucket.managed === 'models'
+										? 'Flock created this bucket for the Models tab'
+										: 'Flock created this bucket for the Datasets tab'
+								)}
 							>
 								Managed by Flock
 							</Badge>
@@ -99,7 +104,7 @@
 			{:else if column === 'created'}
 				<span
 					class={['block truncate', gone ? 'text-faint' : 'text-muted-foreground']}
-					title={dateTime(bucket.created_at)}
+					{@attach hint(dateTime(bucket.created_at))}
 				>
 					{relativeTime(bucket.created_at, data.now)}
 				</span>

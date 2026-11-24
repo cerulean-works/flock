@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ArrowDownToLineIcon from '@lucide/svelte/icons/arrow-down-to-line';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
@@ -528,7 +529,7 @@
 				<Button
 					variant="ghost"
 					size="icon-xs"
-					title="Previous match (Shift+Enter)"
+					{@attach hint('Previous match (Shift+Enter)')}
 					aria-label="Previous match"
 					disabled={!matches.length}
 					onclick={() => step(-1)}
@@ -538,7 +539,7 @@
 				<Button
 					variant="ghost"
 					size="icon-xs"
-					title="Next match (Enter)"
+					{@attach hint('Next match (Enter)')}
 					aria-label="Next match"
 					disabled={!matches.length}
 					onclick={() => step(1)}
@@ -551,7 +552,7 @@
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
-					<Button {...props} variant="ghost" size="sm" title="Filter by level">
+					<Button {...props} variant="ghost" size="sm" {@attach hint('Filter by level')}>
 						<ListFilterIcon />
 						{levelsShown === LEVEL_KEYS.length ? 'All levels' : `${levelsShown} levels`}
 					</Button>
@@ -596,7 +597,7 @@
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
-					<Button {...props} variant="ghost" size="sm" title="Timestamps">
+					<Button {...props} variant="ghost" size="sm" {@attach hint('Timestamps')}>
 						<ClockIcon />
 						<span class="max-sm:hidden">{STAMPS.find((s) => s.value === stamps)?.label}</span>
 					</Button>
@@ -621,7 +622,7 @@
 			variant="ghost"
 			size="icon-sm"
 			class="aria-pressed:bg-muted aria-pressed:text-foreground"
-			title={wrap ? 'Don’t wrap long lines' : 'Wrap long lines'}
+			{@attach hint(wrap ? 'Don’t wrap long lines' : 'Wrap long lines')}
 			aria-label="Wrap long lines"
 			aria-pressed={wrap}
 			onclick={() => ((wrap = !wrap), remember())}
@@ -633,7 +634,9 @@
 				variant="ghost"
 				size="sm"
 				class="aria-pressed:bg-muted aria-pressed:text-foreground"
-				title={following ? 'Stop following new lines' : 'Follow new lines as they’re printed'}
+				{@attach hint(
+					following ? 'Stop following new lines' : 'Follow new lines as they’re printed'
+				)}
 				aria-pressed={following}
 				onclick={follow}
 			>
@@ -646,7 +649,7 @@
 		<Button
 			variant="ghost"
 			size="icon-sm"
-			title="Copy the lines loaded"
+			{@attach hint('Copy the lines loaded')}
 			aria-label="Copy the lines loaded"
 			disabled={!shown.lines.length}
 			onclick={copy}
@@ -656,7 +659,7 @@
 		<Button
 			variant="ghost"
 			size="icon-sm"
-			title="Download all of it"
+			{@attach hint('Download all of it')}
 			aria-label="Download the console output"
 			disabled={downloading || !known}
 			onclick={download}
@@ -730,7 +733,9 @@
 											? 'text-ansi-red/60'
 											: 'text-faint/70'
 								]}
-								title={l.stderr ? 'Link to this line (printed to stderr)' : 'Link to this line'}
+								{@attach hint(
+									l.stderr ? 'Link to this line (printed to stderr)' : 'Link to this line'
+								)}
 								onclick={(e) => pick(e, l.line)}>{l.line + 1}</a
 							>
 							{#if stamps !== 'hidden'}
@@ -743,7 +748,7 @@
 									{#if l.at != null}
 										<span
 											class="mt-px inline-flex h-[18px] items-center rounded-[4px] bg-muted px-1.5 align-top text-[11px] text-muted-foreground tabular-nums"
-											title={dateTime(l.at)}>{stampOf(l)}</span
+											{@attach hint(dateTime(l.at))}>{stampOf(l)}</span
 										>
 									{/if}
 								</span>

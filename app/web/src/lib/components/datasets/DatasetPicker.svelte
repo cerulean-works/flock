@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
@@ -131,12 +132,14 @@
 			>
 				{#if pick === 'folder'}
 					<FolderIcon class="size-3.5 shrink-0 text-muted-foreground" />
-					<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={value}
+					<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" {@attach hint(value)}
 						>{value || 'flock-datasets'}</span
 					>
 				{:else if value}
 					<DatabaseIcon class="size-3.5 shrink-0 text-muted-foreground" />
-					<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={value}>{value}</span>
+					<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" {@attach hint(value)}
+						>{value}</span
+					>
 				{:else}
 					<span class="min-w-0 flex-1 truncate text-muted-foreground">{placeholder}</span>
 				{/if}

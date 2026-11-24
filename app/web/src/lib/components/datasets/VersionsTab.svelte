@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 	import TagIcon from '@lucide/svelte/icons/tag';
@@ -121,7 +122,9 @@
 						{#if v.kept_for}
 							<p
 								class="mt-1 text-xs whitespace-nowrap text-muted-foreground"
-								title="Forks or blends read this version, so it's never cleaned up (D173)."
+								{@attach hint(
+									"Forks or blends read this version, so it's never cleaned up (D173)."
+								)}
 							>
 								Kept for {v.kept_for} dataset{v.kept_for === 1 ? '' : 's'}
 							</p>
@@ -129,7 +132,7 @@
 					</td>
 					<td
 						class="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums"
-						title={dateTime(v.timestamp)}
+						{@attach hint(dateTime(v.timestamp))}
 					>
 						{relativeTime(v.timestamp, now)}
 					</td>

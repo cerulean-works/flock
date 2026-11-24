@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
@@ -122,7 +123,7 @@
 				size="icon-sm"
 				class="ml-auto text-muted-foreground"
 				aria-label="Hide sidebar"
-				title="Hide sidebar"
+				{@attach hint('Hide sidebar')}
 				onclick={oncollapse}
 			>
 				<PanelLeftCloseIcon />
@@ -146,7 +147,7 @@
 						class="mb-2 flex items-center gap-2.5 rounded-lg px-1 py-1 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-[current=page]:bg-muted"
 						href={entityHref(org)}
 						aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
-						title={org}
+						{@attach hint(org)}
 					>
 						<OrgMark name={orgName ?? org} src={orgAvatar} />
 						<span class="min-w-0 flex-1 truncate text-[13.5px] font-medium">{orgName ?? org}</span>
@@ -207,7 +208,7 @@
 								size="icon-xs"
 								class={['text-muted-foreground', searching && 'bg-muted']}
 								aria-label="Find a project"
-								title="Find a project"
+								{@attach hint('Find a project')}
 								aria-pressed={searching}
 								onclick={() => {
 									searching = !searching;
@@ -222,7 +223,7 @@
 									size="icon-xs"
 									class="text-muted-foreground"
 									aria-label="New project"
-									title="New project"
+									{@attach hint('New project')}
 									onclick={() => (creating = true)}
 								>
 									<PlusIcon />
@@ -257,7 +258,7 @@
 									class={ITEM}
 									href={projectHref(org, p.name)}
 									aria-current={here ? 'page' : undefined}
-									title={p.description ?? p.name}
+									{@attach hint(p.description ?? p.name)}
 								>
 									<FolderIcon />
 									<span class="min-w-0 flex-1 truncate">{p.name}</span>
@@ -265,7 +266,7 @@
 										{#if p.active_run_count}
 											<span
 												class="size-1.5 animate-live rounded-full bg-state-running text-state-running group-focus-within/project:invisible group-hover/project:invisible motion-reduce:animate-none"
-												title="{p.active_run_count} running"
+												{@attach hint(`${p.active_run_count} running`)}
 											></span>
 										{/if}
 									</span>
@@ -330,7 +331,7 @@
 						<div class="min-w-0 flex-1">
 							<h2
 								class="truncate text-[14px] leading-5 font-medium text-foreground"
-								title={info?.description ?? shownProject}
+								{@attach hint(info?.description ?? shownProject)}
 							>
 								{shownProject}
 							</h2>

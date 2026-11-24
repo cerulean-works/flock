@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FolderIcon from '@lucide/svelte/icons/folder';
@@ -282,7 +283,7 @@
 						<a
 							class={['truncate hover:text-link', ROW_LINK]}
 							href={objectHref(org, bucket, row.key)}
-							title={row.key}
+							{@attach hint(row.key)}
 						>
 							{nameOf(row.key)}{row.kind === 'folder' ? '/' : ''}
 						</a>
@@ -301,7 +302,7 @@
 			{:else if row.kind === 'folder'}
 				<span class="text-faint">–</span>
 			{:else}
-				<span class="text-muted-foreground" title={dateTime(row.last_modified)}>
+				<span class="text-muted-foreground" {@attach hint(dateTime(row.last_modified))}>
 					{relativeTime(row.last_modified, now)}
 				</span>
 			{/if}

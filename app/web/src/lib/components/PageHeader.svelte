@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Snippet } from 'svelte';
 
 	interface Props {
@@ -70,7 +71,7 @@
 				{#if subtitle}
 					<div
 						class="min-w-0 truncate text-[13px] text-muted-foreground tabular-nums max-sm:hidden"
-						title={subtitleTitle}
+						{@attach hint(subtitleTitle)}
 					>
 						{@render subtitle()}
 					</div>
@@ -108,7 +109,7 @@
 			{#if subtitle}
 				<div
 					class="min-w-0 flex-1 truncate text-[13px] text-muted-foreground max-sm:hidden"
-					title={subtitleTitle}
+					{@attach hint(subtitleTitle)}
 				>
 					{@render subtitle()}
 				</div>

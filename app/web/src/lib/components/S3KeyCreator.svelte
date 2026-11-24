@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import { enhance } from '$app/forms';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -112,7 +113,7 @@
 								value={String(choice.seconds ?? 'never')}
 								label={choice.label}
 								disabled={choice.disabled !== null}
-								title={choice.disabled ?? undefined}
+								{@attach hint(choice.disabled)}
 							>
 								{choice.label}
 							</Select.Item>

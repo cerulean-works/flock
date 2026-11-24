@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import MoonIcon from '@lucide/svelte/icons/moon';
 	import SunIcon from '@lucide/svelte/icons/sun';
@@ -54,7 +55,7 @@
 							<a
 								class="min-w-0 truncate font-medium hover:text-link"
 								href={entityHref(org.name)}
-								title={org.name}>{org.display_name}</a
+								{@attach hint(org.name)}>{org.display_name}</a
 							>
 							<Badge variant="secondary" class="text-muted-foreground">
 								{org.role === 'admin' ? 'Admin' : 'Member'}
@@ -77,7 +78,7 @@
 										size="sm"
 										class="text-muted-foreground"
 										disabled={defaultOrg.pending}
-										title="Log runs here when wandb.init names no entity"
+										{@attach hint('Log runs here when wandb.init names no entity')}
 									>
 										Make default
 									</Button>
@@ -134,7 +135,7 @@
 										size="icon-sm"
 										class="text-muted-foreground hover:text-destructive"
 										aria-label="Revoke the sign-in of {name}"
-										title="Sign this machine out"
+										{@attach hint('Sign this machine out')}
 									>
 										<Trash2Icon />
 									</Button>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FileIcon from '@lucide/svelte/icons/file';
@@ -237,7 +238,10 @@
 			{:else if column === 'size'}
 				<span class="text-muted-foreground">{row.size == null ? '—' : bytes(row.size)}</span>
 			{:else}
-				<span class="text-muted-foreground" title={row.updated ? dateTime(row.updated) : undefined}>
+				<span
+					class="text-muted-foreground"
+					{@attach hint(row.updated ? dateTime(row.updated) : undefined)}
+				>
 					{row.updated ? relativeTime(row.updated, now) : '—'}
 				</span>
 			{/if}

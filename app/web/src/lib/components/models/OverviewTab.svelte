@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import { flatten } from '#lib/data/run.ts';
 	import { readText, runPathHref, sortTags } from '#lib/models.ts';
@@ -173,7 +174,10 @@
 					>
 						Digest
 					</th>
-					<td class="py-2 text-right font-mono text-[12px] break-all" title={version.digest}>
+					<td
+						class="py-2 text-right font-mono text-[12px] break-all"
+						{@attach hint(version.digest)}
+					>
 						{version.digest.slice(0, 12)}
 					</td>
 				</tr>

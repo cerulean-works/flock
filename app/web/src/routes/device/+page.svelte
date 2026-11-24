@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import AuthShell from '#lib/components/AuthShell.svelte';
 	import FormError from '#lib/components/FormError.svelte';
@@ -57,7 +58,9 @@
 				<dd class="font-mono">{request.ip}</dd>
 			{/if}
 			<dt class="text-muted-foreground">Asked</dt>
-			<dd title={dateTime(request.created_at)}>{relativeTime(request.created_at, data.now)}</dd>
+			<dd {@attach hint(dateTime(request.created_at))}>
+				{relativeTime(request.created_at, data.now)}
+			</dd>
 			{#if data.user}
 				<dt class="text-muted-foreground">Account</dt>
 				<dd class="truncate">

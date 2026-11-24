@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import HistoryIcon from '@lucide/svelte/icons/history';
@@ -265,7 +266,7 @@
 										size="icon-sm"
 										class="text-muted-foreground hover:text-destructive"
 										aria-label="Withdraw invite for {invite.email}"
-										title="Withdraw invite"
+										{@attach hint('Withdraw invite')}
 									>
 										<Trash2Icon />
 									</Button>

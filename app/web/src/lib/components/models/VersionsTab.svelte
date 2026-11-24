@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import EyeIcon from '@lucide/svelte/icons/eye';
@@ -151,7 +152,7 @@
 					</td>
 					<td
 						class="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums"
-						title={dateTime(v.created_at)}
+						{@attach hint(dateTime(v.created_at))}
 					>
 						{v.created_by ? `${v.created_by.name}, ` : ''}{relativeTime(v.created_at, now)}
 					</td>

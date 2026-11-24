@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
@@ -220,7 +221,7 @@
 								style:min-width={cap === null ? undefined : `${cap + PAD}px`}
 								style:max-width={cap === null ? undefined : `${cap + PAD}px`}
 							>
-								<div class="truncate" title="{column.name} {column.type}">
+								<div class="truncate" {@attach hint(`${column.name} ${column.type}`)}>
 									<span class="text-foreground">{column.name}</span>
 									<span
 										class="ml-1 inline-block truncate align-bottom font-mono text-[11px] font-normal"
