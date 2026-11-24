@@ -149,8 +149,8 @@ A multiple-choice task's `predictions/<task>.tokens.parquet` holds what the mode
 | Column | Meaning |
 |---|---|
 | `id` | The doc's id, as in its prediction row. |
-| `choice` | The choice the sequence belongs to: for a `context` or `greedy` row, the first choice with that context. |
-| `part` | `continuation`: a choice's scored tokens, one row per choice. `greedy`: the first 32 tokens greedy decoding writes after the doc's context, one row per distinct context, with `--greedy-tokens`. `context`: the context's own tokens, with `--context-tokens`. |
+| `choice` | The choice the sequence belongs to. |
+| `part` | `continuation`: a choice's scored tokens, one row per choice. |
 | `token_ids` | The tokens, from the tokenizer the provenance names and hashes. |
 | `logprob` | Each token's natural-log probability. A continuation's add up to its `logprob` in the prediction row, to FP32 rounding. |
 | `rank` | 1 plus the number of tokens the model found more likely, so the model's own choice has rank 1. |
@@ -158,22 +158,18 @@ A multiple-choice task's `predictions/<task>.tokens.parquet` holds what the mode
 | `top1_logprob` | The log-probability of the most likely token at that position. |
 | `logprob_std` | The standard deviation of the log-probability under that distribution, Min-K%++'s sigma. |
 
-A `greedy` row has no values. A Flock model has no `greedy` rows: it keeps no key-value cache, and decoding without one would read each context 32 times over. A `context` row covers every token of the context but its first, which nothing predicts, after the context loses tokens from the left to leave room for 32 decoded ones.
-
-Context values and greedy tokens come from a pass of their own over each doc's distinct contexts, once per context, not once per choice. Each is off by default, for its cost. Measured on one H200 with OLMo 2 1B in BF16 at `--batch-tokens 16384`:
+Measured on one H200 with OLMo 2 1B in BF16 at `--batch-tokens 16384`:
 
 | Run | Scoring time | Per-token files |
 |---|---|---|
 | Base Easy and one exam task (100,457 docs), no per-token values | 1527 s | none, beside 138 MB of predictions |
 | The same, default per-token values | 1560 s (1.02x) | 101 MB, about 1 KB per doc |
-| The same, with `--context-tokens`, `--greedy-tokens` and `--perplexity-tokens` | 3138 s (2.06x) | 306 MB, about 3 KB per doc |
-| All of MMLU, HellaSwag and ARC-Easy, default values, then with `--greedy-tokens` | 372 s, then 539 s (1.05x, then 1.52x of 353 s) | 35 MB |
 
-Greedy tokens cost the most: 32 decoding steps run one after another for every batch. Scoring itself runs as it does without the file, so every score and every prediction row is the same, bit for bit, with or without it.
+Scoring itself runs as it does without the file, so every score and every prediction row is the same, bit for bit, with or without it.
 
 A private dataset's per-token file is readable by its owner only, and goes under `private/` on a tracker run, as its predictions do: token ids are the dataset's text. A training loop that scores between steps writes none unless it asks (`score_prepared(..., tokens=True)`).
 
-With `--perplexity-tokens`, a perplexity task gets a file of its own shape: one `text` row per doc with its `id`, and per token `byte_end`, `logprob`, `rank`, `entropy`, `top1_logprob` and `logprob_std`. Its `logprob`s add up to the row's `logprob`, and a token's loss is its `logprob` negated, so you can split a domain's loss by position or by byte range, as Paloma's analyses of which tokens carry the loss need. It has no token ids: they are the text, which a perplexity task's files never hold. `byte_end` is where each token ends in the text's UTF-8 bytes, so a token's bytes are those after the previous token's end. Tokenizers place a token that holds only part of a character (a byte-level or byte-fallback piece) at the character's end or at its start, so such a token can span no bytes.
+Some early schema 12 runs, written with options `flock eval` no longer has, also hold `context` and `greedy` rows, and per-token files for perplexity tasks with a `byte_end` column and no token ids. They are read as written.
 
 Read a task's rows, or only some docs', with [`~eval.results.WrittenResults.tokens`]:
 
@@ -213,5 +209,3 @@ A tracker run is read as the user signed in with `flock login`, on that server. 
 [[autodoc]] eval.results.WrittenResults
 
 [[autodoc]] eval.requests.TokenValues
-
-[[autodoc]] eval.requests.ContextScores
