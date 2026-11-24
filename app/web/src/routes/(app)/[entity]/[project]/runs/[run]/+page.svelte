@@ -9,7 +9,7 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { onMount, untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import ChartsPane from '#lib/components/ChartsPane.svelte';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
@@ -33,7 +33,7 @@
 	import { projectUrl } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
 	import { runWorkspace } from '#lib/data/run.ts';
-	import { compareHref } from '#lib/evals.ts';
+	import { compareHref, itemsViewOf, withItemsView } from '#lib/evals.ts';
 	import { LIVE_STATES } from '#lib/types.ts';
 	import { entityHref, projectHref, runHref, withParam } from '#lib/workspace/url.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
@@ -283,7 +283,13 @@
 			{:else if tab === 'results'}
 				{#if data.results}
 					{#key data.run.id}
-						<RunResults run={data.run} results={data.results} models={data.models} />
+						<RunResults
+							run={data.run}
+							results={data.results}
+							models={data.models}
+							view={itemsViewOf(page.url.searchParams)}
+							onview={(view) => replaceState(withItemsView(page.url, view), page.state)}
+						/>
 					{/key}
 				{:else}
 					<EmptyState>

@@ -1,11 +1,19 @@
 import asyncio
+import dataclasses
+import hashlib
+import math
 import mimetypes
+import os
+from collections import OrderedDict
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
+from functools import cache, partial
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import orjson
+import pyarrow as pa
+import pyarrow.parquet as pq
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -29,11 +37,13 @@ from app.api.src.api.deps import (
 from app.api.src.api.home import GpuType
 from app.api.src.api.models import with_users
 from app.api.src.core import query
+from app.api.src.core.accounts import User
 from app.api.src.core.errors import NotFound
-from app.api.src.core.evals import PairFiles
+from app.api.src.core.evals import PairFiles, token_texts
 from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
-from flock.eval.diff import diff
-from flock.eval.results import WrittenResults
+from flock.eval.diff import check_instrument, diff
+from flock.eval.items import CELLS, RANKED, Item, items
+from flock.eval.results import WrittenResults, tokens_name
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
 # Item comparisons (025, D185) run here, never in the default executor: each waits on file reads
@@ -583,6 +593,39 @@ async def get_run_file(
     return StreamingResponse(chunks, media_type=media_type, headers={"content-length": str(size)})
 
 
+async def eval_readers(
+    run: Run, other: str | None, store: Store, viewer: User | None
+) -> list[tuple[str, Callable[[str], str | None], Callable[[str], bytes | None]]]:
+    """The run, and ``other`` (``entity/project/id``) if given, as eval reads tracker runs: each one's ``run:`` source and readers of its files as text and as bytes, all sharing one ``PairFiles`` budget, the arguments of ``WrittenResults.read``. The other run must be readable too; either one unknown or unreadable is the same 404."""
+    # The readers are called from a thread of `DIFFS` and read each file through this loop.
+    files = PairFiles(store, asyncio.get_running_loop())
+    runs = [(run, f"{run.entity}/{run.project.name}/{run.name}")]
+    if other is not None:
+        parts = other.split("/")
+        if len(parts) != 3 or not all(parts):
+            raise APIError(404, f"run {other} not found")
+        entity, project, name = parts
+        readable = await get_readable_project(entity, project, store, viewer)
+        runs.append((await find_run(store, readable, name), other))
+
+    def read(of: Run, public: bool, name: str) -> str | None:
+        # A private dataset's rows, under `private/` (D181), are read for the run's org members
+        # only. To anyone else its task has no predictions, so no count, id or text of it leaves.
+        return files.read(of, name, readable=not (public and members_only(name)))
+
+    def read_bytes(of: Run, public: bool, name: str) -> bytes | None:
+        return files.read_bytes(of, name, readable=not (public and members_only(name)))
+
+    # As tracker runs (`run:`), so a private dataset's task is read from `private/`.
+    readers = []
+    for of, source in runs:
+        public = store.accounts.access(viewer, of.project) == "public"
+        readers.append(
+            (f"run:{source}", partial(read, of, public), partial(read_bytes, of, public))
+        )
+    return readers
+
+
 @public.get("/projects/{entity}/{project}/runs/{run}/diff")
 async def diff_runs(
     run: ReadableRunDep,
@@ -594,30 +637,13 @@ async def diff_runs(
     it: eval's ``ItemDiff`` (025, D185). The other run must be readable too; either one unknown
     or unreadable is the same 404. 404 if either has no ``results.json``, and 409 with eval's
     reason if the diff refuses the pair."""
-    parts = other.split("/")
-    if len(parts) != 3 or not all(parts):
-        raise APIError(404, f"run {other} not found")
-    entity, project, name = parts
-    found = await find_run(store, await get_readable_project(entity, project, store, viewer), name)
     loop = asyncio.get_running_loop()
-
     # The diff runs in a thread of its own pool and reads a file only when a task needs it, each
     # through this loop, so two runs' hundreds of files never travel to the client.
-    files = PairFiles(store, loop)
-
-    def read(of: Run, public: bool, name: str) -> str | None:
-        # A private dataset's rows, under `private/` (D181), are read for the run's org members
-        # only. To anyone else its task has no predictions, so no count or doc id of it leaves.
-        return files.read(of, name, readable=not (public and members_only(name)))
-
-    # As tracker runs (`run:`), so a private dataset's task is read from `private/`.
-    pair = []
-    for of, source in ((run, f"{run.entity}/{run.project.name}/{run.name}"), (found, other)):
-        public = store.accounts.access(viewer, of.project) == "public"
-        pair.append((f"run:{source}", partial(read, of, public)))
+    pair = await eval_readers(run, other, store, viewer)
 
     def compare() -> dict[str, Any]:
-        a, b = (WrittenResults.read(source, reader) for source, reader in pair)
+        a, b = (WrittenResults.read(*reader) for reader in pair)
         return diff(a, b).to_dict()
 
     try:
@@ -626,3 +652,446 @@ async def diff_runs(
         raise APIError(404, str(exc)) from exc
     except ValueError as exc:  # another instrument, or files that don't match their results
         raise APIError(409, str(exc)) from exc
+
+
+def _with_margins(
+    found: list[Item], sort: Literal["margin", "doc"]
+) -> list[tuple[Item, list[float | None]]]:
+    """Each item with each run's margin, its gold choice's score minus its best wrong choice's in the primary metric's units, in doc order or with ``sort="margin"`` the most telling first (D198): for two runs the largest gap between their margins, for one run the largest margin either way."""
+    # `share` is a softmax of the metric's scores, so the log of a ratio of shares is a gap
+    # between scores. `acc_greedy` ranks no choices, and a doc with one choice has no wrong one:
+    # no margin. A share that underflowed is floored.
+    ranked = []
+    for item in found:
+        margins: list[float | None] = []
+        for answer in item.runs:
+            wrong = [s for k, s in enumerate(answer.share or []) if k != item.gold]
+            if answer.share is None or not wrong:
+                margins.append(None)
+                continue
+            gold = max(answer.share[item.gold], 1e-300)
+            margins.append(math.log(gold) - math.log(max(max(wrong), 1e-300)))
+        ranked.append((item, margins))
+    if sort == "margin":
+
+        def rank(entry: tuple[Item, list[float | None]]) -> tuple[int, float]:
+            # One run: the surest first, right or wrong. Two: the biggest gap first. Items
+            # without a margin go last, in doc order (the sort is stable).
+            _, margins = entry
+            known = [m for m in margins if m is not None]
+            if len(known) < len(margins):
+                return (1, 0.0)
+            gap = known[0] if len(known) == 1 else known[0] - known[1]
+            return (0, -abs(gap))
+
+        ranked.sort(key=rank)
+    return ranked
+
+
+# What an items list keeps: eval's own values (`ONE_RUN` and `CELLS`), one run's or a cell of two.
+ItemKeep = Literal["wrong", "right", "all", "only_a", "only_b", "both_wrong", "both_right"]
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/items")
+async def run_items(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    task: Annotated[str, Query(description="the task whose docs are listed")],
+    keep: Annotated[
+        ItemKeep, Query(description="one run's docs by outcome, or a cell of two runs' diff")
+    ],
+    other: Annotated[
+        str | None, Query(alias="with", description="the other run, as entity/project/id")
+    ] = None,
+    sort: Annotated[
+        Literal["margin", "doc"],
+        Query(description="the biggest margin gap first (two runs), or the surest first (one)"),
+    ] = "margin",
+    offset: Annotated[int, Query(ge=0, le=1 << 31)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Response:
+    """A page of one task's docs, each a short summary of eval's ``Item``: its id, the part of its question that varies and its gold choice, clipped, and per run whether it was right, its pick, its margin and the gold choice's probability. ``total`` counts them all. A row's text leaves out the whole lines every question of the list shares at either end (027, 028). A doc's whole text is ``.../item``.
+
+    By default the items most likely to tell something come first (D198): for two runs, the largest gap between their margins, for one run the largest margin either way. A run's margin is its gold choice's score minus the best wrong choice's, in the primary metric's own units. ``sort=doc`` keeps the dataset's order.
+
+    One run keeps its ``wrong``, ``right`` or ``all`` docs; with ``with=``, two runs keep a cell of their diff. Access is the diff's: a private dataset's task has no predictions to anyone but the org's members. 404 if a run has no ``results.json``, and 409 with eval's reason when the items can't be read (another instrument, a run before schema 11, which holds no text)."""
+    loop = asyncio.get_running_loop()
+    readers = await eval_readers(run, other, store, viewer)
+
+    def read() -> bytes:
+        runs = [WrittenResults.read(*reader) for reader in readers]
+        ranked = _with_margins(items(runs, task, keep), sort)
+
+        # The whole lines every question shares at both ends (a wrapper such as `Question:` and
+        # `Answer:`) are left out of the rows, which show what varies; a doc opens whole.
+        questions = [item.question for item, _ in ranked if item.question is not None]
+        head = tail = ""
+        # Docs whose choices each have their own context (Winogrande) have no question to share.
+        shared = len(questions) == len(ranked)
+        # Nothing varies when every question is the same, or when there is one.
+        shared = shared and len(set(questions)) > 1
+        if shared:
+            common = os.path.commonprefix(questions)
+            head = common[: common.rfind("\n") + 1]
+            rests = [q[len(head) :] for q in questions]
+            # The common end is the common start of the reversed texts.
+            common = os.path.commonprefix([r[::-1] for r in rests])[::-1]
+            tail = common[common.find("\n") :] if "\n" in common else ""
+        # A row left with nothing to show keeps every question whole.
+        if shared and any(not r[: len(r) - len(tail)].strip() for r in rests):
+            head = tail = ""
+
+        def clip(text: str) -> str:
+            # Enough for two lines of a wide column; the whole text comes when a row opens.
+            return text if len(text) <= 240 else text[:240].rstrip() + "…"
+
+        rows = []
+        for item, margins in ranked[offset : offset + limit]:
+            # A choice as a reader names it: Winogrande's choices share their ending, and the
+            # option is in each choice's own context.
+            named = [c.strip() for c in item.contexts or item.choices]
+            if item.question is None:
+                text = " / ".join(named)
+            else:
+                text = item.question[len(head) : len(item.question) - len(tail)].strip()
+            answers = []
+            for answer, margin in zip(item.runs, margins, strict=True):
+                pick = None if answer.pick is None else clip(named[answer.pick])
+                answers.append(
+                    {
+                        "correct": answer.correct,
+                        "pick": answer.pick,
+                        "pick_text": pick,
+                        "margin": margin,
+                        "gold_prob": answer.prob[item.gold],
+                    }
+                )
+            rows.append(
+                {
+                    "id": item.id,
+                    "text": clip(text),
+                    "gold": item.gold,
+                    "gold_text": clip(named[item.gold]),
+                    "runs": answers,
+                }
+            )
+        page = {"total": len(ranked), "offset": offset, "items": rows}
+        return orjson.dumps(page)  # off the event loop
+
+    try:
+        return Response(await loop.run_in_executor(DIFFS, read), media_type="application/json")
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:  # eval's refusal, which says how to get the items where it can
+        raise APIError(409, str(exc)) from exc
+
+
+def _accuracy_suites(a: WrittenResults, b: WrittenResults) -> dict[str, list[str]]:
+    """The suites both runs recorded under one hash, scored by their tasks' own metrics, that hold a task of their own, each with every task under it, nested suites' too, that both scored under one hash and that an accuracy ranking choices is the primary metric of: what the compare page draws a square for (029). A suite that only groups others gets none: its groups have theirs."""
+    check_instrument(a, b)
+    suites = {s.suite: s for s in a.suites}
+    hashes_b = {s.suite: s.suite_hash for s in b.suites}
+    tasks_b = {t.task: t.task_hash for t in b.tasks}
+    # `acc_greedy` ranks no choices, so its docs have no margin to place.
+    ranked = set()
+    for t in a.tasks:
+        if t.primary_metric in RANKED and tasks_b.get(t.task) == t.task_hash:
+            ranked.add(t.task)
+    found = {}
+    for suite in a.suites:
+        # A suite scored by a metric of its own (`mmlu:bpb`) isn't about its tasks' accuracy.
+        if hashes_b.get(suite.suite) != suite.suite_hash or suite.metric is not None:
+            continue
+        if all(member in suites for member in suite.members):
+            continue
+        # Each suite opened once: an uploaded file may nest suites in a loop, or share one twice.
+        tasks, todo, opened = [], list(suite.members), {suite.suite}
+        while todo:
+            name = todo.pop(0)
+            if name in suites:
+                if name not in opened:
+                    opened.add(name)
+                    todo.extend(suites[name].members)
+            elif name in ranked and name not in tasks:
+                tasks.append(name)
+        if tasks:
+            found[suite.suite] = tasks
+    return found
+
+
+# The suite squares of a pair (029): reading every accuracy task of two runs takes tens of seconds,
+# so it runs on a worker of its own, never holding up the lists' and docs' reads in `DIFFS`, and
+# its answer is kept for the last few pairs, keyed by both runs' files (names, sizes and times)
+# and whether the viewer reads each as an outsider: any upload is a new key, and an answer
+# missing a task a run is still uploading isn't kept.
+SQUARES = ThreadPoolExecutor(max_workers=1, thread_name_prefix="squares")
+SQUARE_ANSWERS: OrderedDict[tuple[str, ...], bytes] = OrderedDict()
+SQUARES_RUNNING: dict[tuple[str, ...], asyncio.Future[tuple[bytes, bool]]] = {}
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/items/suites")
+async def run_items_suites(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    other: Annotated[str, Query(alias="with", description="the other run, as entity/project/id")],
+) -> Response:
+    """The compare page's row of suite squares for two runs (029): each suite both runs recorded alike that holds a task of its own, with its tasks (every accuracy task under it both scored under one hash), the number of docs in each cell of their diff, and up to 800 of its docs as ``[A's margin, B's margin, cell, task, place, id]`` (the cell an index into eval's ``CELLS``, the task one into ``tasks``, the place the doc's in that task's cell in the list's default order), taken evenly through each cell in the list's default order, margins rounded to 3 decimals.
+
+    Each task is computed once for all its suites. A task a run has no predictions for, or whose predictions the viewer can't read (a private dataset's, outside the organization), is left out of its suites. The answer is kept for the last 8 pairs. 404 as ``.../items`` for a run unknown, unreadable or without results; 409 with eval's reason otherwise."""
+    loop = asyncio.get_running_loop()
+    readers = await eval_readers(run, other, store, viewer)
+    # Whether the viewer reads each run as an outsider, who gets no private dataset's predictions,
+    # as `eval_readers` decides it; it is in the key, so a change of membership is a new key.
+    entity, project, name = other.split("/")
+    other_project = await get_readable_project(entity, project, store, viewer)
+    pair = [run, await find_run(store, other_project, name)]
+    public = [store.accounts.access(viewer, r.project) == "public" for r in pair]
+    # Every file of both runs, by name, size and time: any upload, a predictions file replaced
+    # under the same results file too, is a new key. Read here, so a kept answer is served
+    # without waiting behind another pair's computation on `SQUARES`.
+    listing = hashlib.sha256()
+    for of in pair:
+        listing.update(f"{of.pk}\n".encode())
+        for file in await store.list_files(of):
+            listing.update(f"{file}\n".encode())
+    key = (listing.hexdigest(), *(str(p) for p in public))
+    if key in SQUARE_ANSWERS:
+        SQUARE_ANSWERS.move_to_end(key)
+        return Response(SQUARE_ANSWERS[key], media_type="application/json")
+
+    def read() -> tuple[bytes, bool]:
+        runs = [WrittenResults.read(source, text) for source, text, _ in readers]
+        suites = _accuracy_suites(*runs)
+        # The tasks an outsider can't read; any other task without predictions is a run still
+        # uploading, and an answer missing it isn't kept.
+        private = set()
+        for written, outsider in zip(runs, public, strict=True):
+            if outsider:
+                private |= {t.task for t in written.tasks if t.dataset.private}
+        whole = True
+        # Each task's docs by cell, in the list's default order: id and both margins.
+        cells_of: dict[str, list[list[tuple[str, list[float | None]]]]] = {}
+        for task in dict.fromkeys(t for tasks in suites.values() for t in tasks):
+            # A task's files read once for its four cells, so they come from the same rows, and
+            # let go before the next task.
+            scoped = [dataclasses.replace(r, read_file=cache(r.read_file)) for r in runs]
+            if any(r.predictions(task) is None for r in scoped):
+                whole = whole and task in private
+                continue
+            cells_of[task] = [
+                [
+                    (item.id, pair)
+                    for item, pair in _with_margins(items(scoped, task, keep), "margin")
+                ]
+                for keep in CELLS
+            ]
+        rows = []
+        for suite, tasks in suites.items():
+            shown = [task for task in tasks if task in cells_of]
+            # Each doc with where the list has it: its task's place in `shown` and its own in the
+            # cell's default order, so a dot opens its doc.
+            cells: list[list[tuple[int, int, str, list[float | None]]]] = [[], [], [], []]
+            for t, task in enumerate(shown):
+                for k, docs_in_cell in enumerate(cells_of[task]):
+                    for i, (doc_id, pair) in enumerate(docs_in_cell):
+                        cells[k].append((t, i, doc_id, pair))
+            docs = sum(len(pairs) for pairs in cells)
+            if not docs:
+                continue
+            # Each cell's share of 800 dots, taken evenly through it: never more than 800 in all.
+            dots = []
+            for k, pairs in enumerate(cells):
+                n = len(pairs) if docs <= 800 else len(pairs) * 800 // docs
+                for j in range(n):
+                    t, i, doc_id, (a, b) = pairs[j * len(pairs) // n]
+                    if a is not None and b is not None:
+                        dots.append([round(a, 3), round(b, 3), k, t, i, doc_id])
+            counts = {keep: len(pairs) for keep, pairs in zip(CELLS, cells, strict=True)}
+            rows.append({"suite": suite, "tasks": shown, "counts": counts, "dots": dots})
+        return orjson.dumps({"suites": rows}), whole
+
+    # Two first visits to one pair share one computation, rather than both queueing for the
+    # worker; shielded, so one visitor leaving doesn't stop the other's.
+    running = SQUARES_RUNNING.get(key)
+    if running is None:
+        running = loop.run_in_executor(SQUARES, read)
+        SQUARES_RUNNING[key] = running
+        running.add_done_callback(lambda _: SQUARES_RUNNING.pop(key, None))
+    try:
+        answer, whole = await asyncio.shield(running)
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:
+        raise APIError(409, str(exc)) from exc
+    # Kept from the event loop only, so one thread ever touches the kept answers.
+    if whole:
+        SQUARE_ANSWERS[key] = answer
+        while len(SQUARE_ANSWERS) > 8:
+            SQUARE_ANSWERS.popitem(last=False)
+    return Response(answer, media_type="application/json")
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/item")
+async def run_item(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    doc: Annotated[str, Query(description="the doc's id")],
+    task: Annotated[str, Query(description="the task the doc is in")],
+    keep: Annotated[
+        ItemKeep, Query(description="the list the doc is in: two runs are read by a cell")
+    ],
+    other: Annotated[
+        str | None, Query(alias="with", description="the other run, as entity/project/id")
+    ] = None,
+) -> Response:
+    """One doc with its whole text and each run's answer, eval's ``Item`` as ``flock eval items --json`` prints it: what a row of ``.../items`` opens to (028). The id is a query parameter, so any id reaches it as written.
+
+    Read and refused as ``.../items`` is, with 404 too if ``keep`` holds no doc ``doc``."""
+    loop = asyncio.get_running_loop()
+    readers = await eval_readers(run, other, store, viewer)
+
+    def read() -> bytes | None:
+        runs = [WrittenResults.read(*reader) for reader in readers]
+        found = next((item for item in items(runs, task, keep) if item.id == doc), None)
+        return None if found is None else orjson.dumps(found.to_dict())
+
+    try:
+        found = await loop.run_in_executor(DIFFS, read)
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:
+        raise APIError(409, str(exc)) from exc
+    if found is None:
+        raise APIError(404, f"{task} has no doc {doc} among its {keep} docs")
+    return Response(found, media_type="application/json")
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/item/tokens")
+async def run_item_tokens(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    doc: Annotated[str, Query(description="the doc's id")],
+    task: Annotated[str, Query(description="the task the doc is in")],
+    keep: Annotated[
+        ItemKeep, Query(description="the list the doc is in: two runs are read by a cell")
+    ],
+    other: Annotated[
+        str | None, Query(alias="with", description="the other run, as entity/project/id")
+    ] = None,
+) -> Response:
+    """Each run's per-token values over each choice of one doc, from its sidecar (schema 12, ``predictions/<task>.tokens.parquet``): log-probability, rank and entropy per token, and each token's text from the run's tokenizer. What an opened row of ``.../items`` shows as heat (030).
+
+    Per run, in order: ``choices`` (one entry per choice, its ``text`` pieces, ``logprob``, ``rank`` and ``entropy``) and ``note``. A run without values for the task (written before schema 12, or without them) has ``choices`` null and says why in ``note``; a run whose tokenizer can't be fetched, or doesn't give back the choices' text, has its values with ``text`` null, and ``note`` says why. Read and refused as ``.../item`` is."""
+    loop = asyncio.get_running_loop()
+    readers = await eval_readers(run, other, store, viewer)
+
+    def read() -> bytes | None:
+        runs = [WrittenResults.read(*reader) for reader in readers]
+        found = next((item for item in items(runs, task, keep) if item.id == doc), None)
+        if found is None:
+            return None
+        answers: list[dict[str, Any]] = []
+        for written in runs:
+            # Only each choice's continuation: context and greedy rows come by flags (045.D3)
+            # and aren't shown.
+            # A sidecar is an uploaded file: one Parquet can't read leaves this run without
+            # values, never the other run without its own.
+            # Its footer is read first: a file under the 64 MiB read limit can unpack to far more,
+            # so one holding more than 2^25 values (the bank's largest default sidecar holds 8.1
+            # million) or more than 256 MiB unpacked is refused before a row is decoded. The file
+            # is read once for both, named as `tokens` names it.
+            read = written.read_bytes
+            scoped = dataclasses.replace(written, read_bytes=cache(read)) if read else written
+            name = tokens_name(task)
+            if any(t.task == task and t.dataset.private for t in written.tasks):
+                name = f"private/{name}" if written.source.startswith("run:") else name
+            try:
+                rows = []
+                # Only schema 12 on writes one, as `tokens` reads it: an older run's file of
+                # that name isn't fetched.
+                data = None
+                if scoped.read_bytes and written.schema_version >= 12:
+                    data = scoped.read_bytes(name)
+                values = unpacked = 0
+                if data:
+                    footer = pq.read_metadata(pa.BufferReader(data))
+                    for i in range(footer.num_row_groups):
+                        group = footer.row_group(i)
+                        unpacked += group.total_byte_size
+                        values += sum(group.column(j).num_values for j in range(group.num_columns))
+                if values <= 1 << 25 and unpacked <= 256 << 20:
+                    rows = scoped.tokens(task, [doc]) or []
+            # (pyarrow's errors are these: `ArrowInvalid` a ValueError, `ArrowTypeError` a
+            # TypeError, its I/O errors OSErrors.)
+            except ValueError, TypeError, KeyError, OSError:
+                rows = []
+            # A file that isn't the writer's counts as none: a choice missing or twice, or not a
+            # whole number; a column missing; arrays of other lengths or of other than numbers.
+            continuation = [r for r in rows if r.get("part") == "continuation"]
+            # Checked before any is a key: a list or struct isn't one.
+            indices = [r.get("choice") for r in continuation]
+            whole = all(type(k) is int for k in indices)
+            n = len(found.choices)
+            whole = whole and len(indices) == n and len(set(indices)) == n
+            whole = whole and all(k in range(n) for k in indices)
+            by_choice = {r["choice"]: r for r in continuation} if whole else {}
+            fields = ("token_ids", "logprob", "rank", "entropy")
+            for k in range(len(found.choices)):
+                row = by_choice.get(k, {})
+                lists = [row[f] for f in fields if isinstance(row.get(f), list)]
+                if len(lists) < len(fields) or len({len(a) for a in lists}) != 1:
+                    whole = False
+                    continue
+                # As the writer writes them: token ids and ranks whole numbers (ids from 0 within
+                # its 32-bit column, ranks from 1), log-probabilities and entropies finite.
+                ids, logprobs, ranks, entropies = lists
+                if not all(type(v) is int and 0 <= v < 1 << 31 for v in ids):
+                    whole = False
+                if not all(type(v) is int and v >= 1 for v in ranks):
+                    whole = False
+                for values in (logprobs, entropies):
+                    if not all(type(v) in (int, float) and math.isfinite(v) for v in values):
+                        whole = False
+            if not whole:
+                note = f"{written.source} has no per-token values for {task}"
+                answers.append({"choices": None, "note": note})
+                continue
+            values = [by_choice[k] for k in range(len(found.choices))]
+
+            # Schema 12 names the tokenizer (else the model's repo stands in); it is at the
+            # model's revision when it is the model's own repo.
+            name, _, revision = written.provenance.model.partition("@")
+            tokenizer = written.provenance.tokenizer or name
+            note = None
+            try:
+                ids = [v["token_ids"] for v in values]
+                at = revision if tokenizer == name and revision else None
+                texts = token_texts(tokenizer, at, ids, found.choices)
+            except ValueError as exc:
+                texts, note = [None] * len(values), str(exc)
+            choices = []
+            for text, v in zip(texts, values, strict=True):
+                choices.append(
+                    {
+                        "text": text,
+                        "logprob": v["logprob"],
+                        "rank": v["rank"],
+                        "entropy": v["entropy"],
+                    }
+                )
+            answers.append({"choices": choices, "note": note})
+        return orjson.dumps({"runs": answers})
+
+    try:
+        found = await loop.run_in_executor(DIFFS, read)
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:
+        raise APIError(409, str(exc)) from exc
+    if found is None:
+        raise APIError(404, f"{task} has no doc {doc} among its {keep} docs")
+    return Response(found, media_type="application/json")

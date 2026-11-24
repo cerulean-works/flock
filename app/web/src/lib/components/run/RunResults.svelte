@@ -4,9 +4,10 @@
 	import CopyButton from '#lib/components/CopyButton.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import InfoHint from '#lib/components/InfoHint.svelte';
+	import EvalItems from '#lib/components/run/EvalItems.svelte';
 	import { RESULT_SCHEMAS, formatScore } from '#lib/evals.ts';
 	import { versionHref } from '#lib/models.ts';
-	import type { EvalResults, RunDetail, RunModels } from '#lib/types.ts';
+	import type { EvalResults, ItemsView, RunDetail, RunModels } from '#lib/types.ts';
 
 	/**
 	 * An eval run's results file (025 D184): suites, tasks and what produced them. `models` names
@@ -15,8 +16,17 @@
 	let {
 		run,
 		results,
-		models = null
-	}: { run: RunDetail; results: EvalResults; models?: RunModels | null } = $props();
+		models = null,
+		view,
+		onview
+	}: {
+		run: RunDetail;
+		results: EvalResults;
+		models?: RunModels | null;
+		/** Where a link left the items list, and where to tell it moved (028). */
+		view?: ItemsView;
+		onview?: (view: ItemsView) => void;
+	} = $props();
 
 	const p = $derived(results.provenance);
 	// What produced the scores, in the order a reader checks two runs against each other.
@@ -39,6 +49,20 @@
 		['Scored at', p.created_at],
 		['Command', p.command]
 	]);
+
+	// The tasks whose docs are right or wrong (eval's `acc_*` metrics) and that have a score,
+	// for the items. Docs right are the accuracy times the docs scored.
+	const itemTasks = $derived(
+		results.tasks
+			.filter((t) => t.primary_metric.startsWith('acc_') && t.metrics[t.primary_metric] != null)
+			.map((t) => {
+				const right = Math.round(t.metrics[t.primary_metric]! * t.num_docs);
+				return {
+					task: t.task,
+					counts: { wrong: t.num_docs - right, right, all: t.num_docs }
+				};
+			})
+	);
 
 	// The version it scored, as a link; a run Flock didn't link shows the model as written.
 	const scored = $derived(models?.scored?.[0] ?? null);
@@ -227,6 +251,37 @@
 					</table>
 				</div>
 			</section>
+
+			{#if itemTasks.length}
+				<section aria-labelledby="results-items">
+					<h2 id="results-items" class="mb-2 text-[15px]">Items</h2>
+					<!-- Text came with schema 11: an older run's items can't be read, only scored again. -->
+					{#if results.schema_version < 11}
+						<p class="text-muted-foreground">
+							This run’s predictions hold no text (results schema {results.schema_version}). Score
+							the model again with this flock to read its items.
+						</p>
+					{:else}
+						<!-- Run ids are per project: a run of another project is another list. -->
+						{#key `${run.entity}/${run.project}/${run.id}`}
+							<EvalItems
+								entity={run.entity}
+								project={run.project}
+								run={run.id}
+								sides={['This run']}
+								tasks={itemTasks}
+								keeps={[
+									{ keep: 'wrong', label: 'Wrong' },
+									{ keep: 'right', label: 'Right' },
+									{ keep: 'all', label: 'All' }
+								]}
+								{view}
+								{onview}
+							/>
+						{/key}
+					{/if}
+				</section>
+			{/if}
 
 			<section aria-labelledby="results-provenance">
 				<h2 id="results-provenance" class="mb-2 flex items-center gap-1.5 text-[15px]">

@@ -21,6 +21,7 @@
 !flock/eval/__init__.py
 !flock/eval/dataset.py
 !flock/eval/diff.py
+!flock/eval/items.py
 !flock/eval/provenance.py
 !flock/eval/results.py
 

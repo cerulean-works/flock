@@ -29,6 +29,7 @@ An eval run that `flock eval run --wandb-project` logged carries its `results.js
 
 - **Suites:** each suite's score, its metric, how many members it has and its suite hash.
 - **Tasks:** each task's primary metric and score, its number of docs, its task hash, its dataset (with a lock on a private one) and, when any task lost tokens, how many docs had their context cut to fit the model.
+- **Items:** each doc of a task whose primary metric is an accuracy, with its question and choices and the run's pick, its wrong ones by default. See [read the items](#read-eval-items).
 - **Provenance:** the model and its digest, the instrument (dtype, batch tokens, attention, SDPA kernel), the libraries, the flock commit and the command.
 
 Scores show four decimals; hover one for its exact value. Hashes show their first 12 characters. Hover one for the whole value, or copy it. Two scores are comparable only when their hashes are equal, as [comparing results](../evals/comparison) explains.
@@ -36,11 +37,39 @@ Scores show four decimals; hover one for its exact value. Hashes show their firs
 ### Compare two eval runs[[compare-two-eval-runs]]
 
 1. In **Table**, check exactly two eval runs and click **Compare items**. From a model version, open **Evals**, check two runs and click the same button. From an eval run, click **Compare with…** on its **Results** tab or in its **⋯** menu, then pick the other run.
-2. The page lists every task both runs scored under the same task hash, with four counts: docs both got right, both got wrong, only A got right and only B got right.
-3. Click a task to see the ids of the docs only one run got right. **Copy ids** puts a list on the clipboard.
+2. **Items** shows one task's docs side by side, with what each run picked. Choose the task, then one of four groups: docs only A got right, only B got right, both got wrong or both got right. Each shows its count.
+3. Below, every task both runs scored under the same task hash is listed with each run's accuracy on the docs compared, A's lead in points and the four counts. Click a task to read its items above. On two large runs the counts take a few seconds to arrive after the page. A link that names a task shows its items meanwhile.
 4. To compare another pair, click either run, or press <kbd>A</kbd> or <kbd>B</kbd>. Type to search the project's eval runs, use the arrow keys and press <kbd>Enter</kbd>. Press <kbd>Backspace</kbd> in the empty search box to pick another project.
 
-Tasks that can't be compared are listed below with the reason, such as another task hash or a primary metric that isn't an accuracy. Runs scored with another instrument aren't compared at all, and the page says why. The counts are those of `flock eval diff`, computed by Flock from the runs' files, and the page shows ids only, never a doc's text. A task on a private dataset is compared for your organization's members only: anyone else sees it among the tasks not compared, with no predictions.
+Tasks that can't be compared are listed below with the reason, such as another task hash or a primary metric that isn't an accuracy. Runs scored with another instrument aren't compared at all, and the page says why. The counts are those of `flock eval diff`, and the items those of [`flock eval items`](../evals/commands#flock-eval-items), computed by Flock from the runs' files. A task on a private dataset is compared, and its text shown, for your organization's members only: anyone else sees it among the tasks not compared, with no predictions.
+
+### Read the items[[read-eval-items]]
+
+With two runs, a row of small squares sits above the table, one for each suite of accuracy tasks both runs scored. Each square is a scatter plot of the suite's docs: a dot at A's margin across and B's margin up. The zero lines split it into the four groups (only B right top left, both right top right, both wrong bottom left, only A right bottom right), and the dashed diagonal is where both runs were equally sure, so a dot far from it is a doc they disagree on. The docs only one run got right are blue. Each square is scaled to its own suite, so compare shapes, not distances. The square holding the task shown (the one you clicked last, when several do) has a ring. Point at a quadrant to see its group and count, and to light up that group's button; point at a button to light up its quadrant. Click a quadrant to show that group in the table. Point at a dot to see its task, doc id and margins, and click it to open that doc in the table, on its page. The first visit to a pair of runs computes every suite, which takes a while on large runs; later visits are immediate.
+
+Each doc is one row: its id, the part of its question that varies (the lines every question of the list shares, such as `Answer:`, are left out), the gold choice, and for each run its pick with a check or a cross, and its margin. With two runs, the last column is the gap between their margins.
+
+A run's margin is its gold choice's score minus its best wrong choice's, in the task's primary metric: per character for `acc_per_char`, the log-probability for `acc_raw`. Above zero the run got the doc right, and the further from zero, the surer it was. A margin that rounds to zero can show either sign: the scorer picked in FP32, and Flock computes the margin in double precision. The tint follows the sign and grows with the margin. A task scored by `acc_greedy` ranks no choices, so its rows have no margin.
+
+By default the rows that tell most come first: with two runs, the biggest gap between their margins, and with one run, its surest docs, right or wrong. **Dataset order** switches back. Above the table, the task's score for each run, the difference in points and how many docs only one run got right show whether a net gain hides churn.
+
+Open a row and it grows in place, one row at a time: the whole question as scored, then a line per choice in the same columns, the gold one marked, with each run's share (a softmax of the metric's scores, a probability only for `acc_raw`), probability and log-probability. A run's pick has a solid bar and darker numbers.
+
+Runs scored with results schema 12 also show, under each run's numbers for a choice, the choice's tokens as that run's tokenizer cut them. Each is tinted by how unlikely the run found it (its surprisal, minus its log-probability), or, clicking the flame button above the table (**Surprisal** until clicked) to step through the others, by its rank among the run's guesses, the run's entropy there, or **A vs B**: green where this run found the token likelier than the other, red where less, shown only where both runs cut the choice into the same whole tokens. Hover a token for its log-probability, rank and entropy. A run scored without per-token values has an info icon in its column instead, which says why. If Flock can't fetch a run's tokenizer, or it doesn't decode the tokens back to the choice, its tokens show as dots with their numbers.
+
+Drag a column's edge to resize it, or double-click the edge to reset it; your browser remembers the widths. On the compare page, a table wider than the text grows toward the window's edge and then scrolls sideways.
+
+Move with the keys named under the list:
+
+| Key | Does |
+|---|---|
+| <kbd>J</kbd>, <kbd>K</kbd> | The next or previous doc, turning the page at its ends. With a doc open, open the next or previous one instead. |
+| <kbd>Enter</kbd> or <kbd>O</kbd> | Open the doc whose row has the focus. |
+| <kbd>Esc</kbd> | Close the open doc. |
+
+The page's address follows the list: the task, the group, the order, the page and the open doc. Copy it to send someone straight to that doc. A doc of a task on a private dataset opens for your organization's members only.
+
+Items are 20 to a page. Runs scored before predictions held text (results schema 10 and older) have no items: the Results tab says so, and the compare page keeps the doc ids of the docs only one run got right. Score the model again to read them.
 
 ## Organize projects and runs
 

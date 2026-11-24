@@ -25,9 +25,10 @@ COPY app/api/scripts /app/app/api/scripts
 # Hugging Face imports (D124) run flock.hub's own code, which reads Flock's credentials module.
 COPY flock/hub /app/flock/hub
 COPY flock/cli/__init__.py flock/cli/credentials.py /app/flock/cli/
-# The item comparison (025, D185) runs eval's own diff, whose reader needs no torch (D186).
-COPY flock/eval/__init__.py flock/eval/dataset.py flock/eval/diff.py flock/eval/provenance.py \
-    flock/eval/results.py /app/flock/eval/
+# The item comparison (025, D185) and the items (027) run eval's own diff and items, whose
+# reader needs no torch (D186).
+COPY flock/eval/__init__.py flock/eval/dataset.py flock/eval/diff.py flock/eval/items.py \
+    flock/eval/provenance.py flock/eval/results.py /app/flock/eval/
 RUN /opt/venv/bin/python -m compileall -q /app
 
 

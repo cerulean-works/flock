@@ -740,6 +740,132 @@ export interface ItemDiff {
 	schema_version: number;
 }
 
+/** One run's answer to a doc (eval's `Answer`, in `GET …/runs/{run}/items`). */
+export interface ItemAnswer {
+	/** The run's `provenance.model`. */
+	model: string;
+	/** The choice the primary metric picks; null for `acc_greedy`, which ranks none. */
+	pick: number | null;
+	correct: boolean;
+	/** Each choice's summed log-probability after its context. */
+	logprob: number[];
+	/** Each choice's probability renormalized over the choices. */
+	prob: number[];
+	/**
+	 * The softmax of the scores the primary metric ranks by: a share, not a probability, under a
+	 * length-normalized metric; null for `acc_greedy`.
+	 */
+	share: number[] | null;
+}
+
+/** A doc with its text and each run's answer (eval's `Item`, `flock eval items --json`). */
+export interface EvalItem {
+	task: string;
+	/** The primary metric, which `pick`, `correct` and `share` follow. */
+	metric: string;
+	id: string;
+	/** The context the choices share, or null when each has its own (`contexts`). */
+	question: string | null;
+	contexts: string[] | null;
+	/** Each choice's continuation as scored, leading space included. */
+	choices: string[];
+	gold: number;
+	/** One answer per run, in the order the runs were asked for. */
+	runs: ItemAnswer[];
+}
+
+/** One run's answer in a row of the items list (`GET …/runs/{run}/items`). */
+export interface ItemRunSummary {
+	correct: boolean;
+	/** The choice the primary metric picks; null for `acc_greedy`, which ranks none. */
+	pick: number | null;
+	/** The picked choice as a reader names it, clipped. */
+	pick_text: string | null;
+	/**
+	 * The gold choice's score minus the best wrong choice's, in the primary metric's units; null
+	 * for `acc_greedy` or a doc with one choice.
+	 */
+	margin: number | null;
+	/** The gold choice's probability renormalized over the choices. */
+	gold_prob: number;
+}
+
+/** A doc as a row of the items list: enough to skim, the whole `EvalItem` comes when it opens. */
+export interface ItemSummary {
+	id: string;
+	/** The part of the question that varies (the lines every question shares left out), clipped. */
+	text: string;
+	gold: number;
+	/** The gold choice as a reader names it, clipped. */
+	gold_text: string;
+	/** One answer per run, in the order the runs were asked for. */
+	runs: ItemRunSummary[];
+}
+
+/** A page of a task's items (`GET …/runs/{run}/items`). */
+export interface ItemsPage {
+	/** How many items the filter keeps in all. */
+	total: number;
+	offset: number;
+	items: ItemSummary[];
+}
+
+/** The compare page's row of suite squares for two runs (`GET …/runs/{run}/items/suites`). */
+export interface ItemSuites {
+	suites: {
+		suite: string;
+		/** Every accuracy task under it both runs scored under one hash. */
+		tasks: string[];
+		/** How many of its docs are in each cell of the runs' diff. */
+		counts: Partial<Record<ItemKeep, number>>;
+		/**
+		 * Up to 800 docs, taken evenly through each cell: A's margin, B's, the cell's index in eval's
+		 * `CELLS`, the task's index in `tasks`, the doc's place in that task's cell in the list's
+		 * default order, and its id.
+		 */
+		dots: [number, number, number, number, number, string][];
+	}[];
+}
+
+/** One run's values per token over a choice's continuation, from its sidecar. */
+export interface ChoiceTokens {
+	/** Each token's text from the run's tokenizer, or null when it couldn't be named. */
+	text: string[] | null;
+	logprob: number[];
+	/** 1 for the token the run found likeliest. */
+	rank: number[];
+	/** The entropy of the run's next-token distribution, in nats. */
+	entropy: number[];
+}
+
+/**
+ * What an opened item's tokens are tinted by: how unlikely the run found each one (minus its
+ * log-probability), its rank, the run's entropy there, or the two runs' log-probabilities against
+ * each other where they cut the choice into the same tokens.
+ */
+export type TokenHeat = 'surprisal' | 'rank' | 'entropy' | 'versus';
+
+/** Each run's per-token values over one doc's choices (`GET …/runs/{run}/item/tokens`). */
+export interface ItemTokens {
+	/** One per run, in order: `choices` null when the run has none, and `note` says why. */
+	runs: { choices: ChoiceTokens[] | null; note: string | null }[];
+}
+
+/** Where a link leaves the items list (028): each part only when it isn't the default. */
+export interface ItemsView {
+	task?: string;
+	keep?: ItemKeep;
+	sort?: 'doc';
+	/** From 1. */
+	page?: number;
+	/** The open item's id. */
+	item?: string;
+}
+
+/** What an items page keeps: one run's docs by outcome, or a cell of two runs' diff. */
+export type ItemKeep =
+	'wrong' | 'right' | 'all' | 'only_a' | 'only_b' | 'both_wrong' | 'both_right';
+
 /** An eval run the compare page's picker offers (`GET /api/projects/…/eval-runs`). */
 export interface EvalRunChoice {
 	id: string;

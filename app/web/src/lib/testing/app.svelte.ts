@@ -9,7 +9,7 @@ import { vi } from 'vitest';
  *     vi.mock('$app/forms', () => import('#lib/testing/app.svelte.ts'));
  *
  * `use:enhance` forms answer with `app.result` instead of posting, and record what they sent in
- * `app.sent`. `goto` moves `page.url` there.
+ * `app.sent`. `goto` and `replaceState` move `page.url` there.
  */
 /** What an action answers: its data, or a refusal with `{ error }`. */
 interface Answer {
@@ -28,7 +28,8 @@ export const app = $state({
 export const page = $state({
 	url: new URL('http://flock.test/'),
 	data: {} as Record<string, unknown>,
-	params: {} as Record<string, string>
+	params: {} as Record<string, string>,
+	state: {} as App.PageState
 });
 
 /** Back to a page at `url`, with no forms sent and success as the answer. */
@@ -38,9 +39,13 @@ export function resetApp(url = 'http://flock.test/', data: Record<string, unknow
 	app.result = { type: 'success', status: 200, data: {} };
 	app.sent = [];
 	goto.mockClear();
+	replaceState.mockClear();
 }
 
 export const goto = vi.fn(async (to: string | URL) => {
+	page.url = new URL(to, page.url);
+});
+export const replaceState = vi.fn((to: string | URL) => {
 	page.url = new URL(to, page.url);
 });
 export const invalidate = vi.fn(async () => {});
