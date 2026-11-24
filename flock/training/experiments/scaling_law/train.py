@@ -18,6 +18,7 @@ from flock.training.core.distributed import DistributedRuntime, distributed_run
 from flock.training.core.streaming import TextStream
 
 from .config import DataSettings, ExperimentConfig, ModelSettings
+from .evals import SaveEvaluator
 from .trainer import TokenBudgetTrainer
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,17 @@ def build_trainer(
         if data.streams
         else TokenChunkDataset(cache_dir=location, chunk_length=data.chunk_length)
     )
+    runtime = runtime if runtime is not None else DistributedRuntime.from_env()
+    evaluator = (
+        SaveEvaluator(
+            experiment.save_evals.suites,
+            runtime,
+            batch_tokens=experiment.save_evals.batch_tokens,
+            limit=experiment.save_evals.limit,
+        )
+        if experiment.save_evals is not None
+        else None
+    )
     return TokenBudgetTrainer(
         config=experiment.trainer_config(),
         model=model,
@@ -82,6 +94,11 @@ def build_trainer(
         stop_tokens=experiment.stop_tokens,
         save_tokens=experiment.save_tokens,
         runtime=runtime,
+        rounding=experiment.token_rounding,
+        wsd=experiment.wsd,
+        one_pass_tokens=experiment.one_pass_tokens,
+        nominal_params=experiment.nominal_params,
+        evaluator=evaluator,
     )
 
 

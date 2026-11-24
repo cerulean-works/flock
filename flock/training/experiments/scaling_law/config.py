@@ -31,6 +31,8 @@ from flock.training.core.models import (
 from flock.training.core.models import BaseModel as TrainingModel
 from flock.training.experiments.proxy.olmo2_proxy import PROXY_SIZES
 
+from .wsd import TokenRounding, WSDSettings
+
 type ArchitectureConfig = Olmo2Config | LlamaConfig
 
 MODEL_PRESETS: dict[str, ArchitectureConfig] = {
@@ -225,6 +227,25 @@ class MuonAdamWSettings(BaseModel):
         return MuonAdamWConfig(**self.model_dump(exclude={"type"}))
 
 
+class SaveEvalSettings(BaseModel):
+    """Flock perplexity suites to score, across the run's ranks, just before each save.
+
+    Args:
+        suites (`dict[str, str]`, *optional*): Flock suite name to its W&B label; defaults to
+            Paloma as `paloma` and tw-text-v0 as `tw_text_v0`.
+        batch_tokens (`int`, *optional*, defaults to `32768`): Scoring batch budget.
+        limit (`int`, *optional*): Documents per task, for quick tests.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    suites: dict[str, str] = Field(
+        default_factory=lambda: {"paloma": "paloma", "tw_text": "tw_text_v0"}
+    )
+    batch_tokens: int = Field(default=32768, gt=0)
+    limit: int | None = Field(default=None, gt=0)
+
+
 # Fields the experiment sets itself, so the passthrough `trainer` table cannot.
 _MANAGED_TRAINER_FIELDS = {
     "run_name",
@@ -237,6 +258,9 @@ _MANAGED_TRAINER_FIELDS = {
 }
 
 
+_PLACEHOLDER_SCHEDULE = (LRScheduleSegment(start=0, end=1.0, start_ratio=1.0, end_ratio=1.0),)
+
+
 class ExperimentConfig(BaseModel):
     """One training run: model, data, optimizer, schedule and when to save and stop.
 
@@ -246,8 +270,10 @@ class ExperimentConfig(BaseModel):
         data (`DataSettings`): Token cache.
         model (`ModelSettings`): Architecture and attention backend.
         optimizer (`AdamWSettings` or `MuonAdamWSettings`): Chosen by its `type` field.
-        schedule (`list[LRScheduleSegment]`): Learning-rate segments. Fractions are
-            fractions of the run up to `stop_tokens`.
+        schedule (`list[LRScheduleSegment]`, *optional*): Learning-rate segments. Fractions
+            are fractions of the run up to `stop_tokens`. Set this or `wsd`.
+        wsd (`WSDSettings`, *optional*): Warmup-stable-decay schedule with token boundaries,
+            resolved to updates when training starts. Needs a text stream.
         trainer (`dict[str, Any]`): Other `TrainerConfig` fields, such as
             `batch_tokens`, `torch_compile` or `wandb_project`. Name `model_dtype`
             as a string, such as `"bfloat16"`.
@@ -259,6 +285,12 @@ class ExperimentConfig(BaseModel):
             continuing its weights, optimizer, counters and data position under this run's
             schedule. Used only on the first start; restarts resume from this run's own
             checkpoints. Data, batching, seed, GPUs and peak rates must match the parent.
+        token_rounding (`str`, *optional*, defaults to `"first_reaching"`): Save and schedule
+            token counts land on the first update reaching them, or the `"nearest"` update.
+        one_pass_tokens (`int`, *optional*): Targets one pass over the data can train on;
+            budgets beyond it are refused. Also the denominator of `train/epoch_pct`.
+        nominal_params (`int`, *optional*): Parameter count for `train/tokens_per_param`.
+        save_evals (`SaveEvalSettings`, *optional*): Score Flock suites before each save.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -268,13 +300,18 @@ class ExperimentConfig(BaseModel):
     data: DataSettings
     model: ModelSettings
     optimizer: Annotated[AdamWSettings | MuonAdamWSettings, Field(discriminator="type")]
-    schedule: list[LRScheduleSegment] = Field(min_length=1)
+    schedule: list[LRScheduleSegment] = Field(default_factory=list)
+    wsd: WSDSettings | None = None
     trainer: dict[str, Any] = Field(default_factory=dict)
     stop_tokens: TokenCount
     save_tokens: list[TokenCount] = Field(default_factory=list)
     seed: int = 0
     wandb_group: str | None = None
     branch_from: str | None = None
+    token_rounding: TokenRounding = "first_reaching"
+    one_pass_tokens: TokenCount | None = None
+    nominal_params: TokenCount | None = None
+    save_evals: SaveEvalSettings | None = None
 
     @model_validator(mode="after")
     def validate_run(self) -> Self:
@@ -284,6 +321,14 @@ class ExperimentConfig(BaseModel):
             raise ValueError(f"Set {sorted(managed)} outside the trainer table")
         if any(tokens > self.stop_tokens for tokens in self.save_tokens):
             raise ValueError("save_tokens must not exceed stop_tokens")
+        if bool(self.schedule) == (self.wsd is not None):
+            raise ValueError("Set exactly one of schedule and wsd")
+        if self.wsd is not None and not self.data.streams:
+            raise ValueError("A wsd schedule needs data.text_path")
+        if self.one_pass_tokens is not None and self.stop_tokens > self.one_pass_tokens:
+            raise ValueError(
+                f"stop_tokens {self.stop_tokens} exceeds one pass ({self.one_pass_tokens})"
+            )
         self.trainer_config()
         self.model.architecture_config(self.seed)
         return self
@@ -306,7 +351,10 @@ class ExperimentConfig(BaseModel):
                 "input_column": self.data.input_column,
                 "output_dir": self.output_dir,
                 "optimizer_config": self.optimizer.build(),
-                "lr_scheduler_config": LRSchedulerConfig(schedule=tuple(self.schedule)),
+                # A WSD run's schedule depends on its world size; the trainer resolves it.
+                "lr_scheduler_config": LRSchedulerConfig(
+                    schedule=tuple(self.schedule) or _PLACEHOLDER_SCHEDULE
+                ),
                 "seed": self.seed,
                 "max_steps": max_steps,
             }
