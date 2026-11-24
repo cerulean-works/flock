@@ -26,7 +26,7 @@ import sys
 import threading
 import uuid
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import FrameType
@@ -106,6 +106,19 @@ class SlotLayout:
                 f"A run needs {gpus_per_run} GPUs but the allocation has {allocation.gpus}"
             )
         return layout
+
+    def capped(self, max_slots: int | None) -> Self:
+        """Return this layout limited to at most `max_slots` concurrent runs.
+
+        Several launchers can then share one allocation, each training its own sweep in
+        part of it. Slurm places each run's step on whichever GPUs are free, so the
+        launchers' slots together must not need more GPUs than the allocation has.
+        """
+        if max_slots is None or max_slots >= self.slots:
+            return self
+        if max_slots < 1:
+            raise ValueError(f"max_slots must be positive, not {max_slots}")
+        return replace(self, slots=max_slots)
 
 
 def capacity_warnings(runs: int, allocation: Allocation, layout: SlotLayout) -> list[str]:
@@ -624,6 +637,11 @@ def main(argv: list[str] | None = None) -> int:
     launch.add_argument("--local", action="store_true", help="Use this machine's GPUs, no srun.")
     launch.add_argument("--retries", type=int, default=0, help="Extra attempts after a failure.")
     launch.add_argument("--dry-run", action="store_true", help="Print the first wave's commands.")
+    launch.add_argument(
+        "--max-slots",
+        type=int,
+        help="Train at most this many runs at once, to share the allocation with other launchers.",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -670,7 +688,7 @@ def main(argv: list[str] | None = None) -> int:
         allocation = Allocation(1, args.gpus_per_node or local_gpu_count())
     else:
         allocation = Allocation.from_slurm(args.gpus_per_node)
-    layout = SlotLayout.plan(allocation, sweep.sweep.gpus_per_run)
+    layout = SlotLayout.plan(allocation, sweep.sweep.gpus_per_run).capped(args.max_slots)
     if args.local and layout.nodes_per_run > 1:
         raise ValueError("Local launches cannot span nodes; lower gpus_per_run")
     remaining = [run for run in runs if not run.done.exists()]
@@ -681,8 +699,12 @@ def main(argv: list[str] | None = None) -> int:
         layout.slots,
         allocation.gpus,
     )
-    for warning in capacity_warnings(len(remaining), allocation, layout):
-        logger.warning(warning)
+    if args.max_slots is not None and layout.slots * layout.gpus_per_run < allocation.gpus:
+        # A capped launcher shares the allocation, so its unused GPUs are not idle.
+        logger.info("Using %d of the allocation's GPUs", layout.slots * layout.gpus_per_run)
+    else:
+        for warning in capacity_warnings(len(remaining), allocation, layout):
+            logger.warning(warning)
     launcher = Launcher(
         sweep,
         runs,

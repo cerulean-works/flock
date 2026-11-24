@@ -164,6 +164,16 @@ def test_slot_layout_fits_runs_to_the_allocation(
     assert (layout.slots, layout.nodes_per_run) == (slots, nodes_per_run)
 
 
+def test_capped_layouts_share_the_allocation() -> None:
+    layout = SlotLayout.plan(Allocation(10, 8), 2)
+    assert layout.capped(None) == layout
+    assert layout.capped(100) == layout
+    capped = layout.capped(9)
+    assert (capped.slots, capped.gpus_per_run, capped.nodes_per_run) == (9, 2, 1)
+    with pytest.raises(ValueError, match="positive"):
+        layout.capped(0)
+
+
 @pytest.mark.parametrize(("nodes", "per_run"), [(4, 6), (1, 8)])
 def test_slot_layout_rejects_runs_that_cannot_fit(nodes: int, per_run: int) -> None:
     with pytest.raises(ValueError, match="multiple|needs"):
