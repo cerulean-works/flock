@@ -234,9 +234,11 @@ describe('the compare page', () => {
 		const { promise: compared, resolve: land } = Promise.withResolvers<typeof answer>();
 		render(ComparePage, { data: { a: run('r1'), b: run('r2'), compared } } as never);
 		await expect.element(screen.getByRole('status')).toHaveTextContent(/Comparing/);
-		// The items asked Flock for the linked cell at once (here: a run without text).
+		// The items asked Flock for the linked cell at once (here: a run without text), beside the
+		// suite row's own request.
 		await expect.element(screen.getByRole('alert')).toHaveTextContent(/schema 10/);
-		expect(vi.mocked(fetch).mock.calls[0][0]).toMatch(/task=arc_easy&keep=only_b/);
+		const asked = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+		expect(asked.some((url) => /task=arc_easy&keep=only_b/.test(url))).toBe(true);
 		land(answer);
 		await expect.element(screen.getByRole('heading', { name: /1 tasks compared/ })).toBeVisible();
 		await expect.element(screen.getByText('Mercury_3')).toBeVisible();
