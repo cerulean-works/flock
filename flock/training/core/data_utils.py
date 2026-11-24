@@ -134,11 +134,13 @@ class LanceBatchCollator:
         ]
         rows = len(chunks)
         width = max(sum(len(ids) - 1 for ids in row) for row in chunks)
+
         input_ids = torch.full((rows, width), self.tokenizer.pad_token_id, dtype=torch.long)
         labels = torch.full((rows, width), -100, dtype=torch.long)
         attention_mask = torch.zeros((rows, width), dtype=torch.bool)
         position_ids = torch.zeros((rows, width), dtype=torch.long)
         lengths: list[int] = []
+
         for row, row_chunks in enumerate(chunks):
             start = 0
             for ids in row_chunks:
@@ -152,6 +154,7 @@ class LanceBatchCollator:
             if start < width:
                 position_ids[row, start:] = torch.arange(width - start)
                 lengths.append(width - start)
+
         cu_seq_lens = torch.zeros(len(lengths) + 1, dtype=torch.int32)
         cu_seq_lens[1:] = torch.tensor(lengths).cumsum(0)
         return {

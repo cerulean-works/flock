@@ -128,8 +128,9 @@ def _flash_attention(
 
         indices = attention_metadata.indices
         if indices is None:
-            # Packed documents cover every position, so flatten instead of gathering.
-            query, key, value = (packing.flatten(tensor) for tensor in (q, k, v))
+            # Packed documents cover every position, so [batch * seq_len, heads, head_dim]
+            # already puts every token in the order the kernel needs.
+            query, key, value = (tensor.transpose(1, 2).flatten(0, 1) for tensor in (q, k, v))
         else:
             query, key, value = (packing.pack(tensor, indices) for tensor in (q, k, v))
 
@@ -171,7 +172,8 @@ def _flash_attention(
             output = cast(Tensor, output)
 
         if indices is None:
-            return packing.unflatten(output, q.shape[0], q.shape[2])
+            # Restore the query layout [batch, heads, seq_len, head_dim].
+            return output.unflatten(0, (q.shape[0], q.shape[2])).transpose(1, 2)
         return packing.unpack(output, indices, q.shape[0], q.shape[2])
 
 
