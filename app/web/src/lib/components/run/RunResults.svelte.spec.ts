@@ -133,14 +133,17 @@ const DIFF: ItemDiff = {
 	schema_version: 1
 };
 
+const answer = { diff: DIFF, refusal: null };
+
 describe('the compare page', () => {
 	it('shows the four counts per task, and the ids of a cell when the runs have no text', async () => {
 		noText();
 		resetApp('http://flock.test/acme/evals/runs/r1/compare?with=acme%2Fevals%2Fr2');
 		render(ComparePage, {
-			data: { a: run('r1', 'olmo'), b: run('r2'), diff: DIFF, refusal: null }
+			data: { a: run('r1', 'olmo'), b: run('r2'), compared: Promise.resolve(answer) }
 		} as never);
 		const row = screen.getByRole('row').filter({ hasText: 'arc_easy' });
+		await expect.element(row).toBeVisible();
 		expect(
 			row
 				.getByRole('cell')
@@ -172,8 +175,10 @@ describe('the compare page', () => {
 			data: {
 				a: run('r1', 'olmo'),
 				b: run('r2'),
-				diff: { ...DIFF, tasks: [...DIFF.tasks, piqa] },
-				refusal: null
+				compared: Promise.resolve({
+					diff: { ...DIFF, tasks: [...DIFF.tasks, piqa] },
+					refusal: null
+				})
 			}
 		} as never);
 		const order = () =>
@@ -214,8 +219,23 @@ describe('the compare page', () => {
 	it('says why a pair can’t be compared', async () => {
 		const refusal = 'different instrument: provenance.dtype is float32 in a, bfloat16 in b';
 		render(ComparePage, {
-			data: { a: run('r1'), b: run('r2'), diff: null, refusal }
+			data: { a: run('r1'), b: run('r2'), compared: Promise.resolve({ diff: null, refusal }) }
 		} as never);
 		await expect.element(screen.getByRole('alert')).toHaveTextContent(refusal);
+	});
+
+	it('loads a linked task’s items before the diff lands', async () => {
+		noText();
+		const url = 'http://flock.test/acme/evals/runs/r1/compare?with=acme%2Fevals%2Fr2';
+		resetApp(`${url}&task=arc_easy&keep=only_b`);
+		const { promise: compared, resolve: land } = Promise.withResolvers<typeof answer>();
+		render(ComparePage, { data: { a: run('r1'), b: run('r2'), compared } } as never);
+		await expect.element(screen.getByRole('status')).toHaveTextContent(/Comparing/);
+		// The items asked Flock for the linked cell at once (here: a run without text).
+		await expect.element(screen.getByRole('alert')).toHaveTextContent(/schema 10/);
+		expect(vi.mocked(fetch).mock.calls[0][0]).toMatch(/task=arc_easy&keep=only_b/);
+		land(answer);
+		await expect.element(screen.getByRole('heading', { name: /1 tasks compared/ })).toBeVisible();
+		await expect.element(screen.getByText('Mercury_3')).toBeVisible();
 	});
 });
