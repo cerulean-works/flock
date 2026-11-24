@@ -6,6 +6,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import type { RunFile } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		/** `/api/projects/…/runs/{run}/files` */
@@ -37,7 +38,7 @@
 	{#if failed}
 		<EmptyState tone="error">Couldn’t load the run’s files</EmptyState>
 	{:else if !files}
-		<EmptyState>Loading…</EmptyState>
+		<Skeleton count={8} />
 	{:else if !files.length}
 		<EmptyState>No files uploaded</EmptyState>
 	{:else}

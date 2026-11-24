@@ -11,6 +11,7 @@
 	import { withParam } from '#lib/workspace/url.ts';
 	import CellView from './CellView.svelte';
 	import ImageDialog from './ImageDialog.svelte';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -196,7 +197,7 @@
 	{:else if failed}
 		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
 	{:else if !rows}
-		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+		<Skeleton count={10} />
 	{:else if !rows.rows.length}
 		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">
 			{rows.total ? 'No rows on this page.' : 'This version has no rows.'}

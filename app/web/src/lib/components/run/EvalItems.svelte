@@ -5,7 +5,7 @@
 	import FlameIcon from '@lucide/svelte/icons/flame';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { tick, untrack, type Snippet } from 'svelte';
 	import PageNumbers from '#lib/components/PageNumbers.svelte';
@@ -637,9 +637,7 @@
 									{#if detailRefusal}
 										<span role="alert">No text for this doc: {detailRefusal}</span>
 									{:else}
-										<span class="flex items-center gap-2">
-											<LoaderCircleIcon class="size-3.5 animate-spin" /> Loading the doc…
-										</span>
+										<Skeleton shape="lines" />
 									{/if}
 								</td>
 							</tr>
@@ -649,9 +647,7 @@
 			</table>
 		</div>
 	{:else if loading}
-		<p class="flex items-center gap-2 text-muted-foreground">
-			<LoaderCircleIcon class="size-3.5 animate-spin" /> Loading items…
-		</p>
+		<Skeleton count={20} />
 	{/if}
 	<!-- Kept under a refused page, so the reader can go back to one that loads. -->
 	{#if total}

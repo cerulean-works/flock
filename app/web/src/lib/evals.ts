@@ -1,3 +1,4 @@
+import { formatNumber } from './utils.ts';
 import { resolve } from '$app/paths';
 import type {
 	EvalResults,
@@ -128,12 +129,13 @@ export const isAccuracy = (metric: string | null, value: number) =>
 
 /**
  * A score as the eval pages show it: an accuracy as a percent to one decimal (`62.4%`), any other
- * metric (`bpb`, `perplexity`) to four significant figures. The exact value is the hover hint.
+ * metric (`bpb`, `perplexity`) to three decimals, so a column of them lines up. The exact value is
+ * the hover hint.
  */
 export function formatScore(value: number | null | undefined, metric: string | null): string {
 	if (value == null || !Number.isFinite(value)) return '–';
 	if (isAccuracy(metric, value)) return `${(100 * value).toFixed(1)}%`;
-	return String(+value.toPrecision(4));
+	return Math.abs(value) >= 1e4 ? formatNumber(value) : value.toFixed(3);
 }
 
 /** Why eval's diff didn't compare a task, in words. */

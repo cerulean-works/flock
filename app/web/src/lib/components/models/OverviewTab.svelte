@@ -7,6 +7,7 @@
 	import { bytes, dateTime, formatValue } from '#lib/utils.ts';
 	import Markdown from '../Markdown.svelte';
 	import TagChip from '../TagChip.svelte';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -74,7 +75,7 @@
 	<section class="mt-8 first:mt-0" aria-label={title}>
 		<h2 class="text-[13px] font-medium">{title}</h2>
 		{#if read === null}
-			<p class="mt-2 text-[13px] text-muted-foreground">Loading…</p>
+			<Skeleton shape="lines" class="mt-2" />
 		{:else if 'error' in read}
 			<p class="mt-2 text-[13px] text-destructive" role="alert">{read.error}</p>
 		{:else if rows === null}
@@ -103,7 +104,7 @@
 				This version has no README. Add a README.md to the folder you push to describe it.
 			</p>
 		{:else if readme === null}
-			<p class="mb-8 bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+			<Skeleton shape="lines" count={6} class="mb-8" />
 		{:else if 'error' in readme}
 			<p class="mb-8 bg-card px-4 py-6 text-[13px] text-destructive" role="alert">
 				{readme.error}

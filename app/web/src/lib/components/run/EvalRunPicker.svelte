@@ -4,12 +4,12 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import FolderIcon from '@lucide/svelte/icons/folder';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { Snippet } from 'svelte';
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import type { EvalRunChoice } from '#lib/types.ts';
 	import { relativeTime } from '#lib/utils.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	/**
 	 * Picks one side of a comparison (025 D185) from the keyboard: the search box has focus, ↑↓
@@ -229,9 +229,7 @@
 				<p class="px-2 py-2 text-xs text-destructive" role="alert">{failed}</p>
 			{:else if mode === 'runs'}
 				{#if runs === null}
-					<p class="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
-						<LoaderCircleIcon class="size-3.5 animate-spin" /> Loading…
-					</p>
+					<Skeleton shape="lines" class="px-2" />
 				{/if}
 				{#each runs ?? [] as r, i (r.id)}
 					{@const current = scope.entity === entity && scope.project === project && r.id === run}
@@ -263,9 +261,7 @@
 				{/each}
 			{:else}
 				{#if projects === null}
-					<p class="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
-						<LoaderCircleIcon class="size-3.5 animate-spin" /> Loading…
-					</p>
+					<Skeleton shape="lines" class="px-2" />
 				{/if}
 				{#each shownProjects as p, i (p.name)}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->

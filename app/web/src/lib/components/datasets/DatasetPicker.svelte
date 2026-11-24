@@ -5,12 +5,12 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import type { DatasetAt, DatasetEntry, DatasetFolder } from '#lib/types.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	// A dropdown choosing a dataset of flock-datasets by browsing it a folder at a time, as the
 	// Datasets tab lists it: folders open in place, a dataset is picked. The filter narrows the
@@ -230,9 +230,7 @@
 				</button>
 			{/each}
 			{#if loading}
-				<p class="flex items-center gap-2 px-1.5 py-1.5 text-xs text-muted-foreground">
-					<LoaderCircleIcon class="size-3.5 animate-spin" /> Loading…
-				</p>
+				<Skeleton shape="lines" class="px-1.5" />
 			{:else if error}
 				<p class="px-1.5 py-1.5 text-xs text-destructive">{error}</p>
 			{:else if cursor}

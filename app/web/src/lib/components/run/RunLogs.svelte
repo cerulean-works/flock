@@ -21,6 +21,7 @@
 	import { clock, elapsed, parseLine, type Level, type LogLine, type Span } from '#lib/logs.ts';
 	import type { RunLogs } from '#lib/types.ts';
 	import { dateTime, fileSafe, saveBlob } from '#lib/utils.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 	import {
 		LEVEL_KEYS,
 		levelCounts,
@@ -688,8 +689,10 @@
 
 		{#if failed}
 			<EmptyState tone="error">Couldn’t load the console output</EmptyState>
+		{:else if !lines.length && loading}
+			<Skeleton shape="lines" count={8} class="px-4 py-3" />
 		{:else if !lines.length}
-			<EmptyState>{loading ? 'Loading…' : 'Nothing printed to the console'}</EmptyState>
+			<EmptyState>Nothing printed to the console</EmptyState>
 		{:else if !shown.lines.length}
 			<EmptyState>
 				No lines at the levels shown.

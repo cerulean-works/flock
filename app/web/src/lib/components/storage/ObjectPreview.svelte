@@ -4,6 +4,7 @@
 	import { unreachable } from '#lib/uploads.svelte.ts';
 	import { bytes } from '#lib/utils.ts';
 	import Markdown from '../Markdown.svelte';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		org: string;
@@ -97,7 +98,7 @@
 				>{shown.body}</code
 			></pre>
 	{:else}
-		<p class="bg-card px-4 py-6 text-center text-[13px] text-muted-foreground">Loading preview…</p>
+		<Skeleton shape="block" class="h-64" />
 	{/if}
 	{#if text !== null && truncated}
 		<p class="mt-2 text-[13px] text-muted-foreground">

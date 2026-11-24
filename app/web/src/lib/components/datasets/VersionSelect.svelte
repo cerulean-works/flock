@@ -4,6 +4,7 @@
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	// A dataset's version, for a blend source or a fork: the latest (an empty value), or one of
 	// its versions, each shown with its tags and rows. Another dataset goes back to the latest.
@@ -108,7 +109,7 @@
 		{#if failed}
 			<p class="px-2 py-1.5 text-xs text-destructive">{failed}</p>
 		{:else if versions === null}
-			<p class="px-2 py-1.5 text-xs text-muted-foreground">Loading…</p>
+			<Skeleton shape="lines" class="px-2" />
 		{:else}
 			{#each versions as v (v.version)}
 				<Select.Item value={String(v.version)} label="v{v.version}">

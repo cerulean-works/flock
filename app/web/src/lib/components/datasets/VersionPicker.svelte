@@ -9,6 +9,7 @@
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -87,7 +88,7 @@
 			{#if failed}
 				<p class="px-2 py-1.5 text-[13px] text-destructive">{failed}</p>
 			{:else if versions === null}
-				<p class="px-2 py-1.5 text-[13px] text-muted-foreground">Loading…</p>
+				<Skeleton shape="lines" class="px-2" />
 			{:else}
 				{#each versions as v (v.version)}
 					<DropdownMenu.Item onSelect={() => choose(String(v.version))}>

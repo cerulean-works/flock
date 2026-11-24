@@ -9,6 +9,7 @@
 	import type { Scope } from '#lib/scope.ts';
 	import type { ModelEvalRun, ModelVersionDetail } from '#lib/types.ts';
 	import { runHref } from '#lib/workspace/url.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	let { scope, version }: { scope: Scope; version: ModelVersionDetail } = $props();
 
@@ -58,7 +59,7 @@
 {:else if failed}
 	<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
 {:else if runs === null}
-	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+	<Skeleton />
 {:else if !runs.length}
 	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">
 		The eval runs of this version can’t be read.

@@ -13,6 +13,7 @@
 	import TagChip from '../TagChip.svelte';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
 	import TagDialog from './TagDialog.svelte';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -79,7 +80,7 @@
 {#if failed && !loaded}
 	<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
 {:else if !loaded}
-	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+	<Skeleton />
 {:else}
 	<!-- Every cell starts on the same 24px line, so a row reads level whatever it holds. -->
 	<table class="w-full border-collapse text-[13px] leading-6">
