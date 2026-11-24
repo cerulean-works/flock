@@ -70,8 +70,13 @@
 			<FormError {error} />
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-				<Button type="submit" variant="destructive" disabled={!entry || typed !== label || pending}>
-					{pending ? 'Deleting…' : 'Delete for good'}
+				<Button
+					type="submit"
+					variant="destructive"
+					disabled={!entry || typed !== label || pending}
+					{pending}
+				>
+					Delete for good
 				</Button>
 			</AlertDialog.Footer>
 		</form>

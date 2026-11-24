@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import CoinsIcon from '@lucide/svelte/icons/coins';
@@ -54,7 +55,7 @@
 			href={monthHref(shiftMonth(budget.month, -1))}
 			data-sveltekit-noscroll
 			aria-label="Previous month"
-			title="Previous month"
+			{@attach hint('Previous month')}
 		>
 			<ChevronLeftIcon />
 		</Button>
@@ -68,7 +69,7 @@
 			href={current ? undefined : monthHref(shiftMonth(budget.month, 1))}
 			data-sveltekit-noscroll
 			aria-label="Next month"
-			title="Next month"
+			{@attach hint('Next month')}
 			aria-disabled={current}
 		>
 			<ChevronRightIcon />
@@ -163,7 +164,7 @@
 								<a
 									class="min-w-0 flex-1 truncate text-muted-foreground hover:text-link"
 									href={orgHref(budget.org, 'deleted-projects')}
-									title="Manage the spend of deleted projects"
+									{@attach hint('Manage the spend of deleted projects')}
 								>
 									Deleted projects
 								</a>
@@ -204,7 +205,7 @@
 						{@const hardware = gpus(run.gpu_type, run.gpu_count)}
 						<!-- Three columns, each centred on the row: who, which run, and what it cost. -->
 						<li class="flex items-center gap-3 border-b border-divider py-2.5 last:border-0">
-							<span class="flex-none" title={run.owner?.name}>
+							<span class="flex-none" {@attach hint(run.owner?.name)}>
 								<Avatar
 									name={run.owner?.name ?? '?'}
 									src={run.owner?.avatar_url}
@@ -226,7 +227,9 @@
 								<p class="font-medium tabular-nums">{fmt(run.cost)}</p>
 								<p
 									class="mt-0.5 text-xs text-muted-foreground tabular-nums"
-									title={hardware ? `${hardware}, ${hours(run.gpu_hours)} GPU hours` : undefined}
+									{@attach hint(
+										hardware ? `${hardware}, ${hours(run.gpu_hours)} GPU hours` : undefined
+									)}
 								>
 									{hours(run.gpu_hours)}
 									{run.gpu_type ?? 'GPU'}-hr

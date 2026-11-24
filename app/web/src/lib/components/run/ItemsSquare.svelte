@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { signedMargin } from '#lib/evals.ts';
 	import { scheme } from '#lib/theme.svelte.ts';
 	import type { ItemKeep, ItemSuites } from '#lib/types.ts';
@@ -223,7 +224,7 @@
 			'truncate font-mono text-[11px]',
 			current ? 'text-foreground' : 'text-muted-foreground'
 		]}
-		title={suite.suite}
+		{@attach hint(suite.suite)}
 	>
 		{suite.suite}
 	</figcaption>

@@ -110,8 +110,13 @@
 					<Button type="button" onclick={() => (open = false)}>Close</Button>
 				{:else}
 					<AlertDialog.Cancel disabled={pending}>Cancel</AlertDialog.Cancel>
-					<Button type="submit" variant="destructive" disabled={typed !== expected || pending}>
-						{pending ? 'Deleting…' : `Delete ${count(names.length, 'model')}`}
+					<Button
+						type="submit"
+						variant="destructive"
+						disabled={typed !== expected || pending}
+						{pending}
+					>
+						{`Delete ${count(names.length, 'model')}`}
 					</Button>
 				{/if}
 			</AlertDialog.Footer>

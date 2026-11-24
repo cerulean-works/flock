@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { cn } from '#lib/utils.js';
@@ -17,7 +18,7 @@
 <Badge
 	variant="outline"
 	class={cn('public-badge text-muted-foreground', className)}
-	title="Anyone with the link can see {what}"
+	{@attach hint(`Anyone with the link can see ${what}`)}
 >
 	<GlobeIcon /> Public
 </Badge>

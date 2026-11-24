@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import CpuIcon from '@lucide/svelte/icons/cpu';
 	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
 	import LayersIcon from '@lucide/svelte/icons/layers';
@@ -42,7 +43,7 @@
 			<FolderPlusIcon class="size-3.5" />
 		</span>
 	{:else}
-		<span title={item.actor?.name}
+		<span {@attach hint(item.actor?.name)}
 			><Avatar name={item.actor?.name ?? '?'} src={item.actor?.avatar_url} /></span
 		>
 	{/if}
@@ -71,7 +72,7 @@
 			<time
 				class="flex-none text-[13px] text-muted-foreground"
 				datetime={new Date(item.at * 1000).toISOString()}
-				title={dateTime(item.at)}
+				{@attach hint(dateTime(item.at))}
 			>
 				{relativeTime(item.at, now)}
 			</time>

@@ -1,18 +1,20 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
 	import ArrowDownWideNarrowIcon from '@lucide/svelte/icons/arrow-down-wide-narrow';
 	import FlameIcon from '@lucide/svelte/icons/flame';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { tick, untrack, type Snippet } from 'svelte';
 	import PageNumbers from '#lib/components/PageNumbers.svelte';
+	import PickerField from '#lib/components/PickerField.svelte';
+	import PickerList from '#lib/components/PickerList.svelte';
 	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
 	import ItemChoiceRow from './ItemChoiceRow.svelte';
 	import ItemsMap from './ItemsMap.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Select from '#lib/components/ui/select/index.js';
 	import { signedMargin, typedIn } from '#lib/evals.ts';
 	import type {
 		EvalItem,
@@ -161,6 +163,14 @@
 	const columns = $derived(4 + sides.length + (other ? 1 : 0));
 
 	const counts = $derived(tasks.find((t) => t.task === task)?.counts ?? {});
+
+	// The task picker: the shared searchable list, its search over the task names.
+	let picking = $state(false);
+	let taskQuery = $state('');
+	let taskActive = $state(0);
+	const taskChoices = $derived(
+		tasks.filter((t) => t.task.toLowerCase().includes(taskQuery.trim().toLowerCase()))
+	);
 	const pages = $derived(Math.max(1, Math.ceil((total ?? 0) / SIZE)));
 
 	// Every change the reader makes ends here, so the page's link follows it. Untracked: the page
@@ -406,29 +416,48 @@
 
 <div class="grid gap-3" bind:this={root}>
 	<div class="flex flex-wrap items-center gap-2">
-		<Select.Root
-			type="single"
-			value={task}
-			onValueChange={(v) => {
-				task = v;
-				at = 1;
-				total = null;
-				open = null; // doc ids repeat across tasks
-				tell();
+		<PickerField
+			bind:open={picking}
+			onOpenChange={(next) => {
+				if (!next) return;
+				taskQuery = '';
+				taskActive = Math.max(
+					0,
+					tasks.findIndex((t) => t.task === task)
+				);
 			}}
+			aria-label="Task: {task}"
+			class="h-7 max-w-80 min-w-56 font-mono text-[12.5px]"
 		>
-			<Select.Trigger size="sm" class="max-w-80 min-w-56 font-mono text-[12.5px]" aria-label="Task">
-				{task}
-			</Select.Trigger>
-			<Select.Content class="max-h-96">
-				{#each tasks as t (t.task)}
-					<Select.Item value={t.task} label={t.task}>
+			<span class="min-w-0 flex-1 truncate">{task}</span>
+			{#snippet list()}
+				<PickerList
+					options={taskChoices}
+					key={(t) => t.task}
+					current={(t) => t.task === task}
+					noun="tasks"
+					label="Search tasks"
+					placeholder="Search tasks…"
+					class="max-h-96"
+					bind:query={taskQuery}
+					bind:active={taskActive}
+					onpick={(t) => {
+						picking = false;
+						if (t.task === task) return;
+						task = t.task;
+						at = 1;
+						total = null;
+						open = null; // doc ids repeat across tasks
+						tell();
+					}}
+				>
+					{#snippet row(t: (typeof tasks)[number])}
 						<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{t.task}</span>
 						<span class="text-xs text-muted-foreground tabular-nums">{t.counts[keep] ?? ''}</span>
-					</Select.Item>
-				{/each}
-			</Select.Content>
-		</Select.Root>
+					{/snippet}
+				</PickerList>
+			{/snippet}
+		</PickerField>
 		<div class="flex flex-wrap gap-1" role="radiogroup" aria-label="Docs shown">
 			{#each keeps as k (k.keep)}
 				<button
@@ -461,7 +490,7 @@
 			variant="ghost"
 			size="sm"
 			class="ml-auto text-muted-foreground"
-			title="Tokens: {tint.now.hint}. Click for {tint.next.label}."
+			{@attach hint(`Tokens: ${tint.now.hint}. Click for ${tint.next.label}.`)}
 			onclick={() => (heat = tint.next.heat)}
 		>
 			<FlameIcon />
@@ -471,11 +500,13 @@
 			variant="ghost"
 			size="sm"
 			class="text-muted-foreground"
-			title={sort === 'margin'
-				? other
-					? 'The biggest gap between the runs’ margins first'
-					: 'The surest first, right or wrong'
-				: 'The dataset’s order'}
+			{@attach hint(
+				sort === 'margin'
+					? other
+						? 'The biggest gap between the runs’ margins first'
+						: 'The surest first, right or wrong'
+					: 'The dataset’s order'
+			)}
 			onclick={() => {
 				sort = sort === 'margin' ? 'doc' : 'margin';
 				at = 1;
@@ -566,7 +597,7 @@
 									<ChevronRightIcon
 										class={['size-3.5 flex-none transition-transform', shown && 'rotate-90']}
 									/>
-									<span class="truncate" title={row.id}>{row.id}</span>
+									<span class="truncate" {@attach hint(row.id)}>{row.id}</span>
 								</button>
 							</td>
 							<td class="px-2 py-1.5">
@@ -579,7 +610,9 @@
 							{#each row.runs as answer, side (side)}
 								<td
 									class="px-2 py-1.5"
-									title="Gold choice’s probability {(100 * answer.gold_prob).toFixed(1)}%"
+									{@attach hint(
+										`Gold choice’s probability ${(100 * answer.gold_prob).toFixed(1)}%`
+									)}
 								>
 									<!-- Right or wrong by the icon's shape, then what the run picked. -->
 									<span class="flex items-start gap-1.5">
@@ -632,9 +665,7 @@
 									{#if detailRefusal}
 										<span role="alert">No text for this doc: {detailRefusal}</span>
 									{:else}
-										<span class="flex items-center gap-2">
-											<LoaderCircleIcon class="size-3.5 animate-spin" /> Loading the doc…
-										</span>
+										<Skeleton shape="lines" />
 									{/if}
 								</td>
 							</tr>
@@ -644,9 +675,7 @@
 			</table>
 		</div>
 	{:else if loading}
-		<p class="flex items-center gap-2 text-muted-foreground">
-			<LoaderCircleIcon class="size-3.5 animate-spin" /> Loading items…
-		</p>
+		<Skeleton count={20} />
 	{/if}
 	<!-- Kept under a refused page, so the reader can go back to one that loads. -->
 	{#if total}

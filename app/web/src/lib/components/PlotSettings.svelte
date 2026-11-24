@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
 	import InfoHint from '#lib/components/InfoHint.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -19,7 +20,7 @@
 <Popover.Root>
 	<Popover.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} variant="outline" title="Line plot settings">
+			<Button {...props} variant="outline" {@attach hint('Line plot settings')}>
 				<SlidersHorizontalIcon /> Settings
 			</Button>
 		{/snippet}

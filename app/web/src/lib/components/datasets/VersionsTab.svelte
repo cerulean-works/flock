@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 	import TagIcon from '@lucide/svelte/icons/tag';
@@ -12,6 +13,7 @@
 	import TagChip from '../TagChip.svelte';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
 	import TagDialog from './TagDialog.svelte';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -78,7 +80,7 @@
 {#if failed && !loaded}
 	<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
 {:else if !loaded}
-	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+	<Skeleton />
 {:else}
 	<!-- Every cell starts on the same 24px line, so a row reads level whatever it holds. -->
 	<table class="w-full border-collapse text-[13px] leading-6">
@@ -121,7 +123,9 @@
 						{#if v.kept_for}
 							<p
 								class="mt-1 text-xs whitespace-nowrap text-muted-foreground"
-								title="Forks or blends read this version, so it's never cleaned up (D173)."
+								{@attach hint(
+									"Forks or blends read this version, so it's never cleaned up (D173)."
+								)}
 							>
 								Kept for {v.kept_for} dataset{v.kept_for === 1 ? '' : 's'}
 							</p>
@@ -129,7 +133,7 @@
 					</td>
 					<td
 						class="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums"
-						title={dateTime(v.timestamp)}
+						{@attach hint(dateTime(v.timestamp))}
 					>
 						{relativeTime(v.timestamp, now)}
 					</td>
@@ -196,8 +200,8 @@
 	{/if}
 	{#if cursor !== null}
 		<div class="mt-3">
-			<Button variant="outline" size="sm" disabled={loading} onclick={() => load(true)}>
-				{loading ? 'Loading…' : 'Load more'}
+			<Button variant="outline" size="sm" onclick={() => load(true)} pending={loading}>
+				Load more
 			</Button>
 		</div>
 	{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -260,7 +261,7 @@
 					aria-label="Preview"
 				>
 					<div class="flex min-h-8 items-center gap-2">
-						<h3 class="min-w-0 flex-1 truncate font-medium" title={preview.title}>
+						<h3 class="min-w-0 flex-1 truncate font-medium" {@attach hint(preview.title)}>
 							<span class="font-normal text-muted-foreground"
 								>{preview.title.slice(0, preview.prefix)}</span
 							>{preview.title.slice(preview.prefix)}
@@ -304,7 +305,7 @@
 										{#each draft.metrics as key, k (key)}
 											<li
 												class="flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2 text-[13px]"
-												title={key}
+												{@attach hint(key)}
 											>
 												<span
 													class="h-0.5 w-3 flex-none rounded-full"

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
 	import ArrowUpDownIcon from '@lucide/svelte/icons/arrow-up-down';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
@@ -215,7 +216,10 @@
 	{#snippet field()}
 		{#if run}
 			<span class="block truncate text-[15px]">{nameOf(run)}</span>
-			<span class="block truncate font-mono text-[12px] text-muted-foreground" title={model}>
+			<span
+				class="block truncate font-mono text-[12px] text-muted-foreground"
+				{@attach hint(model)}
+			>
 				{pathOf(run)}{model ? ` · ${model}` : ''}
 			</span>
 		{:else}
@@ -251,8 +255,8 @@
 
 <!-- Each run's accuracy over the docs compared, and A's lead in points. -->
 {#snippet rates({ a, b }: { a: number; b: number })}
-	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(a)}</td>
-	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(b)}</td>
+	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(a, 'acc')}</td>
+	<td class="px-3 py-1.5 text-right tabular-nums">{formatScore(b, 'acc')}</td>
 	<td class="px-3 py-1.5 text-right tabular-nums">
 		{#if Number.isFinite(a - b)}
 			<!-- A tint per sign, as strong as the lead is wide in the table: the items' margins'. -->
@@ -406,7 +410,6 @@
 											<button
 												type="button"
 												class="group/sort inline-flex items-center gap-1 hover:text-foreground"
-												title="Click to sort"
 												onclick={() => sortBy(c.key)}
 											>
 												{c.label}
@@ -434,11 +437,11 @@
 											<button
 												type="button"
 												class="block max-w-full truncate font-mono text-[12.5px] hover:underline"
-												title="Show its items"
+												{@attach hint('Show its items')}
 											>
 												{t.task}
 											</button>
-											<span class="text-xs text-faint" title={t.task_hash}>
+											<span class="text-xs text-faint" {@attach hint(t.task_hash)}>
 												{t.metric} · {t.task_hash.slice(0, 12)}
 											</span>
 										</td>
@@ -481,7 +484,7 @@
 								<tbody>
 									{#each diff.not_compared as [task, reason] (task)}
 										<tr class="border-b border-divider">
-											<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" title={task}
+											<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" {@attach hint(task)}
 												>{task}</td
 											>
 											<td colspan="8" class="px-3 py-1.5 text-muted-foreground"

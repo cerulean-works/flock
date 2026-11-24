@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
@@ -257,7 +258,7 @@
 				class="ml-auto aria-pressed:bg-muted aria-pressed:text-foreground"
 				aria-pressed={sidebar}
 				aria-controls="run-overview"
-				title={sidebar ? 'Hide the overview' : 'Show the overview'}
+				{@attach hint(sidebar ? 'Hide the overview' : 'Show the overview')}
 				onclick={() => setSidebar(!sidebar)}
 			>
 				<PanelRightIcon />
@@ -333,7 +334,7 @@
 						variant="ghost"
 						size="icon-xs"
 						aria-label="Hide the overview"
-						title="Hide the overview"
+						{@attach hint('Hide the overview')}
 						onclick={() => setSidebar(false)}
 					>
 						<XIcon />

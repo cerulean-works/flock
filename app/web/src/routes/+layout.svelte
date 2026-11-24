@@ -2,6 +2,7 @@
 	import './layout.css';
 	import touchIcon from '#lib/assets/apple-touch-icon.png';
 	import favicon from '#lib/assets/favicon.png';
+	import HintLayer from '#lib/components/HintLayer.svelte';
 	import NavigationProgress from '#lib/components/NavigationProgress.svelte';
 	import { Toaster } from '#lib/components/ui/sonner/index.js';
 	import type { LayoutProps } from './$types';
@@ -21,3 +22,4 @@
 {@render children()}
 
 <Toaster position="bottom-right" />
+<HintLayer />

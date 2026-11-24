@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
 	import PlusIcon from '@lucide/svelte/icons/plus';
@@ -123,7 +124,7 @@
 								k !== shownSource && 'hidden sm:table-cell'
 							]}
 						>
-							<span class="block truncate font-mono" title={s}>{s}</span>
+							<span class="block truncate font-mono" {@attach hint(s)}>{s}</span>
 						</th>
 					{/each}
 					<th class="w-24"><span class="sr-only">Order and remove</span></th>
@@ -296,7 +297,7 @@
 							size="sm"
 							class="h-7 text-xs"
 							{disabled}
-							title="Add {u.name} from {u.source}, null for the other sources"
+							{@attach hint(`Add ${u.name} from ${u.source}, null for the other sources`)}
 							onclick={() =>
 								(columns = [...columns, addedColumn(u.name, u.type, u.source, sources, names)])}
 						>

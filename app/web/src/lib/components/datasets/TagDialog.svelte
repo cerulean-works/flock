@@ -93,11 +93,11 @@
 			<FormError {error} />
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={() => (open = false)}>Cancel</Button>
-				<Button type="submit" disabled={pending}>
+				<Button type="submit" {pending}>
 					{#if taken !== null}
-						{pending ? 'Moving…' : 'Move tag'}
+						Move tag
 					{:else}
-						{pending ? 'Adding…' : 'Add tag'}
+						Add tag
 					{/if}
 				</Button>
 			</Dialog.Footer>

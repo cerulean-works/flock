@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { goto } from '$app/navigation';
@@ -76,7 +77,7 @@
 		class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint [&::-webkit-search-cancel-button]:hidden"
 		placeholder="Search runs"
 		aria-label="Search runs by name or id"
-		title="Search runs by name or id (/)"
+		{@attach hint('Search runs by name or id (/)')}
 		autocomplete="off"
 		spellcheck="false"
 	/>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
 	import Maximize2Icon from '@lucide/svelte/icons/maximize-2';
 	import PinIcon from '@lucide/svelte/icons/pin';
@@ -103,7 +104,7 @@
 		class={['min-h-7 items-center', dragging ? 'cursor-grabbing' : 'cursor-grab']}
 		onpointerdown={ongrab}
 	>
-		<Card.Title class="flex min-w-0 items-center leading-7" title={view.title}>
+		<Card.Title class="flex min-w-0 items-center leading-7" {@attach hint(view.title)}>
 			<button
 				class={[
 					'-ml-1.5 grid h-6 w-4 flex-none cursor-[inherit] place-items-center rounded text-faint transition-opacity outline-none hover:text-muted-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50',
@@ -111,7 +112,7 @@
 				]}
 				data-grip
 				aria-label="Move {view.title} (arrow keys)"
-				title="Drag to move"
+				{@attach hint('Drag to move')}
 				onkeydown={gripKey}
 			>
 				<GripVerticalIcon class="size-3.5" />
@@ -138,7 +139,7 @@
 				variant="ghost"
 				size="icon-sm"
 				onclick={() => ws.togglePinned(panel)}
-				title={pinned ? 'Unpin' : 'Pin to the front'}
+				{@attach hint(pinned ? 'Unpin' : 'Pin to the front')}
 				aria-label={pinned ? `Unpin ${view.title}` : `Pin ${view.title} to the front`}
 				aria-pressed={pinned}
 			>
@@ -149,7 +150,7 @@
 				size="icon-sm"
 				href={fullscreenHref}
 				onclick={onfullscreen}
-				title="Full screen"
+				{@attach hint('Full screen')}
 				aria-label="{view.title} full screen"
 			>
 				<Maximize2Icon />
@@ -183,7 +184,7 @@
 		aria-valuemin={MIN_PLOT_H}
 		aria-valuemax={MAX_PLOT_H}
 		tabindex="0"
-		title="Drag to resize, or double-click to reset"
+		{@attach hint('Drag to resize, or double-click to reset')}
 		onpointerdown={startResize}
 		ondblclick={() => ws.setHeight(section, null)}
 		onkeydown={resizeKey}

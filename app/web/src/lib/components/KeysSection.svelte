@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import Building2Icon from '@lucide/svelte/icons/building-2';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import LockIcon from '@lucide/svelte/icons/lock';
@@ -76,7 +77,7 @@
 			size="icon-sm"
 			class="text-muted-foreground hover:text-destructive"
 			aria-label={label}
-			title="Revoke this key"
+			{@attach hint('Revoke this key')}
 		>
 			<Trash2Icon />
 		</Button>
@@ -91,7 +92,7 @@
 				<li class="flex h-12 items-center gap-4">
 					<span class="min-w-0 flex-1 truncate font-medium">{key.name}</span>
 					<span class="font-mono text-[12.5px] text-muted-foreground">{key.prefix}…</span>
-					<span class="w-24 text-muted-foreground" title={dateTime(key.created_at)}>
+					<span class="w-24 text-muted-foreground" {@attach hint(dateTime(key.created_at))}>
 						{relativeTime(key.created_at, now)}
 					</span>
 					<form method="POST" action="?/deleteKey" use:enhance={removal.enhance}>
@@ -102,7 +103,7 @@
 							size="icon-sm"
 							class="text-muted-foreground hover:text-destructive"
 							aria-label="Delete key {key.name}"
-							title="Delete this key"
+							{@attach hint('Delete this key')}
 						>
 							<Trash2Icon />
 						</Button>

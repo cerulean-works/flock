@@ -97,8 +97,8 @@
 				<FormError {error} />
 				<AlertDialog.Footer>
 					<AlertDialog.Cancel disabled={pending}>Cancel</AlertDialog.Cancel>
-					<Button type="submit" variant="destructive" disabled={typed !== ref || pending}>
-						{pending ? 'Deleting…' : 'Delete version'}
+					<Button type="submit" variant="destructive" disabled={typed !== ref || pending} {pending}>
+						Delete version
 					</Button>
 				</AlertDialog.Footer>
 			</form>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
@@ -10,6 +11,7 @@
 	import { withParam } from '#lib/workspace/url.ts';
 	import CellView from './CellView.svelte';
 	import ImageDialog from './ImageDialog.svelte';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -195,7 +197,7 @@
 	{:else if failed}
 		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
 	{:else if !rows}
-		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+		<Skeleton count={10} />
 	{:else if !rows.rows.length}
 		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">
 			{rows.total ? 'No rows on this page.' : 'This version has no rows.'}
@@ -220,7 +222,7 @@
 								style:min-width={cap === null ? undefined : `${cap + PAD}px`}
 								style:max-width={cap === null ? undefined : `${cap + PAD}px`}
 							>
-								<div class="truncate" title="{column.name} {column.type}">
+								<div class="truncate" {@attach hint(`${column.name} ${column.type}`)}>
 									<span class="text-foreground">{column.name}</span>
 									<span
 										class="ml-1 inline-block truncate align-bottom font-mono text-[11px] font-normal"

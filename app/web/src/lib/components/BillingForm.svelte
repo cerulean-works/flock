@@ -142,9 +142,7 @@
 		<div class="grid gap-2">
 			<FormError error={saving.error} />
 			<div>
-				<Button type="submit" variant="outline" disabled={saving.pending}>
-					{saving.pending ? 'Saving…' : 'Save'}
-				</Button>
+				<Button type="submit" variant="outline" pending={saving.pending}>Save</Button>
 			</div>
 		</div>
 	{/if}

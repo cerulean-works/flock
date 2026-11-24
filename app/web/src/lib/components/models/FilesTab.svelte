@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import { folderHref } from '#lib/models.ts';
@@ -25,13 +26,15 @@
 						href={folderHref(scope.org, `${version.prefix}${file.path}`)}
 					>
 						<FileIcon class="size-4 flex-none text-muted-foreground" />
-						<span class="truncate font-mono text-[12.5px]" title={file.path}>{file.path}</span>
+						<span class="truncate font-mono text-[12.5px]" {@attach hint(file.path)}
+							>{file.path}</span
+						>
 					</a>
 				</td>
 				<td class="px-2 text-right text-muted-foreground tabular-nums">{bytes(file.size)}</td>
 				<td
 					class="hidden truncate px-2 font-mono text-[12px] text-muted-foreground md:table-cell"
-					title={file.sha256}
+					{@attach hint(file.sha256)}
 				>
 					{file.sha256}
 				</td>

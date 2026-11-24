@@ -1,14 +1,15 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import FolderIcon from '@lucide/svelte/icons/folder';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { Snippet } from 'svelte';
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import type { EvalRunChoice } from '#lib/types.ts';
 	import { relativeTime } from '#lib/utils.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	/**
 	 * Picks one side of a comparison (025 D185) from the keyboard: the search box has focus, ↑↓
@@ -164,7 +165,7 @@
 			<button
 				{...props}
 				type="button"
-				title="Change run {side} ({side})"
+				{@attach hint(`Change run ${side} (${side})`)}
 				class="group/field flex w-full min-w-0 items-start gap-3 rounded-lg border border-transparent bg-card px-4 py-3 text-left transition-colors outline-none hover:border-input hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:border-ring"
 			>
 				<span
@@ -187,7 +188,9 @@
 				<button
 					type="button"
 					class="inline-flex max-w-40 flex-none items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs hover:bg-accent"
-					title="Runs of {scope.entity}/{scope.project}: click, or Backspace, to change project"
+					{@attach hint(
+						`Runs of ${scope.entity}/${scope.project}: click, or Backspace, to change project`
+					)}
 					onclick={toProjects}
 				>
 					<FolderIcon class="size-3 flex-none text-muted-foreground" />
@@ -226,9 +229,7 @@
 				<p class="px-2 py-2 text-xs text-destructive" role="alert">{failed}</p>
 			{:else if mode === 'runs'}
 				{#if runs === null}
-					<p class="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
-						<LoaderCircleIcon class="size-3.5 animate-spin" /> Loading…
-					</p>
+					<Skeleton shape="lines" class="px-2" />
 				{/if}
 				{#each runs ?? [] as r, i (r.id)}
 					{@const current = scope.entity === entity && scope.project === project && r.id === run}
@@ -260,9 +261,7 @@
 				{/each}
 			{:else}
 				{#if projects === null}
-					<p class="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
-						<LoaderCircleIcon class="size-3.5 animate-spin" /> Loading…
-					</p>
+					<Skeleton shape="lines" class="px-2" />
 				{/if}
 				{#each shownProjects as p, i (p.name)}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->

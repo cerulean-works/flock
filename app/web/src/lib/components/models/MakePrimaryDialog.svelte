@@ -56,9 +56,7 @@
 		<FormError {error} />
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-			<Button disabled={pending} onclick={promote}>
-				{pending ? 'Saving…' : 'Make primary'}
-			</Button>
+			<Button onclick={promote} {pending}>Make primary</Button>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>

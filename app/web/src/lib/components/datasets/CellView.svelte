@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { cellCut, cellText } from '#lib/datasets.ts';
 	import { prettyJson } from '#lib/storage.ts';
 	import type { Cell } from '#lib/types.ts';
@@ -35,7 +36,7 @@
 {:else if cell.k === 'image'}
 	<button
 		class="block rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-		title={cellText(cell)}
+		{@attach hint(cellText(cell))}
 		onclick={onopen}
 	>
 		<img

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -8,6 +9,7 @@
 	import type { Scope } from '#lib/scope.ts';
 	import type { ModelEvalRun, ModelVersionDetail } from '#lib/types.ts';
 	import { runHref } from '#lib/workspace/url.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	let { scope, version }: { scope: Scope; version: ModelVersionDetail } = $props();
 
@@ -57,7 +59,7 @@
 {:else if failed}
 	<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
 {:else if runs === null}
-	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+	<Skeleton />
 {:else if !runs.length}
 	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">
 		The eval runs of this version can’t be read.
@@ -93,7 +95,7 @@
 								<a
 									class="text-link underline-offset-3 hover:underline"
 									href={runHref(run.entity, run.project, run.id)}
-									title={run.path}
+									{@attach hint(run.path)}
 								>
 									{run.display_name ?? run.id}
 								</a>
@@ -107,7 +109,7 @@
 					<tr class="h-9 border-b border-divider hover:bg-muted">
 						<th scope="row" class="px-2 text-left font-normal">
 							<span class="font-mono text-[12.5px]">{row.name}</span>
-							<span class="ml-1.5 text-xs text-faint" title={row.hash}>
+							<span class="ml-1.5 text-xs text-faint" {@attach hint(row.hash)}>
 								{row.kind === 'suite' ? 'suite' : row.metric}{uses[row.name] > 1
 									? ` · ${row.hash.slice(0, 12)}`
 									: ''}
@@ -117,9 +119,9 @@
 							{@const value = run.scores?.values[row.key]}
 							<td
 								class={['px-2 text-right tabular-nums', value == null && 'text-faint']}
-								title={value == null ? undefined : String(value)}
+								{@attach hint(value == null ? undefined : String(value))}
 							>
-								{formatScore(value)}
+								{formatScore(value, row.metric)}
 							</td>
 						{/each}
 					</tr>

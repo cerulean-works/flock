@@ -86,7 +86,6 @@
 		title="Stop being a super admin?"
 		description="You keep your organization roles but lose this page. Only another super admin can undo this."
 		confirm="Stop being a super admin"
-		pending="Changing…"
 		success="You’re no longer a super admin"
 	/>
 {:else}
@@ -98,7 +97,6 @@
 		title="Delete {user.name}’s account?"
 		description="They can’t sign in and their wandb keys stop working. Their runs stay. There is no undo."
 		confirm="Delete account"
-		pending="Deleting…"
 		success="Deleted {user.name}’s account"
 	/>
 {/if}

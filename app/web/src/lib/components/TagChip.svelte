@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import XIcon from '@lucide/svelte/icons/x';
 
 	interface Props {
@@ -21,7 +22,7 @@
 		onremove ? 'pr-1 pl-2' : 'px-2'
 	]}
 >
-	<span class="truncate" title={tag}>{tag}</span>
+	<span class="truncate" {@attach hint(tag)}>{tag}</span>
 	{#if onremove}
 		<button
 			class="grid size-4 flex-none place-items-center rounded-full text-primary/75 hover:bg-primary/15 hover:text-primary"

@@ -70,8 +70,8 @@
 			<FormError {error} />
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel disabled={pending}>Cancel</AlertDialog.Cancel>
-				<Button type="submit" variant="destructive" disabled={typed !== path || pending}>
-					{pending ? 'Deleting…' : 'Delete dataset'}
+				<Button type="submit" variant="destructive" disabled={typed !== path || pending} {pending}>
+					Delete dataset
 				</Button>
 			</AlertDialog.Footer>
 		</form>

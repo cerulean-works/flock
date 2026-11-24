@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { getWorkspace, metricColor, type PanelView } from '#lib/workspace/workspace.svelte.ts';
 
 	interface Props {
@@ -67,7 +68,7 @@
 				onpointerleave={() => row != null && (ws.hover = null)}
 			>
 				<span class="h-0.5 w-3.5 flex-none rounded-full" style:background={entry.color}></span>
-				<span class="truncate" title={entry.label}>{entry.label}</span>
+				<span class="truncate" {@attach hint(entry.label)}>{entry.label}</span>
 			</li>
 		{/each}
 		{#if legend.more > 0}

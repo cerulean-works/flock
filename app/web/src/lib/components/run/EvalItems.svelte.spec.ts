@@ -222,7 +222,9 @@ describe('eval items', () => {
 			with: 'acme/evals/r2'
 		});
 		// A's token under each choice, with its numbers; B's reason behind an icon in its column.
-		const venus = screen.getByTitle('log p -4.00 · rank 3 · entropy 1.50').first();
+		const venus = screen.elementLocator(
+			document.querySelector('[aria-description="log p -4.00 · rank 3 · entropy 1.50"]')!
+		);
 		await expect.element(venus).toHaveTextContent('Venus');
 		await expect.element(screen.getByRole('button', { name: 'Why B has no tokens' })).toBeVisible();
 		// 4 nats of 8: half of the full tint.
@@ -331,6 +333,29 @@ describe('eval items', () => {
 		await expect
 			.element(screen.getByRole('radio', { name: /Only B right/ }))
 			.toHaveTextContent('4');
+	});
+
+	it('picks a task from the searchable list with the keys, starting the pager over', async () => {
+		const fetch = answer(200, rows([ROW], 21));
+		const onview = vi.fn();
+		render(EvalItems, { ...PAIR, onview });
+
+		await screen.getByRole('button', { name: 'Next page' }).click();
+		await vi.waitFor(() => expect(lists(fetch)).toHaveLength(2));
+		await screen.getByRole('button', { name: 'Task' }).click();
+		// The search box has the focus; its keys aren't the list's j and k.
+		await expect.element(screen.getByRole('combobox', { name: 'Search tasks' })).toHaveFocus();
+		await userEvent.keyboard('piq');
+		await expect.element(screen.getByRole('option')).toHaveTextContent('piqa');
+		await userEvent.keyboard('{Enter}');
+		await vi.waitFor(() => expect(lists(fetch)).toHaveLength(3));
+		expect(lists(fetch)[2].searchParams.get('task')).toBe('piqa');
+		expect(lists(fetch)[2].searchParams.get('offset')).toBe('0');
+		expect(onview).toHaveBeenLastCalledWith(
+			expect.objectContaining({ task: 'piqa', page: undefined })
+		);
+		// The field's name says the task shown, since a screen reader reads no value from a button.
+		await expect.element(screen.getByRole('button', { name: 'Task: piqa' })).toBeVisible();
 	});
 
 	it('draws a square per suite whose quadrants lift and pick the list’s cells', async () => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -46,7 +47,7 @@
 						size="icon-sm"
 						class="text-muted-foreground"
 						aria-label="Dismiss for everyone"
-						title="Dismiss for everyone"
+						{@attach hint('Dismiss for everyone')}
 						disabled={dismissing.pending}
 					>
 						<XIcon />

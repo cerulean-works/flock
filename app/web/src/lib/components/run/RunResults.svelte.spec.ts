@@ -82,7 +82,7 @@ describe('the Results tab', () => {
 		await expect.element(task.getByLabelText('Private dataset')).toBeInTheDocument();
 		await expect.element(screen.getByText('EFFICIENT_ATTENTION')).toBeVisible();
 		await expect
-			.element(screen.getByRole('row').filter({ hasText: 'arc' }).getByText('0.5'))
+			.element(screen.getByRole('row').filter({ hasText: 'arc' }).getByText('50.0%'))
 			.toBeVisible();
 	});
 
@@ -150,7 +150,7 @@ describe('the compare page', () => {
 				.all()
 				.slice(1)
 				.map((c) => c.element().textContent!.trim())
-		).toEqual(['5', '0.6000', '0.4000', '+20.0', '1', '1', '2', '1']);
+		).toEqual(['5', '60.0%', '40.0%', '+20.0', '1', '1', '2', '1']);
 		// The items start on the first task with docs only A got right.
 		await expect.element(screen.getByRole('alert')).toHaveTextContent(/schema 10/);
 		await expect.element(screen.getByText('Mercury_1 Mercury_2')).toBeVisible();
@@ -201,7 +201,10 @@ describe('the compare page', () => {
 		expect(order()).toEqual(['piqa', 'arc_easy']);
 		expect(sorted()).toBe('ascending');
 		// A task's name sorts A to Z first.
-		await screen.getByTitle('Click to sort').filter({ hasText: 'Task' }).click();
+		await screen
+			.getByRole('columnheader')
+			.getByRole('button', { name: 'Task', exact: true })
+			.click();
 		expect(order()).toEqual(['arc_easy', 'piqa']);
 
 		// A's lead tinted green, B's red, the larger the stronger.

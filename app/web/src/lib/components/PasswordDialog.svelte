@@ -91,8 +91,8 @@
 						<Button {...props} variant="outline">Cancel</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={saving.pending}>
-					{saving.pending ? 'Saving…' : profile.has_password ? 'Change password' : 'Set password'}
+				<Button type="submit" pending={saving.pending}>
+					{profile.has_password ? 'Change password' : 'Set password'}
 				</Button>
 			</Dialog.Footer>
 		</form>

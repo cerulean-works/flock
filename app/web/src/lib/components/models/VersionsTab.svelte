@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import EyeIcon from '@lucide/svelte/icons/eye';
@@ -19,6 +20,7 @@
 	import MakePrimaryDialog from './MakePrimaryDialog.svelte';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
 	import TagDialog from './TagDialog.svelte';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -79,7 +81,7 @@
 {#if failed && !loaded}
 	<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
 {:else if !loaded}
-	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+	<Skeleton />
 {:else if !versions.length}
 	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">This model has no versions yet.</p>
 {:else}
@@ -151,7 +153,7 @@
 					</td>
 					<td
 						class="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums"
-						title={dateTime(v.created_at)}
+						{@attach hint(dateTime(v.created_at))}
 					>
 						{v.created_by ? `${v.created_by.name}, ` : ''}{relativeTime(v.created_at, now)}
 					</td>
@@ -203,8 +205,8 @@
 	{/if}
 	{#if cursor !== null}
 		<div class="mt-3">
-			<Button variant="outline" size="sm" disabled={loading} onclick={() => load(true)}>
-				{loading ? 'Loading…' : 'Load more'}
+			<Button variant="outline" size="sm" onclick={() => load(true)} pending={loading}>
+				Load more
 			</Button>
 		</div>
 	{/if}

@@ -7,6 +7,7 @@
 </script>
 
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { Input } from '#lib/components/ui/input/index.js';
 
 	// A text input suggesting values: its list opens on focus with every option, narrows as you
@@ -177,7 +178,7 @@
 				>
 					<span
 						class={['min-w-0 flex-1 truncate', mono && 'font-mono text-[12.5px]']}
-						title={o.value}
+						{@attach hint(o.value)}
 					>
 						{o.value}
 					</span>

@@ -50,8 +50,13 @@
 		<span class={['text-[14px]', !on && 'text-muted-foreground']}>
 			untagged versions of each model
 		</span>
-		<Button type="submit" variant="outline" disabled={!changed || mutation.pending}>
-			{mutation.pending ? 'Saving…' : 'Save'}
+		<Button
+			type="submit"
+			variant="outline"
+			disabled={!changed || mutation.pending}
+			pending={mutation.pending}
+		>
+			Save
 		</Button>
 	</div>
 	<FormError error={mutation.error} />

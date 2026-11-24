@@ -67,8 +67,13 @@
 				</Select.Content>
 			</Select.Root>
 		</div>
-		<Button type="submit" variant="outline" disabled={!changed || mutation.pending}>
-			{mutation.pending ? 'Saving…' : 'Save'}
+		<Button
+			type="submit"
+			variant="outline"
+			disabled={!changed || mutation.pending}
+			pending={mutation.pending}
+		>
+			Save
 		</Button>
 	</div>
 	<FormError error={mutation.error} />

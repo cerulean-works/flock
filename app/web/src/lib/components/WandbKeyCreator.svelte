@@ -39,9 +39,9 @@
 				autocomplete="off"
 			/>
 		{/if}
-		<Button type="submit" variant="outline" disabled={mutation.pending}>
+		<Button type="submit" variant="outline" pending={mutation.pending}>
 			<KeyRoundIcon />
-			{mutation.pending ? 'Creating…' : 'Create wandb key'}
+			Create wandb key
 		</Button>
 		<FormError error={mutation.error} />
 	</form>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import BracketsIcon from '@lucide/svelte/icons/brackets';
 	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
 	import PlusIcon from '@lucide/svelte/icons/plus';
@@ -265,7 +266,7 @@
 			variant="ghost"
 			size="icon"
 			aria-label="Remove condition"
-			title="Remove"
+			{@attach hint('Remove')}
 			onclick={() => remove(g, d.id, parent)}
 		>
 			<XIcon />
@@ -317,7 +318,7 @@
 	<Button
 		variant={mine ? 'secondary' : 'outline'}
 		aria-pressed={mine}
-		title={mine ? 'Show everyone’s runs' : 'Show only the runs you logged'}
+		{@attach hint(mine ? 'Show everyone’s runs' : 'Show only the runs you logged')}
 		onclick={() => show(setOwner(applied, me, !mine))}
 	>
 		<UserIcon /> My runs
@@ -332,7 +333,7 @@
 					{...props}
 					variant={count ? 'secondary' : 'outline'}
 					class={count ? 'rounded-r-none' : ''}
-					title={count ? describeFilters(applied, kindOf, true, ws.people) : 'Filter runs'}
+					{@attach hint(count ? describeFilters(applied, kindOf, true, ws.people) : 'Filter runs')}
 				>
 					<ListFilterIcon /> Filter
 					{#if count}
@@ -365,7 +366,7 @@
 					<Button
 						variant="ghost"
 						size="sm"
-						title="Conditions that hold together, or any one of them"
+						{@attach hint('Conditions that hold together, or any one of them')}
 						onclick={addGroup}
 					>
 						<BracketsIcon /> Add group
@@ -394,7 +395,7 @@
 			size="icon"
 			class="rounded-l-none border-l border-background"
 			aria-label="Clear filters"
-			title="Clear filters"
+			{@attach hint('Clear filters')}
 			onclick={() => show([])}
 		>
 			<XIcon />

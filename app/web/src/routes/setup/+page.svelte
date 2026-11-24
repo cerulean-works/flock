@@ -110,9 +110,7 @@
 					{form.error.charAt(0).toUpperCase() + form.error.slice(1)}.
 				</p>
 			{/if}
-			<Button type="submit" class="mt-2 h-10 w-full text-sm" disabled={pending}>
-				{pending ? 'Creating account…' : 'Create account'}
-			</Button>
+			<Button type="submit" class="mt-2 h-10 w-full text-sm" {pending}>Create account</Button>
 		</form>
 	{:else}
 		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">Create your workspace</h1>
@@ -129,9 +127,7 @@
 					{form.error.charAt(0).toUpperCase() + form.error.slice(1)}.
 				</p>
 			{/if}
-			<Button type="submit" class="mt-2 h-10 w-full text-sm" disabled={pending}>
-				{pending ? 'Creating workspace…' : 'Create workspace'}
-			</Button>
+			<Button type="submit" class="mt-2 h-10 w-full text-sm" {pending}>Create workspace</Button>
 		</form>
 	{/if}
 </AuthShell>

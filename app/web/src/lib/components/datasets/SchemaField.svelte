@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import type { SchemaField } from '#lib/types.ts';
 	import Self from './SchemaField.svelte';
@@ -16,7 +17,7 @@
 	>
 		<!-- Names start at the edge; a struct's chevron follows its name. -->
 		<span class="flex min-w-0 items-center" style:padding-left="{depth * 1.25}rem">
-			<span class="truncate font-mono text-[12.5px]" title={field.name}>{field.name}</span>
+			<span class="truncate font-mono text-[12.5px]" {@attach hint(field.name)}>{field.name}</span>
 			{#if field.children.length}
 				<button
 					class="ml-1 grid size-5 flex-none place-items-center rounded-sm text-muted-foreground hover:bg-muted"
@@ -38,7 +39,7 @@
 							class="inline-flex max-w-full min-w-0 items-baseline gap-1.5 rounded-sm bg-card px-1.5 font-mono text-[11px] leading-5"
 						>
 							<dt class="text-faint">{key}</dt>
-							<dd class="min-w-0 truncate" title={value}>{value}</dd>
+							<dd class="min-w-0 truncate" {@attach hint(value)}>{value}</dd>
 						</div>
 					{/each}
 				</dl>

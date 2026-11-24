@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
@@ -116,7 +117,7 @@
 						class="flex items-center gap-2.5 border-b border-divider px-3 py-2 text-[13.5px] last:border-0"
 					>
 						<Icon class="size-3.5 flex-none text-faint" aria-label={item.kind} />
-						<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={item.path}
+						<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" {@attach hint(item.path)}
 							>{item.path}</span
 						>
 						<span class="flex-none text-xs text-muted-foreground tabular-nums"
@@ -191,12 +192,13 @@
 						Continue
 					</Button>
 				{:else}
-					<Button type="submit" variant="destructive" disabled={!ready || mutation.pending}>
-						{mutation.pending
-							? 'Deleting…'
-							: items.length
-								? `Delete project and ${count(items.length, 'item')}`
-								: 'Delete project'}
+					<Button
+						type="submit"
+						variant="destructive"
+						disabled={!ready || mutation.pending}
+						pending={mutation.pending}
+					>
+						{items.length ? `Delete project and ${count(items.length, 'item')}` : 'Delete project'}
 					</Button>
 				{/if}
 			</AlertDialog.Footer>

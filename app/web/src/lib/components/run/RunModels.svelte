@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import MetaItem from '#lib/components/MetaItem.svelte';
@@ -35,7 +36,7 @@
 				<a
 					class="min-w-0 truncate text-link underline-offset-3 hover:underline"
 					href={versionHref(scopeOf(v), v.name, v.number)}
-					title="{v.model}@{v.number}"
+					{@attach hint(`${v.model}@${v.number}`)}
 				>
 					{v.project ? v.model : v.name}@{v.number}
 				</a>

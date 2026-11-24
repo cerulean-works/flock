@@ -5,6 +5,7 @@
 </script>
 
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { page as appPage } from '$app/state';
 	import { prefetchRunPage } from '#lib/data/cache.ts';
 	import { columnGroups } from '#lib/data/snapshot.ts';
@@ -335,7 +336,7 @@
 					<a
 						class={['flex size-full min-w-0 items-center gap-1', isNumeric(col) && 'justify-end']}
 						href={sortHref(col.key)}
-						title={col.key}
+						{@attach hint(col.key)}
 						data-sveltekit-preload-data="tap"
 						onpointerenter={() => hoverSort(col.key)}
 						onpointerleave={leaveSort}
@@ -410,7 +411,7 @@
 						]}
 						href={runHref(ws.meta.entity, ws.meta.project, run.id)}
 						data-sveltekit-preload-data="tap"
-						title={ws.nameOf(r)}
+						{@attach hint(ws.nameOf(r))}
 					>
 						{ws.nameOf(r)}
 					</a>
@@ -419,7 +420,7 @@
 						<Badge
 							variant="secondary"
 							class="live bg-state-running/10 text-state-running"
-							title="Running"
+							{@attach hint('Running')}
 						>
 							<span class="size-1.5 animate-live rounded-full bg-current motion-reduce:animate-none"
 							></span>
@@ -446,7 +447,7 @@
 							{@const person = id == null ? undefined : ws.people.get(id)}
 							{#if person}
 								<Avatar name={person.name} src={person.avatar_url} class="mr-2 size-5 text-[9px]" />
-								<span class="truncate" title={person.email}>{person.name}</span>
+								<span class="truncate" {@attach hint(person.email)}>{person.name}</span>
 							{:else if id == null}
 								<span class="text-faint">–</span>
 							{:else}
@@ -457,7 +458,7 @@
 							{@const text = cellText(c, r)}
 							<span
 								class={['truncate', text === '–' && 'text-faint']}
-								title={col.kind === 'str' ? text : undefined}>{text}</span
+								{@attach hint(col.kind === 'str' ? text : undefined)}>{text}</span
 							>
 						{/if}
 					</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import CopyButton from '#lib/components/CopyButton.svelte';
@@ -72,7 +73,7 @@
 
 {#snippet hash(value: string)}
 	<span class="inline-flex items-center gap-1">
-		<span class="font-mono text-[12px] text-muted-foreground" title={value}
+		<span class="font-mono text-[12px] text-muted-foreground" {@attach hint(value)}
 			>{value.slice(0, 12)}</span
 		>
 		<CopyButton text={value} label="Copy hash" class="size-6" />
@@ -113,7 +114,7 @@
 							scored.name,
 							scored.number
 						)}
-						title="{scored.model}@{scored.number}"
+						{@attach hint(`${scored.model}@${scored.number}`)}
 					>
 						<BoxIcon class="size-3.5" />{scored.project
 							? scored.model
@@ -124,7 +125,7 @@
 				{/if}
 				{#if p.model_digest}
 					<span aria-hidden="true">·</span>
-					<span class="font-mono text-[12px]" title={p.model_digest}
+					<span class="font-mono text-[12px]" {@attach hint(p.model_digest)}
 						>{p.model_digest.slice(0, 12)}</span
 					>
 				{/if}
@@ -152,7 +153,7 @@
 							<tbody>
 								{#each results.suites as s (s.suite)}
 									<tr class="border-b border-divider hover:bg-muted">
-										<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" title={s.suite}
+										<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" {@attach hint(s.suite)}
 											>{s.suite}</td
 										>
 										<td
@@ -160,19 +161,24 @@
 												'px-3 py-1.5 text-right tabular-nums',
 												s.score == null && 'text-faint'
 											]}
-											title={s.score == null
-												? 'No score: it groups other suites, or its mean isn’t finite'
-												: String(s.score)}
+											{@attach hint(
+												s.score == null
+													? 'No score: it groups other suites, or its mean isn’t finite'
+													: String(s.score)
+											)}
 										>
-											{formatScore(s.score)}
+											{formatScore(s.score, s.metric)}
 										</td>
 										<td
 											class="truncate px-3 py-1.5 text-muted-foreground"
-											title={s.metric ?? 'Each member task’s primary metric'}
+											{@attach hint(s.metric ?? 'Each member task’s primary metric')}
 										>
 											{s.metric ?? 'primary'}
 										</td>
-										<td class="px-3 py-1.5 text-right tabular-nums" title={s.members.join(', ')}>
+										<td
+											class="px-3 py-1.5 text-right tabular-nums"
+											{@attach hint(s.members.join(', '))}
+										>
 											{s.members.length}
 										</td>
 										<td class="px-3 py-1.5">{@render hash(s.suite_hash)}</td>
@@ -208,17 +214,18 @@
 							{#each results.tasks as t (t.task)}
 								{@const value = t.metrics[t.primary_metric]}
 								<tr class="border-b border-divider hover:bg-muted">
-									<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" title={t.task}
+									<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" {@attach hint(t.task)}
 										>{t.task}</td
 									>
 									<td
 										class={['px-3 py-1.5 text-right tabular-nums', value == null && 'text-faint']}
-										title={value == null ? 'Not a finite number' : String(value)}
+										{@attach hint(value == null ? 'Not a finite number' : String(value))}
 									>
-										{formatScore(value)}
+										{formatScore(value, t.primary_metric)}
 									</td>
-									<td class="truncate px-3 py-1.5 text-muted-foreground" title={t.primary_metric}
-										>{t.primary_metric}</td
+									<td
+										class="truncate px-3 py-1.5 text-muted-foreground"
+										{@attach hint(t.primary_metric)}>{t.primary_metric}</td
 									>
 									<td class="px-3 py-1.5 text-right tabular-nums">
 										{t.num_docs}{t.limit != null ? ` (limit ${t.limit})` : ''}
@@ -226,8 +233,11 @@
 									<td class="px-3 py-1.5">{@render hash(t.task_hash)}</td>
 									<td
 										class="truncate px-3 py-1.5 text-muted-foreground"
-										title="{t.dataset.repo}@{t.dataset.revision} {t.dataset.subset ?? ''} {t.dataset
-											.split}"
+										{@attach hint(
+											`${t.dataset.repo}@${t.dataset.revision} ${t.dataset.subset ?? ''} ${
+												t.dataset.split
+											}`
+										)}
 									>
 										{#if t.dataset.private}
 											<LockIcon class="mr-1 inline size-3.5" aria-label="Private dataset" />
@@ -240,7 +250,7 @@
 												'px-3 py-1.5 text-right tabular-nums',
 												!t.truncation.docs && 'text-faint'
 											]}
-											title="Docs whose context lost tokens to fit the model"
+											{@attach hint('Docs whose context lost tokens to fit the model')}
 										>
 											{t.truncation.docs}
 										</td>

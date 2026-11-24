@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { untrack } from 'svelte';
@@ -205,7 +206,7 @@
 			{:else if column === 'size'}
 				<span class="text-muted-foreground">{r.m.size == null ? '—' : bytes(r.m.size)}</span>
 			{:else}
-				<span class="text-muted-foreground" title={dateTime(r.m.updated_at)}>
+				<span class="text-muted-foreground" {@attach hint(dateTime(r.m.updated_at))}>
 					{relativeTime(r.m.updated_at, now)}
 				</span>
 			{/if}
@@ -233,9 +234,7 @@
 
 {#snippet footer()}
 	{#if cursor}
-		<Button variant="outline" disabled={loading} onclick={more}>
-			{loading ? 'Loading…' : 'Load more'}
-		</Button>
+		<Button variant="outline" onclick={more} pending={loading}>Load more</Button>
 	{/if}
 	{#if failed}
 		<span class="text-[13px] text-destructive" role="alert">{failed}</span>
