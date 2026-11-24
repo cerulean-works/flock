@@ -414,16 +414,23 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     margins = [round(m["margin"], 3) for m in listed.json()["items"][0]["runs"]]
     assert [*margins, 1, 0, 0, "d-1"] in rows["s"]["dots"]
 
-    # The same pair again is the kept answer, byte for byte; a predictions file uploaded again
-    # under the same results file (other margins, the same outcomes) is a new answer.
+    # The same pair again is the kept answer, byte for byte.
     assert api.get(route, **{"with": "flock/p/b"}).body == found.body
-    rows_u = (
-        (Path(b) / "predictions" / "u.jsonl").read_text().replace("[-1.0, -2.0]", "[-1.0, -5.0]")
-    )
-    api.upload("p", "b", "predictions/u.jsonl", rows_u.encode())
+    # A predictions file uploaded again under the same results file is a new answer. Its outcomes
+    # must still give the results' accuracy: flipped alone, they are eval's refusal, not a kept map.
+    rows_u = (Path(b) / "predictions" / "u.jsonl").read_text()
+    flipped = rows_u.replace('"correct": true', '"correct": false')
+    api.upload("p", "b", "predictions/u.jsonl", flipped.encode())
+    refused = api.get(route, **{"with": "flock/p/b"})
+    assert refused.status == 409 and "acc_raw is 1.0" in refused.json()["error"]
+    # Other margins with the same outcomes: u's one doc, both right, moves on B's axis.
+    assert [1.0, 1.0, 3, 1, 0, "d-0"] in rows["s"]["dots"]
+    api.upload("p", "b", "predictions/u.jsonl", rows_u.replace("-2.0]", "-5.0]").encode())
     again = api.get(route, **{"with": "flock/p/b"})
     assert again.status == 200, again.body
-    assert again.body != found.body
+    dots = {row["suite"]: row["dots"] for row in again.json()["suites"]}["s"]
+    assert [1.0, 4.0, 3, 1, 0, "d-0"] in dots
+    assert [1.0, 1.0, 3, 1, 0, "d-0"] not in dots
     assert api.get(route).status == 422
 
     # On the public project, an outsider's squares leave the private exam out.

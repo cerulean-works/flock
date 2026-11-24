@@ -1011,7 +1011,11 @@ async def run_item_tokens(
                 name = f"private/{name}" if written.source.startswith("run:") else name
             try:
                 rows = []
-                data = scoped.read_bytes(name) if scoped.read_bytes else None
+                # Only schema 12 on writes one, as `tokens` reads it: an older run's file of
+                # that name isn't fetched.
+                data = None
+                if scoped.read_bytes and written.schema_version >= 12:
+                    data = scoped.read_bytes(name)
                 values = unpacked = 0
                 if data:
                     footer = pq.read_metadata(pa.BufferReader(data))
