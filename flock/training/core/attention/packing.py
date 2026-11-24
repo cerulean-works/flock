@@ -4,7 +4,9 @@ from torch import Tensor
 
 def pack(x: Tensor, indices: Tensor) -> Tensor:
     """Gather real tokens from `[batch, heads, seq_len, head_dim]` into `[total_tokens, heads, head_dim]`."""
-    return x.transpose(1, 2).flatten(0, 1).index_select(0, indices)
+    # The indices refer to token positions in the flattened [batch, seq_len] mask.
+    tokens = x.transpose(1, 2).flatten(0, 1)
+    return tokens.index_select(0, indices)
 
 
 def unpack(x: Tensor, indices: Tensor, batch: int, seq_len: int) -> Tensor:

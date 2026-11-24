@@ -228,7 +228,12 @@ def test_import_then_load_gives_the_same_logits(
     assert (described["run"], described["step"]) == (None, None)
 
     ids = torch.tensor([[5, 6, 7, 8, 9]])
-    batch = {"input_ids": ids, "attention_mask": torch.ones_like(ids), "labels": ids}
+    batch = {
+        "input_ids": ids,
+        "attention_mask": torch.ones_like(ids),
+        "labels": ids,
+        "position_ids": torch.arange(ids.shape[1])[None],
+    }
     with torch.no_grad():
         torch.testing.assert_close(loaded.eval()(batch), reference(input_ids=ids).logits)
     if repo_kind == "sharded":

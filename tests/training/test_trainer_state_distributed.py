@@ -293,9 +293,14 @@ def test_distributed_trainer_step_budget_and_final_log(
 
 class _StochasticOlmo2(Olmo2):
     def _forward(
-        self, input_ids: torch.Tensor, attention_mask: torch.Tensor, position_ids: torch.Tensor
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,
+        *,
+        cu_seq_lens: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        logits = super()._forward(input_ids, attention_mask, position_ids)
+        logits = super()._forward(input_ids, attention_mask, position_ids, cu_seq_lens=cu_seq_lens)
         return F.dropout(logits, p=0.2, training=self.training) * (1 + random.random())
 
 

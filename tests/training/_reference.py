@@ -117,7 +117,15 @@ def olmo2_training_parity(
     ids, mask = token_batch(padding, device)
     labels = ids[:, 1:].clone()
     labels.masked_fill_(~(mask[:, :-1] & mask[:, 1:]), -100)
-    actual = model({"input_ids": ids[:, :-1], "attention_mask": mask[:, :-1], "labels": labels})
+    positions = (mask[:, :-1].long().cumsum(-1) - 1).clamp_min(0)
+    actual = model(
+        {
+            "input_ids": ids[:, :-1],
+            "attention_mask": mask[:, :-1],
+            "labels": labels,
+            "position_ids": positions,
+        }
+    )
     # HF shifts labels internally. Suppress the pad -> first-real-token target as
     # well as padding targets, exactly matching the collator's adjacent-token rule.
     hf_labels = torch.full_like(ids, -100)

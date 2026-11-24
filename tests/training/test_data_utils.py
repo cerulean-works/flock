@@ -19,10 +19,23 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.parametrize(
-    "padding_side, inputs, masks, labels",
+    "padding_side, inputs, masks, labels, positions",
     [
-        ("left", [[2, 3], [1, 3]], [[True, True], [False, True]], [[3, 1], [-100, 1]]),
-        ("right", [[2, 3], [3, 1]], [[True, True], [True, True]], [[3, 1], [1, -100]]),
+        (
+            "left",
+            [[2, 3], [1, 3]],
+            [[True, True], [False, True]],
+            [[3, 1], [-100, 1]],
+            # Left padding does not shift the first real token from position 0.
+            [[0, 1], [0, 0]],
+        ),
+        (
+            "right",
+            [[2, 3], [3, 1]],
+            [[True, True], [True, True]],
+            [[3, 1], [1, -100]],
+            [[0, 1], [0, 1]],
+        ),
     ],
 )
 def test_collator_shifts_targets_and_preserves_real_eos(
@@ -31,18 +44,20 @@ def test_collator_shifts_targets_and_preserves_real_eos(
     inputs: list[list[int]],
     masks: list[list[bool]],
     labels: list[list[int]],
+    positions: list[list[int]],
 ) -> None:
     tokenizer.padding_side = padding_side
     assert tokenizer.eos_token_id == tokenizer.pad_token_id == 1
     batch = LanceBatchCollator(tokenizer, "body").collate_fn(
         [{"body": "a b [EOS]"}, {"body": "b [EOS]"}]
     )
-    assert set(batch) == {"input_ids", "attention_mask", "labels"}
+    assert set(batch) == {"input_ids", "attention_mask", "labels", "position_ids"}
     assert batch["input_ids"].tolist() == inputs
     assert batch["attention_mask"].tolist() == masks
     assert batch["attention_mask"].dtype == torch.bool
     assert batch["labels"].tolist() == labels
     assert batch["labels"].dtype == batch["input_ids"].dtype == torch.long
+    assert batch["position_ids"].tolist() == positions
     # Neither masked padding nor a pad -> first-token boundary contributes a target.
     assert (batch["labels"] != -100).sum().item() == 3
     assert (batch["labels"] == tokenizer.eos_token_id).sum().item() == 2

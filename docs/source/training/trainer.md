@@ -175,7 +175,8 @@ Choose the learning-rate schedule for that new count.
 Each item holds at most 4096 token IDs, yielding at most 4095 next-token targets.
 Adjacent chunks overlap by one context token. Every original next-token target appears
 exactly once, including a final tail with only one target. Documents with fewer than two
-tokens produce no items. Short documents remain separate; there is no packing.
+tokens produce no items. Short documents remain separate unless you
+[pack them](#pack-chunks).
 Apply document exclusions and deduplication before preparing the cache. Each chunk
 keeps its document metadata and adds its document index and chunk index.
 
@@ -188,10 +189,50 @@ chunks = TokenChunkDataset(cache_dir=".training-cache/documents", chunk_length=4
 ```
 
 The cache pins its first Lance version. Do not modify it. Resume checks its source URI
-and version, tokenizer rules and chunk length in addition to the normal sampler settings.
-Changing any of those requires a fresh training run. The trainer also checks the cache's
-text column and tokenizer against the supplied configuration. Chunk length must not
-exceed the tokenizer's model limit.
+and version, tokenizer rules, chunk length and packing in addition to the normal sampler
+settings. Changing any of those requires a fresh training run. The trainer also checks
+the cache's text column and tokenizer against the supplied configuration. Chunk length
+must not exceed the tokenizer's model limit.
+
+### Pack short documents into rows[[pack-chunks]]
+
+Without packing, each chunk takes its own row, and a batch pads every row to its longest
+chunk. Short documents then leave most positions as padding. Pass `packing=True` to put
+several chunks in one row:
+
+```python
+chunks = TokenChunkDataset(cache_dir=".training-cache/documents", chunk_length=4096, packing=True)
+```
+
+When you open the cache, it groups the chunks into rows of `chunk_length - 1` positions
+with best-fit decreasing: chunks go in by decreasing size, each into the row with the
+least space that still fits it. A chunk of N token IDs takes N - 1 positions, so the
+longest chunk fills a row on its own. Packing never splits a chunk. Each item is then a
+row: `len(chunks)` counts rows, and `batch_size` counts rows per rank per update.
+
+Each chunk in a row is its own document:
+
+- **Targets** shift within the document, so a document's last token never predicts the
+  next document's first token.
+- **Positions** restart at zero in each document.
+- **Attention** stays inside each document. The collator builds the document boundaries
+  on the CPU and passes them as `Batch["cu_seq_lens"]`, so the forward never waits on
+  the GPU to find them.
+- **Padding** fills the end of a row after its last document and has no targets. The
+  collator pads each batch to its longest row.
+
+Packed batches need a model that keeps attention inside documents. `Olmo2` supports
+them with `sdpa`, `flash_attention_3` and `flash_attention_4`. FlashAttention passes the
+boundaries to its variable-length kernel and skips attention across documents. SDPA
+builds a dense mask with one block per document. `HFCompatibleModel` refuses packed
+batches, because `transformers` would see only the padding mask and attend across
+documents.
+
+Packing depends only on the cache and the chunk length, so reopening the cache gives the
+same rows and resume replays the same batches. The sampler still shuffles the rows.
+Resume a packed run with `packing=True`: packing changes the data the checkpoint
+records. Packing runs once in each process that opens the dataset, before training
+starts.
 
 ## Launch distributed training
 
@@ -369,6 +410,8 @@ the architecture. `repo` can also be a local folder.
 - **Attention** uses `attn_implementation`, which defaults to `"sdpa"`.
   `"flash_attention_2"` works when it's installed. The setting is part of the config,
   so a resumed checkpoint keeps it.
+- **[Packed batches](#pack-chunks)** are refused, because `transformers` would see only
+  the padding mask and attend across documents.
 
 To build one from a config you already have, pass an `HFCompatibleConfig`:
 
@@ -500,7 +543,10 @@ page apply to OLMo 2 only: `HFCompatibleConfig.attn_implementation` names a
 `transformers` kernel instead.
 
 Pass a `[batch, sequence]` padding mask in `Batch["attention_mask"]`, with True/1
-for real tokens. OLMo 2 handles causality and prepares the backend's mask for you.
+for real tokens, and each input's position in `Batch["position_ids"]`. Positions count
+from the row's first real token, or restart at zero in each document of a
+[packed batch](#pack-chunks), which also carries `Batch["cu_seq_lens"]`. The collator
+builds all of them. OLMo 2 handles causality and prepares the backend's mask for you.
 
 ### Use FlashAttention-3 or FlashAttention-4
 
@@ -526,10 +572,14 @@ config = replace(OLMO2_1B_CONFIG, attn_implementation="flash_attention_4")
 - **Padded batches** reuse one `VarlenMetadata`, built once per forward, and each
   layer packs the real tokens into one `varlen_attn` call. Unpadded batches use one
   batched SDPA call per layer.
+- **[Packed batches](#pack-chunks)** reuse one `VarlenMetadata` built from
+  `Batch["cu_seq_lens"]`. Their documents cover every position, so each layer reshapes
+  the batch instead of gathering real tokens, then makes one `varlen_attn` call.
 
-An unsupported GPU or input raises an error; there is no fallback. Outputs at
-padding positions are zero, so final logits there can differ from SDPA. Compare
-real-token outputs; the trainer's collator already excludes padding from the loss.
+An unsupported GPU or input raises an error; there is no fallback. In a padded batch,
+outputs at padding positions are zero, so final logits there can differ from SDPA. In a
+packed batch, each row's padding is its own document, so both backends attend within it.
+Compare real-token outputs; the trainer's collator already excludes padding from the loss.
 
 Activating FA3 or FA4 replaces PyTorch's Flash backend for the whole process, so
 only one of them can be active. Keep it active until all pending backward passes
@@ -555,14 +605,18 @@ with Q's heads and sequence length. With SDPA, an explicit mask must include the
 causal restriction.
 
 A preparer takes a boolean 2D `padding_mask` (or `None`) and keyword-only
-`is_causal`, and returns the metadata its attention function reads. The model
-calls it once per forward and passes the result to every layer unchanged.
-`AttentionMetadata` lists the kinds of metadata, one type per kind:
+`is_causal`, and returns the metadata its attention function reads. To accept
+[packed batches](#pack-chunks), also pass `packed_preparer` to `register`. It takes the
+int32 `cu_seq_lens` and keyword-only `batch_size`, `seq_len` and `is_causal`, and
+returns the same kind of metadata. A packed batch on a backend without one raises an
+error. The model calls one of the two once per forward, depending on whether the batch
+is packed, and passes the result to every layer unchanged. `AttentionMetadata` lists
+the kinds of metadata, one type per kind:
 
-| Kind | Preparer | Read by |
-|---|---|---|
-| Dense mask (`torch.Tensor`) | `prepare_sdpa_mask` | `sdpa_attention` |
-| `VarlenMetadata` | `prepare_varlen_metadata` | `flash_attention_3`, `flash_attention_4` |
+| Kind | Preparer | Packed preparer | Read by |
+|---|---|---|---|
+| Dense mask (`torch.Tensor`) | `prepare_sdpa_mask` | `prepare_packed_sdpa_mask` | `sdpa_attention` |
+| `VarlenMetadata` | `prepare_varlen_metadata` | `prepare_packed_varlen_metadata` | `flash_attention_3`, `flash_attention_4` |
 
 `None` means no padding. To support a new kind, add its type to
 `AttentionMetadata`; model code does not change.
