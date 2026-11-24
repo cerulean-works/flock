@@ -12,7 +12,7 @@ def sdpa_attention(
 ) -> torch.Tensor:
     """Compute attention with a prepared mask, using the causal flag when absent.
 
-    `attention_metadata` is SDPA's dense mask, as returned by `prepare_sdpa_mask`.
+    `attention_metadata` is the dense mask from `prepare_sdpa_mask` or `prepare_packed_sdpa_mask`.
     An explicit mask defines all visibility, including any causal restriction.
     `is_causal` applies only when the mask is `None`.
     """

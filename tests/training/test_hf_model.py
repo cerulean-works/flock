@@ -16,6 +16,7 @@ from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegmen
 from flock.training.core.models import HFCompatibleConfig, HFCompatibleModel, registry
 from flock.training.core.optimizers import AdamWConfig
 from flock.training.core.trainer import Trainer, TrainerConfig
+from tests.training.test_olmo2 import PACKED_ROWS, PACKED_WIDTH, packed_batch
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -46,10 +47,12 @@ CONFIGS: dict[str, Callable[[], PretrainedConfig]] = {
 
 
 def make_batch(input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> Batch:
+    mask = torch.ones_like(input_ids) if attention_mask is None else attention_mask
     return {
         "input_ids": input_ids,
-        "attention_mask": torch.ones_like(input_ids) if attention_mask is None else attention_mask,
+        "attention_mask": mask,
         "labels": torch.full_like(input_ids, -100),
+        "position_ids": (mask.long().cumsum(-1) - 1).clamp_min(0),
     }
 
 
@@ -134,6 +137,14 @@ def test_logits_match_transformers_with_left_padding(repo: tuple[Path, PreTraine
     torch.testing.assert_close(actual[0, 2:], expected[0])
     torch.testing.assert_close(actual[1, :5], expected[1])
     assert torch.isfinite(actual).all()
+
+
+def test_packed_batches_are_refused(repo: tuple[Path, PreTrainedModel]) -> None:
+    folder, _ = repo
+    model = HFCompatibleModel.from_hf(str(folder), pretrained=True)
+    # transformers would see only the padding mask and attend across documents.
+    with pytest.raises(ValueError, match="HFCompatibleModel does not support packed batches"):
+        model(packed_batch(PACKED_ROWS, PACKED_WIDTH))
 
 
 def test_tied_embeddings_stay_tied(tmp_path: Path) -> None:

@@ -268,7 +268,11 @@ def test_training_state_is_skipped_unless_asked_for(
 ) -> None:
     model = tiny()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-    batch = {"input_ids": torch.zeros(1, 4, dtype=torch.long), "attention_mask": torch.ones(1, 4)}
+    batch = {
+        "input_ids": torch.zeros(1, 4, dtype=torch.long),
+        "attention_mask": torch.ones(1, 4),
+        "position_ids": torch.arange(4)[None],
+    }
     model(batch).sum().backward()
     optimizer.step()
     state = {"optimizer": optimizer.state_dict(), "ema": {"w": torch.ones(3)}}

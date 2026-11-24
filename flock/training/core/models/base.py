@@ -136,19 +136,22 @@ class BaseModel(nn.Module, ABC):
             tokenizer.pad_token_id = tokenizer.bos_token_id
         return tokenizer
 
-    def _check_batch(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Validate a collated batch and derive its boolean mask and position IDs.
+    def _check_batch(
+        self, batch: Batch
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
+        """Validate a collated batch and return the inputs `_forward` takes.
 
-        Position IDs are contiguous over each row's real tokens, so left padding
-        does not shift them.
+        Position IDs and `cu_seq_lens` pass through unchecked, as the collator builds them.
 
         Args:
-            batch (`Batch`): Token IDs and a matching mask shaped `[batch, sequence]`.
-                Mask values `True` or `1` identify real tokens.
+            batch (`Batch`): Token IDs, a matching mask and position IDs, shaped
+                `[batch, sequence]`. Mask values `True` or `1` identify real tokens.
 
         Returns:
-            `tuple[torch.Tensor, torch.Tensor, torch.Tensor]`: The token IDs, the mask
-            as booleans on the IDs' device, and position IDs, all `[batch, sequence]`.
+            `tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]`: The
+            token IDs and the mask as booleans on the IDs' device, both `[batch, sequence]`,
+            then the batch's position IDs and `cu_seq_lens`, or `None` unless the batch is
+            packed.
 
         Raises:
             `ValueError`: If IDs are not rank two, length is outside the configured
@@ -168,29 +171,30 @@ class BaseModel(nn.Module, ABC):
             raise ValueError("attention_mask must have the same shape as input_ids")
 
         attention_mask = attention_mask.to(device=input_ids.device, dtype=torch.bool)
-        position_ids = (attention_mask.long().cumsum(-1) - 1).clamp_min(0)
-        return input_ids, attention_mask, position_ids
+        return input_ids, attention_mask, batch["position_ids"], batch.get("cu_seq_lens")
 
     def forward(self, batch: Batch) -> torch.Tensor:  # ty: ignore[invalid-mutable-override]
         """Return full-sequence logits for a collated batch.
 
         Labels in a batch are ignored: the trainer owns target alignment and loss.
-        Position IDs are contiguous over each row's real tokens.
         Subclasses prepare the backend's mask and causal flag in `_forward`.
 
+        A batch with `cu_seq_lens` is packed, and `_forward` receives the boundaries.
+
         Args:
-            batch (`Batch`): Token IDs and a matching mask shaped `[batch, sequence]`.
-                Mask values `True` or `1` identify real tokens.
+            batch (`Batch`): Token IDs, a matching mask and position IDs, shaped
+                `[batch, sequence]`. Mask values `True` or `1` identify real tokens.
 
         Returns:
             `torch.Tensor`: Logits shaped `[batch, sequence, vocabulary]`.
 
         Raises:
             `ValueError`: If IDs are not rank two, length is outside the configured
-                range, or the attention mask shape differs from the IDs.
+                range, the attention mask shape differs from the IDs, or the batch is
+                packed and the model or its attention implementation does not support it.
         """
-        input_ids, attention_mask, position_ids = self._check_batch(batch)
-        return self._forward(input_ids, attention_mask, position_ids)
+        input_ids, attention_mask, position_ids, cu_seq_lens = self._check_batch(batch)
+        return self._forward(input_ids, attention_mask, position_ids, cu_seq_lens=cu_seq_lens)
 
     @abstractmethod
     def _forward(
@@ -198,9 +202,13 @@ class BaseModel(nn.Module, ABC):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
+        *,
+        cu_seq_lens: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Run validated inputs with a 2D boolean padding mask and position IDs.
 
         The subclass owns causal attention and backend-specific mask preparation.
+        `cu_seq_lens` is `None` unless the batch is packed. A model given boundaries
+        must keep attention inside each document they bound, or raise.
         """
         raise NotImplementedError

@@ -164,7 +164,9 @@ class Olmo2Model(nn.Module):
     def __init__(self, config: Olmo2Config) -> None:
         """Construct embeddings, decoder layers and final normalization."""
         super().__init__()
-        self.mask_preparer = AttentionInterface.get_mask_preparer(config.attn_implementation)
+        self.prepare_attention_metadata = AttentionInterface.get_metadata_preparer(
+            config.attn_implementation
+        )
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
             Olmo2DecoderLayer(config) for _ in range(config.num_hidden_layers)
@@ -178,20 +180,37 @@ class Olmo2Model(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor,
+        *,
+        cu_seq_lens: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Return hidden states using RoPE frequencies computed in FP32.
 
         Args:
             input_ids (`torch.Tensor`): Token IDs shaped `[batch, sequence]`.
             attention_mask (`torch.Tensor` or `None`): Boolean padding mask shaped
-                `[batch, sequence]`; `None` means every token is valid.
+                `[batch, sequence]`; `None` means every token is valid. Unused when
+                `cu_seq_lens` is given.
             position_ids (`torch.Tensor`): Positions shaped `[batch, sequence]`.
+            cu_seq_lens (`torch.Tensor`, *optional*): int32 document boundaries of a
+                packed batch in the flattened `[batch * sequence]` axis. Attention
+                stays inside each document.
 
         Returns:
             `torch.Tensor`: Normalized states shaped `[batch, sequence, hidden]`.
+
+        Raises:
+            `ValueError`: If `cu_seq_lens` is given and the attention implementation
+                does not support packed batches.
         """
         # Prepare once per forward; every layer reuses the metadata.
-        metadata = self.mask_preparer(attention_mask, is_causal=True)
+        batch_size, seq_len = input_ids.shape
+        metadata = self.prepare_attention_metadata(
+            attention_mask,
+            batch_size=batch_size,
+            seq_len=seq_len,
+            is_causal=True,
+            cu_seq_lens=cu_seq_lens,
+        )
         x: Any = self.embed_tokens(input_ids)
         # Build frequencies in float32 even when model weights are cast to bfloat16.
         inv_freq = self.rope_theta ** (
@@ -217,6 +236,7 @@ class Olmo2(BaseModel):
 
     The inherited `forward` returns `[batch, sequence, vocabulary]` logits.
     Input embeddings and the output projection have separate, untied weights.
+    Packed batches need an attention implementation with a packed preparer.
     """
 
     def __init__(self, config: Olmo2Config) -> None:
@@ -237,6 +257,12 @@ class Olmo2(BaseModel):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
+        *,
+        cu_seq_lens: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Project validated decoder outputs to full-sequence vocabulary logits."""
-        return self.lm_head(self.model(input_ids, attention_mask, position_ids))
+        """Project validated decoder outputs to full-sequence vocabulary logits.
+
+        With `cu_seq_lens`, the decoder keeps attention inside each document.
+        """
+        hidden = self.model(input_ids, attention_mask, position_ids, cu_seq_lens=cu_seq_lens)
+        return self.lm_head(hidden)
