@@ -385,7 +385,7 @@
 						<Button
 							variant={evals ? 'secondary' : 'outline'}
 							aria-pressed={evals}
-							href={hrefWith({ preset: evals ? null : 'evals' })}
+							href={hrefWith(evals ? { preset: null, view: 'table' } : { preset: 'evals' })}
 							data-sveltekit-replacestate
 							{@attach hint('Eval runs by suites, ranked')}
 						>

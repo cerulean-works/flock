@@ -248,6 +248,10 @@ describe('the Evals preset', () => {
 	it('opens a link to the preset on the table, whichever view was picked last', async () => {
 		openEvals('member', 'http://flock.test/acme/bert?preset=evals', 'charts');
 		await expect.element(screen.getByText('Mean rank (2)')).toBeVisible();
+		// Turned off, it goes back to the full table, not to the charts.
+		await expect
+			.element(screen.getByRole('link', { name: 'Evals' }))
+			.toHaveAttribute('href', '/acme/bert?view=table');
 	});
 
 	it('shows outsiders of a public project the same scores, with nothing to select', async () => {

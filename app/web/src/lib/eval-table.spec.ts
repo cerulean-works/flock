@@ -242,6 +242,9 @@ describe('the Evals table', () => {
 
 		expect(table.columns.even.scale).toBeNull();
 		expect(table.columns.loop.scale).toBeNull();
+		// Held only by itself, it is still a column, unranked.
+		expect(table.top).toContain('loop');
+		expect(table.rows[0].cells.loop).toEqual({ value: 1, otherHash: null, rank: null, heat: null });
 		expect(table.rows.map((r) => r.cells.even.rank)).toEqual([null, null]);
 	});
 });

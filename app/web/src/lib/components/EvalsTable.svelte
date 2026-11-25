@@ -55,11 +55,12 @@
 	// first click, the other way on the second; a run without a value goes last either way.
 	// A suite's key is `suite/<name>`, apart from the run's name and the mean rank.
 	let sort = $state<{ key: string; best: boolean } | null>(null);
-	/** A row's number in the column sorted by: a mean rank or a comparable score. */
+	/** A row's number in the column sorted by: a mean rank or a ranked score. */
 	const sortValue = (row: EvalTableRow, key: string) => {
 		if (key === 'mean') return row.meanRank;
+		// Only ranked scores order a column; the rest follow, as runs without a value do.
 		const cell = row.cells[key.slice('suite/'.length)];
-		return cell.otherHash === null ? cell.value : null;
+		return cell.rank === null ? null : cell.value;
 	};
 	const rows = $derived.by(() => {
 		const out = table.rows.filter((r) => showOther || !r.differs.length);
@@ -243,7 +244,8 @@
 									<span {@attach hint(cell.value === null ? undefined : String(cell.value))}
 										>{formatScore(
 											cell.value,
-											columnScale === 'accuracy' ? 'acc' : columnScale
+											// An unknown scale reads as a plain number, never a percent.
+											columnScale === 'accuracy' ? 'acc' : (columnScale ?? 'score')
 										)}</span
 									>
 									<span class="inline-block w-5 text-left text-[11px] text-faint"

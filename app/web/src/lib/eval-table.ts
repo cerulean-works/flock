@@ -226,13 +226,26 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 			children: (members ?? []).filter((m) => suites.has(m))
 		};
 	}
-	const top = [...suites]
-		.filter((suite) => !held.has(suite))
-		.sort(
-			(a, b) =>
-				Number(columns[a].scale !== 'accuracy') - Number(columns[b].scale !== 'accuracy') ||
-				(a < b ? -1 : 1)
-		);
+	// A suite no top suite leads to (a group of suites that hold each other) is a top suite
+	// too, so every scored suite has a column to open.
+	const roots = [...suites].filter((suite) => !held.has(suite));
+	const reached = new Set<string>();
+	const reach = (suite: string) => {
+		if (reached.has(suite)) return;
+		reached.add(suite);
+		for (const child of columns[suite].children) reach(child);
+	};
+	for (const suite of roots) reach(suite);
+	for (const suite of [...suites].sort())
+		if (!reached.has(suite)) {
+			roots.push(suite);
+			reach(suite);
+		}
+	const top = roots.sort(
+		(a, b) =>
+			Number(columns[a].scale !== 'accuracy') - Number(columns[b].scale !== 'accuracy') ||
+			(a < b ? -1 : 1)
+	);
 
 	const deviceOf = (run: EvalTableRun) => stringAt(run, 'config.device');
 	const usualDevice = mostCommon(runs, deviceOf);
