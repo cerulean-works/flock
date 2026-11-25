@@ -221,8 +221,9 @@ describe('the Evals preset', () => {
 		await expect.element(screen.getByText('Mean rank (2)')).toBeVisible();
 		// The header, then olmo and llama; fp32 waits behind the button.
 		expect(rows.elements()).toHaveLength(3);
-		await expect.element(rows.nth(1)).toHaveTextContent(/olmo.*2\.0.*40\.0%\s*2.*0\.900\s*2/);
-		await expect.element(rows.nth(2)).toHaveTextContent(/llama.*1\.0.*50\.0%\s*1.*0\.800\s*1/);
+		// Best mean rank first: llama, then olmo.
+		await expect.element(rows.nth(1)).toHaveTextContent(/llama.*1\.0.*50\.0%\s*1.*0\.800\s*1/);
+		await expect.element(rows.nth(2)).toHaveTextContent(/olmo.*2\.0.*40\.0%\s*2.*0\.900\s*2/);
 		await expect.element(screen.getByRole('checkbox', { name: 'Select olmo' })).toBeVisible();
 
 		await screen.getByRole('button', { name: 'Show 1 on other settings' }).click();
@@ -231,7 +232,7 @@ describe('the Evals preset', () => {
 		await expect.element(rows.nth(3)).toHaveTextContent(/Other settings\s*–/);
 	});
 
-	it('sorts by a mean rank, best first, then the other way', async () => {
+	it('opens sorted by mean rank, best first, and turns it the other way and back', async () => {
 		openEvals('member', 'http://flock.test/acme/bert?preset=evals');
 		const names = () =>
 			screen
@@ -239,10 +240,11 @@ describe('the Evals preset', () => {
 				.elements()
 				.slice(1)
 				.map((row) => row.querySelector('a')?.textContent);
-		await screen.getByRole('button', { name: 'Mean rank (2)' }).click();
 		await vi.waitFor(() => expect(names()).toEqual(['llama', 'olmo']));
 		await screen.getByRole('button', { name: 'Mean rank (2)' }).click();
 		await vi.waitFor(() => expect(names()).toEqual(['olmo', 'llama']));
+		await screen.getByRole('button', { name: 'Mean rank (2)' }).click();
+		await vi.waitFor(() => expect(names()).toEqual(['llama', 'olmo']));
 	});
 
 	it('opens a link to the preset on the table, whichever view was picked last', async () => {

@@ -52,9 +52,10 @@
 	const others = $derived(table.rows.filter((r) => r.differs.length).length);
 
 	// Sorted here, not by the server: a mean rank isn't a stored column. Best first on the
-	// first click, the other way on the second; a run without a value goes last either way.
+	// first click on a new column, the other way on the next; a run without a value goes last either way.
 	// A suite's key is `suite/<name>`, apart from the run's name and the mean rank.
-	let sort = $state<{ key: string; best: boolean } | null>(null);
+	// Opens on the mean rank, best first, so the best model is the top row.
+	let sort = $state<{ key: string; best: boolean } | null>({ key: 'mean', best: true });
 	/** A row's number in the column sorted by: a mean rank or a ranked score. */
 	const sortValue = (row: EvalTableRow, key: string) => {
 		if (key === 'mean') return row.meanRank;
@@ -95,7 +96,6 @@
 	};
 	const scale = (s: Scale | null) => (s === null ? 'scale unknown' : SCALES[s]);
 	const meanRank = (rank: number | null) => (rank === null ? '–' : rank.toFixed(1));
-	const narrowed = $derived(ws.page.total > ws.page.runs.length);
 </script>
 
 {#snippet sortHeader(key: string, label: string, help: string)}
@@ -116,18 +116,14 @@
 			<code class="font-mono text-[0.95em] text-foreground">flock eval log</code> show here, one row each.
 		</p>
 	{:else}
-		<div class="flex min-h-10 items-center gap-3 px-4 text-[13px] text-muted-foreground">
-			<span>
-				Ranked among the {table.rows.length - others} runs{narrowed ? ' on this page' : ''} scored under
-				the same settings. Darker is better within a column.
-			</span>
-			{#if others}
+		{#if others}
+			<div class="flex min-h-10 items-center px-4">
 				<Button variant="outline" size="sm" onclick={() => (showOther = !showOther)}>
 					{showOther ? 'Hide' : 'Show'}
 					{others} on other settings
 				</Button>
-			{/if}
-		</div>
+			</div>
+		{/if}
 		<table class="border-collapse text-[13px] tabular-nums">
 			<thead class="sticky top-0 z-2 bg-background">
 				<tr class="h-12 border-b text-xs text-muted-foreground">

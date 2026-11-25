@@ -37,7 +37,7 @@ The settings most of the page's runs share, taken as a whole (dtype, attention, 
 
 ### D213. A rank per cell, and one mean rank as a reading order
 
-Ranks are competition ranks (equal scores share the better rank), best first in each column's direction. A cell's tint is where its score sits between the column's worst and best. One mean rank, over every top suite with a ranked cell, orders the runs as a leaderboard does. It averages accuracy and bits-per-byte ranks together, so it is a convenience order for reading the table and the page says so; comparisons rest on the suites themselves. A run without a rank in one of those suites has no mean rank, so a missing suite can't raise it. Opened member suites don't count, so a parent and its members aren't counted twice.
+Ranks are competition ranks (equal scores share the better rank), best first in each column's direction. A cell's tint is where its score sits between the column's worst and best. One mean rank, over every top suite with a ranked cell, orders the runs as a leaderboard does, and the table opens sorted by it, best first. It averages accuracy and bits-per-byte ranks together, so it is a convenience order for reading the table and the page says so; comparisons rest on the suites themselves. A run without a rank in one of those suites has no mean rank, so a missing suite can't raise it. Opened member suites don't count, so a parent and its members aren't counted twice.
 
 ---
 
