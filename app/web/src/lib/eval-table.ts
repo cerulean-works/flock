@@ -227,7 +227,8 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 		// Every run under the column's hash must read the same scale, or the scale is unknown:
 		// the runs ranked, or with none of them the runs shown, which are never ranked.
 		const read = new Set(under.map((run) => scaleOf(run, suite)));
-		const members = under
+		// Its members as scored under the column's hash; with no hash known, as any run lists them.
+		const members = (under.length ? under : scored)
 			.map((run) => run.values[`config.suite_members.${suite}`])
 			.find(Array.isArray) as string[] | undefined;
 		for (const m of members ?? []) held.add(m);
