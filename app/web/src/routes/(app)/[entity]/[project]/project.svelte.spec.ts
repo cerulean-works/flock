@@ -219,17 +219,17 @@ describe('the Evals preset', () => {
 			.element(screen.getByRole('link', { name: 'Evals' }))
 			.toHaveAttribute('aria-pressed', 'true');
 		await expect.element(screen.getByText('2 suites')).toBeVisible();
-		// The header, then olmo and llama; fp32 waits behind the button.
-		expect(rows.elements()).toHaveLength(3);
+		// Two header rows (groups, then columns), then llama and olmo; fp32 waits behind the button.
+		expect(rows.elements()).toHaveLength(4);
 		// Best mean rank first: llama, then olmo.
-		await expect.element(rows.nth(1)).toHaveTextContent(/llama.*1\.0.*50\.0%\s*1.*0\.800\s*1/);
-		await expect.element(rows.nth(2)).toHaveTextContent(/olmo.*2\.0.*40\.0%\s*2.*0\.900\s*2/);
+		await expect.element(rows.nth(2)).toHaveTextContent(/llama.*1\.0.*50\.0%\s*1.*0\.800\s*1/);
+		await expect.element(rows.nth(3)).toHaveTextContent(/olmo.*2\.0.*40\.0%\s*2.*0\.900\s*2/);
 		await expect.element(screen.getByRole('checkbox', { name: 'Select olmo' })).toBeVisible();
 
 		await screen.getByRole('button', { name: 'Show 1 on other settings' }).click();
-		await expect.element(rows.nth(3)).toHaveTextContent(/fp32.*Other settings.*90\.0%.*0\.500/);
+		await expect.element(rows.nth(4)).toHaveTextContent(/fp32.*Other settings.*90\.0%.*0\.500/);
 		// Shown, never ranked: the FP32 run is first on both scores and has no mean rank.
-		await expect.element(rows.nth(3)).toHaveTextContent(/Other settings\s*–/);
+		await expect.element(rows.nth(4)).toHaveTextContent(/Other settings\s*–/);
 	});
 
 	it('opens sorted by mean rank, best first, and turns it the other way and back', async () => {
@@ -238,7 +238,7 @@ describe('the Evals preset', () => {
 			screen
 				.getByRole('row')
 				.elements()
-				.slice(1)
+				.slice(2)
 				.map((row) => row.querySelector('a')?.textContent);
 		await vi.waitFor(() => expect(names()).toEqual(['llama', 'olmo']));
 		await screen.getByRole('button', { name: 'Mean rank' }).click();
