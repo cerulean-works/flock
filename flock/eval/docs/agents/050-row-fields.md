@@ -56,8 +56,9 @@ Nothing to declare for ARC, WinoGrande, SocialIQA, PIQA, SciQ (`support` is a pa
 ## 3. How it was actually built
 
 - `_gen2mc_task` and `exam_task` take `row_fields` as a required argument (a default instance in a signature is ruff's B008), so each caller states its columns.
-- Every declared task was loaded over all its rows: no missing column and no non-scalar value.
+- Every declared task was loaded over all its rows, the tc-edu many-shot tasks too: no missing column and no non-scalar value.
 - Every multiple-choice task's hash over its full data is equal before and after, and equal to the bank's where it has the task; the regenerated snapshot differs only in `row_fields`.
 - A test scores a private and a public text task under umask 022 and checks 600 and 644 for its predictions.
 - Review found two gaps in 044's copying, fixed here: a null id or subject was written as the string `"None"`, which would join unrelated rows on one id, and is now left missing; a NaN or infinite `meta` value would have written a line no strict JSON reader takes, and is now `null`, as `results.json` writes a non-finite metric. No declared column holds either today.
 - A test checks that a position with a masked token matches a reference over the unmasked ones, and that a NaN position gives NaN entropy and deviation.
+- Base Easy with Paloma WikiText-103 and FineWeb English on OLMo 2 1B, in BF16, against a run of the same model before this stage: equal task hashes and every metric bit for bit (524 values over 111 tasks), equal suites, and equal per-token values in all 109 per-token files. Prediction rows of 38 tasks differ only by the `subject` and `meta` keys added here, and the other 73 tasks' files are byte-equal.
