@@ -4,7 +4,7 @@ import dataclasses
 from typing import TYPE_CHECKING
 
 from flock.eval.tasks import SUITES, TASKS, Fewshot, MultipleChoiceTask
-from flock.eval.tasks.tc_edu import MANYSHOT_SHOTS, SUBJECTS, TC_EDU, TC_EDU_JH
+from flock.eval.tasks.tc_edu import MANYSHOT_SHOTS, ROW_FIELDS, SUBJECTS, TC_EDU, TC_EDU_JH
 from flock.eval.tasks.tw_mock_exams import chinese_doc, english_doc
 
 if TYPE_CHECKING:
@@ -115,7 +115,9 @@ def test_manyshot_shots_are_the_head_of_the_long_context_split(
         options = [{"label": "A", "text": "甲"}, {"label": "B", "text": "乙"}]
         return {"hash": id, "passage": "", "stem": f"{id}？", "options": options, "answer": "A"}
 
-    rows_by_split.update(test=[row("t1")], long_context=[row(f"l{i}") for i in range(30)])
+    # Only scored rows give the columns `row_fields` names.
+    scored = {**row("t1"), **dict.fromkeys(("uid", *ROW_FIELDS.meta), "x")}
+    rows_by_split.update(test=[scored], long_context=[row(f"l{i}") for i in range(30)])
     task = TASKS["tc_edu_manyshot_4k_jh_social"]
     assert isinstance(task, MultipleChoiceTask)
 
