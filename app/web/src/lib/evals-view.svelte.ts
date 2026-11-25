@@ -56,8 +56,8 @@ export class EvalsView {
 	});
 
 	/**
-	 * Every scored suite in the table's order: top suites accuracy first, each followed by the
-	 * suites it holds, until the viewer moves one in the Columns menu; then the viewer's order.
+	 * Every scored suite in the table's order: top suites by group, accuracy first, each followed
+	 * by the suites it holds, until the viewer moves one in the Columns menu; then the viewer's.
 	 */
 	readonly ordered = $derived.by(() => {
 		const out: string[] = [];
@@ -66,7 +66,15 @@ export class EvalsView {
 			out.push(suite);
 			for (const child of this.table.columns[suite].children) add(child);
 		};
-		for (const suite of this.table.top) add(suite);
+		// A group's top suites stay together (`base_easy`'s accuracy and bits-per-byte columns),
+		// groups in the order their first suite comes, each top suite with the suites it holds.
+		const groups: string[][] = [];
+		for (const suite of this.table.top) {
+			const group = groups.find((g) => g[0].split(':')[0] === suite.split(':')[0]);
+			if (group) group.push(suite);
+			else groups.push([suite]);
+		}
+		for (const suite of groups.flat()) add(suite);
 		const ws = this.#ws;
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a lookup, never mutated
 		const at = new Map(ws.arrangedColumns.map((c, i) => [ws.meta.columns[c].key, i]));

@@ -73,16 +73,19 @@ export interface EvalTable {
 }
 
 /**
- * A suite's name as a column header shows it, on one line above its scale: `_` read as spaces
- * and `:` as ` · `, without a `bpb` part when the scale under it already says bits per byte
- * (`base_easy:math_bpb` is `base easy · math`, `zh_tw:bpb` is `zh tw`). The id stays its hover.
+ * A suite's name as a column header shows it: its group, the first part of its id, and its own
+ * name, the rest, with `_` read as spaces and further `:` as ` · `, and without a `bpb` part when
+ * the scale under it already says bits per byte (`base_easy:math_bpb` is `math` in `base easy`).
+ * A suite with nothing past its first part is named as its group (`zh_tw:bpb` is `zh tw` in
+ * `zh tw`). The id stays its hover.
  */
-export function suiteLabel(suite: string, scale: Scale | null): string {
+export function suiteLabel(suite: string, scale: Scale | null): { group: string; name: string } {
 	const parts = suite
 		.split(':')
-		.map((part) => (scale === 'bpb' ? part.replace(/(^|_)bpb$/, '') : part))
-		.filter(Boolean);
-	return parts.map((part) => part.replaceAll('_', ' ')).join(' · ');
+		.map((part, i) => (scale === 'bpb' && i > 0 ? part.replace(/(^|_)bpb$/, '') : part))
+		.filter(Boolean)
+		.map((part) => part.replaceAll('_', ' '));
+	return { group: parts[0], name: parts.length > 1 ? parts.slice(1).join(' · ') : parts[0] };
 }
 
 const numberAt = (run: EvalTableRun, key: string) => {

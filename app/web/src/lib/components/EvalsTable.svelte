@@ -35,6 +35,19 @@
 		if (cell && names) scroller!.scrollTo({ left: cell.offsetLeft - names.offsetWidth });
 	}
 
+	// Neighbouring columns of one group (`base easy`, `paloma`) share a band above their headers,
+	// as the runs table groups its columns. A lone column named as its group needs no band label.
+	const bands = $derived.by(() => {
+		const out: { key: string; group: string; span: number; named: boolean }[] = [];
+		for (const { suite } of view.shown) {
+			const { group, name } = suiteLabel(suite, table.columns[suite].scale);
+			const last = out.at(-1);
+			if (last?.group === group) last.span++;
+			else out.push({ key: suite, group, span: 1, named: name !== group });
+		}
+		return out;
+	});
+
 	const arrow = (key: string) => (view.sort?.key === key ? (view.sort.best ? '↓' : '↑') : '');
 
 	const SCALES = {
@@ -47,23 +60,23 @@
 	const meanRank = (rank: number | null) => (rank === null ? '–' : rank.toFixed(1));
 </script>
 
-<!-- A number column's header: its name on one line, its scale or count on the next, both ending
-     where the numbers below end; the slot after them holds the sort arrow, as a cell's holds its
-     rank. `open` is an opened suite's arrow, on the second line. -->
+<!-- A number column's header: its name on one line, its scale or count on the next, both centered
+     over the numbers, with slots either side as wide as a cell's rank, the right one holding the
+     sort arrow. `open` is an opened suite's arrow, at the start of the second line. -->
 {#snippet header(key: string, name: string, caption: string, help: string, open?: Snippet)}
 	<button
 		type="button"
-		class="flex w-full items-center justify-end font-medium hover:text-foreground"
+		class="flex w-full items-center justify-center font-medium hover:text-foreground"
 		onclick={() => view.sortBy(key)}
 		{@attach hint(help)}
 	>
+		<span class="w-4 flex-none"></span>
 		<span class="min-w-0 truncate">{name}</span>
-		<span class="w-5 flex-none pl-1 text-left text-foreground">{arrow(key)}</span>
+		<span class="w-4 flex-none pl-1 text-left text-foreground">{arrow(key)}</span>
 	</button>
-	<div class="flex h-5 items-center justify-end text-[11px] text-faint">
+	<div class="relative flex h-5 items-center justify-center text-[11px] text-faint">
 		{@render open?.()}
-		<span class="min-w-0 truncate">{caption}</span>
-		<span class="w-5 flex-none"></span>
+		<span class="min-w-0 truncate px-4">{caption}</span>
 	</div>
 {/snippet}
 
@@ -76,6 +89,21 @@
 	{:else}
 		<table class="border-collapse text-[13px] tabular-nums">
 			<thead class="sticky top-0 z-2 bg-background">
+				<tr class="text-xs text-muted-foreground">
+					<th class="sticky left-0 z-1 bg-background"></th>
+					<th></th>
+					{#each bands as band (band.key)}
+						<th
+							colspan={band.span}
+							class="h-6.5 border-l border-divider px-3 pt-1.5 text-left font-normal whitespace-nowrap"
+						>
+							{#if band.span > 1 || band.named}
+								{band.group}
+								{#if band.span > 1}<span class="ml-0.5 text-faint">{band.span}</span>{/if}
+							{/if}
+						</th>
+					{/each}
+				</tr>
 				<tr class="border-b text-xs text-muted-foreground">
 					<th
 						class="sticky left-0 z-1 min-w-64 bg-background px-4 pb-6.5 text-left align-bottom font-medium"
@@ -110,7 +138,7 @@
 							{#snippet openSuites()}
 								<button
 									type="button"
-									class="mr-auto -ml-1 grid size-5 flex-none place-items-center rounded hover:bg-muted"
+									class="absolute top-0 -left-1 grid size-5 place-items-center rounded hover:bg-muted"
 									aria-expanded={view.open.has(suite)}
 									aria-label="{view.open.has(suite) ? 'Close' : 'Open'} {suite}'s suites"
 									onclick={() =>
@@ -121,7 +149,7 @@
 							{/snippet}
 							{@render header(
 								`suite/${suite}`,
-								suiteLabel(suite, column.scale),
+								suiteLabel(suite, column.scale).name,
 								scale(column.scale),
 								`${suite}: ${scale(column.scale)}`,
 								column.children.length ? openSuites : undefined
@@ -182,15 +210,15 @@
 								{/if}
 							</span>
 						</th>
-						<td class="border-r border-divider px-3 text-right whitespace-nowrap">
-							{meanRank(row.meanRank)}<span class="inline-block w-5"></span>
+						<td class="border-r border-divider px-3 text-center whitespace-nowrap">
+							{meanRank(row.meanRank)}
 						</td>
 						{#each view.shown as { suite, depth } (suite)}
 							{@const cell = row.cells[suite]}
 							{@const columnScale = table.columns[suite].scale}
 							<td
 								class={[
-									'px-3 text-right whitespace-nowrap',
+									'px-3 text-center whitespace-nowrap',
 									depth && cell.heat === null && 'bg-card'
 								]}
 								style:background-color={cell.heat === null
@@ -205,6 +233,8 @@
 										)}>–</span
 									>
 								{:else}
+									<!-- As wide as the rank after it, so the score sits in the middle. -->
+									<span class="inline-block w-4"></span>
 									<span {@attach hint(cell.value === null ? undefined : String(cell.value))}
 										>{formatScore(
 											cell.value,
@@ -212,7 +242,7 @@
 											columnScale === 'accuracy' ? 'acc' : (columnScale ?? 'score')
 										)}</span
 									>
-									<span class="inline-block w-5 text-left text-[11px] text-faint"
+									<span class="inline-block w-4 text-left text-[11px] text-faint"
 										>{cell.rank ?? ''}</span
 									>
 								{/if}

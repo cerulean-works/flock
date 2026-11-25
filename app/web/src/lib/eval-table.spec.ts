@@ -279,13 +279,16 @@ describe('the Evals table', () => {
 		expect(table.rows.map((r) => r.cells.even.rank)).toEqual([null, null]);
 	});
 
-	it('names a suite for its header, leaving out what its scale already says', () => {
-		expect(suiteLabel('base_easy:math_bpb', 'bpb')).toBe('base easy · math');
-		expect(suiteLabel('zh_tw:bpb', 'bpb')).toBe('zh tw');
-		expect(suiteLabel('tmmluplus:stem:bpb', 'bpb')).toBe('tmmluplus · stem');
-		expect(suiteLabel('base_easy:qa_rc', 'accuracy')).toBe('base easy · qa rc');
-		// Only a scale read as bits per byte drops it.
-		expect(suiteLabel('mmlu:bpb', null)).toBe('mmlu · bpb');
-		expect(suiteLabel('paloma:dolma-v1_5', 'bpb')).toBe('paloma · dolma-v1 5');
+	it('names a suite for its header under its group, leaving out what its scale already says', () => {
+		expect(suiteLabel('base_easy:math_bpb', 'bpb')).toEqual({ group: 'base easy', name: 'math' });
+		expect(suiteLabel('zh_tw:bpb', 'bpb')).toEqual({ group: 'zh tw', name: 'zh tw' });
+		expect(suiteLabel('tmmluplus:stem:bpb', 'bpb')).toEqual({ group: 'tmmluplus', name: 'stem' });
+		expect(suiteLabel('base_easy:qa_rc', 'accuracy')).toEqual({
+			group: 'base easy',
+			name: 'qa rc'
+		});
+		// The group keeps its name whole, and only a scale read as bits per byte drops `bpb`.
+		expect(suiteLabel('mt_mbpp', 'bpb')).toEqual({ group: 'mt mbpp', name: 'mt mbpp' });
+		expect(suiteLabel('mmlu:bpb', null)).toEqual({ group: 'mmlu', name: 'bpb' });
 	});
 });
