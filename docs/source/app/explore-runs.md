@@ -34,6 +34,20 @@ An eval run that `flock eval run --wandb-project` logged carries its `results.js
 
 Scores show four decimals; hover one for its exact value. Hashes show their first 12 characters. Hover one for the whole value, or copy it. Two scores are comparable only when their hashes are equal, as [comparing results](../evals/comparison) explains.
 
+### Rank eval runs by suite[[evals-preset]]
+
+In **Table**, click **Evals** to see a project's eval runs side by side. The button appears once a run has a suite score, which `flock eval log` writes as `suites/<suite>`. The table then has one row per eval run on the page and one column per suite:
+
+- **Columns** are the suites no other scored suite holds, accuracy first within each group. Click the arrow beside a suite to show the suites it holds beside it. Columns of one group sit together under a band naming it, as the full table groups Config and Summary: **base easy** holds its accuracy and bits-per-byte columns. A column shows the rest of its suite's name, with `_` read as a space and without a trailing `bpb` that the scale below already says (`base_easy:math_bpb` is **math** over **bits per byte**); hover it for the suite's id. Each column names its scale, read from the scores of the suite's members: accuracy, bits per byte, loss per token or perplexity.
+- **Cells** show the score and its rank in the column. Rank 1 is the best score, the highest accuracy or the lowest bits per byte, and equal scores share a rank. Darker cells are better within their column.
+- **Mean rank** averages a run's ranks over the top suites ranked in, accuracy and bits per byte alike. It is a convenient order for reading the table, not a result: compare runs on the suites themselves. A run that lacks one of those suites has no mean rank.
+- **Sorting:** the table opens sorted by mean rank, best first, so the best model is the top row. Click a header to sort by it, best first, and again for the other order. Scores without a rank go last. Ranks and sorting cover the runs on the current page.
+- **Columns** in the toolbar lists the suites: check or clear one to show or hide it, and drag its grip to move it, as in the full table. These are the same column settings, kept in this browser, and a hidden suite leaves the mean rank. Suite columns start at one width; drag a column's edge to resize it, and hover a name cut to two lines to read it whole.
+
+Scores are ranked only when they come from the same instrument. Runs scored with another dtype, attention, SDPA kernel or batch size in tokens than most runs are hidden. Click **Show N on other settings** in the toolbar to list them, marked **Other settings** and not ranked. A suite scored under another suite hash than most runs' shows a dash. A run on another GPU shows its device, a model scored with a BOS token shows **BOS**, and a model whose name says Instruct or Chat shows **Instruct**. All three are still ranked.
+
+Check two runs and click **Compare items** to read them doc by doc. Click **Evals** again to return to the full table.
+
 ### Compare two eval runs[[compare-two-eval-runs]]
 
 1. In **Table**, check exactly two eval runs and click **Compare items**. From a model version, open **Evals**, check two runs and click the same button. From an eval run, click **Compare with…** on its **Results** tab or in its **⋯** menu, then pick the other run.

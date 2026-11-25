@@ -17,6 +17,7 @@
 	import {
 		type ColumnGroup,
 		type ColumnNode,
+		LOCKED_COLUMNS,
 		columnTree,
 		filterTree,
 		findFolder,
@@ -27,9 +28,14 @@
 	interface Props {
 		/** Scroll the table to a column (shown by then). */
 		onjump: (key: string) => void;
+		/**
+		 * Only these columns, in this order (the Evals preset's suites); the project's others keep
+		 * their settings. Every column when not set.
+		 */
+		keys?: readonly string[];
 	}
 
-	let { onjump }: Props = $props();
+	let { onjump, keys }: Props = $props();
 
 	const ws = getWorkspace();
 
@@ -38,12 +44,22 @@
 	/** Folders the viewer opened; the groups (Run, Config, Summary) start open. */
 	const expanded = new SvelteSet<string>(['info', 'config', 'summary']);
 
-	const tree = $derived(columnTree(ws.arrangedColumns.map((i) => ws.meta.columns[i])));
+	const listed = $derived.by(() => {
+		if (!keys) return ws.arrangedColumns.map((i) => ws.meta.columns[i]);
+		const byKey = new Map(ws.meta.columns.map((c) => [c.key, c]));
+		return keys.flatMap((k) => byKey.get(k) ?? []);
+	});
+	const tree = $derived(columnTree(listed));
 	const searching = $derived(query.trim() !== '');
 	const nodes = $derived(filterTree(tree, query));
 	const hidden = $derived(ws.hiddenColumns);
-	const total = $derived(ws.meta.columns.length);
-	const hiddenCount = $derived(total - ws.shownColumns.length);
+	const total = $derived(listed.length);
+	const hiddenCount = $derived(
+		listed.filter((c) => hidden.has(c.key) && !LOCKED_COLUMNS.has(c.key)).length
+	);
+	const moved = $derived(
+		keys ? ws.columnPrefs.order.some((k) => keys.includes(k)) : ws.columnsMoved
+	);
 
 	/** The first column a search matches, for Enter. */
 	function firstLeaf(list: readonly ColumnNode[]): string | null {
@@ -85,7 +101,7 @@
 	const indexIn = (parent: string, id: string) => siblings(parent).findIndex((n) => idOf(n) === id);
 
 	function move(parent: string, from: number, to: number) {
-		if (parent) ws.moveColumn(parent, from, to);
+		if (parent) ws.moveColumn(parent, from, to, keys);
 		else ws.moveColumnGroup(tree[from].id as ColumnGroup, to);
 	}
 
@@ -419,20 +435,25 @@
 		<p class="sr-only" aria-live="polite">{status}</p>
 		<div class="flex flex-wrap items-center gap-1 border-t py-2.5 pr-3 pl-4">
 			<span class="mr-auto text-xs text-muted-foreground tabular-nums">
-				{ws.shownColumns.length} of {total} shown
+				{total - hiddenCount} of {total} shown
 			</span>
 			<Button
 				variant="ghost"
 				size="sm"
-				disabled={!ws.columnsMoved}
+				disabled={!moved}
 				onclick={() => {
-					ws.resetColumnOrder();
+					ws.resetColumnOrder(keys);
 					status = 'Columns back in their default order';
 				}}
 			>
 				Reset order
 			</Button>
-			<Button variant="ghost" size="sm" disabled={!hiddenCount} onclick={() => ws.showAllColumns()}>
+			<Button
+				variant="ghost"
+				size="sm"
+				disabled={!hiddenCount}
+				onclick={() => (keys ? ws.setColumnsHidden(keys, false) : ws.showAllColumns())}
+			>
 				Show all
 			</Button>
 			<Dialog.Close>

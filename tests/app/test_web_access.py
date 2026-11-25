@@ -226,3 +226,39 @@ def test_eval_results_comparisons_and_model_evals_follow_the_projects_access(
         assert found.json()["runs"][0]["scores"]["values"]["secret_task/acc_raw@h"] == 0.5
         assert anon.get(evals).status_code == 401
         assert outside.get(evals).status_code == 404
+
+
+def test_a_private_projects_evals_preset_reaches_members_only(flock: S3Flock, web: str) -> None:
+    """The Evals preset of a private project scored on a private task: its suite scores, written by the server into the page, reach members only."""
+    api = flock.client()
+    for run, score in (("a", 0.4), ("b", 0.5)):
+        config = {
+            "dtype": "bfloat16",
+            "suite_members": {"secret_suite": ["secret_task"]},
+            "suite_hashes": {"secret_suite": "h"},
+        }
+        api.create_run("p", run, config=config)
+        assert api.patch(f"/api/v1/projects/flock/p/runs/{run}", {"job_type": "eval"}).status == 200
+        summary = {"suites/secret_suite": score, "secret_task/acc_raw": score}
+        api.stream("p", run, history=[{"_step": 0}], summary=summary, complete=0)
+    assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
+    member = flock.add_user("member@web.test")
+    outsider = flock.add_user("outsider@web.test", org="lab")
+    with (
+        httpx.Client(base_url=web) as anon,
+        httpx.Client(base_url=web, cookies=session(member)) as inside,
+        httpx.Client(base_url=web, cookies=session(outsider)) as outside,
+    ):
+        path = "/flock/p?preset=evals"
+        page = inside.get(path)
+        assert page.status_code == 200, page.text
+        assert (
+            "Mean rank" in page.text and "1 suite" in page.text
+        )  # the table, rendered on the server
+        assert "secret_suite" in page.text
+        redirect = anon.get(path)
+        assert redirect.status_code in (303, 307), redirect.text
+        assert redirect.headers["location"].startswith("/login")
+        refused = outside.get(path)
+        assert refused.status_code == 404
+        assert "secret_suite" not in refused.text

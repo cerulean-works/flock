@@ -13,12 +13,15 @@
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
+	import TrophyIcon from '@lucide/svelte/icons/trophy';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import EvalsTable from '#lib/components/EvalsTable.svelte';
+	import { EvalsView } from '#lib/evals-view.svelte.ts';
 	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
@@ -159,7 +162,11 @@
 	// A URL without a view (a project opened from the sidebar) shows the one picked last.
 	const urlView = $derived.by((): View => {
 		const v = page.url.searchParams.get('view');
-		return v === 'charts' || v === 'table' ? v : lastView(data.shell.projectView);
+		if (v === 'charts' || v === 'table') return v;
+		// A link to the Evals preset opens on the table it is a preset of.
+		return page.url.searchParams.get('preset') === 'evals'
+			? 'table'
+			: lastView(data.shell.projectView);
 	});
 	const urlPanel = $derived.by(() => {
 		const id = page.url.searchParams.get('panel');
@@ -168,6 +175,12 @@
 		return i === -1 ? null : i;
 	});
 	const view = $derived(viewOverride ?? urlView);
+	// The Evals preset of the table: its eval runs by suites, ranked. Offered once a run has a
+	// suite score (`flock eval log` writes `suites/<suite>`).
+	const hasEvals = $derived(ws.meta.columns.some((c) => c.key.startsWith('summary.suites/')));
+	const evals = $derived(hasEvals && page.url.searchParams.get('preset') === 'evals');
+	const evalsView = new EvalsView(ws);
+	let evalsTable = $state<EvalsTable>();
 	const fullscreen = $derived(panelOverride !== undefined ? panelOverride : urlPanel);
 
 	const hrefWith = (changes: Record<string, string | null>) =>
@@ -371,11 +384,33 @@
 				<RunFilters />
 
 				{#if view === 'table'}
-					<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />
+					{#if hasEvals}
+						<Button
+							variant={evals ? 'secondary' : 'outline'}
+							aria-pressed={evals}
+							href={hrefWith(evals ? { preset: null, view: 'table' } : { preset: 'evals' })}
+							data-sveltekit-replacestate
+							{@attach hint('Eval runs by suites, ranked')}
+						>
+							<TrophyIcon /> Evals
+						</Button>
+					{/if}
+					{#if evals}
+						<ColumnsMenu keys={evalsView.keys} onjump={(key) => evalsTable?.scrollToColumn(key)} />
+					{:else}
+						<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />
+					{/if}
 				{:else}
 					<PlotSettings />
 					<Button variant="outline" onclick={() => ws.newPanel()}><PlusIcon /> Add panel</Button>
 				{/if}
+			{/if}
+			<!-- Outside the selection's actions too: the second run to compare may be one of these. -->
+			{#if evals && view === 'table' && evalsView.others}
+				<Button variant="outline" onclick={() => (evalsView.showOther = !evalsView.showOther)}>
+					{evalsView.showOther ? 'Hide' : 'Show'}
+					{evalsView.others} on other settings
+				</Button>
 			{/if}
 
 			<span class="flex-1"></span>
@@ -393,7 +428,11 @@
 	</PageHeader>
 
 	<main class="relative min-h-0 flex-1">
-		<RunsTable bind:this={table} mode={view} {nameW} />
+		{#if evals && view === 'table'}
+			<EvalsTable bind:this={evalsTable} view={evalsView} />
+		{:else}
+			<RunsTable bind:this={table} mode={view} {nameW} />
+		{/if}
 		<ChartsPane
 			shown={view === 'charts'}
 			active={view === 'charts' && fullscreen == null}
@@ -441,17 +480,20 @@
 			</EmptyState>
 		{:else}
 			<Pager />
-			<!-- On the name column's edge, above the table and the charts beside it. -->
-			<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
-				<ResizeHandle
-					class="pointer-events-auto"
-					value={nameW}
-					bounds={NAME_W}
-					label="Resize the runs column"
-					onresize={(px) => (nameW = px)}
-					oncommit={(px) => saveWidth(NAME_W, px)}
-				/>
-			</div>
+			<!-- On the name column's edge, above the table and the charts beside it. The Evals table
+			     sizes its own run column. -->
+			{#if !(evals && view === 'table')}
+				<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
+					<ResizeHandle
+						class="pointer-events-auto"
+						value={nameW}
+						bounds={NAME_W}
+						label="Resize the runs column"
+						onresize={(px) => (nameW = px)}
+						oncommit={(px) => saveWidth(NAME_W, px)}
+					/>
+				</div>
+			{/if}
 		{/if}
 	</main>
 </Page>
