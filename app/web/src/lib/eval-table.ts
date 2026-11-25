@@ -72,6 +72,19 @@ export interface EvalTable {
 	rows: EvalTableRow[];
 }
 
+/**
+ * A suite's name as a column header shows it, on one line above its scale: `_` read as spaces
+ * and `:` as ` · `, without a `bpb` part when the scale under it already says bits per byte
+ * (`base_easy:math_bpb` is `base easy · math`, `zh_tw:bpb` is `zh tw`). The id stays its hover.
+ */
+export function suiteLabel(suite: string, scale: Scale | null): string {
+	const parts = suite
+		.split(':')
+		.map((part) => (scale === 'bpb' ? part.replace(/(^|_)bpb$/, '') : part))
+		.filter(Boolean);
+	return parts.map((part) => part.replaceAll('_', ' ')).join(' · ');
+}
+
 const numberAt = (run: EvalTableRun, key: string) => {
 	const value = run.values[key];
 	return typeof value === 'number' && Number.isFinite(value) ? value : null;

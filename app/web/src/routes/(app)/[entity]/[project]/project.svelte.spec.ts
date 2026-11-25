@@ -209,7 +209,7 @@ describe('the Evals preset', () => {
 		const toggle = screen.getByRole('link', { name: 'Evals' });
 		await expect.element(toggle).toHaveAttribute('href', '/acme/bert?preset=evals');
 		await expect.element(toggle).toHaveAttribute('aria-pressed', 'false');
-		await expect.element(screen.getByText('Mean rank (2)')).not.toBeInTheDocument();
+		await expect.element(screen.getByText('Mean rank')).not.toBeInTheDocument();
 	});
 
 	it('ranks the runs scored alike by suite, each in its direction, and hides the others', async () => {
@@ -218,7 +218,7 @@ describe('the Evals preset', () => {
 		await expect
 			.element(screen.getByRole('link', { name: 'Evals' }))
 			.toHaveAttribute('aria-pressed', 'true');
-		await expect.element(screen.getByText('Mean rank (2)')).toBeVisible();
+		await expect.element(screen.getByText('2 suites')).toBeVisible();
 		// The header, then olmo and llama; fp32 waits behind the button.
 		expect(rows.elements()).toHaveLength(3);
 		// Best mean rank first: llama, then olmo.
@@ -241,15 +241,15 @@ describe('the Evals preset', () => {
 				.slice(1)
 				.map((row) => row.querySelector('a')?.textContent);
 		await vi.waitFor(() => expect(names()).toEqual(['llama', 'olmo']));
-		await screen.getByRole('button', { name: 'Mean rank (2)' }).click();
+		await screen.getByRole('button', { name: 'Mean rank' }).click();
 		await vi.waitFor(() => expect(names()).toEqual(['olmo', 'llama']));
-		await screen.getByRole('button', { name: 'Mean rank (2)' }).click();
+		await screen.getByRole('button', { name: 'Mean rank' }).click();
 		await vi.waitFor(() => expect(names()).toEqual(['llama', 'olmo']));
 	});
 
 	it('opens a link to the preset on the table, whichever view was picked last', async () => {
 		openEvals('member', 'http://flock.test/acme/bert?preset=evals', 'charts');
-		await expect.element(screen.getByText('Mean rank (2)')).toBeVisible();
+		await expect.element(screen.getByText('2 suites')).toBeVisible();
 		// Turned off, it goes back to the full table, not to the charts.
 		await expect
 			.element(screen.getByRole('link', { name: 'Evals' }))
@@ -269,7 +269,7 @@ describe('the Evals preset', () => {
 			.not.toBeInTheDocument();
 
 		await menu.getByRole('checkbox', { name: 'Show summary.suites/code' }).click();
-		await expect.element(screen.getByText('Mean rank (1)')).toBeVisible();
+		await expect.element(screen.getByText('1 suite', { exact: true })).toBeVisible();
 		await expect
 			.element(screen.getByRole('columnheader', { name: /^code/ }))
 			.not.toBeInTheDocument();

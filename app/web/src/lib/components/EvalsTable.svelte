@@ -2,10 +2,10 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { page as appPage } from '$app/state';
-	import { tick } from 'svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import type { Scale } from '#lib/eval-table.ts';
+	import { tick, type Snippet } from 'svelte';
+	import { suiteLabel, type Scale } from '#lib/eval-table.ts';
 	import { formatScore } from '#lib/evals.ts';
 	import type { EvalsView } from '#lib/evals-view.svelte.ts';
 	import { runHref } from '#lib/workspace/url.ts';
@@ -47,15 +47,24 @@
 	const meanRank = (rank: number | null) => (rank === null ? '–' : rank.toFixed(1));
 </script>
 
-{#snippet sortHeader(key: string, label: string, help: string)}
+<!-- A number column's header: its name on one line, its scale or count on the next, both ending
+     where the numbers below end; the slot after them holds the sort arrow, as a cell's holds its
+     rank. `open` is an opened suite's arrow, on the second line. -->
+{#snippet header(key: string, name: string, caption: string, help: string, open?: Snippet)}
 	<button
 		type="button"
-		class="flex w-full items-center justify-end gap-1 font-medium whitespace-nowrap hover:text-foreground"
+		class="flex w-full items-center justify-end font-medium hover:text-foreground"
 		onclick={() => view.sortBy(key)}
 		{@attach hint(help)}
 	>
-		{label}<span class="w-2 text-foreground">{arrow(key)}</span>
+		<span class="min-w-0 truncate">{name}</span>
+		<span class="w-5 flex-none pl-1 text-left text-foreground">{arrow(key)}</span>
 	</button>
+	<div class="flex h-5 items-center justify-end text-[11px] text-faint">
+		{@render open?.()}
+		<span class="min-w-0 truncate">{caption}</span>
+		<span class="w-5 flex-none"></span>
+	</div>
 {/snippet}
 
 <div class="absolute inset-0 overflow-auto pb-18" bind:this={scroller}>
@@ -69,7 +78,7 @@
 			<thead class="sticky top-0 z-2 bg-background">
 				<tr class="border-b text-xs text-muted-foreground">
 					<th
-						class="sticky left-0 z-1 min-w-64 bg-background px-4 text-left font-medium"
+						class="sticky left-0 z-1 min-w-64 bg-background px-4 pb-6.5 text-left align-bottom font-medium"
 						data-names
 					>
 						<button
@@ -80,10 +89,11 @@
 							Run <span class="text-foreground">{arrow('name')}</span>
 						</button>
 					</th>
-					<th class="border-r border-divider px-3">
-						{@render sortHeader(
+					<th class="w-32 border-r border-divider px-3 py-1.5 align-bottom font-normal">
+						{@render header(
 							'mean',
-							`Mean rank (${table.meanOver.length})`,
+							'Mean rank',
+							`${table.meanOver.length} suite${table.meanOver.length === 1 ? '' : 's'}`,
 							`A convenience order: the mean of a run's ranks over the ${table.meanOver.length} top suites shown, accuracy and bits per byte alike, among the ${table.rows.length - view.others} runs on this page scored alike; 1 is best. No result rests on it.`
 						)}
 					</th>
@@ -97,30 +107,25 @@
 							style:max-width="{width}px"
 							data-suite={suite}
 						>
-							<div class="flex items-end justify-end gap-1">
-								{#if column.children.length}
-									<button
-										type="button"
-										class="grid size-5 flex-none place-items-center rounded hover:bg-muted"
-										aria-expanded={view.open.has(suite)}
-										aria-label="{view.open.has(suite) ? 'Close' : 'Open'} {suite}'s suites"
-										onclick={() =>
-											view.open.has(suite) ? view.open.delete(suite) : view.open.add(suite)}
-									>
-										<ChevronRightIcon class={['size-3.5', view.open.has(suite) && 'rotate-90']} />
-									</button>
-								{/if}
+							{#snippet openSuites()}
 								<button
 									type="button"
-									class="line-clamp-2 min-w-0 text-right font-medium [overflow-wrap:anywhere] hover:text-foreground"
-									onclick={() => view.sortBy(`suite/${suite}`)}
-									{@attach hint(`${suite}: ${scale(column.scale)}`)}
+									class="mr-auto -ml-1 grid size-5 flex-none place-items-center rounded hover:bg-muted"
+									aria-expanded={view.open.has(suite)}
+									aria-label="{view.open.has(suite) ? 'Close' : 'Open'} {suite}'s suites"
+									onclick={() =>
+										view.open.has(suite) ? view.open.delete(suite) : view.open.add(suite)}
 								>
-									{suite}
+									<ChevronRightIcon class={['size-3.5', view.open.has(suite) && 'rotate-90']} />
 								</button>
-								<span class="w-2 flex-none text-foreground">{arrow(`suite/${suite}`)}</span>
-							</div>
-							<div class="truncate text-right text-[11px] text-faint">{scale(column.scale)}</div>
+							{/snippet}
+							{@render header(
+								`suite/${suite}`,
+								suiteLabel(suite, column.scale),
+								scale(column.scale),
+								`${suite}: ${scale(column.scale)}`,
+								column.children.length ? openSuites : undefined
+							)}
 							<ColumnResizer {width} onresize={(w) => (widths = { ...widths, [suite]: w })} />
 						</th>
 					{/each}
@@ -177,7 +182,9 @@
 								{/if}
 							</span>
 						</th>
-						<td class="border-r border-divider px-3 text-right">{meanRank(row.meanRank)}</td>
+						<td class="border-r border-divider px-3 text-right whitespace-nowrap">
+							{meanRank(row.meanRank)}<span class="inline-block w-5"></span>
+						</td>
 						{#each view.shown as { suite, depth } (suite)}
 							{@const cell = row.cells[suite]}
 							{@const columnScale = table.columns[suite].scale}

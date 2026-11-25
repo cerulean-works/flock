@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evalTable, type EvalTableRun } from './eval-table.ts';
+import { evalTable, suiteLabel, type EvalTableRun } from './eval-table.ts';
 
 const BANK = {
 	dtype: 'bfloat16',
@@ -277,5 +277,15 @@ describe('the Evals table', () => {
 		expect(table.columns.z.children).toEqual(['z', 'a']);
 		expect(table.rows[0].cells.loop).toEqual({ value: 1, otherHash: null, rank: null, heat: null });
 		expect(table.rows.map((r) => r.cells.even.rank)).toEqual([null, null]);
+	});
+
+	it('names a suite for its header, leaving out what its scale already says', () => {
+		expect(suiteLabel('base_easy:math_bpb', 'bpb')).toBe('base easy · math');
+		expect(suiteLabel('zh_tw:bpb', 'bpb')).toBe('zh tw');
+		expect(suiteLabel('tmmluplus:stem:bpb', 'bpb')).toBe('tmmluplus · stem');
+		expect(suiteLabel('base_easy:qa_rc', 'accuracy')).toBe('base easy · qa rc');
+		// Only a scale read as bits per byte drops it.
+		expect(suiteLabel('mmlu:bpb', null)).toBe('mmlu · bpb');
+		expect(suiteLabel('paloma:dolma-v1_5', 'bpb')).toBe('paloma · dolma-v1 5');
 	});
 });
