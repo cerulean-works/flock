@@ -462,17 +462,20 @@
 			</EmptyState>
 		{:else}
 			<Pager />
-			<!-- On the name column's edge, above the table and the charts beside it. -->
-			<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
-				<ResizeHandle
-					class="pointer-events-auto"
-					value={nameW}
-					bounds={NAME_W}
-					label="Resize the runs column"
-					onresize={(px) => (nameW = px)}
-					oncommit={(px) => saveWidth(NAME_W, px)}
-				/>
-			</div>
+			<!-- On the name column's edge, above the table and the charts beside it. The Evals table
+			     sizes its own run column. -->
+			{#if !(evals && view === 'table')}
+				<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
+					<ResizeHandle
+						class="pointer-events-auto"
+						value={nameW}
+						bounds={NAME_W}
+						label="Resize the runs column"
+						onresize={(px) => (nameW = px)}
+						oncommit={(px) => saveWidth(NAME_W, px)}
+					/>
+				</div>
+			{/if}
 		{/if}
 	</main>
 </Page>

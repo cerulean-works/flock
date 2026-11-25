@@ -38,12 +38,12 @@ Scores show four decimals; hover one for its exact value. Hashes show their firs
 
 In **Table**, click **Evals** to see a project's eval runs side by side. The button appears once a run has a suite score, which `flock eval log` writes as `suites/<suite>`. The table then has one row per eval run on the page and one column per suite:
 
-- **Columns** are the suites no other scored suite holds, accuracy suites first, then bits-per-byte suites. Click the arrow beside a suite to show the suites it holds beside it. A suite counts as bits per byte when its score is the mean of its members' bits per byte.
+- **Columns** are the suites no other scored suite holds, accuracy suites first. Click the arrow beside a suite to show the suites it holds beside it. Each column names its scale, read from the scores of the suite's members: accuracy, bits per byte, loss per token or perplexity.
 - **Cells** show the score and its rank in the column. Rank 1 is the best score, the highest accuracy or the lowest bits per byte, and equal scores share a rank. Darker cells are better within their column.
-- **Mean rank, accuracy** and **Mean rank, BPB** average a run's ranks over the top accuracy suites and over the top bits-per-byte suites. Accuracy and bits per byte are never averaged together. A run that lacks one of those suites has no mean rank.
+- **Mean rank** averages a run's ranks over the top suites, accuracy and bits per byte alike. It is a convenient order for reading the table, not a result: compare runs on the suites themselves. A run that lacks one of those suites has no mean rank.
 - **Sorting:** click a header to sort by it, best first, and again for the other order. Ranks and sorting cover the runs on the current page.
 
-Scores are ranked only when they come from the same instrument. Runs scored with another dtype, attention, SDPA kernel, batch size in tokens, maximum length or BOS setting than most runs are hidden. Click **Show N on other settings** to list them, marked **Other settings** and not ranked. A suite scored under another suite hash than most runs' shows a dash. A run on another GPU shows its device, and a model whose name says Instruct or Chat shows **Instruct**. Both are still ranked.
+Scores are ranked only when they come from the same instrument. Runs scored with another dtype, attention, SDPA kernel or batch size in tokens than most runs are hidden. Click **Show N on other settings** to list them, marked **Other settings** and not ranked. A suite scored under another suite hash than most runs' shows a dash. A run on another GPU shows its device, a model scored with a BOS token shows **BOS**, and a model whose name says Instruct or Chat shows **Instruct**. All three are still ranked.
 
 Check two runs and click **Compare items** to read them doc by doc. Click **Evals** again to return to the full table.
 

@@ -252,7 +252,7 @@ def test_a_private_projects_evals_preset_reaches_members_only(flock: S3Flock, we
         path = "/flock/p?preset=evals"
         page = inside.get(path)
         assert page.status_code == 200, page.text
-        assert "Mean rank, accuracy (1)" in page.text  # the table, rendered on the server
+        assert "Mean rank (1)" in page.text  # the table, rendered on the server
         assert "secret_suite" in page.text
         redirect = anon.get(path)
         assert redirect.status_code in (303, 307), redirect.text

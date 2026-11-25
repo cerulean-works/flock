@@ -29,6 +29,7 @@ function run(
 	const values: Record<string, unknown> = {
 		'summary.t1/acc_per_char': acc[0],
 		'summary.t1/bpb': bpb[0],
+		'summary.t1/acc_raw': acc[0] - 0.1,
 		'summary.t2/acc_per_char': acc[1],
 		'summary.t2/bpb': bpb[1],
 		'summary.c1/bpb': code,
@@ -46,15 +47,50 @@ function run(
 
 describe('the Evals table', () => {
 	it('shows the suites no other suite holds, accuracy first, each scale read from its members', () => {
-		const table = evalTable([run(0, [0.5, 0.7], [1.2, 0.8], 0.6)]);
+		const table = evalTable([run(0, [0.5, 0.7], [1.2, 0.8], 0.6), run(1, [0.4, 0.6], [1, 1], 0.7)]);
 
 		// `qa` sits inside `zh`; `base` has no score, so what it holds is on top.
 		expect(table.top).toEqual(['zh', 'code', 'qa:bpb']);
-		expect(table.columns.zh).toEqual({ suite: 'zh', lower: false, hash: 'h-zh', children: ['qa'] });
-		expect(table.columns.qa.lower).toBe(false);
+		expect(table.columns.zh).toEqual({
+			suite: 'zh',
+			scale: 'accuracy',
+			hash: 'h-zh',
+			children: ['qa']
+		});
+		expect(table.columns.qa.scale).toBe('accuracy');
 		// `code` is bits per byte though its name doesn't say so: its score is its task's bpb.
-		expect(table.columns.code.lower).toBe(true);
-		expect(table.columns['qa:bpb'].lower).toBe(true);
+		expect(table.columns.code.scale).toBe('bpb');
+		expect(table.columns['qa:bpb'].scale).toBe('bpb');
+	});
+
+	it('reads a perplexity suite as lower is better, and leaves a scale it cannot tell unranked', () => {
+		const a = run(0, [0.5, 0.5], [1, 1], 1);
+		const b = run(1, [0.5, 0.5], [1, 1], 1);
+		Object.assign(a.values, {
+			'summary.suites/ppl': 12,
+			'summary.p1/perplexity': 12,
+			'config.suite_members.ppl': ['p1'],
+			'config.suite_hashes.ppl': 'h-ppl',
+			// Neither a mean of a lower-is-better metric nor within its member's accuracies.
+			'summary.suites/odd': 7,
+			'summary.o1/f1': 7,
+			'config.suite_members.odd': ['o1'],
+			'config.suite_hashes.odd': 'h-odd'
+		});
+		Object.assign(b.values, {
+			'summary.suites/ppl': 15,
+			'summary.p1/perplexity': 15,
+			'config.suite_members.ppl': ['p1'],
+			'config.suite_hashes.ppl': 'h-ppl'
+		});
+		const table = evalTable([a, b]);
+
+		expect(table.columns.ppl.scale).toBe('perplexity');
+		expect(table.rows.map((r) => r.cells.ppl.rank)).toEqual([1, 2]);
+		expect(table.columns.odd.scale).toBeNull();
+		expect(table.rows[0].cells.odd).toEqual({ value: 7, otherHash: null, rank: null, heat: null });
+		// The mean rank leaves out a suite of unknown scale.
+		expect(table.rows[0].meanRank).toBe(1);
 	});
 
 	it('ranks each column in its own direction, ties sharing a rank, and tints best to worst', () => {
@@ -70,23 +106,40 @@ describe('the Evals table', () => {
 		expect(ranks('code')).toEqual([1, 1, 3]);
 		expect(table.rows.map((r) => r.cells.zh.heat)).toEqual([0.5, 1, 0]);
 
-		// Each mean rank over the top suites of one scale only.
-		expect(table.rows.map((r) => r.accuracyRank)).toEqual([2, 1, 3]);
-		expect(table.rows.map((r) => r.bpbRank)).toEqual([1.5, 1, 3]);
+		// One mean over every top suite: zh, code and qa:bpb.
+		expect(table.rows[0].meanRank).toBeCloseTo(5 / 3);
+		expect(table.rows.map((r) => r.meanRank).slice(1)).toEqual([1, 3]);
 	});
 
 	it('leaves a run scored under other settings out of every rank, naming what differs', () => {
 		const table = evalTable([
-			run(0, [0.5, 0.5], [1, 1], 1),
-			run(1, [0.9, 0.9], [0.5, 0.5], 0.5, { settings: { dtype: 'float32', max_length: 2048 } }),
+			run(0, [0.5, 0.5], [1, 1], 1, { settings: { max_length: 131072, add_bos: true } }),
+			run(1, [0.9, 0.9], [0.5, 0.5], 0.5, { settings: { dtype: 'float32', batch_tokens: 8192 } }),
 			run(2, [0.4, 0.4], [1.1, 1.1], 1.1)
 		]);
 
-		expect(table.rows.map((r) => r.differs)).toEqual([[], ['dtype', 'max_length'], []]);
+		// A model's own maximum length and its family's BOS rule are no reason to leave it out.
+		expect(table.rows.map((r) => r.differs)).toEqual([[], ['dtype', 'batch_tokens'], []]);
+		expect(table.rows.map((r) => r.bos)).toEqual([true, false, false]);
 		expect(table.rows[1].cells.zh).toEqual({ value: 0.9, otherHash: null, rank: null, heat: null });
-		expect(table.rows[1].accuracyRank).toBeNull();
+		expect(table.rows[1].meanRank).toBeNull();
 		// The best of the others is first: the FP32 run isn't counted.
 		expect(table.rows.map((r) => r.cells.zh.rank)).toEqual([1, null, 2]);
+	});
+
+	it('takes the most common settings whole, a tie to the oldest run', () => {
+		// Each differs from one never used in a different setting: the oldest run's set wins.
+		const table = evalTable([
+			run(5, [0.5, 0.5], [1, 1], 1, { settings: { dtype: 'float32' } }),
+			run(3, [0.4, 0.4], [1, 1], 1, { settings: { attention: 'eager' } }),
+			run(4, [0.4, 0.4], [1, 1], 1, { settings: { batch_tokens: 8192 } })
+		]);
+
+		expect(table.rows.map((r) => r.differs)).toEqual([
+			['dtype', 'attention'],
+			[],
+			['attention', 'batch_tokens']
+		]);
 	});
 
 	it('labels a run on another GPU and an instruction-tuned model', () => {
@@ -110,15 +163,6 @@ describe('the Evals table', () => {
 		expect(table.rows[2].cells.zh.rank).toBe(1);
 	});
 
-	it('takes the settings of the oldest run when two sets are as common', () => {
-		const table = evalTable([
-			run(5, [0.5, 0.5], [1, 1], 1, { settings: { dtype: 'float32' } }),
-			run(3, [0.4, 0.4], [1, 1], 1)
-		]);
-
-		expect(table.rows.map((r) => r.differs)).toEqual([['dtype'], []]);
-	});
-
 	it('shows a suite scored under another hash as not comparable, and ranks the rest by the usual one', () => {
 		const table = evalTable([
 			run(0, [0.5, 0.5], [1, 1], 1),
@@ -134,9 +178,37 @@ describe('the Evals table', () => {
 			heat: null
 		});
 		expect(table.rows.map((r) => r.cells.zh.rank)).toEqual([1, null, 2]);
-		// A mean over every top accuracy suite needs a rank in each.
-		expect(table.rows.map((r) => r.accuracyRank)).toEqual([1, null, 2]);
-		expect(table.rows[1].bpbRank).toBe(1);
+		// A mean over every top suite needs a rank in each.
+		expect(table.rows.map((r) => r.meanRank)).toEqual([1, null, 4 / 3]);
+	});
+
+	it('ranks a cell only under a known hash, and shows a score only hidden runs have', () => {
+		const a = run(0, [0.5, 0.5], [1, 1], 1);
+		const b = run(1, [0.4, 0.4], [1, 1], 1);
+		delete a.values['config.suite_hashes.zh'];
+		b.values['config.suite_hashes.zh'] = null;
+		const fp32 = run(2, [0.9, 0.9], [1, 1], 1, { settings: { dtype: 'float32' } });
+		Object.assign(fp32.values, {
+			'summary.suites/solo': 0.3,
+			'summary.s1/acc_raw': 0.3,
+			'config.suite_members.solo': ['s1'],
+			'config.suite_hashes.solo': 'h-solo'
+		});
+		const table = evalTable([a, b, fp32]);
+
+		expect(table.rows.map((r) => r.cells.zh)).toEqual([
+			{ value: 0.5, otherHash: null, rank: null, heat: null },
+			{ value: 0.4, otherHash: null, rank: null, heat: null },
+			{ value: 0.9, otherHash: null, rank: null, heat: null }
+		]);
+		// Only the hidden FP32 run scored `solo`: its score shows, under its own hash, unranked.
+		expect(table.columns.solo.hash).toBe('h-solo');
+		expect(table.rows[2].cells.solo).toEqual({
+			value: 0.3,
+			otherHash: null,
+			rank: null,
+			heat: null
+		});
 	});
 
 	it('has no rows for runs with no suite score, and no rank or tint in a column of one', () => {

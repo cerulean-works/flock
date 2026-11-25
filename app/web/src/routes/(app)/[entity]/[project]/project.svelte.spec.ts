@@ -153,7 +153,7 @@ function openEvals(access: 'member' | 'public', url: string) {
 	});
 	const runs = [
 		{ id: 'r1', name: 'olmo', values: run(0.4, 0.9) },
-		{ id: 'r2', name: 'llama', values: run(0.5, 1.1) },
+		{ id: 'r2', name: 'llama', values: run(0.5, 0.8) },
 		{ id: 'r3', name: 'fp32', values: run(0.9, 0.5, 'float32') }
 	];
 	const keys = Object.keys(runs[0].values);
@@ -209,29 +209,26 @@ describe('the Evals preset', () => {
 		const toggle = screen.getByRole('link', { name: 'Evals' });
 		await expect.element(toggle).toHaveAttribute('href', '/acme/bert?preset=evals');
 		await expect.element(toggle).toHaveAttribute('aria-pressed', 'false');
-		await expect.element(screen.getByText('Mean rank, accuracy (1)')).not.toBeInTheDocument();
+		await expect.element(screen.getByText('Mean rank (2)')).not.toBeInTheDocument();
 	});
 
-	it('ranks the runs scored alike by suite, each scale on its own, and hides the others', async () => {
+	it('ranks the runs scored alike by suite, each in its direction, and hides the others', async () => {
 		openEvals('member', 'http://flock.test/acme/bert?preset=evals');
 		const rows = screen.getByRole('row');
 		await expect
 			.element(screen.getByRole('link', { name: 'Evals' }))
 			.toHaveAttribute('aria-pressed', 'true');
-		await expect.element(screen.getByText('Mean rank, accuracy (1)')).toBeVisible();
-		await expect.element(screen.getByText('Mean rank, BPB (1)')).toBeVisible();
+		await expect.element(screen.getByText('Mean rank (2)')).toBeVisible();
 		// The header, then olmo and llama; fp32 waits behind the button.
 		expect(rows.elements()).toHaveLength(3);
-		await expect.element(rows.nth(1)).toHaveTextContent(/olmo.*2\.0.*1\.0.*40\.0%\s*2.*0\.900\s*1/);
-		await expect
-			.element(rows.nth(2))
-			.toHaveTextContent(/llama.*1\.0.*2\.0.*50\.0%\s*1.*1\.100\s*2/);
+		await expect.element(rows.nth(1)).toHaveTextContent(/olmo.*2\.0.*40\.0%\s*2.*0\.900\s*2/);
+		await expect.element(rows.nth(2)).toHaveTextContent(/llama.*1\.0.*50\.0%\s*1.*0\.800\s*1/);
 		await expect.element(screen.getByRole('checkbox', { name: 'Select olmo' })).toBeVisible();
 
 		await screen.getByRole('button', { name: 'Show 1 on other settings' }).click();
 		await expect.element(rows.nth(3)).toHaveTextContent(/fp32.*Other settings.*90\.0%.*0\.500/);
-		// Shown, never ranked: the FP32 run is first on both scores and has no rank.
-		await expect.element(rows.nth(3)).toHaveTextContent(/–\s*–/);
+		// Shown, never ranked: the FP32 run is first on both scores and has no mean rank.
+		await expect.element(rows.nth(3)).toHaveTextContent(/Other settings\s*–/);
 	});
 
 	it('sorts by a mean rank, best first, then the other way', async () => {
@@ -242,9 +239,9 @@ describe('the Evals preset', () => {
 				.elements()
 				.slice(1)
 				.map((row) => row.querySelector('a')?.textContent);
-		await screen.getByRole('button', { name: 'Mean rank, accuracy (1)' }).click();
+		await screen.getByRole('button', { name: 'Mean rank (2)' }).click();
 		await vi.waitFor(() => expect(names()).toEqual(['llama', 'olmo']));
-		await screen.getByRole('button', { name: 'Mean rank, accuracy (1)' }).click();
+		await screen.getByRole('button', { name: 'Mean rank (2)' }).click();
 		await vi.waitFor(() => expect(names()).toEqual(['olmo', 'llama']));
 	});
 

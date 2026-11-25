@@ -6,7 +6,7 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import { evalTable, type EvalTableRow, type EvalTableRun } from '#lib/eval-table.ts';
+	import { evalTable, type EvalTableRow, type EvalTableRun, type Scale } from '#lib/eval-table.ts';
 	import { formatScore } from '#lib/evals.ts';
 	import { runHref } from '#lib/workspace/url.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
@@ -17,10 +17,10 @@
 
 	const table = $derived.by(() => {
 		void ws.tableVersion;
-		// Only the columns the table reads: suite scores, the tasks' bits per byte (a suite's
-		// scale), and the config `flock eval log` writes.
+		// Only the columns the table reads: suite scores, the tasks' metrics a suite's scale is
+		// read from, and the config `flock eval log` writes.
 		const reads =
-			/^(summary\.suites\/|summary\..*\/(bpb|bits_per_byte)$|config\.suite_(members|hashes)\.|config\.(dtype|attention|sdpa_backend|batch_tokens|max_length|add_bos|device|model)$)/;
+			/^(summary\.suites\/|summary\..*\/(bpb|bits_per_byte|loss_per_token|perplexity|acc[^/]*)$|config\.suite_(members|hashes)\.|config\.(dtype|attention|sdpa_backend|batch_tokens|add_bos|device|model)$)/;
 		const read = ws.meta.columns.flatMap((c, i) =>
 			reads.test(c.key) ? [[c.key, i] as const] : []
 		);
@@ -36,15 +36,17 @@
 	const open = new SvelteSet<string>();
 	const shown = $derived.by(() => {
 		const out: { suite: string; depth: number }[] = [];
+		// A suite two opened suites hold shows once, beside the first.
 		const add = (suite: string, depth: number) => {
+			if (out.some((c) => c.suite === suite)) return;
 			out.push({ suite, depth });
 			if (open.has(suite)) for (const child of table.columns[suite].children) add(child, depth + 1);
 		};
 		for (const suite of table.top) add(suite, 0);
 		return out;
 	});
-	const accuracyOver = $derived(table.top.filter((s) => table.columns[s].lower === false).length);
-	const bpbOver = $derived(table.top.filter((s) => table.columns[s].lower === true).length);
+	/** The top suites the mean rank is over: those of known scale. */
+	const counted = $derived(table.top.filter((s) => table.columns[s].scale !== null).length);
 
 	/** Runs scored under other settings than most: hidden unless asked for. */
 	let showOther = $state(false);
@@ -52,24 +54,28 @@
 
 	// Sorted here, not by the server: a mean rank isn't a stored column. Best first on the
 	// first click, the other way on the second; a run without a value goes last either way.
+	// A suite's key is `suite/<name>`, apart from the run's name and the mean rank.
 	let sort = $state<{ key: string; best: boolean } | null>(null);
 	/** A row's number in the column sorted by: a mean rank or a comparable score. */
 	const sortValue = (row: EvalTableRow, key: string) => {
-		if (key === 'accuracy') return row.accuracyRank;
-		if (key === 'bpb') return row.bpbRank;
-		const cell = row.cells[key];
+		if (key === 'mean') return row.meanRank;
+		const cell = row.cells[key.slice('suite/'.length)];
 		return cell.otherHash === null ? cell.value : null;
 	};
 	const rows = $derived.by(() => {
 		const out = table.rows.filter((r) => showOther || !r.differs.length);
-		if (!sort) return out;
+		const column = sort?.key.startsWith('suite/')
+			? table.columns[sort.key.slice('suite/'.length)]
+			: undefined;
+		// A suite sorted by on an earlier page that this page has no score for: page order.
+		if (!sort || (sort.key.startsWith('suite/') && !column)) return out;
 		const { key, best } = sort;
 		if (key === 'name')
 			return out.toSorted(
 				(a, b) => (best ? 1 : -1) * ws.nameOf(a.row).localeCompare(ws.nameOf(b.row))
 			);
-		// Lower is better for ranks and bits per byte.
-		const lower = key === 'accuracy' || key === 'bpb' || table.columns[key].lower === true;
+		// Lower is better for ranks, and on every scale but accuracy.
+		const lower = !column || column.scale !== 'accuracy';
 		const sign = lower === best ? 1 : -1;
 		return out.toSorted((a, b) => {
 			const [x, y] = [sortValue(a, key), sortValue(b, key)];
@@ -81,8 +87,13 @@
 		(sort = sort?.key === key ? { key, best: !sort.best } : { key, best: true });
 	const arrow = (key: string) => (sort?.key === key ? (sort.best ? '↓' : '↑') : '');
 
-	const scale = (lower: boolean | null) =>
-		lower === null ? 'scale unknown' : lower ? 'bits per byte' : 'accuracy';
+	const SCALES = {
+		accuracy: 'accuracy',
+		bpb: 'bits per byte',
+		loss_per_token: 'loss per token',
+		perplexity: 'perplexity'
+	};
+	const scale = (s: Scale | null) => (s === null ? 'scale unknown' : SCALES[s]);
 	const meanRank = (rank: number | null) => (rank === null ? '–' : rank.toFixed(1));
 	const narrowed = $derived(ws.page.total > ws.page.runs.length);
 </script>
@@ -129,18 +140,11 @@
 							Run <span class="text-foreground">{arrow('name')}</span>
 						</button>
 					</th>
-					<th class="px-3">
-						{@render sortHeader(
-							'accuracy',
-							`Mean rank, accuracy (${accuracyOver})`,
-							`The mean of a run's ranks over the ${accuracyOver} top accuracy suites; 1 is best. Never pooled with bits per byte.`
-						)}
-					</th>
 					<th class="border-r border-divider px-3">
 						{@render sortHeader(
-							'bpb',
-							`Mean rank, BPB (${bpbOver})`,
-							`The mean of a run's ranks over the ${bpbOver} top bits-per-byte suites; 1 is best. Never pooled with accuracy.`
+							'mean',
+							`Mean rank (${counted})`,
+							`A convenience order: the mean of a run's ranks over the ${counted} top suites, accuracy and bits per byte alike; 1 is best. No result rests on it.`
 						)}
 					</th>
 					{#each shown as { suite, depth } (suite)}
@@ -158,9 +162,9 @@
 										<ChevronRightIcon class={['size-3.5', open.has(suite) && 'rotate-90']} />
 									</button>
 								{/if}
-								{@render sortHeader(suite, suite, `${suite}: ${scale(column.lower)}`)}
+								{@render sortHeader(`suite/${suite}`, suite, `${suite}: ${scale(column.scale)}`)}
 							</div>
-							<div class="text-right text-[11px] text-faint">{scale(column.lower)}</div>
+							<div class="text-right text-[11px] text-faint">{scale(column.scale)}</div>
 						</th>
 					{/each}
 				</tr>
@@ -193,6 +197,13 @@
 										)}>Instruct</Badge
 									>
 								{/if}
+								{#if row.bos}
+									<Badge
+										variant="secondary"
+										class="text-muted-foreground"
+										{@attach hint('Scored with a BOS token, as its model family asks')}>BOS</Badge
+									>
+								{/if}
 								{#if row.device}
 									<Badge variant="secondary" class="text-muted-foreground"
 										>{row.device.replace(/^NVIDIA /, '')}</Badge
@@ -209,11 +220,10 @@
 								{/if}
 							</span>
 						</th>
-						<td class="px-3 text-right">{meanRank(row.accuracyRank)}</td>
-						<td class="border-r border-divider px-3 text-right">{meanRank(row.bpbRank)}</td>
+						<td class="border-r border-divider px-3 text-right">{meanRank(row.meanRank)}</td>
 						{#each shown as { suite, depth } (suite)}
 							{@const cell = row.cells[suite]}
-							{@const lower = table.columns[suite].lower}
+							{@const columnScale = table.columns[suite].scale}
 							<td
 								class={[
 									'px-3 text-right whitespace-nowrap',
@@ -232,7 +242,10 @@
 									>
 								{:else}
 									<span {@attach hint(cell.value === null ? undefined : String(cell.value))}
-										>{formatScore(cell.value, lower ? 'bpb' : lower === false ? 'acc' : null)}</span
+										>{formatScore(
+											cell.value,
+											columnScale === 'accuracy' ? 'acc' : columnScale
+										)}</span
 									>
 									<span class="inline-block w-5 text-left text-[11px] text-faint"
 										>{cell.rank ?? ''}</span

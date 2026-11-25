@@ -2,8 +2,8 @@
  * A project's eval runs by suites: the Evals preset of the runs table. Everything comes from
  * what `flock eval log` writes on a run: each scored suite's score as `summary.suites/<suite>`,
  * each task's metrics as `summary.<task>/<metric>`, and as config the scoring settings and each
- * suite's members and hash. Accuracy and bits per byte are never pooled; a run scored under
- * other settings, or a suite under another hash, is never ranked with the rest (one instrument).
+ * suite's members and hash. A run scored under other settings, or a suite under another hash,
+ * is never ranked with the rest (one instrument).
  */
 
 /** One run of the page, with the summary and config values the table reads, by column key. */
@@ -15,22 +15,28 @@ export interface EvalTableRun {
 	values: Record<string, unknown>;
 }
 
+/**
+ * How a suite's score reads: an accuracy (higher is better), or the mean of its members' bits
+ * per byte, loss per token or perplexity (lower is better).
+ */
+export type Scale = 'accuracy' | 'bpb' | 'loss_per_token' | 'perplexity';
+
 export interface EvalColumn {
 	suite: string;
-	/**
-	 * Lower is better: the score is the mean of its members' bits per byte. Null when no run
-	 * lists its members.
-	 */
-	lower: boolean | null;
+	/** Read from the scores of its members; null when the runs don't agree or don't tell. */
+	scale: Scale | null;
 	/** The suite hash most of the comparable runs scored it under; their ranks are by it. */
 	hash: string | null;
-	/** Its scored member suites, which open beside it. */
+	/** Its scored member suites under that hash, which open beside it. */
 	children: string[];
 }
 
 export interface EvalCell {
 	value: number | null;
-	/** Scored under a suite hash other than the column's: not comparable, so shown as a dash. */
+	/**
+	 * Scored under a suite hash other than the column's: not comparable, so shown as a dash. A
+	 * cell with no hash shows its score but is never ranked.
+	 */
 	otherHash: string | null;
 	/** 1 is best; equal scores share a rank. Null where the cell isn't ranked. */
 	rank: number | null;
@@ -42,20 +48,23 @@ export interface EvalTableRow {
 	row: number;
 	/** The settings it was scored under that differ from most runs'; empty when none do. */
 	differs: string[];
+	/** Scored with a BOS token, as its model family's rule asks (Gemma): marked, still ranked. */
+	bos: boolean;
 	/** Its GPU when most runs were scored on another (an H100 beside H200 runs), else null. */
 	device: string | null;
 	/** Its model is instruction-tuned, by its name: scored with the same raw prompts. */
 	instruct: boolean;
 	cells: Record<string, EvalCell>;
-	/** Its mean rank over the top accuracy suites, or null unless it has a rank in each. */
-	accuracyRank: number | null;
-	/** The same over the top bits-per-byte suites. */
-	bpbRank: number | null;
+	/**
+	 * Its mean rank over the top suites of known scale, a convenience order as in a
+	 * leaderboard, or null unless it has a rank in each.
+	 */
+	meanRank: number | null;
 }
 
 export interface EvalTable {
 	columns: Record<string, EvalColumn>;
-	/** The suites no other scored suite holds: accuracy first, then bits per byte. */
+	/** The suites no other scored suite holds: accuracy first, then the rest. */
 	top: string[];
 	/** Every run with a suite score, in page order. */
 	rows: EvalTableRow[];
@@ -83,30 +92,10 @@ function mostCommon(runs: EvalTableRun[], valueOf: (run: EvalTableRun) => string
 	return best;
 }
 
-/**
- * Whether `suite`'s score on `run` is the mean of its members' bits per byte: a member task's
- * `bpb` (`bits_per_byte` for perplexity tasks), a member suite's score when it is one too. A
- * scored suite's members share one scale (flock's `Suite`), so a suite of accuracies never
- * matches. Null when the run doesn't list its members.
- */
-function isBitsPerByte(run: EvalTableRun, suite: string): boolean | null {
-	const members = run.values[`config.suite_members.${suite}`];
-	const score = numberAt(run, `summary.suites/${suite}`);
-	if (!Array.isArray(members) || !members.length || score === null) return null;
-	let sum = 0;
-	for (const member of members) {
-		const value = Array.isArray(run.values[`config.suite_members.${member}`])
-			? isBitsPerByte(run, member)
-				? numberAt(run, `summary.suites/${member}`)
-				: null
-			: (numberAt(run, `summary.${member}/bpb`) ??
-				numberAt(run, `summary.${member}/bits_per_byte`));
-		if (value === null) return false;
-		sum += value;
-	}
-	// The mean as eval computes it, up to float rounding.
-	return Math.abs(sum / members.length - score) <= 1e-9 * Math.max(1, Math.abs(score));
-}
+const stringAt = (run: EvalTableRun, key: string) => {
+	const value = run.values[key];
+	return typeof value === 'string' ? value : null;
+};
 
 /** The Evals preset's table over a page's runs. */
 export function evalTable(page: EvalTableRun[]): EvalTable {
@@ -116,22 +105,82 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 		)
 	);
 
-	// One instrument: the scoring settings most runs share. A run scored under others is never
-	// ranked with them.
-	const settings = ['dtype', 'attention', 'sdpa_backend', 'batch_tokens', 'max_length', 'add_bos'];
-	const usual = new Map<string, string | null>();
-	for (const s of settings)
-		usual.set(
-			s,
-			mostCommon(runs, (run) => JSON.stringify(run.values[`config.${s}`] ?? null))
-		);
+	// One instrument: the settings most runs share, taken whole, so the winner is a set some run
+	// was scored with. A run scored under others is never ranked with them. A model's maximum
+	// length is its own, and BOS follows its family's rule, so neither is a setting here.
+	const instrument = ['dtype', 'attention', 'sdpa_backend', 'batch_tokens'];
+	const settingsOf = (run: EvalTableRun) =>
+		instrument.map((s) => JSON.stringify(run.values[`config.${s}`] ?? null));
+	const usual = JSON.parse(
+		mostCommon(runs, (run) => JSON.stringify(settingsOf(run))) ?? '[]'
+	) as string[];
 	const differs = new Map<EvalTableRun, string[]>();
-	for (const run of runs)
+	for (const run of runs) {
+		const settings = settingsOf(run);
 		differs.set(
 			run,
-			settings.filter((s) => JSON.stringify(run.values[`config.${s}`] ?? null) !== usual.get(s))
+			instrument.filter((_, i) => settings[i] !== usual[i])
 		);
+	}
 	const like = runs.filter((run) => !differs.get(run)!.length);
+
+	// Each run's accuracies by task (`acc_raw`, `acc_per_char`, ...), for reading a suite's scale.
+	const accuracies = new Map<EvalTableRun, Map<string, number[]>>();
+	for (const run of runs) {
+		const byTask = new Map<string, number[]>();
+		for (const key of Object.keys(run.values)) {
+			const match = /^summary\.(.+)\/acc[^/]*$/.exec(key);
+			const value = numberAt(run, key);
+			if (match && value !== null) byTask.set(match[1], [...(byTask.get(match[1]) ?? []), value]);
+		}
+		accuracies.set(run, byTask);
+	}
+
+	/**
+	 * The scale of `suite`'s score on `run`, read from its members, whose scores share one scale
+	 * (eval's `Suite`): a lower-is-better metric when the score is the mean of the members' values
+	 * of it (a member suite's when its scale is the same), up to float rounding; accuracy when
+	 * the score lies within what the means of the members' accuracies allow, since a task's
+	 * primary accuracy isn't logged. Null when neither holds or the run doesn't list members.
+	 */
+	const scaleOf = (run: EvalTableRun, suite: string): Scale | null => {
+		const members = run.values[`config.suite_members.${suite}`];
+		const score = numberAt(run, `summary.suites/${suite}`);
+		if (!Array.isArray(members) || !members.length || score === null) return null;
+		const isSuite = (m: string) => Array.isArray(run.values[`config.suite_members.${m}`]);
+		// Equal up to float rounding, or inside the bounds, at the score's scale.
+		const near = (low: number, high: number) => {
+			const slack = 1e-9 * Math.max(1, Math.abs(score));
+			return low - slack <= score && score <= high + slack;
+		};
+		for (const scale of ['bpb', 'loss_per_token', 'perplexity'] as const) {
+			const values = members.map((m) =>
+				isSuite(m)
+					? scaleOf(run, m) === scale
+						? numberAt(run, `summary.suites/${m}`)
+						: null
+					: scale === 'bpb'
+						? (numberAt(run, `summary.${m}/bpb`) ?? numberAt(run, `summary.${m}/bits_per_byte`))
+						: numberAt(run, `summary.${m}/${scale}`)
+			);
+			if (values.every((v) => v !== null)) {
+				const mean = values.reduce((a, b) => a + b, 0) / values.length;
+				if (near(mean, mean)) return scale;
+			}
+		}
+		let [low, high] = [0, 0];
+		for (const m of members) {
+			const values = isSuite(m)
+				? scaleOf(run, m) === 'accuracy'
+					? [numberAt(run, `summary.suites/${m}`)!]
+					: []
+				: (accuracies.get(run)!.get(m) ?? []);
+			if (!values.length) return null;
+			low += Math.min(...values);
+			high += Math.max(...values);
+		}
+		return near(low / members.length, high / members.length) ? 'accuracy' : null;
+	};
 
 	const suites = new Set<string>();
 	for (const run of runs)
@@ -142,57 +191,61 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 	const columns: Record<string, EvalColumn> = {};
 	const held = new Set<string>();
 	for (const suite of suites) {
-		const scoring = like.filter((run) => numberAt(run, `summary.suites/${suite}`) !== null);
-		const hash = mostCommon(scoring, (run) => {
-			const value = run.values[`config.suite_hashes.${suite}`];
-			return typeof value === 'string' ? value : null;
-		});
-		// Read on a run that scored it under the column's hash, the oldest first.
-		let lower: boolean | null = null;
-		for (const run of scoring.toSorted((a, b) => a.ordinal - b.ordinal)) {
-			if (run.values[`config.suite_hashes.${suite}`] !== hash) continue;
-			lower = isBitsPerByte(run, suite);
-			if (lower !== null) break;
-		}
-		const lists = runs.map((run) => run.values[`config.suite_members.${suite}`]);
-		const members = (lists.find(Array.isArray) ?? []) as string[];
-		for (const list of lists) if (Array.isArray(list)) for (const m of list) held.add(m);
-		columns[suite] = { suite, lower, hash, children: members.filter((m) => suites.has(m)) };
+		const scored = runs.filter((run) => numberAt(run, `summary.suites/${suite}`) !== null);
+		const comparable = scored.filter((run) => like.includes(run));
+		// The hash of the runs ranked; with none of them, of the runs shown, which aren't ranked.
+		const hashOf = (run: EvalTableRun) => stringAt(run, `config.suite_hashes.${suite}`);
+		const hash = mostCommon(comparable.length ? comparable : scored, hashOf);
+		const under = scored.filter((run) => hash !== null && hashOf(run) === hash);
+		// Every run under the column's hash must read the same scale, or the scale is unknown.
+		const scales = new Set(
+			under.map((run) => scaleOf(run, suite)).filter((scale) => scale !== null)
+		);
+		const members = under
+			.map((run) => run.values[`config.suite_members.${suite}`])
+			.find(Array.isArray) as string[] | undefined;
+		for (const m of members ?? []) held.add(m);
+		columns[suite] = {
+			suite,
+			scale: scales.size === 1 ? [...scales][0] : null,
+			hash,
+			children: (members ?? []).filter((m) => suites.has(m))
+		};
 	}
 	const top = [...suites]
 		.filter((suite) => !held.has(suite))
 		.sort(
 			(a, b) =>
-				Number(columns[a].lower === true) - Number(columns[b].lower === true) || (a < b ? -1 : 1)
+				Number(columns[a].scale !== 'accuracy') - Number(columns[b].scale !== 'accuracy') ||
+				(a < b ? -1 : 1)
 		);
 
-	const deviceOf = (run: EvalTableRun) => {
-		const device = run.values['config.device'];
-		return typeof device === 'string' ? device : null;
-	};
+	const deviceOf = (run: EvalTableRun) => stringAt(run, 'config.device');
 	const usualDevice = mostCommon(runs, deviceOf);
 	const rows: EvalTableRow[] = runs.map((run) => ({
 		row: run.row,
 		differs: differs.get(run)!,
+		bos: run.values['config.add_bos'] === true,
 		device: deviceOf(run) === usualDevice ? null : deviceOf(run),
 		instruct: /instruct|chat/i.test(String(run.values['config.model'] ?? '')),
 		cells: {},
-		accuracyRank: null,
-		bpbRank: null
+		meanRank: null
 	}));
 	for (const suite of suites) {
-		const { lower, hash } = columns[suite];
+		const { scale, hash } = columns[suite];
 		const ranked: EvalCell[] = [];
 		runs.forEach((run, i) => {
 			const value = numberAt(run, `summary.suites/${suite}`);
-			const scoredAs = run.values[`config.suite_hashes.${suite}`];
-			// A run from before suite hashes has none: it isn't known to be comparable either.
-			const otherHash = value !== null && scoredAs !== hash ? String(scoredAs ?? '') : null;
+			const scoredAs = stringAt(run, `config.suite_hashes.${suite}`);
+			const otherHash =
+				value !== null && scoredAs !== null && hash !== null && scoredAs !== hash ? scoredAs : null;
 			const cell: EvalCell = { value, otherHash, rank: null, heat: null };
 			rows[i].cells[suite] = cell;
-			if (value !== null && otherHash === null && lower !== null && !rows[i].differs.length)
-				ranked.push(cell);
+			// Ranked only under the column's hash, known, on the usual settings and a known scale.
+			if (value !== null && hash !== null && scoredAs === hash && scale !== null)
+				if (!rows[i].differs.length) ranked.push(cell);
 		});
+		const lower = scale !== 'accuracy';
 		const better = (a: number, b: number) => (lower ? a < b : a > b);
 		const values = ranked.map((c) => c.value!);
 		const best = lower ? Math.min(...values) : Math.max(...values);
@@ -203,22 +256,15 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 		}
 	}
 
-	// Each mean over the top suites of one scale only: accuracy and bits per byte never pool.
-	const accuracy = top.filter((suite) => columns[suite].lower === false);
-	const bpb = top.filter((suite) => columns[suite].lower === true);
+	// One order over every top suite of known scale, accuracies and bits per byte alike: a
+	// convenience for reading the table, which no claim cites. Opened member suites don't count,
+	// so a suite and its members aren't counted twice.
+	const counted = top.filter((suite) => columns[suite].scale !== null);
 	for (const row of rows) {
-		if (row.differs.length) continue;
-		const mean = (over: string[]) => {
-			let sum = 0;
-			for (const suite of over) {
-				const rank = row.cells[suite].rank;
-				if (rank === null) return null;
-				sum += rank;
-			}
-			return over.length ? sum / over.length : null;
-		};
-		row.accuracyRank = mean(accuracy);
-		row.bpbRank = mean(bpb);
+		if (row.differs.length || !counted.length) continue;
+		let sum = 0;
+		for (const suite of counted) sum += row.cells[suite].rank ?? NaN;
+		row.meanRank = Number.isNaN(sum) ? null : sum / counted.length;
 	}
 	return { columns, top, rows };
 }
