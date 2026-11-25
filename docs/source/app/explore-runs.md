@@ -41,7 +41,7 @@ In **Table**, click **Evals** to see a project's eval runs side by side. The but
 - **Columns** are the suites no other scored suite holds, accuracy suites first. Click the arrow beside a suite to show the suites it holds beside it. Each column names its scale, read from the scores of the suite's members: accuracy, bits per byte, loss per token or perplexity.
 - **Cells** show the score and its rank in the column. Rank 1 is the best score, the highest accuracy or the lowest bits per byte, and equal scores share a rank. Darker cells are better within their column.
 - **Mean rank** averages a run's ranks over the top suites ranked in, accuracy and bits per byte alike. It is a convenient order for reading the table, not a result: compare runs on the suites themselves. A run that lacks one of those suites has no mean rank.
-- **Sorting:** click a header to sort by it, best first, and again for the other order. Ranks and sorting cover the runs on the current page.
+- **Sorting:** click a header to sort by it, best first, and again for the other order. Scores without a rank go last. Ranks and sorting cover the runs on the current page.
 
 Scores are ranked only when they come from the same instrument. Runs scored with another dtype, attention, SDPA kernel or batch size in tokens than most runs are hidden. Click **Show N on other settings** to list them, marked **Other settings** and not ranked. A suite scored under another suite hash than most runs' shows a dash. A run on another GPU shows its device, a model scored with a BOS token shows **BOS**, and a model whose name says Instruct or Chat shows **Instruct**. All three are still ranked.
 
