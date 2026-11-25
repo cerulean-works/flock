@@ -256,6 +256,25 @@ describe('the Evals preset', () => {
 			.toHaveAttribute('href', '/acme/bert?view=table');
 	});
 
+	it('lists only the suites in its Columns menu, and a hidden one leaves the table and the mean', async () => {
+		openEvals('member', 'http://flock.test/acme/bert?preset=evals');
+		await screen.getByRole('button', { name: 'Columns' }).click();
+		const menu = screen.getByRole('list', { name: 'Columns' });
+		await expect
+			.element(menu.getByRole('checkbox', { name: 'Show summary.suites/zh' }))
+			.toBeVisible();
+		// The project's other columns aren't listed here.
+		await expect
+			.element(menu.getByRole('checkbox', { name: 'Show summary.t1/acc_raw' }))
+			.not.toBeInTheDocument();
+
+		await menu.getByRole('checkbox', { name: 'Show summary.suites/code' }).click();
+		await expect.element(screen.getByText('Mean rank (1)')).toBeVisible();
+		await expect
+			.element(screen.getByRole('columnheader', { name: /^code/ }))
+			.not.toBeInTheDocument();
+	});
+
 	it('shows outsiders of a public project the same scores, with nothing to select', async () => {
 		openEvals('public', 'http://flock.test/acme/bert?preset=evals');
 		await expect.element(screen.getByRole('link', { name: 'olmo' })).toBeVisible();

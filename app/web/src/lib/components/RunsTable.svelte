@@ -24,6 +24,7 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import Avatar from './Avatar.svelte';
+	import ColumnResizer from './ColumnResizer.svelte';
 	import RunEye from './RunEye.svelte';
 	import RunMenu from './RunMenu.svelte';
 	import StateBadge from './StateBadge.svelte';
@@ -188,28 +189,6 @@
 	const leaveSort = () => clearTimeout(intent);
 
 	// ------------------------------------------------------------------------------------------
-	// Column resize
-
-	function startResize(e: PointerEvent, c: number) {
-		e.preventDefault();
-		e.stopPropagation();
-		const el = e.currentTarget as HTMLElement;
-		el.setPointerCapture(e.pointerId);
-		const x0 = e.clientX;
-		const w0 = widths[c];
-		const key = columns[c].key;
-		const move = (ev: PointerEvent) => {
-			widthOverrides = { ...widthOverrides, [key]: Math.max(56, Math.round(w0 + ev.clientX - x0)) };
-		};
-		const up = () => {
-			el.removeEventListener('pointermove', move);
-			el.removeEventListener('pointerup', up);
-		};
-		el.addEventListener('pointermove', move);
-		el.addEventListener('pointerup', up);
-	}
-
-	// ------------------------------------------------------------------------------------------
 	// Row hover feeds chart focus only when charts are showing.
 
 	function rowFromEvent(e: Event) {
@@ -346,11 +325,10 @@
 								>{query.order === 'asc' ? '↑' : '↓'}</span
 							>{/if}
 					</a>
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div
-						class="absolute top-2 -right-[3px] bottom-2 z-1 w-[7px] cursor-col-resize after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-divider group-hover/h:after:bg-border"
-						onpointerdown={(e) => startResize(e, c)}
-					></div>
+					<ColumnResizer
+						width={widths[c]}
+						onresize={(w) => (widthOverrides = { ...widthOverrides, [col.key]: w })}
+					/>
 				</div>
 			{/each}
 		</div>

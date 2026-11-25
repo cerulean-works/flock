@@ -66,7 +66,7 @@ export interface EvalTable {
 	columns: Record<string, EvalColumn>;
 	/** The suites no other scored suite holds: accuracy first, then the rest. */
 	top: string[];
-	/** The top suites the mean rank is over: those with a ranked cell. */
+	/** The top suites the mean rank is over: those shown with a ranked cell. */
 	meanOver: string[];
 	/** Every run with a suite score, in page order. */
 	rows: EvalTableRow[];
@@ -99,8 +99,14 @@ const stringAt = (run: EvalTableRun, key: string) => {
 	return typeof value === 'string' ? value : null;
 };
 
-/** The Evals preset's table over a page's runs. */
-export function evalTable(page: EvalTableRun[]): EvalTable {
+/**
+ * The Evals preset's table over a page's runs. `hidden` names suites whose columns the viewer
+ * hid: they are still ranked, but the mean rank leaves them out.
+ */
+export function evalTable(
+	page: EvalTableRun[],
+	hidden: ReadonlySet<string> = new Set()
+): EvalTable {
 	const runs = page.filter((run) =>
 		Object.keys(run.values).some(
 			(k) => k.startsWith('summary.suites/') && numberAt(run, k) !== null
@@ -302,7 +308,9 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 	// One order over every top suite ranked in, accuracies and bits per byte alike: a
 	// convenience for reading the table, which no claim cites. Opened member suites don't count,
 	// so a suite and its members aren't counted twice.
-	const meanOver = top.filter((suite) => rows.some((row) => row.cells[suite].rank !== null));
+	const meanOver = top.filter(
+		(suite) => !hidden.has(suite) && rows.some((row) => row.cells[suite].rank !== null)
+	);
 	for (const row of rows) {
 		if (row.differs.length || !meanOver.length) continue;
 		let sum = 0;

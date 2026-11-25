@@ -2,91 +2,37 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { page as appPage } from '$app/state';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { Badge } from '#lib/components/ui/badge/index.js';
-	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import { evalTable, type EvalTableRow, type EvalTableRun, type Scale } from '#lib/eval-table.ts';
+	import type { Scale } from '#lib/eval-table.ts';
 	import { formatScore } from '#lib/evals.ts';
+	import type { EvalsView } from '#lib/evals-view.svelte.ts';
 	import { runHref } from '#lib/workspace/url.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
+	import ColumnResizer from './ColumnResizer.svelte';
+
+	let { view }: { view: EvalsView } = $props();
 
 	const ws = getWorkspace();
 	/** Outside the org nothing can be changed, so nothing is selected (D116). */
 	const readonly = $derived(appPage.data.shell?.access === 'public');
+	const table = $derived(view.table);
 
-	const table = $derived.by(() => {
-		void ws.tableVersion;
-		// Only the columns the table reads: suite scores, the tasks' metrics a suite's scale is
-		// read from, and the config `flock eval log` writes.
-		const reads =
-			/^(summary\.suites\/|summary\..*\/(bpb|bits_per_byte|loss_per_token|perplexity|acc[^/]*)$|config\.suite_(members|hashes)\.|config\.(dtype|attention|sdpa_backend|batch_tokens|add_bos|device|model)$)/;
-		const read = ws.meta.columns.flatMap((c, i) =>
-			reads.test(c.key) ? [[c.key, i] as const] : []
-		);
-		const runs: EvalTableRun[] = ws.page.runs.map((run, r) => {
-			const values: Record<string, unknown> = {};
-			for (const [key, i] of read) values[key] = ws.page.num[i]?.[r] ?? ws.page.text[i]?.[r];
-			return { row: r, ordinal: run.ordinal, values };
-		});
-		return evalTable(runs);
-	});
+	// Every suite column starts as wide as the others, so the table reads evenly; a long name
+	// wraps to two lines and shows whole on hover. Each edge drags, as in the runs table.
+	let widths = $state.raw<Readonly<Record<string, number>>>({});
+	const widthOf = (suite: string) => widths[suite] ?? 128;
 
-	/** Suites opened to show their member suites beside them. */
-	const open = new SvelteSet<string>();
-	const shown = $derived.by(() => {
-		const out: { suite: string; depth: number }[] = [];
-		// A suite two opened suites hold shows once, beside the first.
-		const add = (suite: string, depth: number) => {
-			if (out.some((c) => c.suite === suite)) return;
-			out.push({ suite, depth });
-			if (open.has(suite)) for (const child of table.columns[suite].children) add(child, depth + 1);
-		};
-		for (const suite of table.top) add(suite, 0);
-		return out;
-	});
-	const counted = $derived(table.meanOver.length);
+	let scroller = $state<HTMLDivElement>();
+	/** Scroll a suite's column (shown by then) to just past the run names. */
+	export function scrollToColumn(key: string) {
+		const suite = key.slice('summary.suites/'.length);
+		const cell = scroller?.querySelector<HTMLElement>(`th[data-suite="${CSS.escape(suite)}"]`);
+		const names = scroller?.querySelector<HTMLElement>('th[data-names]');
+		if (cell && names) scroller!.scrollTo({ left: cell.offsetLeft - names.offsetWidth });
+	}
 
-	/** Runs scored under other settings than most: hidden unless asked for. */
-	let showOther = $state(false);
-	const others = $derived(table.rows.filter((r) => r.differs.length).length);
-
-	// Sorted here, not by the server: a mean rank isn't a stored column. Best first on the
-	// first click on a new column, the other way on the next; a run without a value goes last either way.
-	// A suite's key is `suite/<name>`, apart from the run's name and the mean rank.
-	// Opens on the mean rank, best first, so the best model is the top row.
-	let sort = $state<{ key: string; best: boolean } | null>({ key: 'mean', best: true });
-	/** A row's number in the column sorted by: a mean rank or a ranked score. */
-	const sortValue = (row: EvalTableRow, key: string) => {
-		if (key === 'mean') return row.meanRank;
-		// Only ranked scores order a column; the rest follow, as runs without a value do.
-		const cell = row.cells[key.slice('suite/'.length)];
-		return cell.rank === null ? null : cell.value;
-	};
-	const rows = $derived.by(() => {
-		const out = table.rows.filter((r) => showOther || !r.differs.length);
-		const column = sort?.key.startsWith('suite/')
-			? table.columns[sort.key.slice('suite/'.length)]
-			: undefined;
-		// A suite sorted by on an earlier page that this page has no score for: page order.
-		if (!sort || (sort.key.startsWith('suite/') && !column)) return out;
-		const { key, best } = sort;
-		if (key === 'name')
-			return out.toSorted(
-				(a, b) => (best ? 1 : -1) * ws.nameOf(a.row).localeCompare(ws.nameOf(b.row))
-			);
-		// Lower is better for ranks, and on every scale but accuracy.
-		const lower = !column || column.scale !== 'accuracy';
-		const sign = lower === best ? 1 : -1;
-		return out.toSorted((a, b) => {
-			const [x, y] = [sortValue(a, key), sortValue(b, key)];
-			if (x === null || y === null) return Number(x === null) - Number(y === null);
-			return sign * (x - y);
-		});
-	});
-	const sortBy = (key: string) =>
-		(sort = sort?.key === key ? { key, best: !sort.best } : { key, best: true });
-	const arrow = (key: string) => (sort?.key === key ? (sort.best ? '↓' : '↑') : '');
+	const arrow = (key: string) => (view.sort?.key === key ? (view.sort.best ? '↓' : '↑') : '');
 
 	const SCALES = {
 		accuracy: 'accuracy',
@@ -102,36 +48,31 @@
 	<button
 		type="button"
 		class="flex w-full items-center justify-end gap-1 font-medium whitespace-nowrap hover:text-foreground"
-		onclick={() => sortBy(key)}
+		onclick={() => view.sortBy(key)}
 		{@attach hint(help)}
 	>
 		{label}<span class="w-2 text-foreground">{arrow(key)}</span>
 	</button>
 {/snippet}
 
-<div class="absolute inset-0 overflow-auto pb-18">
+<div class="absolute inset-0 overflow-auto pb-18" bind:this={scroller}>
 	{#if !table.rows.length}
 		<p class="m-4 max-w-[68ch] bg-card px-4 py-6 text-[13px] text-muted-foreground">
 			No run on this page has a suite score. Eval runs logged with
 			<code class="font-mono text-[0.95em] text-foreground">flock eval log</code> show here, one row each.
 		</p>
 	{:else}
-		{#if others}
-			<div class="flex min-h-10 items-center px-4">
-				<Button variant="outline" size="sm" onclick={() => (showOther = !showOther)}>
-					{showOther ? 'Hide' : 'Show'}
-					{others} on other settings
-				</Button>
-			</div>
-		{/if}
 		<table class="border-collapse text-[13px] tabular-nums">
 			<thead class="sticky top-0 z-2 bg-background">
-				<tr class="h-12 border-b text-xs text-muted-foreground">
-					<th class="sticky left-0 z-1 min-w-64 bg-background px-4 text-left font-medium">
+				<tr class="border-b text-xs text-muted-foreground">
+					<th
+						class="sticky left-0 z-1 min-w-64 bg-background px-4 text-left font-medium"
+						data-names
+					>
 						<button
 							type="button"
 							class="font-medium hover:text-foreground"
-							onclick={() => sortBy('name')}
+							onclick={() => view.sortBy('name')}
 						>
 							Run <span class="text-foreground">{arrow('name')}</span>
 						</button>
@@ -139,34 +80,51 @@
 					<th class="border-r border-divider px-3">
 						{@render sortHeader(
 							'mean',
-							`Mean rank (${counted})`,
-							`A convenience order: the mean of a run's ranks over the ${counted} top suites, accuracy and bits per byte alike; 1 is best. No result rests on it.`
+							`Mean rank (${table.meanOver.length})`,
+							`A convenience order: the mean of a run's ranks over the ${table.meanOver.length} top suites shown, accuracy and bits per byte alike; 1 is best. No result rests on it.`
 						)}
 					</th>
-					{#each shown as { suite, depth } (suite)}
+					{#each view.shown as { suite, depth } (suite)}
 						{@const column = table.columns[suite]}
-						<th class={['px-3 font-normal', depth && 'bg-card']}>
-							<div class="flex items-center justify-end gap-1">
+						{@const width = widthOf(suite)}
+						<th
+							class={['group/h relative px-3 py-1.5 align-bottom font-normal', depth && 'bg-card']}
+							style:width="{width}px"
+							style:min-width="{width}px"
+							style:max-width="{width}px"
+							data-suite={suite}
+						>
+							<div class="flex items-end justify-end gap-1">
 								{#if column.children.length}
 									<button
 										type="button"
-										class="grid size-5 place-items-center rounded hover:bg-muted"
-										aria-expanded={open.has(suite)}
-										aria-label="{open.has(suite) ? 'Close' : 'Open'} {suite}'s suites"
-										onclick={() => (open.has(suite) ? open.delete(suite) : open.add(suite))}
+										class="grid size-5 flex-none place-items-center rounded hover:bg-muted"
+										aria-expanded={view.open.has(suite)}
+										aria-label="{view.open.has(suite) ? 'Close' : 'Open'} {suite}'s suites"
+										onclick={() =>
+											view.open.has(suite) ? view.open.delete(suite) : view.open.add(suite)}
 									>
-										<ChevronRightIcon class={['size-3.5', open.has(suite) && 'rotate-90']} />
+										<ChevronRightIcon class={['size-3.5', view.open.has(suite) && 'rotate-90']} />
 									</button>
 								{/if}
-								{@render sortHeader(`suite/${suite}`, suite, `${suite}: ${scale(column.scale)}`)}
+								<button
+									type="button"
+									class="line-clamp-2 min-w-0 text-right font-medium [overflow-wrap:anywhere] hover:text-foreground"
+									onclick={() => view.sortBy(`suite/${suite}`)}
+									{@attach hint(`${suite}: ${scale(column.scale)}`)}
+								>
+									{suite}
+								</button>
+								<span class="w-2 flex-none text-foreground">{arrow(`suite/${suite}`)}</span>
 							</div>
-							<div class="text-right text-[11px] text-faint">{scale(column.scale)}</div>
+							<div class="truncate text-right text-[11px] text-faint">{scale(column.scale)}</div>
+							<ColumnResizer {width} onresize={(w) => (widths = { ...widths, [suite]: w })} />
 						</th>
 					{/each}
 				</tr>
 			</thead>
 			<tbody>
-				{#each rows as row (row.row)}
+				{#each view.rows as row (row.row)}
 					{@const run = ws.page.runs[row.row]}
 					<tr class="h-10 border-b border-divider hover:bg-muted">
 						<th scope="row" class="sticky left-0 z-1 bg-background px-4 text-left font-normal">
@@ -217,7 +175,7 @@
 							</span>
 						</th>
 						<td class="border-r border-divider px-3 text-right">{meanRank(row.meanRank)}</td>
-						{#each shown as { suite, depth } (suite)}
+						{#each view.shown as { suite, depth } (suite)}
 							{@const cell = row.cells[suite]}
 							{@const columnScale = table.columns[suite].scale}
 							<td

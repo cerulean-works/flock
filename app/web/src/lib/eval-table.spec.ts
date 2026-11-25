@@ -109,6 +109,18 @@ describe('the Evals table', () => {
 		// One mean over every top suite: zh, code and qa:bpb.
 		expect(table.rows[0].meanRank).toBeCloseTo(5 / 3);
 		expect(table.rows.map((r) => r.meanRank).slice(1)).toEqual([1, 3]);
+
+		// A hidden column leaves the mean: over zh and code alone.
+		const shown = evalTable(
+			[
+				run(0, [0.5, 0.5], [1.2, 0.8], 0.6),
+				run(1, [0.75, 0.75], [0.9, 0.7], 0.6),
+				run(2, [0.25, 0.25], [1.5, 1.5], 0.9)
+			],
+			new Set(['qa:bpb'])
+		);
+		expect(shown.meanOver).toEqual(['zh', 'code']);
+		expect(shown.rows.map((r) => r.meanRank)).toEqual([1.5, 1, 3]);
 	});
 
 	it('leaves a run scored under other settings out of every rank, naming what differs', () => {

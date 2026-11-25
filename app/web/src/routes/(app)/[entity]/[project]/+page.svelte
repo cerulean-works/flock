@@ -21,6 +21,7 @@
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import EvalsTable from '#lib/components/EvalsTable.svelte';
+	import { EvalsView } from '#lib/evals-view.svelte.ts';
 	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
@@ -178,6 +179,8 @@
 	// suite score (`flock eval log` writes `suites/<suite>`).
 	const hasEvals = $derived(ws.meta.columns.some((c) => c.key.startsWith('summary.suites/')));
 	const evals = $derived(hasEvals && page.url.searchParams.get('preset') === 'evals');
+	const evalsView = new EvalsView(ws);
+	let evalsTable = $state<EvalsTable>();
 	const fullscreen = $derived(panelOverride !== undefined ? panelOverride : urlPanel);
 
 	const hrefWith = (changes: Record<string, string | null>) =>
@@ -392,7 +395,20 @@
 							<TrophyIcon /> Evals
 						</Button>
 					{/if}
-					{#if !evals}<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />{/if}
+					{#if evals}
+						<ColumnsMenu keys={evalsView.keys} onjump={(key) => evalsTable?.scrollToColumn(key)} />
+						{#if evalsView.others}
+							<Button
+								variant="outline"
+								onclick={() => (evalsView.showOther = !evalsView.showOther)}
+							>
+								{evalsView.showOther ? 'Hide' : 'Show'}
+								{evalsView.others} on other settings
+							</Button>
+						{/if}
+					{:else}
+						<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />
+					{/if}
 				{:else}
 					<PlotSettings />
 					<Button variant="outline" onclick={() => ws.newPanel()}><PlusIcon /> Add panel</Button>
@@ -415,7 +431,7 @@
 
 	<main class="relative min-h-0 flex-1">
 		{#if evals && view === 'table'}
-			<EvalsTable />
+			<EvalsTable bind:this={evalsTable} view={evalsView} />
 		{:else}
 			<RunsTable bind:this={table} mode={view} {nameW} />
 		{/if}
