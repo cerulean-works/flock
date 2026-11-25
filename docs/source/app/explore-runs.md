@@ -34,6 +34,19 @@ An eval run that `flock eval run --wandb-project` logged carries its `results.js
 
 Scores show four decimals; hover one for its exact value. Hashes show their first 12 characters. Hover one for the whole value, or copy it. Two scores are comparable only when their hashes are equal, as [comparing results](../evals/comparison) explains.
 
+### Rank eval runs by suite[[evals-preset]]
+
+In **Table**, click **Evals** to see a project's eval runs side by side. The button appears once a run has a suite score, which `flock eval log` writes as `suites/<suite>`. The table then has one row per eval run on the page and one column per suite:
+
+- **Columns** are the suites no other scored suite holds, accuracy suites first, then bits-per-byte suites. Click the arrow beside a suite to show the suites it holds beside it. A suite counts as bits per byte when its score is the mean of its members' bits per byte.
+- **Cells** show the score and its rank in the column. Rank 1 is the best score, the highest accuracy or the lowest bits per byte, and equal scores share a rank. Darker cells are better within their column.
+- **Mean rank, accuracy** and **Mean rank, BPB** average a run's ranks over the top accuracy suites and over the top bits-per-byte suites. Accuracy and bits per byte are never averaged together. A run that lacks one of those suites has no mean rank.
+- **Sorting:** click a header to sort by it, best first, and again for the other order. Ranks and sorting cover the runs on the current page.
+
+Scores are ranked only when they come from the same instrument. Runs scored with another dtype, attention, SDPA kernel, batch size in tokens, maximum length or BOS setting than most runs are hidden. Click **Show N on other settings** to list them, marked **Other settings** and not ranked. A suite scored under another suite hash than most runs' shows a dash. A run on another GPU shows its device, and a model whose name says Instruct or Chat shows **Instruct**. Both are still ranked.
+
+Check two runs and click **Compare items** to read them doc by doc. Click **Evals** again to return to the full table.
+
 ### Compare two eval runs[[compare-two-eval-runs]]
 
 1. In **Table**, check exactly two eval runs and click **Compare items**. From a model version, open **Evals**, check two runs and click the same button. From an eval run, click **Compare with…** on its **Results** tab or in its **⋯** menu, then pick the other run.
