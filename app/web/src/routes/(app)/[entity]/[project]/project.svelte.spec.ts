@@ -158,8 +158,7 @@ function openEvals(access: 'member' | 'public', url: string) {
 	];
 	const keys = Object.keys(runs[0].values);
 	const numeric = (key: string) => typeof runs[0].values[key as 'summary.suites/zh'] === 'number';
-	const valueOf = (r: (typeof runs)[number], key: string) =>
-		r.values[key as keyof typeof r.values];
+	const valueOf = (r: (typeof runs)[number], key: string) => r.values[key as keyof typeof r.values];
 	const data = {
 		meta: {
 			entity: 'acme',
@@ -216,13 +215,17 @@ describe('the Evals preset', () => {
 	it('ranks the runs scored alike by suite, each scale on its own, and hides the others', async () => {
 		openEvals('member', 'http://flock.test/acme/bert?preset=evals');
 		const rows = screen.getByRole('row');
-		await expect.element(screen.getByRole('link', { name: 'Evals' })).toHaveAttribute('aria-pressed', 'true');
+		await expect
+			.element(screen.getByRole('link', { name: 'Evals' }))
+			.toHaveAttribute('aria-pressed', 'true');
 		await expect.element(screen.getByText('Mean rank, accuracy (1)')).toBeVisible();
 		await expect.element(screen.getByText('Mean rank, BPB (1)')).toBeVisible();
 		// The header, then olmo and llama; fp32 waits behind the button.
 		expect(rows.elements()).toHaveLength(3);
 		await expect.element(rows.nth(1)).toHaveTextContent(/olmo.*2\.0.*1\.0.*40\.0%\s*2.*0\.900\s*1/);
-		await expect.element(rows.nth(2)).toHaveTextContent(/llama.*1\.0.*2\.0.*50\.0%\s*1.*1\.100\s*2/);
+		await expect
+			.element(rows.nth(2))
+			.toHaveTextContent(/llama.*1\.0.*2\.0.*50\.0%\s*1.*1\.100\s*2/);
 		await expect.element(screen.getByRole('checkbox', { name: 'Select olmo' })).toBeVisible();
 
 		await screen.getByRole('button', { name: 'Show 1 on other settings' }).click();
@@ -248,6 +251,8 @@ describe('the Evals preset', () => {
 	it('shows outsiders of a public project the same scores, with nothing to select', async () => {
 		openEvals('public', 'http://flock.test/acme/bert?preset=evals');
 		await expect.element(screen.getByRole('link', { name: 'olmo' })).toBeVisible();
-		await expect.element(screen.getByRole('checkbox', { name: 'Select olmo' })).not.toBeInTheDocument();
+		await expect
+			.element(screen.getByRole('checkbox', { name: 'Select olmo' }))
+			.not.toBeInTheDocument();
 	});
 });
