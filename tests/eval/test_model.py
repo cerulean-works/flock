@@ -1041,6 +1041,22 @@ def test_rolling_loglikelihood_rejects_an_empty_text(scorer: ScoringModel) -> No
         scorer.rolling_loglikelihood(["fox", ""], 8)
 
 
+def test_target_values_skip_a_masked_token_but_keep_a_nan_position_undefined() -> None:
+    # Row 0, position 0 is a valid distribution with one token masked to -inf; position 1 has a
+    # NaN logit.
+    logits = torch.tensor([[[0.5, -float("inf"), 1.0, -2.0], [0.5, float("nan"), 1.0, -2.0]]])
+    _, _, stats = model._target_logprobs(logits, torch.tensor([[0, 0]]), True)
+    assert stats is not None
+
+    logprobs = logits[0, 0, [0, 2, 3]].log_softmax(-1)
+    probs = logprobs.exp()
+    entropy = -(probs * logprobs).sum()
+    torch.testing.assert_close(stats["entropy"][0, 0], entropy)
+    spread = (probs * (logprobs + entropy).square()).sum().sqrt()
+    torch.testing.assert_close(stats["logprob_std"][0, 0], spread)
+    assert stats["entropy"][0, 1].isnan() and stats["logprob_std"][0, 1].isnan()
+
+
 @pytest.mark.parametrize("chunk_positions", [1, 2, 4096])
 def test_target_values_are_the_same_in_any_chunks_of_positions(chunk_positions: int) -> None:
     # One row of 5 positions: chunks of 1 and 2 positions split it, 4096 keeps it whole.

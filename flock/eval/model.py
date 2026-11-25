@@ -1032,15 +1032,17 @@ def _target_logprobs(
 
         # Min-K%++'s mu and sigma are the mean and standard deviation of log p under p itself
         # (Zhang et al. 2024, arXiv 2404.02936, eq. 3); mu is minus the entropy. A token of
-        # probability 0 adds nothing, where `0 * -inf` would be NaN. A few positions at a time,
-        # so the copies these take stay bounded however long one row is.
+        # probability 0 adds nothing, where `0 * -inf` would be NaN. Only those are masked: a NaN
+        # logit makes its position's probabilities NaN, and its entropy stays NaN, not a certain
+        # 0. A few positions at a time, so the copies these take stay bounded however long one
+        # row is.
         for start_position in range(0, chunk.shape[1], chunk_positions):
             cut = slice(start_position, start_position + chunk_positions)
             logprobs = chunk[:, cut] - normalizer[:, cut, None]
             probs = logprobs.exp()
-            entropy = -torch.where(probs > 0, probs * logprobs, 0.0).sum(-1)
+            entropy = -torch.where(probs == 0, 0.0, probs * logprobs).sum(-1)
             deviation = (logprobs + entropy[..., None]).square()
-            spread = torch.where(probs > 0, probs * deviation, 0.0).sum(-1).sqrt()
+            spread = torch.where(probs == 0, 0.0, probs * deviation).sum(-1).sqrt()
             stats["entropy"][rows, cut] = entropy
             stats["logprob_std"][rows, cut] = spread
             stats["top1_logprob"][rows, cut] = chunk[:, cut].amax(-1) - normalizer[:, cut]
