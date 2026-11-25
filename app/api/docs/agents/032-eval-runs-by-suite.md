@@ -25,10 +25,6 @@ A project's eval runs could be read two at a time (the compare page) or as the w
 
 **Evals** in the Table view's toolbar sets `?preset=evals`; a link with the preset and no view opens on the table. While it is on, a small table built for this (`EvalsTable`) takes the place of the runs table, fed by the same page of runs: search, filters, paging, selection and **Compare items** keep working. It isn't part of the runs table because that table is virtualized and sorted by Flock, and a mean rank isn't a stored column Flock could sort by. The preset has at most a page of runs and a few dozen columns, so it renders every cell and sorts in the browser. The button appears only once a run of the project has a `summary.suites/` column.
 
-### D214. The preset reuses the table's column settings, menu and resize
-
-The **Columns** menu is the runs table's own, given the preset's suite columns (`keys`) in the preset's order: hiding, moving, "Reset order" and "Show all" act on those columns through the workspace's column settings, which both views share, and `mergeOrder` keeps the project's other columns where they were. Until a suite is moved, the preset keeps its own default order (top suites accuracy first, each followed by its members); after, the viewer's. A hidden top suite leaves the mean rank. The column-edge resize moved out of the runs table into `ColumnResizer`, which both tables use. Suite columns start at one width (128 px) so the table reads evenly; a name wraps to two lines and shows whole on hover. The state shared by the toolbar and the table (sort, opened suites, runs on other settings) lives in `EvalsView`, held by the project page as it holds the workspace.
-
 ### D211. Columns are the top suites; a suite's scale is read from its members
 
 Columns are the suites with a score that no other scored suite holds (`config.suite_members` under the column's hash), accuracy first, then the rest, each in name order. A suite opens to show its scored member suites beside it; a suite two opened suites hold shows once, and a suite no top suite leads to (suites that hold each other) is a top suite itself. On the bank of nine models this gives 18 columns: `base_easy:qa_rc`, `zh_tw` and `zh_cn` for accuracy, and 15 for bits per byte, among them the nine Paloma sources, since `paloma` itself has no score.
@@ -42,6 +38,10 @@ The settings most of the page's runs share, taken as a whole (dtype, attention, 
 ### D213. A rank per cell, and one mean rank as a reading order
 
 Ranks are competition ranks (equal scores share the better rank), best first in each column's direction. A cell's tint is where its score sits between the column's worst and best. One mean rank, over every top suite with a ranked cell, orders the runs as a leaderboard does, and the table opens sorted by it, best first. It averages accuracy and bits-per-byte ranks together, so it is a convenience order for reading the table and the page says so; comparisons rest on the suites themselves. A run without a rank in one of those suites has no mean rank, so a missing suite can't raise it. Opened member suites don't count, so a parent and its members aren't counted twice.
+
+### D214. The preset reuses the table's column settings, menu and resize
+
+The **Columns** menu is the runs table's own, given the preset's suite columns (`keys`) in the preset's order: hiding, moving, "Reset order" and "Show all" act on those columns through the workspace's column settings, which both views share, and `mergeOrder` keeps the project's other columns where they were. Until a suite is moved, the preset keeps its own default order (top suites accuracy first, each followed by its members); after, the viewer's. A hidden top suite leaves the mean rank. The column-edge resize moved out of the runs table into `ColumnResizer`, which both tables use. Suite columns start at one width (128 px) so the table reads evenly; a name wraps to two lines and shows whole on hover. The state shared by the toolbar and the table (sort, opened suites, runs on other settings) lives in `EvalsView`, held by the project page as it holds the workspace.
 
 ---
 
