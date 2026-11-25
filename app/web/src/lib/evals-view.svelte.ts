@@ -68,29 +68,44 @@ export class EvalsView {
 		};
 		for (const suite of this.table.top) add(suite);
 		const ws = this.#ws;
-		if (!ws.columnPrefs.order.some((key) => key.startsWith('summary.suites/'))) return out;
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a lookup, never mutated
 		const at = new Map(ws.arrangedColumns.map((c, i) => [ws.meta.columns[c].key, i]));
-		return out.toSorted((a, b) => at.get(suiteKey(a))! - at.get(suiteKey(b))!);
+		const arranged = out.toSorted((a, b) => at.get(suiteKey(a))! - at.get(suiteKey(b))!);
+		// Unmoved suites keep the table's name order there (a move of another column saves every
+		// key without moving them): only an order the viewer gave the suites replaces this one.
+		const byName = out.toSorted((a, b) => (suiteKey(a) < suiteKey(b) ? -1 : 1));
+		return arranged.every((suite, i) => suite === byName[i]) ? out : arranged;
 	});
 
 	/** The suites' columns, in order, for the Columns menu. */
 	readonly keys = $derived(this.ordered.map(suiteKey));
 
-	/** The columns shown: top suites, then an opened suite's own beside it, hidden ones left out. */
+	/**
+	 * The columns shown, in the suites' order: the top suites and the members of opened ones,
+	 * hidden ones left out, each with how deep it sits below a top suite.
+	 */
 	readonly shown = $derived.by(() => {
-		const out: { suite: string; depth: number }[] = [];
-		// A suite two opened suites hold shows once, beside the first.
-		const add = (suite: string, depth: number) => {
-			if (this.hidden.has(suite) || out.some((c) => c.suite === suite)) return;
-			out.push({ suite, depth });
-			if (!this.open.has(suite)) return;
-			const children = this.table.columns[suite].children;
-			for (const child of this.ordered) if (children.includes(child)) add(child, depth + 1);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built here, never kept
+		const depth = new Map<string, number>();
+		const add = (suite: string, d: number) => {
+			if (this.hidden.has(suite) || depth.has(suite)) return;
+			depth.set(suite, d);
+			if (this.open.has(suite)) for (const c of this.table.columns[suite].children) add(c, d + 1);
 		};
-		for (const suite of this.ordered) if (this.table.top.includes(suite)) add(suite, 0);
-		return out;
+		for (const suite of this.table.top) add(suite, 0);
+		return this.ordered.flatMap((suite) =>
+			depth.has(suite) ? [{ suite, depth: depth.get(suite)! }] : []
+		);
 	});
+
+	/** Open every suite above `suite`, so its column shows. */
+	reveal(suite: string) {
+		for (const [parent, column] of Object.entries(this.table.columns))
+			if (column.children.includes(suite) && parent !== suite && !this.open.has(parent)) {
+				this.open.add(parent);
+				this.reveal(parent);
+			}
+	}
 
 	/** Runs scored under other settings than most. */
 	readonly others = $derived(this.table.rows.filter((r) => r.differs.length).length);

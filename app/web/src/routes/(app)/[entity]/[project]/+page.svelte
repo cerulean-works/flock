@@ -397,15 +397,6 @@
 					{/if}
 					{#if evals}
 						<ColumnsMenu keys={evalsView.keys} onjump={(key) => evalsTable?.scrollToColumn(key)} />
-						{#if evalsView.others}
-							<Button
-								variant="outline"
-								onclick={() => (evalsView.showOther = !evalsView.showOther)}
-							>
-								{evalsView.showOther ? 'Hide' : 'Show'}
-								{evalsView.others} on other settings
-							</Button>
-						{/if}
 					{:else}
 						<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />
 					{/if}
@@ -413,6 +404,13 @@
 					<PlotSettings />
 					<Button variant="outline" onclick={() => ws.newPanel()}><PlusIcon /> Add panel</Button>
 				{/if}
+			{/if}
+			<!-- Outside the selection's actions too: the second run to compare may be one of these. -->
+			{#if evals && view === 'table' && evalsView.others}
+				<Button variant="outline" onclick={() => (evalsView.showOther = !evalsView.showOther)}>
+					{evalsView.showOther ? 'Hide' : 'Show'}
+					{evalsView.others} on other settings
+				</Button>
 			{/if}
 
 			<span class="flex-1"></span>

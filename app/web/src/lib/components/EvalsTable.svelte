@@ -2,6 +2,7 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { page as appPage } from '$app/state';
+	import { tick } from 'svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import type { Scale } from '#lib/eval-table.ts';
@@ -24,9 +25,11 @@
 	const widthOf = (suite: string) => widths[suite] ?? 128;
 
 	let scroller = $state<HTMLDivElement>();
-	/** Scroll a suite's column (shown by then) to just past the run names. */
-	export function scrollToColumn(key: string) {
+	/** Open the suites above a suite's column, then scroll it to just past the run names. */
+	export async function scrollToColumn(key: string) {
 		const suite = key.slice('summary.suites/'.length);
+		view.reveal(suite);
+		await tick();
 		const cell = scroller?.querySelector<HTMLElement>(`th[data-suite="${CSS.escape(suite)}"]`);
 		const names = scroller?.querySelector<HTMLElement>('th[data-names]');
 		if (cell && names) scroller!.scrollTo({ left: cell.offsetLeft - names.offsetWidth });
@@ -81,7 +84,7 @@
 						{@render sortHeader(
 							'mean',
 							`Mean rank (${table.meanOver.length})`,
-							`A convenience order: the mean of a run's ranks over the ${table.meanOver.length} top suites shown, accuracy and bits per byte alike; 1 is best. No result rests on it.`
+							`A convenience order: the mean of a run's ranks over the ${table.meanOver.length} top suites shown, accuracy and bits per byte alike, among the ${table.rows.length - view.others} runs on this page scored alike; 1 is best. No result rests on it.`
 						)}
 					</th>
 					{#each view.shown as { suite, depth } (suite)}

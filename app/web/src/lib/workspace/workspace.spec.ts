@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AxisCurve, noAxes } from '#lib/chart/axes.ts';
 import { Series, slotOf } from '#lib/chart/series.ts';
-import { metricSections } from '#lib/data/snapshot.ts';
+import { columnDef, metricSections } from '#lib/data/snapshot.ts';
 import type { MetricDefinition, ProjectMeta, RunInfo, RunPage } from '#lib/types.ts';
 import { NEWEST_SHOWN, Workspace } from './workspace.svelte.ts';
 
@@ -13,7 +13,8 @@ const line = (n: number) => new Series(new Float32Array(n).fill(1), steps(n));
  * (10 points each, against `_step`) and its step-metric mappings.
  */
 function workspace(
-	runs: { defs: MetricDefinition[]; logged: string[]; axes?: Record<string, number> }[]
+	runs: { defs: MetricDefinition[]; logged: string[]; axes?: Record<string, number> }[],
+	columns: string[] = []
 ) {
 	const keys = [...new Set(runs.flatMap((r) => r.logged))].sort();
 	const { metrics, panels, sections } = metricSections(keys);
@@ -22,7 +23,7 @@ function workspace(
 		project: 'midterm-nanogpt',
 		pageSize: 100,
 		now: 0,
-		columns: [],
+		columns: columns.map((key) => columnDef(key, 'num')),
 		groups: [],
 		metrics,
 		panels,
@@ -186,6 +187,16 @@ describe('what this browser keeps for a project', () => {
 	const runs = (n: number) => Array.from({ length: n }, () => ({ defs: [], logged: ['loss'] }));
 	const LAYOUT = 'flock:panels:flock/midterm-nanogpt';
 	const HIDDEN = 'flock:hidden:flock/midterm-nanogpt';
+
+	it('moves some columns among themselves without shifting the others', () => {
+		const keys = ['summary.a', 'summary.suites/x', 'summary.b', 'summary.suites/y'];
+		const ws = workspace(runs(1), keys);
+		const order = () => ws.arrangedColumns.map((i) => ws.meta.columns[i].key);
+
+		// The Evals preset lists only its suites: y moved before x takes x's slot, and x y's.
+		ws.moveColumn('summary', 1, 0, ['summary.suites/x', 'summary.suites/y']);
+		expect(order()).toEqual(['summary.a', 'summary.suites/y', 'summary.b', 'summary.suites/x']);
+	});
 
 	it('keeps the line plot settings and reads them back', () => {
 		const ws = workspace(runs(2));

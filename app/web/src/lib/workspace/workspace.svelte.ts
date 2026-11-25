@@ -1051,7 +1051,11 @@ export class Workspace {
 		const arranged = keys
 			? keys.flatMap((k) => this.meta.columns.find((c) => c.key === k) ?? [])
 			: this.arrangedColumns.map((i) => this.meta.columns[i]);
-		const order = moveColumn(arranged, this.columnPrefs.order, parent, from, to);
+		// A subset's moves fill its slots in the whole table's order, so no other column shifts.
+		const saved = keys
+			? this.arrangedColumns.map((i) => this.meta.columns[i].key)
+			: this.columnPrefs.order;
+		const order = moveColumn(arranged, saved, parent, from, to);
 		if (order) this.#saveColumns({ ...this.columnPrefs, order });
 	}
 
