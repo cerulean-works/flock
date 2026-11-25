@@ -241,6 +241,14 @@ describe('the Evals table', () => {
 				'summary.w1/bpb': 0.6,
 				'config.suite_members.wide': ['w1'],
 				'config.suite_hashes.wide': 'h-wide',
+				// `z` holds itself and `a`: only `z` is a top column, whatever the names.
+				'summary.suites/z': 0.5,
+				'summary.suites/a': 0.5,
+				'summary.a1/acc_raw': 0.5,
+				'config.suite_members.z': ['z', 'a'],
+				'config.suite_members.a': ['a1'],
+				'config.suite_hashes.z': 'h-z',
+				'config.suite_hashes.a': 'h-a',
 				'summary.suites/loop': 1,
 				'config.suite_members.loop': ['loop'],
 				'config.suite_hashes.loop': 'h-loop'
@@ -252,6 +260,9 @@ describe('the Evals table', () => {
 		expect(table.columns.loop.scale).toBeNull();
 		// Held only by itself, it is still a column, unranked.
 		expect(table.top).toContain('loop');
+		expect(table.top).toContain('z');
+		expect(table.top).not.toContain('a');
+		expect(table.columns.z.children).toEqual(['z', 'a']);
 		expect(table.rows[0].cells.loop).toEqual({ value: 1, otherHash: null, rank: null, heat: null });
 		expect(table.rows.map((r) => r.cells.even.rank)).toEqual([null, null]);
 	});

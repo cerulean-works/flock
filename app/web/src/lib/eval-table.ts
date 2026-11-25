@@ -238,21 +238,24 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 			children: (members ?? []).filter((m) => suites.has(m))
 		};
 	}
-	// A suite no top suite leads to (a group of suites that hold each other) is a top suite
-	// too, so every scored suite has a column to open.
-	const roots = [...suites].filter((suite) => !held.has(suite));
-	const reached = new Set<string>();
-	const reach = (suite: string) => {
-		if (reached.has(suite)) return;
-		reached.add(suite);
-		for (const child of columns[suite].children) reach(child);
+	// Suites that hold each other with no top suite above them get one top column, the first by
+	// name among those no other unreached suite leads to from outside their group, so every
+	// scored suite has a column to open and the choice follows membership, not names.
+	const below = (suite: string, out = new Set<string>()) => {
+		for (const child of columns[suite].children) if (!out.has(child)) below(child, out.add(child));
+		return out;
 	};
-	for (const suite of roots) reach(suite);
-	for (const suite of [...suites].sort())
-		if (!reached.has(suite)) {
-			roots.push(suite);
-			reach(suite);
-		}
+	const roots = [...suites].filter((suite) => !held.has(suite));
+	const reached = new Set(roots.flatMap((suite) => [suite, ...below(suite)]));
+	for (const suite of [...suites].sort()) {
+		if (reached.has(suite)) continue;
+		const fedFromOutside = [...suites].some(
+			(other) => !reached.has(other) && below(other).has(suite) && !below(suite).has(other)
+		);
+		if (fedFromOutside) continue;
+		roots.push(suite);
+		for (const s of [suite, ...below(suite)]) reached.add(s);
+	}
 	const top = roots.sort(
 		(a, b) =>
 			Number(columns[a].scale !== 'accuracy') - Number(columns[b].scale !== 'accuracy') ||
