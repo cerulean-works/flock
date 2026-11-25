@@ -138,7 +138,7 @@ describe('a public project made private', () => {
  * with `access` on `url`: `zh` is an accuracy suite of task `t1`, `code` a bits-per-byte suite
  * of task `c1`, and `fp32` was scored under another dtype.
  */
-function openEvals(access: 'member' | 'public', url: string) {
+function openEvals(access: 'member' | 'public', url: string, projectView = 'table') {
 	const run = (zh: number, code: number, dtype = 'bfloat16') => ({
 		'summary.suites/zh': zh,
 		'summary.suites/code': code,
@@ -195,7 +195,7 @@ function openEvals(access: 'member' | 'public', url: string) {
 		},
 		project: project('private'),
 		people: [],
-		shell: { access, me: null, orgName: 'Acme', nameW: 280, projectView: 'table' }
+		shell: { access, me: null, orgName: 'Acme', nameW: 280, projectView }
 	};
 	resetApp(url, data);
 	page.params = { entity: 'acme', project: 'bert' };
@@ -243,6 +243,11 @@ describe('the Evals preset', () => {
 		await vi.waitFor(() => expect(names()).toEqual(['llama', 'olmo']));
 		await screen.getByRole('button', { name: 'Mean rank (2)' }).click();
 		await vi.waitFor(() => expect(names()).toEqual(['olmo', 'llama']));
+	});
+
+	it('opens a link to the preset on the table, whichever view was picked last', async () => {
+		openEvals('member', 'http://flock.test/acme/bert?preset=evals', 'charts');
+		await expect.element(screen.getByText('Mean rank (2)')).toBeVisible();
 	});
 
 	it('shows outsiders of a public project the same scores, with nothing to select', async () => {

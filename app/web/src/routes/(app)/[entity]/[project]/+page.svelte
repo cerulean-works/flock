@@ -161,7 +161,11 @@
 	// A URL without a view (a project opened from the sidebar) shows the one picked last.
 	const urlView = $derived.by((): View => {
 		const v = page.url.searchParams.get('view');
-		return v === 'charts' || v === 'table' ? v : lastView(data.shell.projectView);
+		if (v === 'charts' || v === 'table') return v;
+		// A link to the Evals preset opens on the table it is a preset of.
+		return page.url.searchParams.get('preset') === 'evals'
+			? 'table'
+			: lastView(data.shell.projectView);
 	});
 	const urlPanel = $derived.by(() => {
 		const id = page.url.searchParams.get('panel');

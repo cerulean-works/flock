@@ -209,6 +209,9 @@ describe('the Evals table', () => {
 			rank: null,
 			heat: null
 		});
+		// Neither `solo` nor `zh` has a ranked cell, so the mean is over the other two.
+		expect(table.meanOver).toEqual(['code', 'qa:bpb']);
+		expect(table.rows.map((r) => r.meanRank)).toEqual([1, 1, null]);
 	});
 
 	it('has no rows for runs with no suite score, and no rank or tint in a column of one', () => {
@@ -217,6 +220,28 @@ describe('the Evals table', () => {
 
 		expect(table.rows.map((r) => r.row)).toEqual([1]);
 		expect(table.rows[0].cells.zh).toMatchObject({ rank: 1, heat: null });
-		expect(evalTable([training])).toEqual({ columns: {}, top: [], rows: [] });
+		expect(evalTable([training])).toEqual({ columns: {}, top: [], meanOver: [], rows: [] });
+	});
+
+	it('gives no scale to a suite two scales fit, or to one that holds itself', () => {
+		const a = run(0, [0.5, 0.5], [1, 1], 1);
+		const b = run(1, [0.4, 0.4], [1, 1], 1);
+		for (const r of [a, b])
+			Object.assign(r.values, {
+				// Its one task's bits per byte equal its accuracy: either reading fits.
+				'summary.suites/even': 0.5,
+				'summary.e1/acc_raw': 0.5,
+				'summary.e1/bpb': 0.5,
+				'config.suite_members.even': ['e1'],
+				'config.suite_hashes.even': 'h-even',
+				'summary.suites/loop': 1,
+				'config.suite_members.loop': ['loop'],
+				'config.suite_hashes.loop': 'h-loop'
+			});
+		const table = evalTable([a, b]);
+
+		expect(table.columns.even.scale).toBeNull();
+		expect(table.columns.loop.scale).toBeNull();
+		expect(table.rows.map((r) => r.cells.even.rank)).toEqual([null, null]);
 	});
 });

@@ -66,6 +66,8 @@ export interface EvalTable {
 	columns: Record<string, EvalColumn>;
 	/** The suites no other scored suite holds: accuracy first, then the rest. */
 	top: string[];
+	/** The top suites the mean rank is over: those with a ranked cell. */
+	meanOver: string[];
 	/** Every run with a suite score, in page order. */
 	rows: EvalTableRow[];
 }
@@ -141,9 +143,16 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 	 * (eval's `Suite`): a lower-is-better metric when the score is the mean of the members' values
 	 * of it (a member suite's when its scale is the same), up to float rounding; accuracy when
 	 * the score lies within what the means of the members' accuracies allow, since a task's
-	 * primary accuracy isn't logged. Null when neither holds or the run doesn't list members.
+	 * primary accuracy isn't logged. Null unless exactly one scale fits, and for a suite that
+	 * holds itself. Kept per run, as nested suites are read again from each parent.
 	 */
+	const scales = new Map<EvalTableRun, Map<string, Scale | null>>();
 	const scaleOf = (run: EvalTableRun, suite: string): Scale | null => {
+		const known = scales.get(run) ?? new Map<string, Scale | null>();
+		scales.set(run, known);
+		// A suite met again while its own scale is being read lists itself: no scale.
+		if (known.has(suite)) return known.get(suite)!;
+		known.set(suite, null);
 		const members = run.values[`config.suite_members.${suite}`];
 		const score = numberAt(run, `summary.suites/${suite}`);
 		if (!Array.isArray(members) || !members.length || score === null) return null;
@@ -153,6 +162,7 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 			const slack = 1e-9 * Math.max(1, Math.abs(score));
 			return low - slack <= score && score <= high + slack;
 		};
+		const fits: Scale[] = [];
 		for (const scale of ['bpb', 'loss_per_token', 'perplexity'] as const) {
 			const values = members.map((m) =>
 				isSuite(m)
@@ -165,7 +175,7 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 			);
 			if (values.every((v) => v !== null)) {
 				const mean = values.reduce((a, b) => a + b, 0) / values.length;
-				if (near(mean, mean)) return scale;
+				if (near(mean, mean)) fits.push(scale);
 			}
 		}
 		let [low, high] = [0, 0];
@@ -175,11 +185,14 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 					? [numberAt(run, `summary.suites/${m}`)!]
 					: []
 				: (accuracies.get(run)!.get(m) ?? []);
-			if (!values.length) return null;
-			low += Math.min(...values);
-			high += Math.max(...values);
+			low += values.length ? Math.min(...values) : NaN;
+			high += values.length ? Math.max(...values) : NaN;
 		}
-		return near(low / members.length, high / members.length) ? 'accuracy' : null;
+		if (near(low / members.length, high / members.length)) fits.push('accuracy');
+		// Two scales that both fit (a task whose bits per byte equals its accuracy) tell nothing.
+		const scale = fits.length === 1 ? fits[0] : null;
+		known.set(suite, scale);
+		return scale;
 	};
 
 	const suites = new Set<string>();
@@ -196,18 +209,19 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 		// The hash of the runs ranked; with none of them, of the runs shown, which aren't ranked.
 		const hashOf = (run: EvalTableRun) => stringAt(run, `config.suite_hashes.${suite}`);
 		const hash = mostCommon(comparable.length ? comparable : scored, hashOf);
-		const under = scored.filter((run) => hash !== null && hashOf(run) === hash);
-		// Every run under the column's hash must read the same scale, or the scale is unknown.
-		const scales = new Set(
-			under.map((run) => scaleOf(run, suite)).filter((scale) => scale !== null)
+		const under = (comparable.length ? comparable : scored).filter(
+			(run) => hash !== null && hashOf(run) === hash
 		);
+		// Every run under the column's hash must read the same scale, or the scale is unknown:
+		// the runs ranked, or with none of them the runs shown, which are never ranked.
+		const read = new Set(under.map((run) => scaleOf(run, suite)));
 		const members = under
 			.map((run) => run.values[`config.suite_members.${suite}`])
 			.find(Array.isArray) as string[] | undefined;
 		for (const m of members ?? []) held.add(m);
 		columns[suite] = {
 			suite,
-			scale: scales.size === 1 ? [...scales][0] : null,
+			scale: read.size === 1 ? [...read][0] : null,
 			hash,
 			children: (members ?? []).filter((m) => suites.has(m))
 		};
@@ -256,15 +270,15 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 		}
 	}
 
-	// One order over every top suite of known scale, accuracies and bits per byte alike: a
+	// One order over every top suite ranked in, accuracies and bits per byte alike: a
 	// convenience for reading the table, which no claim cites. Opened member suites don't count,
 	// so a suite and its members aren't counted twice.
-	const counted = top.filter((suite) => columns[suite].scale !== null);
+	const meanOver = top.filter((suite) => rows.some((row) => row.cells[suite].rank !== null));
 	for (const row of rows) {
-		if (row.differs.length || !counted.length) continue;
+		if (row.differs.length || !meanOver.length) continue;
 		let sum = 0;
-		for (const suite of counted) sum += row.cells[suite].rank ?? NaN;
-		row.meanRank = Number.isNaN(sum) ? null : sum / counted.length;
+		for (const suite of meanOver) sum += row.cells[suite].rank ?? NaN;
+		row.meanRank = Number.isNaN(sum) ? null : sum / meanOver.length;
 	}
-	return { columns, top, rows };
+	return { columns, top, meanOver, rows };
 }

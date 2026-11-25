@@ -45,8 +45,7 @@
 		for (const suite of table.top) add(suite, 0);
 		return out;
 	});
-	/** The top suites the mean rank is over: those of known scale. */
-	const counted = $derived(table.top.filter((s) => table.columns[s].scale !== null).length);
+	const counted = $derived(table.meanOver.length);
 
 	/** Runs scored under other settings than most: hidden unless asked for. */
 	let showOther = $state(false);
