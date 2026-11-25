@@ -127,24 +127,28 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 	const like = runs.filter((run) => !differs.get(run)!.length);
 
 	// Each run's accuracies by task (`acc_raw`, `acc_per_char`, ...), for reading a suite's scale.
-	const accuracies = new Map<EvalTableRun, Map<string, number[]>>();
+	const accuracies = new Map<EvalTableRun, Map<string, Map<string, number>>>();
 	for (const run of runs) {
-		const byTask = new Map<string, number[]>();
+		const byTask = new Map<string, Map<string, number>>();
 		for (const key of Object.keys(run.values)) {
-			const match = /^summary\.(.+)\/acc[^/]*$/.exec(key);
+			const match = /^summary\.(.+)\/(acc[^/]*)$/.exec(key);
 			const value = numberAt(run, key);
-			if (match && value !== null) byTask.set(match[1], [...(byTask.get(match[1]) ?? []), value]);
+			if (!match || value === null) continue;
+			const metrics = byTask.get(match[1]) ?? new Map<string, number>();
+			byTask.set(match[1], metrics.set(match[2], value));
 		}
 		accuracies.set(run, byTask);
 	}
 
 	/**
 	 * The scale of `suite`'s score on `run`, read from its members, whose scores share one scale
-	 * (eval's `Suite`): a lower-is-better metric when the score is the mean of the members' values
-	 * of it (a member suite's when its scale is the same), up to float rounding; accuracy when
-	 * the score lies within what the means of the members' accuracies allow, since a task's
-	 * primary accuracy isn't logged. Null unless exactly one scale fits, and for a suite that
-	 * holds itself. Kept per run, as nested suites are read again from each parent.
+	 * (eval's `Suite`). A scale fits exactly when the score is the mean of the members' values of
+	 * its metric (a member suite's score when its scale is the same), up to float rounding; for
+	 * accuracy, one `acc_*` metric for every member task. Exactly one exact fit decides, and two
+	 * (a task whose bits per byte equal one of its accuracies) leave the scale unknown. With
+	 * none, the score reads as accuracy when it lies within what the means of the members'
+	 * accuracies allow, since a task's primary accuracy isn't logged. A suite that holds itself
+	 * has no scale. Kept per run, as nested suites are read again from each parent.
 	 */
 	const scales = new Map<EvalTableRun, Map<string, Scale | null>>();
 	const scaleOf = (run: EvalTableRun, suite: string): Scale | null => {
@@ -178,18 +182,26 @@ export function evalTable(page: EvalTableRun[]): EvalTable {
 				if (near(mean, mean)) fits.push(scale);
 			}
 		}
-		let [low, high] = [0, 0];
-		for (const m of members) {
-			const values = isSuite(m)
-				? scaleOf(run, m) === 'accuracy'
-					? [numberAt(run, `summary.suites/${m}`)!]
-					: []
-				: (accuracies.get(run)!.get(m) ?? []);
-			low += values.length ? Math.min(...values) : NaN;
-			high += values.length ? Math.max(...values) : NaN;
+		// Each member's accuracies by metric; a member accuracy suite's score stands for any metric
+		// (`*`). A member with none leaves accuracy out.
+		const byMember = members.map((m) => {
+			if (!isSuite(m)) return accuracies.get(run)!.get(m) ?? new Map<string, number>();
+			const value = scaleOf(run, m) === 'accuracy' ? numberAt(run, `summary.suites/${m}`) : null;
+			return new Map(value === null ? [] : [['*', value]]);
+		});
+		if (byMember.every((metrics) => metrics.size)) {
+			const names = new Set(byMember.flatMap((metrics) => [...metrics.keys()]));
+			const exact = [...names].some((name) => {
+				const values = byMember.map((metrics) => metrics.get(name) ?? metrics.get('*'));
+				if (values.some((v) => v === undefined)) return false;
+				const mean = values.reduce((a, b) => a! + b!, 0)! / values.length;
+				return near(mean, mean);
+			});
+			// Bounds only where nothing fits exactly: they are wide, and bits per byte can lie in them.
+			const low = byMember.reduce((sum, m) => sum + Math.min(...m.values()), 0) / members.length;
+			const high = byMember.reduce((sum, m) => sum + Math.max(...m.values()), 0) / members.length;
+			if (exact || (!fits.length && near(low, high))) fits.push('accuracy');
 		}
-		if (near(low / members.length, high / members.length)) fits.push('accuracy');
-		// Two scales that both fit (a task whose bits per byte equals its accuracy) tell nothing.
 		const scale = fits.length === 1 ? fits[0] : null;
 		known.set(suite, scale);
 		return scale;

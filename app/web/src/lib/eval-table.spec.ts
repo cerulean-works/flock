@@ -223,7 +223,7 @@ describe('the Evals table', () => {
 		expect(evalTable([training])).toEqual({ columns: {}, top: [], meanOver: [], rows: [] });
 	});
 
-	it('gives no scale to a suite two scales fit, or to one that holds itself', () => {
+	it('gives no scale to a suite two scales fit exactly, or to one that holds itself', () => {
 		const a = run(0, [0.5, 0.5], [1, 1], 1);
 		const b = run(1, [0.4, 0.4], [1, 1], 1);
 		for (const r of [a, b])
@@ -234,6 +234,13 @@ describe('the Evals table', () => {
 				'summary.e1/bpb': 0.5,
 				'config.suite_members.even': ['e1'],
 				'config.suite_hashes.even': 'h-even',
+				// Its bits per byte fit exactly; its accuracies only bound it, which isn't enough.
+				'summary.suites/wide': 0.6,
+				'summary.w1/acc_raw': 0.2,
+				'summary.w1/acc_uncond': 0.9,
+				'summary.w1/bpb': 0.6,
+				'config.suite_members.wide': ['w1'],
+				'config.suite_hashes.wide': 'h-wide',
 				'summary.suites/loop': 1,
 				'config.suite_members.loop': ['loop'],
 				'config.suite_hashes.loop': 'h-loop'
@@ -241,6 +248,7 @@ describe('the Evals table', () => {
 		const table = evalTable([a, b]);
 
 		expect(table.columns.even.scale).toBeNull();
+		expect(table.columns.wide.scale).toBe('bpb');
 		expect(table.columns.loop.scale).toBeNull();
 		// Held only by itself, it is still a column, unranked.
 		expect(table.top).toContain('loop');
