@@ -50,6 +50,32 @@ MODEL_PRESETS: dict[str, ArchitectureConfig] = {
         num_attention_heads=12,
         num_key_value_heads=4,
     ),
+    # Scaling-law pilot sizes on the same Llama 3.2 proportions; hidden width / layers stays near
+    # 53-57. Parameter counts include the tied 128256-row embedding.
+    "llama3.2-100m": replace(  # 99.9M
+        LLAMA3_2_1B_CONFIG,
+        hidden_size=512,
+        intermediate_size=2048,
+        num_hidden_layers=9,
+        num_attention_heads=8,
+        num_key_value_heads=2,
+    ),
+    "llama3.2-400m": replace(  # 405M
+        LLAMA3_2_1B_CONFIG,
+        hidden_size=1024,
+        intermediate_size=4096,
+        num_hidden_layers=18,
+        num_attention_heads=16,
+        num_key_value_heads=4,
+    ),
+    "llama3.2-750m": replace(  # 730M
+        LLAMA3_2_1B_CONFIG,
+        hidden_size=1280,
+        intermediate_size=5120,
+        num_hidden_layers=24,
+        num_attention_heads=20,
+        num_key_value_heads=4,
+    ),
 }
 """Named architectures a run can start from: OLMo 2 sizes and Llama 3.2 sizes."""
 

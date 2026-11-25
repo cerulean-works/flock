@@ -1,0 +1,33 @@
+# Probe 2b: data-loader stall fix test (100m).
+sweep:
+  name: wsd-probe2b-100m
+  output_root: /work/u4982363/sweeps
+  gpus_per_run: 8
+  master_port: 31620
+  name_template: wsd-probe2b-100m-s{seed}
+  runs:
+  - {seed: 0}
+base:
+  seed: 0
+  data: {text_path: /work/u4982363/datasets/mix-200b-tc114b-en86b-seed0, text_version: 1, block_rows: 2048,
+    add_bos: true, add_eos: true, chunk_length: 4096}
+  model:
+    preset: llama3.2-200m
+    attn_implementation: flash_attention_4
+    overrides: {hidden_size: 512, intermediate_size: 2048, num_hidden_layers: 9, num_attention_heads: 8,
+      num_key_value_heads: 2}
+  optimizer:
+    type: muon_adamw
+    lr: 0.006
+    betas: [0.9, 0.99]
+    muon_lr: 0.004
+  wsd: {warmup_tokens: 100000000, decay_fraction: 0.1, final_ratio: 0.01, decay: cosine}
+  trainer: {batch_tokens: 32768, torch_compile: true, dataloader_num_workers: 8, dataloader_prefetch_factor: 8,
+    logging_steps: 10, wandb_project: scaling-law-wsd-probe}
+  token_rounding: nearest
+  one_pass_tokens: 191900000000
+  nominal_params: 100000000
+  save_evals:
+    suites: {paloma: paloma, tw_text: tw_text_v0}
+  stop_tokens: 524288000
+  save_tokens: [235929600, 262144000]

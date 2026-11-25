@@ -1,0 +1,37 @@
+# Seed replicates of the 8B winners at 262k and 393k (beta2 0.99), trained from scratch.
+# Same recipe as the winning branches: same data, data order, peak LRs and LR per token
+# (warmup over the first 40M tokens, flat, linear decay over the last 10%); only the
+# initialization seed differs (seed 1 instead of 0). Text-stream data order does not depend on the seed.
+sweep:
+  name: llama200m-8b-seed1
+  output_root: /work/u4982363/sweeps
+  gpus_per_run: 2
+  name_template: "llama200m-8b-bs2x{trainer.batch_tokens}-b20.99-mlr{optimizer.muon_lr}-alr{optimizer.lr}-seed{seed}"
+  runs:
+    - {trainer.batch_tokens: 131072, seed: 1}
+    - {trainer.batch_tokens: 196608, seed: 1}
+base:
+  seed: 1
+  data:
+    text_path: /work/u4982363/datasets/mix-200b-tc114b-en86b-seed0
+    text_version: 1
+    block_rows: 2048
+    add_bos: true
+    add_eos: true
+    chunk_length: 4096
+  model: {preset: llama3.2-200m, attn_implementation: flash_attention_4}
+  optimizer: {type: muon_adamw, lr: 3.0e-3, betas: [0.9, 0.99], muon_lr: 4.0e-3}
+  schedule:
+    - {start: 0, end: 0.005, start_ratio: 0.0, end_ratio: 1.0}
+    - {start: 0.005, end: 0.9, start_ratio: 1.0, end_ratio: 1.0}
+    - {start: 0.9, end: 1.0, start_ratio: 1.0, end_ratio: 0.0, interpolation: linear}
+  trainer:
+    batch_tokens: 131072
+    torch_compile: true
+    dataloader_num_workers: 8
+    dataloader_prefetch_factor: 8
+    logging_steps: 10
+    save_steps: 2000
+    wandb_project: scaling-law-pilot
+  stop_tokens: 8B
+  save_tokens: [1B, 2B, 3B, 4B, 5B, 6B, 7B]

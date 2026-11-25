@@ -1,0 +1,34 @@
+# Llama 3.2-style 202M on the Flock 200b mix, tokenized during training.
+# Batch 262k tokens on 2 GB200 per run (131072 per GPU), AdamW beta2 0.99; 8 Muon x 3 AdamW peak LRs.
+sweep:
+  name: llama200m-bs262k-b20.99
+  output_root: /work/u4982363/sweeps
+  gpus_per_run: 2
+  name_template: "llama200m-bs262k-b20.99-mlr{optimizer.muon_lr}-alr{optimizer.lr}"
+  grid:
+    optimizer.muon_lr: [5.0e-4, 1.0e-3, 2.0e-3, 3.0e-3, 4.0e-3, 6.0e-3, 1.0e-2, 2.0e-2]
+    optimizer.lr: [1.0e-3, 3.0e-3, 6.0e-3]
+base:
+  data:
+    text_path: /work/u4982363/datasets/mix-200b-tc114b-en86b-seed0
+    text_version: 1
+    block_rows: 2048
+    add_bos: true
+    add_eos: true
+    chunk_length: 4096
+  model: {preset: llama3.2-200m, attn_implementation: flash_attention_4}
+  optimizer: {type: muon_adamw, lr: 3.0e-3, betas: [0.9, 0.99], muon_lr: 2.0e-3}
+  schedule:
+    - {start: 0, end: 0.01, start_ratio: 0.0, end_ratio: 1.0}
+    - {start: 0.01, end: 0.8, start_ratio: 1.0, end_ratio: 1.0}
+    - {start: 0.8, end: 1.0, start_ratio: 1.0, end_ratio: 0.0, interpolation: linear}
+  trainer:
+    batch_tokens: 131072
+    torch_compile: true
+    dataloader_num_workers: 8
+    dataloader_prefetch_factor: 8
+    logging_steps: 10
+    save_steps: 2500
+    wandb_project: scaling-law-pilot
+  stop_tokens: 4B
+  save_tokens: [1B, 2B, 3B]

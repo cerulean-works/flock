@@ -1,0 +1,135 @@
+ONE_PASS_TOKENS = 191,900,000,000 targets; recovery every 9,595,000,000
+
+== wsd-100m (per update 262,144; stop 732040 updates; dropped T [2000.0])
+     step           tokens  tok/param  reasons
+     3433      899,940,352       9.00  branch T=10
+     3815    1,000,079,360      10.00  T=10
+     5150    1,350,041,600      13.50  branch T=15
+     5722    1,499,987,968      15.00  T=15
+     6866    1,799,880,704      18.00  branch T=20
+     7629    1,999,896,576      20.00  T=20
+    13733    3,600,023,552      36.00  branch T=40
+    15259    4,000,055,296      40.00  T=40
+    27466    7,200,047,104      72.00  branch T=80
+    30518    8,000,110,592      80.00  T=80
+    36602    9,594,994,688      95.95  recovery 1
+    41199   10,800,070,656     108.00  branch T=120
+    45776   11,999,903,744     120.00  T=120
+    68665   18,000,117,760     180.00  branch T=200
+    73204   19,189,989,376     191.90  recovery 2
+    76294   20,000,014,336     200.00  T=200
+   109806   28,784,984,064     287.85  recovery 3
+   137329   35,999,973,376     360.00  branch T=400
+   146408   38,379,978,752     383.80  recovery 4
+   152588   40,000,028,672     400.00  T=400
+   183010   47,974,973,440     479.75  recovery 5
+   219612   57,569,968,128     575.70  recovery 6
+   256214   67,164,962,816     671.65  recovery 7
+   274658   71,999,946,752     720.00  branch T=800
+   292816   76,759,957,504     767.60  recovery 8
+   305176   80,000,057,344     800.00  T=800
+   329418   86,354,952,192     863.55  recovery 9
+   366020   95,949,946,880     959.50  recovery 10
+   402622  105,544,941,568    1055.45  recovery 11
+   411987  107,999,920,128    1080.00  branch T=1200
+   439224  115,139,936,256    1151.40  recovery 12
+   457764  120,000,086,016    1200.00  T=1200
+   475826  124,734,930,944    1247.35  recovery 13
+   512428  134,329,925,632    1343.30  recovery 14
+   549030  143,924,920,320    1439.25  recovery 15
+   549316  143,999,893,504    1440.00  branch T=1600
+   585632  153,519,915,008    1535.20  recovery 16
+   610352  160,000,114,688    1600.00  T=1600
+   622234  163,114,909,696    1631.15  recovery 17
+   658836  172,709,904,384    1727.10  recovery 18
+   695438  182,304,899,072    1823.05  recovery 19
+   732040  191,899,893,760    1919.00  stop
+
+== wsd-decay1-100m: 14 branches
+  wsd100m-s0/checkpoints/checkpoint-3433 -> 1B (recovery saves [])
+  wsd100m-s1/checkpoints/checkpoint-3433 -> 1B (recovery saves [])
+  wsd100m-s0/checkpoints/checkpoint-5150 -> 1.5B (recovery saves [])
+  wsd100m-s1/checkpoints/checkpoint-5150 -> 1.5B (recovery saves [])
+  wsd100m-s0/checkpoints/checkpoint-6866 -> 2B (recovery saves [])
+  wsd100m-s1/checkpoints/checkpoint-6866 -> 2B (recovery saves [])
+  wsd100m-s0/checkpoints/checkpoint-13733 -> 4B (recovery saves [])
+  wsd100m-s1/checkpoints/checkpoint-13733 -> 4B (recovery saves [])
+  wsd100m-s0/checkpoints/checkpoint-27466 -> 8B (recovery saves [])
+  wsd100m-s1/checkpoints/checkpoint-27466 -> 8B (recovery saves [])
+  wsd100m-s0/checkpoints/checkpoint-41199 -> 12B (recovery saves [])
+  wsd100m-s1/checkpoints/checkpoint-41199 -> 12B (recovery saves [])
+  wsd100m-s0/checkpoints/checkpoint-68665 -> 20B (recovery saves [19190000000])
+  wsd100m-s1/checkpoints/checkpoint-68665 -> 20B (recovery saves [19190000000])
+
+== wsd-decay2-100m: 8 branches
+  wsd100m-s0/checkpoints/checkpoint-137329 -> 40B (recovery saves [38380000000])
+  wsd100m-s1/checkpoints/checkpoint-137329 -> 40B (recovery saves [38380000000])
+  wsd100m-s0/checkpoints/checkpoint-274658 -> 80B (recovery saves [76760000000])
+  wsd100m-s1/checkpoints/checkpoint-274658 -> 80B (recovery saves [76760000000])
+  wsd100m-s0/checkpoints/checkpoint-411987 -> 120B (recovery saves [115140000000])
+  wsd100m-s1/checkpoints/checkpoint-411987 -> 120B (recovery saves [115140000000])
+  wsd100m-s0/checkpoints/checkpoint-549316 -> 160B (recovery saves [153520000000])
+  wsd100m-s1/checkpoints/checkpoint-549316 -> 160B (recovery saves [153520000000])
+
+== wsd-200m (per update 393,216; stop 488026 updates; dropped T [1200.0, 1600.0, 2000.0])
+     step           tokens  tok/param  reasons
+     4578    1,800,142,848       9.00  branch T=10
+     5086    1,999,896,576      10.00  T=10
+     6866    2,699,821,056      13.50  branch T=15
+     7629    2,999,844,864      15.00  T=15
+     9155    3,599,892,480      18.00  branch T=20
+    10173    4,000,186,368      20.00  T=20
+    18311    7,200,178,176      36.00  branch T=40
+    20345    7,999,979,520      40.00  T=40
+    24401    9,594,863,616      47.97  recovery 1
+    36621   14,399,963,136      72.00  branch T=80
+    40690   15,999,959,040      80.00  T=80
+    48803   19,190,120,448      95.95  recovery 2
+    54932   21,600,141,312     108.00  branch T=120
+    61035   23,999,938,560     120.00  T=120
+    73204   28,784,984,064     143.92  recovery 3
+    91553   36,000,104,448     180.00  branch T=200
+    97605   38,379,847,680     191.90  recovery 4
+   101725   39,999,897,600     200.00  T=200
+   122007   47,975,104,512     239.88  recovery 5
+   146408   57,569,968,128     287.85  recovery 6
+   170809   67,164,831,744     335.82  recovery 7
+   183105   71,999,815,680     360.00  branch T=400
+   195211   76,760,088,576     383.80  recovery 8
+   203451   80,000,188,416     400.00  T=400
+   219612   86,354,952,192     431.77  recovery 9
+   244013   95,949,815,808     479.75  recovery 10
+   268415  105,545,072,640     527.73  recovery 11
+   292816  115,139,936,256     575.70  recovery 12
+   317218  124,735,193,088     623.68  recovery 13
+   341619  134,330,056,704     671.65  recovery 14
+   366020  143,924,920,320     719.62  recovery 15
+   366211  144,000,024,576     720.00  branch T=800
+   390422  153,520,177,152     767.60  recovery 16
+   406901  159,999,983,616     800.00  T=800
+   414823  163,115,040,768     815.58  recovery 17
+   439224  172,709,904,384     863.55  recovery 18
+   463626  182,305,161,216     911.53  recovery 19
+   488026  191,899,631,616     959.50  stop
+
+== wsd-decay1-200m: 12 branches
+  wsd200m-s0/checkpoints/checkpoint-4578 -> 2B (recovery saves [])
+  wsd200m-s1/checkpoints/checkpoint-4578 -> 2B (recovery saves [])
+  wsd200m-s0/checkpoints/checkpoint-6866 -> 3B (recovery saves [])
+  wsd200m-s1/checkpoints/checkpoint-6866 -> 3B (recovery saves [])
+  wsd200m-s0/checkpoints/checkpoint-9155 -> 4B (recovery saves [])
+  wsd200m-s1/checkpoints/checkpoint-9155 -> 4B (recovery saves [])
+  wsd200m-s0/checkpoints/checkpoint-18311 -> 8B (recovery saves [])
+  wsd200m-s1/checkpoints/checkpoint-18311 -> 8B (recovery saves [])
+  wsd200m-s0/checkpoints/checkpoint-36621 -> 16B (recovery saves [])
+  wsd200m-s1/checkpoints/checkpoint-36621 -> 16B (recovery saves [])
+  wsd200m-s0/checkpoints/checkpoint-54932 -> 24B (recovery saves [])
+  wsd200m-s1/checkpoints/checkpoint-54932 -> 24B (recovery saves [])
+
+== wsd-decay2-200m: 6 branches
+  wsd200m-s0/checkpoints/checkpoint-91553 -> 40B (recovery saves [38380000000])
+  wsd200m-s1/checkpoints/checkpoint-91553 -> 40B (recovery saves [38380000000])
+  wsd200m-s0/checkpoints/checkpoint-183105 -> 80B (recovery saves [76760000000])
+  wsd200m-s1/checkpoints/checkpoint-183105 -> 80B (recovery saves [76760000000])
+  wsd200m-s0/checkpoints/checkpoint-366211 -> 160B (recovery saves [153520000000])
+  wsd200m-s1/checkpoints/checkpoint-366211 -> 160B (recovery saves [153520000000])

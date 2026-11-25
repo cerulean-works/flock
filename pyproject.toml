@@ -66,6 +66,8 @@ explicit = true
 [tool.ruff]
 target-version = "py314"
 line-length = 100
+# Sweep configs and helper scripts kept verbatim as they ran on the cluster.
+extend-exclude = ["experiments/scaling_law_pilot/sweeps"]
 
 [tool.ruff.format]
 docstring-code-format = true

@@ -1,0 +1,76 @@
+# WSD decay branches, 200m, T in [10, 120] tok/param, seeds 0 and 1: each
+# resumes its main run's 0.9 T save and cosine-decays to 1% of peak at T.
+sweep:
+  name: wsd-decay1-200m
+  output_root: /work/u4982363/sweeps
+  gpus_per_run: 8
+  master_port: 31300
+  name_template: wsd200m-s{seed}-to{stop_tokens}
+  runs:
+  - seed: 0
+    stop_tokens: 2B
+    save_tokens: &id001 []
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s0/checkpoints/checkpoint-4578
+  - seed: 1
+    stop_tokens: 2B
+    save_tokens: *id001
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s1/checkpoints/checkpoint-4578
+  - seed: 0
+    stop_tokens: 3B
+    save_tokens: &id002 []
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s0/checkpoints/checkpoint-6866
+  - seed: 1
+    stop_tokens: 3B
+    save_tokens: *id002
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s1/checkpoints/checkpoint-6866
+  - seed: 0
+    stop_tokens: 4B
+    save_tokens: &id003 []
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s0/checkpoints/checkpoint-9155
+  - seed: 1
+    stop_tokens: 4B
+    save_tokens: *id003
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s1/checkpoints/checkpoint-9155
+  - seed: 0
+    stop_tokens: 8B
+    save_tokens: &id004 []
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s0/checkpoints/checkpoint-18311
+  - seed: 1
+    stop_tokens: 8B
+    save_tokens: *id004
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s1/checkpoints/checkpoint-18311
+  - seed: 0
+    stop_tokens: 16B
+    save_tokens: &id005 []
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s0/checkpoints/checkpoint-36621
+  - seed: 1
+    stop_tokens: 16B
+    save_tokens: *id005
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s1/checkpoints/checkpoint-36621
+  - seed: 0
+    stop_tokens: 24B
+    save_tokens: &id006 []
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s0/checkpoints/checkpoint-54932
+  - seed: 1
+    stop_tokens: 24B
+    save_tokens: *id006
+    branch_from: /work/u4982363/sweeps/wsd-200m/runs/wsd200m-s1/checkpoints/checkpoint-54932
+base:
+  seed: 0
+  data: {text_path: /work/u4982363/datasets/mix-200b-tc114b-en86b-seed0, text_version: 1, block_rows: 2048,
+    add_bos: true, add_eos: true, chunk_length: 4096}
+  model: {preset: llama3.2-200m, attn_implementation: flash_attention_4}
+  optimizer:
+    type: muon_adamw
+    lr: 0.003
+    betas: [0.9, 0.99]
+    muon_lr: 0.006
+  wsd: {warmup_tokens: 200000000, decay_fraction: 0.1, final_ratio: 0.01, decay: cosine}
+  trainer: {batch_tokens: 49152, torch_compile: true, dataloader_num_workers: 8, dataloader_prefetch_factor: 8,
+    logging_steps: 10, wandb_project: scaling-law-wsd}
+  token_rounding: nearest
+  one_pass_tokens: 191900000000
+  nominal_params: 200000000
+  save_evals:
+    suites: {paloma: paloma, tw_text: tw_text_v0}
+  stop_tokens: 2B

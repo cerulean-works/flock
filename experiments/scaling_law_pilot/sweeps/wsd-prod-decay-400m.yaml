@@ -1,0 +1,56 @@
+# WSD decay branches of the 400M production run, T in 10..120 tok/param: each resumes
+# the main run's 0.9 T save and cosine-decays from peak to 1% of peak at T (same 16 GPUs).
+sweep:
+  name: wsd-prod-decay-400m
+  output_root: /work/u4982363/sweeps
+  gpus_per_run: 16
+  master_port: 32100
+  name_template: wsd400m-prod-s{seed}-to{stop_tokens}
+  runs:
+  - seed: 0
+    stop_tokens: 48B
+    save_tokens: [44000000000]
+    branch_from: /work/u4982363/sweeps/wsd-prod-400m/runs/wsd400m-prod-s0/checkpoints/checkpoint-82397
+  - seed: 0
+    stop_tokens: 32B
+    save_tokens: []
+    branch_from: /work/u4982363/sweeps/wsd-prod-400m/runs/wsd400m-prod-s0/checkpoints/checkpoint-54932
+  - seed: 0
+    stop_tokens: 16B
+    save_tokens: []
+    branch_from: /work/u4982363/sweeps/wsd-prod-400m/runs/wsd400m-prod-s0/checkpoints/checkpoint-27466
+  - seed: 0
+    stop_tokens: 8B
+    save_tokens: []
+    branch_from: /work/u4982363/sweeps/wsd-prod-400m/runs/wsd400m-prod-s0/checkpoints/checkpoint-13733
+  - seed: 0
+    stop_tokens: 6B
+    save_tokens: []
+    branch_from: /work/u4982363/sweeps/wsd-prod-400m/runs/wsd400m-prod-s0/checkpoints/checkpoint-10300
+  - seed: 0
+    stop_tokens: 4B
+    save_tokens: []
+    branch_from: /work/u4982363/sweeps/wsd-prod-400m/runs/wsd400m-prod-s0/checkpoints/checkpoint-6866
+base:
+  seed: 0
+  data: {text_path: /work/u4982363/datasets/mix-200b-tc114b-en86b-seed0, text_version: 1, block_rows: 2048,
+    add_bos: true, add_eos: true, chunk_length: 4096}
+  model:
+    preset: llama3.2-200m
+    attn_implementation: flash_attention_4
+    overrides: {hidden_size: 1024, intermediate_size: 4096, num_hidden_layers: 18, num_attention_heads: 16,
+      num_key_value_heads: 4}
+  optimizer:
+    type: muon_adamw
+    lr: 0.003
+    betas: [0.9, 0.99]
+    muon_lr: 0.006
+  wsd: {warmup_tokens: 400000000, decay_fraction: 0.1, final_ratio: 0.01, decay: cosine}
+  trainer: {batch_tokens: 32768, torch_compile: true, dataloader_num_workers: 8, dataloader_prefetch_factor: 8,
+    logging_steps: 10, wandb_project: scaling-law-wsd}
+  token_rounding: nearest
+  one_pass_tokens: 191900000000
+  nominal_params: 400000000
+  save_evals:
+    suites: {paloma: paloma, tw_text: tw_text_v0}
+  stop_tokens: 48B

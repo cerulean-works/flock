@@ -1,0 +1,148 @@
+{
+  "sweep": {
+    "name": "llama200m-8b-branch-65k-131k",
+    "output_root": "/work/u4982363/sweeps",
+    "gpus_per_run": 1,
+    "name_template": "llama200m-8b-bs{trainer.batch_tokens}-b2{optimizer.betas}-mlr{optimizer.muon_lr}-alr{optimizer.lr}",
+    "runs": [
+      {
+        "trainer.batch_tokens": 65536,
+        "trainer.save_steps": 5000,
+        "optimizer.betas": [
+          0.9,
+          0.99
+        ],
+        "optimizer.muon_lr": 0.002,
+        "optimizer.lr": 0.006,
+        "branch_from": "/work/u4982363/sweeps/llama200m-bs65k-b20.99/runs/llama200m-bs65k-b20.99-mlr0.002-alr0.006/checkpoints/checkpoint-45777"
+      },
+      {
+        "trainer.batch_tokens": 65536,
+        "trainer.save_steps": 5000,
+        "optimizer.betas": [
+          0.9,
+          0.99
+        ],
+        "optimizer.muon_lr": 0.001,
+        "optimizer.lr": 0.003,
+        "branch_from": "/work/u4982363/sweeps/llama200m-bs65k-b20.99/runs/llama200m-bs65k-b20.99-mlr0.001-alr0.003/checkpoints/checkpoint-45777"
+      },
+      {
+        "trainer.batch_tokens": 65536,
+        "trainer.save_steps": 5000,
+        "optimizer.betas": [
+          0.9,
+          0.99
+        ],
+        "optimizer.muon_lr": 0.002,
+        "optimizer.lr": 0.003,
+        "branch_from": "/work/u4982363/sweeps/llama200m-bs65k-b20.99/runs/llama200m-bs65k-b20.99-mlr0.002-alr0.003/checkpoints/checkpoint-45777"
+      },
+      {
+        "trainer.batch_tokens": 131072,
+        "trainer.save_steps": 2500,
+        "optimizer.betas": [
+          0.9,
+          0.99
+        ],
+        "optimizer.muon_lr": 0.003,
+        "optimizer.lr": 0.003,
+        "branch_from": "/work/u4982363/sweeps/llama200m-bs131k-b20.99/runs/llama200m-bs131k-b20.99-mlr0.003-alr0.003/checkpoints/checkpoint-22889"
+      },
+      {
+        "trainer.batch_tokens": 131072,
+        "trainer.save_steps": 2500,
+        "optimizer.betas": [
+          0.9,
+          0.99
+        ],
+        "optimizer.muon_lr": 0.002,
+        "optimizer.lr": 0.006,
+        "branch_from": "/work/u4982363/sweeps/llama200m-bs131k-b20.99/runs/llama200m-bs131k-b20.99-mlr0.002-alr0.006/checkpoints/checkpoint-22889"
+      },
+      {
+        "trainer.batch_tokens": 131072,
+        "trainer.save_steps": 2500,
+        "optimizer.betas": [
+          0.9,
+          0.99
+        ],
+        "optimizer.muon_lr": 0.003,
+        "optimizer.lr": 0.006,
+        "branch_from": "/work/u4982363/sweeps/llama200m-bs131k-b20.99/runs/llama200m-bs131k-b20.99-mlr0.003-alr0.006/checkpoints/checkpoint-22889"
+      }
+    ]
+  },
+  "base": {
+    "data": {
+      "add_bos": true,
+      "add_eos": true,
+      "block_rows": 2048,
+      "cache_dir": null,
+      "chunk_length": 4096,
+      "input_column": "text",
+      "source": null,
+      "text_path": "/work/u4982363/datasets/mix-200b-tc114b-en86b-seed0",
+      "text_version": 1
+    },
+    "model": {
+      "architecture": null,
+      "attn_implementation": "flash_attention_4",
+      "overrides": {},
+      "preset": "llama3.2-200m"
+    },
+    "optimizer": {
+      "betas": [
+        0.9,
+        0.99
+      ],
+      "eps": 1e-08,
+      "lr": 0.006,
+      "muon_adjust_lr_fn": null,
+      "muon_lr": 0.002,
+      "muon_momentum": 0.95,
+      "muon_nesterov": true,
+      "muon_ns_steps": 5,
+      "muon_weight_decay": 0.1,
+      "type": "muon_adamw",
+      "weight_decay": 0.0
+    },
+    "trainer": {
+      "batch_tokens": 65536,
+      "dataloader_num_workers": 8,
+      "dataloader_prefetch_factor": 8,
+      "logging_steps": 10,
+      "save_steps": 5000,
+      "torch_compile": true,
+      "wandb_project": "scaling-law-pilot"
+    },
+    "schedule": [
+      {
+        "start": 0,
+        "end": 0.01,
+        "start_ratio": 0.0,
+        "end_ratio": 1.0
+      },
+      {
+        "start": 0.01,
+        "end": 0.9,
+        "start_ratio": 1.0,
+        "end_ratio": 1.0
+      },
+      {
+        "start": 0.9,
+        "end": 1.0,
+        "start_ratio": 1.0,
+        "end_ratio": 0.0,
+        "interpolation": "linear"
+      }
+    ],
+    "stop_tokens": "8B",
+    "save_tokens": [
+      "4B",
+      "5B",
+      "6B",
+      "7B"
+    ]
+  }
+}

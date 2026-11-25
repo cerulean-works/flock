@@ -1,0 +1,33 @@
+# Smoke test: 2-GPU DDP runs at 262k (131,072/GPU) and 393k (196,608/GPU) global batch.
+sweep:
+  name: llama200m-smoke2gpu
+  output_root: /work/u4982363/sweeps
+  gpus_per_run: 2
+  name_template: "bs{trainer.batch_tokens}-b2{optimizer.betas}-mlr{optimizer.muon_lr}-alr{optimizer.lr}-{trainer.wandb_mode}"
+  runs:
+    - {trainer.batch_tokens: 131072, optimizer.betas: [0.9, 0.95], optimizer.muon_lr: 3.0e-3, optimizer.lr: 6.0e-3, trainer.wandb_mode: offline}
+    - {trainer.batch_tokens: 196608, optimizer.betas: [0.9, 0.95], optimizer.muon_lr: 3.0e-3, optimizer.lr: 6.0e-3, trainer.wandb_mode: offline}
+base:
+  data:
+    text_path: /work/u4982363/datasets/mix-200b-tc114b-en86b-seed0
+    text_version: 1
+    block_rows: 2048
+    add_bos: true
+    add_eos: true
+    chunk_length: 4096
+  model: {preset: llama3.2-200m, attn_implementation: flash_attention_4}
+  optimizer: {type: muon_adamw, lr: 3.0e-3, betas: [0.9, 0.95], muon_lr: 2.0e-3}
+  schedule:
+    - {start: 0, end: 0.01, start_ratio: 0.0, end_ratio: 1.0}
+    - {start: 0.01, end: 0.8, start_ratio: 1.0, end_ratio: 1.0}
+    - {start: 0.8, end: 1.0, start_ratio: 1.0, end_ratio: 0.0, interpolation: linear}
+  trainer:
+    batch_tokens: 65536
+    torch_compile: true
+    dataloader_num_workers: 8
+    dataloader_prefetch_factor: 8
+    logging_steps: 10
+    save_steps: 200
+    wandb_project: scaling-law-pilot-smoketest
+  stop_tokens: 60M
+  save_tokens: [30M]

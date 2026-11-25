@@ -1,0 +1,44 @@
+# 400M (d1024 x 18 layers, 405M params) at batch 262k (4 GB200 x 65536 tokens), 8B tokens.
+# beta2 0.99 over a Muon LR ladder, plus beta2 0.95 at 3 of those LRs (when does 0.99 > 0.95 hold?).
+# Low-LR extension of llama400m-bs262k: its lowest Muon LR led mid-run, so the optimum may sit below the ladder.
+sweep:
+  name: llama400m-bs262k-lowlr
+  output_root: /work/u4982363/sweeps
+  gpus_per_run: 4
+  master_port: 31400
+  name_template: llama400m-bs262k-lowlr-b2{optimizer.betas}-mlr{optimizer.muon_lr}-alr{optimizer.lr}-s{seed}
+  runs:
+  - optimizer.muon_lr: 0.0007
+    optimizer.lr: 0.003
+    optimizer.betas: [0.9, 0.99]
+    seed: 0
+  - optimizer.muon_lr: 0.001
+    optimizer.lr: 0.003
+    optimizer.betas: [0.9, 0.99]
+    seed: 0
+  - optimizer.muon_lr: 0.001
+    optimizer.lr: 0.003
+    optimizer.betas: [0.9, 0.95]
+    seed: 0
+base:
+  seed: 0
+  data: {text_path: /work/u4982363/datasets/mix-200b-tc114b-en86b-seed0, text_version: 1,
+    block_rows: 2048, add_bos: true, add_eos: true, chunk_length: 4096}
+  model:
+    preset: llama3.2-200m
+    attn_implementation: flash_attention_4
+    overrides: {hidden_size: 1024, intermediate_size: 4096, num_hidden_layers: 18,
+      num_attention_heads: 16, num_key_value_heads: 4}
+  optimizer:
+    type: muon_adamw
+    lr: 0.003
+    betas: [0.9, 0.99]
+    muon_lr: 0.003
+  schedule:
+  - {start: 0, end: 0.01, start_ratio: 0.0, end_ratio: 1.0}
+  - {start: 0.01, end: 0.8, start_ratio: 1.0, end_ratio: 1.0}
+  - {start: 0.8, end: 1.0, start_ratio: 1.0, end_ratio: 0.0, interpolation: linear}
+  trainer: {batch_tokens: 65536, torch_compile: true, dataloader_num_workers: 8, dataloader_prefetch_factor: 8,
+    logging_steps: 10, save_steps: 3500, wandb_project: scaling-law-pilot}
+  stop_tokens: 8B
+  save_tokens: [2B, 4B, 6B]

@@ -1,0 +1,85 @@
+# Probe branch: from the probe's 100M checkpoint, decay to 125M.
+{
+  "sweep": {
+    "name": "probe-llama750m-4x65k-branch",
+    "output_root": "/work/u4982363/sweeps",
+    "gpus_per_run": 4,
+    "master_port": 32950,
+    "name_template": "probe-llama750m-4x65k-mlr{optimizer.muon_lr}-branch",
+    "runs": [
+      {
+        "optimizer.muon_lr": 0.006,
+        "optimizer.lr": 0.003,
+        "optimizer.betas": [
+          0.9,
+          0.99
+        ],
+        "seed": 0,
+        "branch_from": "/work/u4982363/sweeps/probe-llama750m-4x65k/runs/probe-llama750m-4x65k-mlr0.006/checkpoints/checkpoint-382"
+      }
+    ]
+  },
+  "base": {
+    "seed": 0,
+    "data": {
+      "text_path": "/work/u4982363/datasets/mix-200b-tc114b-en86b-seed0",
+      "text_version": 1,
+      "block_rows": 2048,
+      "add_bos": true,
+      "add_eos": true,
+      "chunk_length": 4096
+    },
+    "model": {
+      "preset": "llama3.2-200m",
+      "attn_implementation": "flash_attention_4",
+      "overrides": {
+        "hidden_size": 1280,
+        "intermediate_size": 5120,
+        "num_hidden_layers": 24,
+        "num_attention_heads": 20,
+        "num_key_value_heads": 4
+      }
+    },
+    "optimizer": {
+      "type": "muon_adamw",
+      "lr": 0.003,
+      "betas": [
+        0.9,
+        0.99
+      ],
+      "muon_lr": 0.006
+    },
+    "schedule": [
+      {
+        "start": 0,
+        "end": 0.01,
+        "start_ratio": 0.0,
+        "end_ratio": 1.0
+      },
+      {
+        "start": 0.01,
+        "end": 0.8,
+        "start_ratio": 1.0,
+        "end_ratio": 1.0
+      },
+      {
+        "start": 0.8,
+        "end": 1.0,
+        "start_ratio": 1.0,
+        "end_ratio": 0.0,
+        "interpolation": "linear"
+      }
+    ],
+    "trainer": {
+      "batch_tokens": 65536,
+      "torch_compile": true,
+      "dataloader_num_workers": 8,
+      "dataloader_prefetch_factor": 8,
+      "logging_steps": 10,
+      "save_steps": 10000000,
+      "wandb_project": "scaling-law-pilot-probe"
+    },
+    "stop_tokens": "125M",
+    "save_tokens": []
+  }
+}

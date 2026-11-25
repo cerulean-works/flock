@@ -1,0 +1,37 @@
+== wsd-prod-400m (per update 524,288; stop 152588 updates = 80,000,057,344 tokens; 27 saves)
+     step           tokens  tok/param  reasons
+     6866    3,599,761,408       9.00  branch T=10
+     7629    3,999,793,152      10.00  T=10, recovery 1
+    10300    5,400,166,400      13.50  branch T=15
+    11444    5,999,951,872      15.00  T=15
+    13733    7,200,047,104      18.00  branch T=20
+    15259    8,000,110,592      20.00  T=20, recovery 2
+    22888   11,999,903,744      30.00  recovery 3
+    27466   14,400,094,208      36.00  branch T=40
+    30518   16,000,221,184      40.00  T=40, recovery 4
+    38147   20,000,014,336      50.00  recovery 5
+    45776   23,999,807,488      60.00  recovery 6
+    53406   28,000,124,928      70.00  recovery 7
+    54932   28,800,188,416      72.00  branch T=80
+    61035   31,999,918,080      80.00  T=80, recovery 8
+    68665   36,000,235,520      90.00  recovery 9
+    76294   40,000,028,672     100.00  recovery 10
+    82397   43,199,758,336     108.00  branch T=120
+    83923   43,999,821,824     110.00  recovery 11
+    91553   48,000,139,264     120.00  T=120, recovery 12
+    99182   51,999,932,416     130.00  recovery 13
+   106812   56,000,249,856     140.00  recovery 14
+   114441   60,000,043,008     150.00  recovery 15
+   122070   63,999,836,160     160.00  recovery 16
+   129700   68,000,153,600     170.00  recovery 17
+   137329   71,999,946,752     180.00  branch T=200, recovery 18
+   144958   75,999,739,904     190.00  recovery 19
+   152588   80,000,057,344     200.00  T=200, stop
+
+== wsd-prod-decay-400m: 6 branches
+  T=120: wsd400m-prod-s0/checkpoint-82397 (43,199,758,336 tok) -> stop 48,000,000,000 tok = update 91553 (48,000,139,264 tok), 9156 updates; recovery saves [44000000000]
+  T= 80: wsd400m-prod-s0/checkpoint-54932 (28,800,188,416 tok) -> stop 32,000,000,000 tok = update 61035 (31,999,918,080 tok), 6103 updates; recovery saves []
+  T= 40: wsd400m-prod-s0/checkpoint-27466 (14,400,094,208 tok) -> stop 16,000,000,000 tok = update 30518 (16,000,221,184 tok), 3052 updates; recovery saves []
+  T= 20: wsd400m-prod-s0/checkpoint-13733 (7,200,047,104 tok) -> stop 8,000,000,000 tok = update 15259 (8,000,110,592 tok), 1526 updates; recovery saves []
+  T= 15: wsd400m-prod-s0/checkpoint-10300 (5,400,166,400 tok) -> stop 6,000,000,000 tok = update 11444 (5,999,951,872 tok), 1144 updates; recovery saves []
+  T= 10: wsd400m-prod-s0/checkpoint-6866 (3,599,761,408 tok) -> stop 4,000,000,000 tok = update 7629 (3,999,793,152 tok), 763 updates; recovery saves []
