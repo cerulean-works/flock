@@ -13,12 +13,14 @@
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
+	import TrophyIcon from '@lucide/svelte/icons/trophy';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import EvalsTable from '#lib/components/EvalsTable.svelte';
 	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
@@ -168,6 +170,10 @@
 		return i === -1 ? null : i;
 	});
 	const view = $derived(viewOverride ?? urlView);
+	// The Evals preset of the table: its eval runs by suites, ranked. Offered once a run has a
+	// suite score (`flock eval log` writes `suites/<suite>`).
+	const hasEvals = $derived(ws.meta.columns.some((c) => c.key.startsWith('summary.suites/')));
+	const evals = $derived(hasEvals && page.url.searchParams.get('preset') === 'evals');
 	const fullscreen = $derived(panelOverride !== undefined ? panelOverride : urlPanel);
 
 	const hrefWith = (changes: Record<string, string | null>) =>
@@ -371,7 +377,18 @@
 				<RunFilters />
 
 				{#if view === 'table'}
-					<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />
+					{#if hasEvals}
+						<Button
+							variant={evals ? 'secondary' : 'outline'}
+							aria-pressed={evals}
+							href={hrefWith({ preset: evals ? null : 'evals' })}
+							data-sveltekit-replacestate
+							{@attach hint('Eval runs by suites, ranked')}
+						>
+							<TrophyIcon /> Evals
+						</Button>
+					{/if}
+					{#if !evals}<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />{/if}
 				{:else}
 					<PlotSettings />
 					<Button variant="outline" onclick={() => ws.newPanel()}><PlusIcon /> Add panel</Button>
@@ -393,7 +410,11 @@
 	</PageHeader>
 
 	<main class="relative min-h-0 flex-1">
-		<RunsTable bind:this={table} mode={view} {nameW} />
+		{#if evals && view === 'table'}
+			<EvalsTable />
+		{:else}
+			<RunsTable bind:this={table} mode={view} {nameW} />
+		{/if}
 		<ChartsPane
 			shown={view === 'charts'}
 			active={view === 'charts' && fullscreen == null}
