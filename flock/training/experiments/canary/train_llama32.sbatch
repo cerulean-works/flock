@@ -14,7 +14,8 @@
 #SBATCH --nodes=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=4
-#SBATCH --exclusive
+#SBATCH --cpus-per-task=136
+#SBATCH --mem=0
 #SBATCH --time=3-00:00:00
 #SBATCH --requeue
 #SBATCH --open-mode=append
@@ -45,8 +46,8 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     echo "$(date '+%F %T %Z') launch attempt $attempt of $MAX_ATTEMPTS"
     status=0
     # --propagate=NONE: do not copy the submitting shell's soft 2048-process limit.
-    # --cpu-bind=none: let each node's ranks and loader workers use all of its CPUs.
-    srun --propagate=NONE --cpu-bind=none --kill-on-bad-exit=1 \
+    # --cpus-per-task: srun does not inherit it from sbatch. --cpu-bind=none: let each node's ranks and loader workers use all of its CPUs.
+    srun --propagate=NONE --cpu-bind=none --cpus-per-task="$SLURM_CPUS_PER_TASK" --kill-on-bad-exit=1 \
         --nodes="$SLURM_JOB_NUM_NODES" --ntasks="$SLURM_JOB_NUM_NODES" --ntasks-per-node=1 \
         bash -c "
 source '$ENV_SH'
