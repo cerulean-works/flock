@@ -38,10 +38,12 @@
 	<div class={['px-5 pt-[12vh] pb-16', className]}>
 		<div class="mx-auto w-full max-w-[36rem]">
 			<div class="text-center">
-				<h2 class="text-[28px] leading-[1.15] tracking-[-0.02em] text-balance">{title}</h2>
+				<h2 class="text-[20px] leading-[1.2] font-medium tracking-[-0.01em] text-balance">
+					{title}
+				</h2>
 				{#if lead}
 					<p
-						class="mx-auto mt-3 max-w-[30rem] text-[17px] leading-[1.45] text-balance text-muted-foreground"
+						class="mx-auto mt-2 max-w-[30rem] text-[14px] leading-[1.45] text-balance text-muted-foreground"
 					>
 						{@render lead()}
 					</p>

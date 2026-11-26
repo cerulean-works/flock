@@ -477,7 +477,8 @@
 				>
 					<XIcon />
 				</Button>
-			{:else}
+			{:else if ws.page.total > 0 || narrowed}
+				<!-- With no runs yet, only the view tabs: nothing here could act. -->
 				<RunSearch />
 				<RunFilters noMine={!mine} compact={compactTools} />
 
