@@ -878,8 +878,11 @@ export function columnKind(key: string, values: readonly unknown[]): ColumnKind 
 	return 'json';
 }
 
-/** A summary column as menus name it: `val/loss`. */
-export const metricLabel = (key: string) => key.replace(/^summary\./, '');
+/**
+ * A summary column as menus name it: `val/loss`; an eval suite by its own name, `zh_tw:bpb`, as
+ * the eval pages write it (`flock eval log` logs it as `suites/zh_tw:bpb`).
+ */
+export const metricLabel = (key: string) => key.replace(/^summary\.(suites\/)?/, '');
 
 /** `val/loss ↓`: the metric and its direction, lowest (↓) or highest (↑) is best. */
 export const bestLabel = (key: string | null, order: BestOrder | null) =>
