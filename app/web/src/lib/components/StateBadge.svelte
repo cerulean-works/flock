@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { RunState } from '#lib/types.ts';
 
-	let { state }: { state: string } = $props();
+	/** `dotOnPhone`: just the dot on narrow screens, the word kept for screen readers. */
+	let { state, dotOnPhone = false }: { state: string; dotOnPhone?: boolean } = $props();
 
 	const LABEL: Record<RunState, string> = {
 		running: 'Running',
@@ -37,5 +38,5 @@
 	data-state={state}
 >
 	<span class={['size-1.5 flex-none rounded-full', DOT[state as RunState] ?? 'bg-faint']}></span>
-	{label}
+	<span class={dotOnPhone ? 'max-sm:sr-only' : undefined}>{label}</span>
 </span>

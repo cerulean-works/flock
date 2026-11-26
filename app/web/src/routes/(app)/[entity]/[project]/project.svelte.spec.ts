@@ -99,7 +99,9 @@ function open(visibility: ProjectInfo['visibility'], access: 'member' | 'public'
 	render(Page, { data });
 }
 
-beforeEach(() => {
+// A desktop window: on a phone the view bar folds its controls behind one button.
+beforeEach(async () => {
+	await screen.viewport(1280, 800);
 	vi.stubGlobal('EventSource', FakeSource);
 	refreshAll.mockClear();
 });

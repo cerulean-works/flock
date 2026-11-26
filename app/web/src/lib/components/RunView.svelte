@@ -21,6 +21,7 @@
 	import Rows2Icon from '@lucide/svelte/icons/rows-2';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import type { Snippet } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -389,6 +390,7 @@
 	const focusPinned = $derived(ws.focus != null && ws.pinned === ws.focus && ws.hover == null);
 
 	/** The runs shown are a search's or a filter's, not all of the page's. */
+	let more = $state(false);
 	let filterControl = $state<{ edit: () => void; pick: () => void } | null>(null);
 	const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
 
@@ -519,51 +521,74 @@
 					<XIcon />
 				</Button>
 			{:else if ws.page.total > 0 || narrowed}
-				<!-- With no runs yet, only the view tabs: nothing here could act. -->
-				<RunSearch />
-				<RunFilters bind:this={filterControl} noMine={!mine} compact={compactTools} />
+				<!-- On a phone the controls fold behind one button and open as a row under the bar. -->
+				<Button
+					variant={more ? 'quiet-on' : 'quiet'}
+					size="icon-bar"
+					class="sm:hidden"
+					aria-label="More controls"
+					aria-expanded={more}
+					onclick={() => (more = !more)}
+				>
+					<EllipsisIcon />
+				</Button>
+				<div
+					class={[
+						'flex items-center gap-1',
+						more
+							? 'max-sm:absolute max-sm:inset-x-0 max-sm:top-full max-sm:z-20 max-sm:flex-wrap max-sm:border-b max-sm:border-divider max-sm:bg-background max-sm:px-3 max-sm:py-1.5'
+							: 'max-sm:hidden'
+					]}
+				>
+					<!-- With no runs yet, only the view tabs: nothing here could act. -->
+					<RunSearch />
+					<RunFilters bind:this={filterControl} noMine={!mine} compact={compactTools} />
 
-				{#if tableShown}
-					{#if hasEvals && view === 'table'}
-						<Button
-							variant={evals ? 'quiet-on' : 'quiet'}
-							size="bar"
-							aria-pressed={evals}
-							href={hrefWith(
-								evals
-									? { preset: evalsFirst ? 'off' : null, view: 'table' }
-									: { preset: evalsFirst ? null : 'evals' }
-							)}
-							data-sveltekit-replacestate
-							{@attach hint('Eval runs by suites, ranked')}
-						>
-							<ClipboardCheckIcon /> Evals
-						</Button>
+					{#if tableShown}
+						{#if hasEvals && view === 'table'}
+							<Button
+								variant={evals ? 'quiet-on' : 'quiet'}
+								size="bar"
+								aria-pressed={evals}
+								href={hrefWith(
+									evals
+										? { preset: evalsFirst ? 'off' : null, view: 'table' }
+										: { preset: evalsFirst ? null : 'evals' }
+								)}
+								data-sveltekit-replacestate
+								{@attach hint('Eval runs by suites, ranked')}
+							>
+								<ClipboardCheckIcon /> Evals
+							</Button>
+						{/if}
+						{#if evalsShown}
+							<ColumnsMenu
+								keys={evalsView.keys}
+								onjump={(key) => evalsTable?.scrollToColumn(key)}
+							/>
+						{:else}
+							<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} compact={compactTools} />
+						{/if}
 					{/if}
-					{#if evalsShown}
-						<ColumnsMenu keys={evalsView.keys} onjump={(key) => evalsTable?.scrollToColumn(key)} />
-					{:else}
-						<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} compact={compactTools} />
+					{#if chartsShown}
+						<PlotSettings compact={compactTools} />
+						{#if view === 'charts'}
+							<Button variant="quiet" size="bar" onclick={() => ws.newPanel()}
+								><PlusIcon /> Add panel</Button
+							>
+						{:else}
+							<Button
+								variant="quiet"
+								size="icon-bar"
+								{@attach hint('Add panel')}
+								aria-label="Add panel"
+								onclick={() => ws.newPanel()}
+							>
+								<PlusIcon />
+							</Button>
+						{/if}
 					{/if}
-				{/if}
-				{#if chartsShown}
-					<PlotSettings compact={compactTools} />
-					{#if view === 'charts'}
-						<Button variant="quiet" size="bar" onclick={() => ws.newPanel()}
-							><PlusIcon /> Add panel</Button
-						>
-					{:else}
-						<Button
-							variant="quiet"
-							size="icon-bar"
-							{@attach hint('Add panel')}
-							aria-label="Add panel"
-							onclick={() => ws.newPanel()}
-						>
-							<PlusIcon />
-						</Button>
-					{/if}
-				{/if}
+				</div>
 			{/if}
 			<!-- Outside the selection's actions too: the second run to compare may be one of these. -->
 			{#if evalsShown && evalsView.others}

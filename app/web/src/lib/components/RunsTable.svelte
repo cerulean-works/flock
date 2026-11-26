@@ -231,6 +231,9 @@
 	const visibleCols = $derived(range(colStart, colEnd));
 	const visibleRows = $derived(range(rowStart, rowEnd));
 
+	/** Columns run on past the table's right edge: a fade there says so. */
+	const cutRight = $derived(wide && mode === 'table' && scrollX + viewW < nameW + totalW - 1);
+
 	function onscroll() {
 		if (!scroller) return;
 		scrollX = scroller.scrollLeft;
@@ -568,7 +571,7 @@
 	{onscroll}
 	onpointermove={() => (cursor = null)}
 	{@attach measure}
-	style:--name-w="{nameW}px"
+	style:--name-w="min({nameW}px, 55vw)"
 	style:--row-h="{ROW_H}px"
 >
 	<div class="sticky top-0 z-3 bg-background" style:width="{nameW + totalW}px">
@@ -778,7 +781,7 @@
 						style:width="{widths[c]}px"
 					>
 						{#if col.kind === 'state'}
-							<StateBadge state={ws.stateOf(r)} />
+							<StateBadge state={ws.stateOf(r)} dotOnPhone />
 						{:else if col.kind === 'user'}
 							{@const id = userAt(c, r)}
 							{@const person = id == null ? undefined : ws.people.get(id)}
@@ -804,3 +807,11 @@
 		{/each}
 	</div>
 </div>
+
+{#if cutRight}
+	<!-- Over the table's right edge, under its scrollbar: more columns that way. -->
+	<div
+		class="pointer-events-none absolute top-0 right-0 bottom-0 z-4 w-10 bg-linear-to-l from-background to-transparent"
+		aria-hidden="true"
+	></div>
+{/if}
