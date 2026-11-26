@@ -290,18 +290,23 @@
 		const offsetY = e.clientY - box.top;
 		const sections = list;
 		const from = ws.sections.findIndex((s) => s.key === key);
+		/** Where the pointer was at the last move: the same position never moves it again. */
+		let movedAt = { x: NaN, y: NaN };
 
 		/**
 		 * Follow the pointer, and move the section past every other whose middle the pointer is
 		 * below: straight to its slot, however far the pointer went. Sections differ in height,
 		 * so slots are halves, not the boxes themselves. Sections sharing a row (packed) are
-		 * passed by the pointer's x within their row: below a row, past all of it.
+		 * passed by the pointer's x within their row: below a row, past all of it. After a move
+		 * the layout is read again only to place the section under the pointer, not to move it
+		 * again: a move can change which sections share a row, and so their slots.
 		 */
-		function follow() {
+		function follow(reorder = true) {
 			if (!sectionDrag) return;
 			const { top, left } = sections.getBoundingClientRect();
 			sectionDrag.x = pointer.x - offsetX - (left + el.offsetLeft);
 			sectionDrag.y = pointer.y - offsetY - (top + el.offsetTop);
+			if (!reorder || (pointer.x === movedAt.x && pointer.y === movedAt.y)) return;
 			let to = 0;
 			for (const other of sections.children as HTMLCollectionOf<HTMLElement>) {
 				if (other === el) continue;
@@ -315,8 +320,9 @@
 			}
 			if (ws.sections.findIndex((s) => s.key === key) === to) return;
 			rearrange();
+			movedAt = { x: pointer.x, y: pointer.y };
 			ws.moveSection(key, to);
-			void tick().then(follow);
+			void tick().then(() => follow(false));
 		}
 
 		const pointer = track(e, {
