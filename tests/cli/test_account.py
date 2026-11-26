@@ -12,6 +12,7 @@ from tests.app.utils import machines
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from contextlib import AbstractContextManager
 
     import pytest
     from click.testing import Result
@@ -62,14 +63,19 @@ def test_whoami_with_flock_token(
 
 
 def test_whoami_signed_out_or_revoked(
-    server: FlockServer, alice: User, signed_in: str, flock_cli: Callable[..., Result]
+    server: FlockServer,
+    alice: User,
+    signed_in: str,
+    flock_cli: Callable[..., Result],
+    notification: Callable[..., AbstractContextManager[None]],
 ) -> None:
     other = flock_cli("whoami", "--host", "http://other.test")
     assert other.exit_code == 1
     assert other.stderr == "Error: Not logged in to http://other.test. Run flock login.\n"
 
     (session,) = machines(alice)
-    alice.api.delete(f"/api/v1/me/cli-sessions/{session['id']}")
+    with notification(server.store.bus, server.loop, "flock_auth", "sessions"):
+        alice.api.delete(f"/api/v1/me/cli-sessions/{session['id']}")
     revoked = flock_cli("whoami")
     assert revoked.exit_code == 1
     assert "refused the credential from flock login" in revoked.stderr
