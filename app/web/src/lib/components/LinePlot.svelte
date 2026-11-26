@@ -55,7 +55,7 @@
 	const ws = getWorkspace();
 	// Canvas colors come from the theme tokens (read once the plot is in the document, and again
 	// when the page turns light or dark).
-	const LIGHT = { ink: '#172a50', paper: '#ffffff', wash: '#cce7fb' };
+	const LIGHT = { ink: '#13233f', paper: '#ffffff', wash: '#cce7fb' };
 	let palette = $state(LIGHT);
 
 	const view = $derived(preview ?? ws.panels[panel]);

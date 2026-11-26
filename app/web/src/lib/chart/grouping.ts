@@ -65,7 +65,7 @@ export const NO_GROUP_HUE = { light: '#7b88a0', dark: '#8a919c' } as const;
 /** The page behind the lines, and the far end from it, that shades mix toward. */
 const ENDS = {
 	light: { page: '#ffffff', far: '#000000' },
-	dark: { page: '#0f1012', far: '#ffffff' }
+	dark: { page: '#141518', far: '#ffffff' }
 } as const;
 
 /** How far a shade mixes toward the page (faintest) and away from it (strongest). */

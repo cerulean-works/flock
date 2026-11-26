@@ -16,14 +16,15 @@ Every value lives once, in `src/routes/layout.css`, mapped onto shadcn's semanti
 
 | Name           | Light     | Dark      | Token                              | Role                                                                       |
 | -------------- | --------- | --------- | ---------------------------------- | -------------------------------------------------------------------------- |
-| Canvas         | `#ffffff` | `#0f1012` | `background`, `popover`, `sidebar` | Page, sidebar, menus and dialogs. Pure white; never tinted                 |
-| Panel          | `#f6f7f8` | `#17181b` | `card`                             | Chart panels, the log panel, inline notes. Ink at 4% over white            |
-| Panel hover    | `#eff0f3` | `#222428` | `muted`, `secondary`, `accent`     | Hover and current-item fills, quiet controls, meter tracks. Ink at 7%      |
-| Ink            | `#172a50` | `#e8eaed` | `foreground`                       | Titles, body text, essential labels                                        |
-| Slate          | `#4b5d79` | `#a0a6b0` | `muted-foreground`                 | Captions, dates, supporting text; still comfortably legible                |
-| Faint          | `#7b88a0` | `#6e747e` | `faint`                            | Tertiary text: counts, empty cells, placeholders                           |
-| Quiet rule     | `#cdd3db` | `#33363c` | `border`, `input`                  | Control outlines and necessary structural rules                            |
-| Divider        | `#e6e9ee` | `#24262b` | `divider`                          | Row and section dividers, lighter than a rule                              |
+| Base           | `#f7f7f8` | `#0e0f11` | `sidebar`                          | The sidebar: the plane behind the content                                  |
+| Canvas         | `#ffffff` | `#141518` | `background`, `popover`            | The content plane, menus and dialogs. Pure white in light; never tinted    |
+| Panel          | `#f6f7f8` | `#1b1c20` | `card`                             | Chart panels, the log panel, inline notes. Ink at 4% over white            |
+| Panel hover    | `#eeeff1` | `#25272b` | `muted`, `secondary`, `accent`     | Hover and current-item fills, quiet controls, meter tracks. Ink at 7%      |
+| Ink            | `#13233f` | `#eceef1` | `foreground`                       | Titles, body text, essential labels                                        |
+| Slate          | `#4b5d79` | `#a3a8b0` | `muted-foreground`                 | Captions, dates, supporting text; still comfortably legible                |
+| Faint          | `#7d8696` | `#6e747e` | `faint`                            | Tertiary text: counts, empty cells, placeholders                           |
+| Quiet rule     | `#d3d6db` | `#33363c` | `border`, `input`                  | Control outlines and necessary structural rules                            |
+| Divider        | `#e8e9ec` | `#26282c` | `divider`                          | Row and section dividers, lighter than a rule                              |
 | Reading blue   | `#145a9a` | `#7ab4f5` | `primary`, `link`                  | Links, the one filled action per form, switches, checks, budget meter      |
 | Focus blue     | `#1768af` | `#7ab4f5` | `ring`                             | Visible focus                                                              |
 | Selection wash | `#cce7fb` | `#1e3a5f` | `selection`                        | Selected text, the selected log line                                       |
@@ -35,7 +36,7 @@ Every value lives once, in `src/routes/layout.css`, mapped onto shadcn's semanti
 
 Text on a filled blue or deep surface is plain white (near-black on dark mode's lighter reading blue). Chart series keep their own categorical palette (`workspace.svelte.ts`), with a lifted variant for dark pages; the brand blue is not forced into every series. Terminal output uses the `ansi-*` tokens.
 
-Dark is a neutral near-black in the manner of Linear, not a navy: graphite surfaces with no blue cast, each layer a step lighter (canvas, panel, hover, then menus and dialogs at `#1b1c20`), and the reading blue lightened so links and focus stay the only saturated thing on the page.
+Dark is a neutral near-black in the manner of Linear, not a navy: graphite surfaces with no blue cast, each layer a step lighter (sidebar, content, panel, hover, then menus and dialogs at `#202125`), and the reading blue lightened so links and focus stay the only saturated thing on the page.
 
 ## Tokens — Typography
 
@@ -79,7 +80,7 @@ Spacing follows Tailwind's 4px scale: tight within a control, generous between g
 
 ## Surfaces & Elevation
 
-The page is one white plane. Grouping comes from the panel tint, dividers and space, not from stacked cards. A panel is the website's card: a flat `#f6f7f8` rectangle with no outline. Nothing reading-related floats.
+Two planes, as in Linear's reset: the sidebar is the base (a faint grey, or the darkest graphite) and the content is lifted one step above it (white, or a step lighter), divided by a rule. Within the content, the page is one white plane. Grouping comes from the panel tint, dividers and space, not from stacked cards. A panel is the website's card: a flat `#f6f7f8` rectangle with no outline. Nothing reading-related floats.
 
 Shadows exist only where something genuinely sits above the page and must be told apart from it: menus, popovers, the floating pager, the plot tooltip, a sheet, a chart panel while it is being dragged, and the sign-in card over the sky. They are small and neutral. No paper shadows, frosted panels, bevels, gradients or textures anywhere in the interface.
 
@@ -141,14 +142,15 @@ One filled reading-blue button for a form's primary action; everything else is o
 identity: Cerulean (Flock dashboard)
 source: cerulean.works (BaseLayout CSS), with a pure white canvas instead of paper
 colors:
+  base: '#f7f7f8' # the sidebar
   canvas: '#ffffff'
   panel: '#f6f7f8' # ink 4% over white
-  panel-hover: '#eff0f3' # ink 7% over white
-  ink: '#172a50'
+  panel-hover: '#eeeff1' # ink 7% over white
+  ink: '#13233f'
   slate: '#4b5d79'
-  faint: '#7b88a0'
-  rule: '#cdd3db'
-  divider: '#e6e9ee'
+  faint: '#7d8696'
+  rule: '#d3d6db'
+  divider: '#e8e9ec'
   link: '#145a9a'
   focus: '#1768af'
   selection: '#cce7fb'
