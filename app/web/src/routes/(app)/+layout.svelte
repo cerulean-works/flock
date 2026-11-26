@@ -12,6 +12,7 @@
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import LogoMark from '#lib/components/LogoMark.svelte';
 	import KeyboardLayer from '#lib/components/keys/KeyboardLayer.svelte';
 	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
 	import OrgMark from '#lib/components/shell/OrgMark.svelte';
@@ -109,29 +110,6 @@
 					<PanelLeftOpenIcon />
 				</Button>
 			</div>
-			<!-- The workspace first, as in the open sidebar. -->
-			<div class="pb-2">
-				{#if signedIn}
-					<WorkspaceSwitcher
-						org={outside ? null : data.shell.org}
-						orgs={data.shell.orgs}
-						{stay}
-						compact
-					/>
-				{:else}
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						class="text-muted-foreground"
-						href={loginHref(page.url)}
-						data-sveltekit-reload
-						aria-label="Sign in"
-						{@attach hint('Sign in')}
-					>
-						<LogInIcon />
-					</Button>
-				{/if}
-			</div>
 			{#if signedIn}
 				<Button
 					variant="ghost"
@@ -225,6 +203,28 @@
 					<HardDriveIcon />
 				</Button>
 			{/if}
+			<div class="mt-auto py-2">
+				{#if signedIn}
+					<WorkspaceSwitcher
+						org={outside ? null : data.shell.org}
+						orgs={data.shell.orgs}
+						{stay}
+						compact
+					/>
+				{:else}
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						class="text-muted-foreground"
+						href={loginHref(page.url)}
+						data-sveltekit-reload
+						aria-label="Sign in"
+						{@attach hint('Sign in')}
+					>
+						<LogInIcon />
+					</Button>
+				{/if}
+			</div>
 		</aside>
 	{/if}
 	<div class="flex min-w-0 flex-1 flex-col">
@@ -241,19 +241,13 @@
 			>
 				<MenuIcon />
 			</Button>
-			{#if data.shell.org}
-				<a
-					href={entityHref(data.shell.org)}
-					class="flex min-w-0 items-center gap-2 rounded-md text-[13px] font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-				>
-					<OrgMark
-						name={data.shell.orgName ?? data.shell.org}
-						src={data.shell.orgAvatar}
-						class="size-5 rounded-[5px] text-[11px]"
-					/>
-					<span class="truncate">{data.shell.orgName ?? data.shell.org}</span>
-				</a>
-			{/if}
+			<a
+				href={resolve('/(app)')}
+				class="flex items-center gap-2 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+			>
+				<LogoMark class="size-4" />
+				<span class="text-[14px] font-medium tracking-[-0.01em]">Flock</span>
+			</a>
 		</header>
 		{@render children()}
 	</div>

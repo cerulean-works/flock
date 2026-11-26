@@ -3,6 +3,7 @@
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
+	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close';
@@ -19,6 +20,7 @@
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import { page } from '$app/state';
+	import LogoMark from '#lib/components/LogoMark.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
 	import GroupMenu from '#lib/components/groups/GroupMenu.svelte';
@@ -340,22 +342,16 @@
 {/snippet}
 
 <div class="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-	<!-- 40px, level with the content's header row. The organization names the workspace here. -->
+	<!-- 40px, level with the content's header row. The mark sits in the rows' icon slot and the
+	     name on their labels' edge. -->
 	<div class="flex h-10 flex-none items-center gap-1 px-2">
-		<div class="min-w-0 flex-1">
-			{#if signedIn}
-				<!-- From outside the org, the switcher names only the viewer's own. -->
-				<WorkspaceSwitcher org={outside ? null : org} {orgs} stay={!inOrg} />
-			{:else if outside && org}
-				<a
-					class="flex h-7 items-center gap-2 rounded-md px-1 outline-none hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50"
-					href={entityHref(org)}
-				>
-					<OrgMark name={orgName ?? org} src={orgAvatar} class="size-5 rounded-[5px] text-[11px]" />
-					<span class="min-w-0 truncate text-[13px] font-medium">{orgName ?? org}</span>
-				</a>
-			{/if}
-		</div>
+		<a
+			href={resolve('/(app)')}
+			class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+		>
+			<LogoMark class="mx-1 size-4" />
+			<span class="text-[14px] font-medium tracking-[-0.01em]">Flock</span>
+		</a>
 		{#if oncollapse}
 			<Button
 				variant="ghost"
@@ -372,7 +368,7 @@
 
 	<nav class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pt-1 pb-3" aria-label="Main">
 		<div class="grid gap-px">
-			{#if outside && org && signedIn}
+			{#if outside && org}
 				<!-- The org being visited, in place of the switcher's: it isn't one of the viewer's. -->
 				<a
 					class={ITEM}
@@ -496,7 +492,8 @@
 								class:font-medium={here}
 								{@attach hint(p.description)}
 							>
-								<FolderIcon />
+								<!-- The project in view shows open, its pages nested under it. -->
+								{#if here}<FolderOpenIcon />{:else}<FolderIcon />{/if}
 								<span class="min-w-0 flex-1 truncate">{p.name}</span>
 								{#if p.active_run_count}
 									<span
@@ -555,7 +552,7 @@
 						href={projectHref(org, project)}
 						aria-current={route === projectRoute ? 'page' : undefined}
 					>
-						<FolderIcon />
+						<FolderOpenIcon />
 						<span class="min-w-0 flex-1 truncate">{project}</span>
 					</a>
 					{@render children(org, project)}
@@ -564,13 +561,16 @@
 		{/if}
 	</nav>
 
-	{#if !signedIn}
-		<div class="flex-none p-2">
+	<div class="flex-none border-t border-divider p-2">
+		{#if signedIn}
+			<!-- The org and who is signed in. From outside the org, it names only the viewer's own. -->
+			<WorkspaceSwitcher org={outside ? null : org} {orgs} stay={!inOrg} />
+		{:else}
 			<Button variant="outline" class="w-full" href={loginHref(page.url)} data-sveltekit-reload>
 				<LogInIcon /> Sign in
 			</Button>
-		</div>
-	{/if}
+		{/if}
+	</div>
 </div>
 
 {#if org && !outside}<ProjectDialog bind:open={creating} entity={org} />{/if}

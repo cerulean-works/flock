@@ -89,7 +89,7 @@ describe('the sidebar from outside the org', () => {
 		// The switcher names their own orgs, not the one visited.
 		const menu = screen.getByRole('button', { name: 'No organization, signed in as Ada' });
 		await expect.element(menu).toBeVisible();
-		await expect.element(menu.getByText('Ada')).toBeVisible();
+		await expect.element(menu.getByText('ada@other.test')).toBeVisible();
 		await menu.click();
 		await expect.element(screen.getByRole('menuitem', { name: 'Other' })).toBeVisible();
 		await expect.element(screen.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
