@@ -5,9 +5,14 @@
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import type { Selection } from '#lib/selection.svelte.ts';
+	import type { Crumb } from '#lib/storage.ts';
 
 	interface Props extends HTMLAttributes<HTMLElement> {
 		title: string;
+		/** The steps between the org (and project) and the title, such as Datasets › pretrain. */
+		trail?: Crumb[];
+		/** Lead the trail with the org (off on Datasets, Models and Storage). */
+		org?: boolean;
 		/** How many runs are live here, for the header's mark. */
 		live?: number;
 		/** Beside the title: a ⋯ menu, a badge. */
@@ -31,6 +36,8 @@
 
 	let {
 		title,
+		trail = [],
+		org = true,
 		live = 0,
 		badges,
 		subtitle,
@@ -79,7 +86,16 @@
 {/snippet}
 
 <Page width="full">
-	<PageHeader {title} {live} {badges} {subtitle} actions={inline ? both : actions} {toolbar} />
+	<PageHeader
+		{title}
+		{trail}
+		{org}
+		{live}
+		{badges}
+		{subtitle}
+		actions={inline ? both : actions}
+		{toolbar}
+	/>
 	<main {...main} class={['relative min-h-0 flex-1 overflow-y-auto pb-10', main.class]}>
 		{@render children()}
 	</main>

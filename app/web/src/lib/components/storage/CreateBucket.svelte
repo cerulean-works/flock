@@ -34,7 +34,7 @@
 >
 	<Dialog.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} variant="outline"><PlusIcon /> Create bucket</Button>
+			<Button {...props} variant="quiet" size="bar"><PlusIcon /> Create bucket</Button>
 		{/snippet}
 	</Dialog.Trigger>
 	<Dialog.Content class="sm:max-w-md">

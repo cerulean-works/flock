@@ -5,6 +5,7 @@
 	import Page from '#lib/components/Page.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
 	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
+	import { headerTrail } from '#lib/storage.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
 	import HFImportRows from '#lib/components/imports/HFImportRows.svelte';
@@ -61,7 +62,10 @@
 		return writer ? new Selection() : undefined;
 	});
 	// Org scope: Datasets › org › folders; a project's: project › Datasets › folders.
-	const subtrail = $derived(trail.filter((_, i) => i !== (project === null ? 0 : 1)));
+	// Datasets › folders: without the org's crumb, or the project's, which the header leads with.
+	const subtrail = $derived(trail.filter((_, i) => i !== (project === null ? 1 : 0)));
+	// The header leads with the org (and project) by itself: Datasets › folders, the last the title.
+	const header = $derived(headerTrail(subtrail, 'Datasets'));
 	const projects = $derived(shell.projects.map((p) => p.name));
 </script>
 
@@ -71,12 +75,10 @@
 	>
 </svelte:head>
 
-{#snippet trailCrumbs()}<Breadcrumbs crumbs={subtrail} />{/snippet}
-
 {#snippet actions()}
-	<!-- One filled action (the import), with the quieter ones beside it. -->
+	<!-- Quiet actions, as on every header. -->
 	{#if writer}
-		<Button variant="ghost" onclick={() => blend()}>
+		<Button variant="quiet" size="bar" onclick={() => blend()}>
 			<BlendIcon /> <span class="max-sm:sr-only">New blend</span>
 		</Button>
 	{/if}
@@ -107,14 +109,7 @@
 {/snippet}
 
 {#if data.kind === 'folder'}
-	<ListPage
-		title="Datasets"
-		heading="All datasets"
-		location={subtrail.length ? trailCrumbs : undefined}
-		{actions}
-		{selection}
-		{selected}
-	>
+	<ListPage title={header.title} trail={header.trail} org={false} {actions} {selection} {selected}>
 		<!-- Imports and blends writing into this folder, over its listing. -->
 		<div class="px-5 has-[li]:pt-4">
 			<HFImportRows {scope} list={imports} kind="dataset" folder={data.path} />

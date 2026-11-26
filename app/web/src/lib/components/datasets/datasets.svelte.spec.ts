@@ -87,7 +87,7 @@ describe('FolderView', () => {
 			[
 				...document.querySelectorAll('[role="rowgroup"] [role="row"] [role="cell"]:first-child')
 			].map((td) => td.textContent!.trim());
-		expect(names()).toEqual(['mmlu', 'deep/', 'notes.md']);
+		expect(names()).toEqual(['mmlu', 'deep', 'notes.md']);
 		// (Version and size columns show on wider screens.)
 		await expect.element(screen.getByText('v12')).toBeInTheDocument();
 		await expect.element(screen.getByText('2.0 KB')).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe('FolderView', () => {
 			'/storage/acme/flock-datasets/eval/notes.md'
 		);
 		await screen.getByRole('button', { name: 'Load more' }).click();
-		await vi.waitFor(() => expect(names()).toEqual(['mmlu', 'old', 'deep/', 'notes.md']));
+		await vi.waitFor(() => expect(names()).toEqual(['mmlu', 'old', 'deep', 'notes.md']));
 		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval&cursor=next&details=true');
 		await expect.element(screen.getByText('Unknown')).toBeInTheDocument();
 		await expect.element(screen.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();

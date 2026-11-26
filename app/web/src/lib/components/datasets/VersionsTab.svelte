@@ -117,8 +117,6 @@
 									/>
 								{/each}
 							</ul>
-						{:else if !v.kept_for}
-							<span class="text-faint">None</span>
 						{/if}
 						{#if v.kept_for}
 							<p

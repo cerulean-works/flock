@@ -123,8 +123,6 @@
 									/>
 								{/each}
 							</ul>
-						{:else}
-							<span class="text-faint">None</span>
 						{/if}
 					</td>
 					<td class="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums">
@@ -147,8 +145,6 @@
 							{/if}
 						{:else if v.step !== null}
 							<span class="tabular-nums">Step {v.step.toLocaleString('en-US')}</span>
-						{:else}
-							<span class="text-faint">None</span>
 						{/if}
 					</td>
 					<td

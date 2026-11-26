@@ -19,7 +19,7 @@
 <Dialog.Root>
 	<Dialog.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} variant="ghost">
+			<Button {...props} variant="quiet" size="bar">
 				<PlugIcon /> <span class="max-sm:sr-only">Connect</span>
 			</Button>
 		{/snippet}

@@ -167,7 +167,7 @@ describe('ModelList', () => {
 		render(ModelList, { scope, path: 'eval', folder, now: NOW });
 		const model = screen.getByRole('link', { name: 'olmo2-1b' });
 		expect(model.element().getAttribute('href')).toBe('/acme/pretrain/models/eval/olmo2-1b');
-		const sub = screen.getByRole('link', { name: 'sweeps/' });
+		const sub = screen.getByRole('link', { name: 'sweeps' });
 		expect(sub.element().getAttribute('href')).toBe('/acme/pretrain/models/eval/sweeps');
 		await expect.element(screen.getByText('4 models')).toBeVisible();
 	});
@@ -213,7 +213,7 @@ describe('a folder row\u2019s menu', () => {
 		invalidateAll.mockClear();
 		const calls = serve({ [`${API}/-/folders`]: () => ({ path: 'bench', project: null }) });
 		render(ModelList, { scope, path: '', folder: listing, now: NOW, selection: new Selection() });
-		await screen.getByRole('button', { name: 'Actions for eval/' }).click();
+		await screen.getByRole('button', { name: 'Actions for eval' }).click();
 		await screen.getByRole('menuitem', { name: 'Rename…' }).click();
 		await screen.getByLabelText('New name').fill('bench');
 		await screen.getByRole('button', { name: 'Rename', exact: true }).click();
@@ -226,13 +226,13 @@ describe('a folder row\u2019s menu', () => {
 		invalidateAll.mockClear();
 		const calls = serve({ [`${API}/-/folders`]: () => new Response(null, { status: 204 }) });
 		render(ModelList, { scope, path: '', folder: listing, now: NOW, selection: new Selection() });
-		await screen.getByRole('button', { name: 'Actions for eval/' }).click();
+		await screen.getByRole('button', { name: 'Actions for eval' }).click();
 		await screen.getByRole('menuitem', { name: 'Delete…' }).click();
 		await expect
 			.element(screen.getByRole('button', { name: 'Delete', exact: true }))
 			.toBeDisabled();
 		await screen.getByRole('button', { name: 'Cancel' }).click();
-		await screen.getByRole('button', { name: 'Actions for empty/' }).click();
+		await screen.getByRole('button', { name: 'Actions for empty' }).click();
 		await screen.getByRole('menuitem', { name: 'Delete…' }).click();
 		await screen.getByRole('button', { name: 'Delete', exact: true }).click();
 		await expect.poll(() => invalidateAll).toHaveBeenCalled();

@@ -172,7 +172,7 @@
 		label="Models"
 		selection={selection ?? null}
 		selectable={(r) => r.kind === 'model'}
-		name={(r) => (r.kind === 'model' ? nameOf(r.m.name) : `${r.f.name}/`)}
+		name={(r) => (r.kind === 'model' ? nameOf(r.m.name) : r.f.name)}
 		menu={selection ? rowMenu : undefined}
 		dense
 		footer={cursor || failed ? footer : undefined}
@@ -186,25 +186,23 @@
 					class={['block truncate underline-offset-3 hover:text-link hover:underline', ROW_LINK]}
 					href={modelsHref(scope, r.kind === 'model' ? r.m.name : r.f.path)}
 				>
-					{r.kind === 'model' ? nameOf(r.m.name) : `${r.f.name}/`}
+					{r.kind === 'model' ? nameOf(r.m.name) : r.f.name}
 				</a>
 			{:else if r.kind === 'folder'}
 				<!-- A folder has only its count of models, under Primary. -->
 				{#if column === 'primary'}
 					<span class="text-muted-foreground tabular-nums">{count(r.f.models, 'model')}</span>
-				{:else}
-					<span class="text-faint">—</span>
 				{/if}
 			{:else if column === 'latest'}
 				<span class="text-muted-foreground">
-					{r.m.latest === null ? '—' : `Version ${r.m.latest}`}
+					{r.m.latest === null ? '' : `Version ${r.m.latest}`}
 				</span>
 			{:else if column === 'primary'}
 				<span class="text-muted-foreground">
-					{r.m.primary === null ? '—' : `Version ${r.m.primary}`}
+					{r.m.primary === null ? '' : `Version ${r.m.primary}`}
 				</span>
 			{:else if column === 'size'}
-				<span class="text-muted-foreground">{r.m.size == null ? '—' : bytes(r.m.size)}</span>
+				<span class="text-muted-foreground">{r.m.size == null ? '' : bytes(r.m.size)}</span>
 			{:else}
 				<span class="text-muted-foreground" {@attach hint(dateTime(r.m.updated_at))}>
 					{relativeTime(r.m.updated_at, now)}
@@ -224,7 +222,7 @@
 		/>
 	{:else if r.kind === 'folder'}
 		<RowMenu
-			name="{r.f.name}/"
+			name={r.f.name}
 			onrename={() => onFolder(r.f, 'rename')}
 			onmove={() => onFolder(r.f, 'move')}
 			ondelete={() => onFolder(r.f, 'delete')}

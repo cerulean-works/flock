@@ -37,6 +37,11 @@
 		trail?: Crumb[];
 		/** `workspace` only: runs live here; the header's one moving mark says how many. */
 		live?: number;
+		/**
+		 * `workspace` only: lead the trail with the org. Off on Datasets, Models and Storage, whose
+		 * trail starts at the tab (the sidebar's foot already names the org).
+		 */
+		org?: boolean;
 	}
 
 	let {
@@ -51,11 +56,13 @@
 		crumbs,
 		description,
 		trail = [],
-		live = 0
+		live = 0,
+		org: withOrg = true
 	}: Props = $props();
 
 	// Where the page is, Linear-style: org / project / … / title, each step a link.
-	const org = $derived(page.params.entity ?? null);
+	// `entity` on the workspace pages, `org` on Datasets, Models and Storage.
+	const org = $derived(page.params.entity ?? page.params.org ?? null);
 	const orgName = $derived(page.data.shell?.orgName ?? org);
 	const project = $derived(page.params.project ?? null);
 	const steps = $derived<Crumb[]>([
@@ -123,32 +130,37 @@
 				!toolbar && 'border-b border-divider'
 			]}
 		>
-			<nav aria-label="Breadcrumbs" class="flex min-w-0 items-center gap-1.5">
-				{#if org && orgName && title !== orgName}
+			<!-- On one baseline: the crumbs are 13px and the title 14px, so centring their boxes
+			     would set the crumbs a pixel high. Icons and chevrons centre themselves. -->
+			<nav aria-label="Breadcrumbs" class="flex min-w-0 items-baseline gap-1.5">
+				{#if withOrg && org && orgName && title !== orgName}
 					<a
 						href={entityHref(org)}
-						class={['flex flex-none items-center gap-2 max-sm:hidden', CRUMB]}
+						class={['flex flex-none items-baseline gap-2 max-sm:hidden', CRUMB]}
 					>
 						<OrgMark
 							name={orgName}
 							src={page.data.shell?.orgAvatar}
-							class="size-4 rounded-[4px] text-[9px]"
+							class="size-4 self-center rounded-[4px] text-[9px]"
 						/>
 						{orgName}
 					</a>
 					<ChevronRightIcon
-						class="size-3.5 flex-none text-faint max-sm:hidden"
+						class="size-3.5 flex-none self-center text-faint max-sm:hidden"
 						aria-hidden="true"
 					/>
 				{/if}
-				{#each steps as step, i (step.href)}
+				{#each steps as step, i (`${i}:${step.href}`)}
 					<!-- On a phone only the step before the title stays: where this page is. -->
 					{@const far = i < steps.length - 1 && 'max-sm:hidden'}
 					<a href={step.href} class={[far, CRUMB]} {@attach hint(step.label)}>{step.label}</a>
-					<ChevronRightIcon class={['size-3.5 flex-none text-faint', far]} aria-hidden="true" />
+					<ChevronRightIcon
+						class={['size-3.5 flex-none self-center text-faint', far]}
+						aria-hidden="true"
+					/>
 				{/each}
 				{#if leading}
-					<div class="flex flex-none items-center">{@render leading()}</div>
+					<div class="flex flex-none items-center self-center">{@render leading()}</div>
 				{/if}
 				<h1
 					class="min-w-0 truncate text-[14px] leading-5 font-medium text-foreground"

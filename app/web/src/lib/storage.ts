@@ -44,6 +44,14 @@ export interface Crumb {
 	href: ResolvedPathname;
 }
 
+/**
+ * A header's trail and title from breadcrumbs that leave out the org (the header leads with it
+ * by itself): the last crumb is the page's title, the ones before it its trail.
+ */
+export function headerTrail(crumbs: Crumb[], fallback: string): { title: string; trail: Crumb[] } {
+	return { title: crumbs.at(-1)?.label ?? fallback, trail: crumbs.slice(0, -1) };
+}
+
 /** Storage › org › bucket › folders… (the last one is the page itself). */
 export function crumbs(org: string, orgLabel: string, bucket?: string, key = ''): Crumb[] {
 	const out: Crumb[] = [

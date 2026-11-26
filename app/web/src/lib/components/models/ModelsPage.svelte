@@ -4,6 +4,7 @@
 	import Page from '#lib/components/Page.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
 	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
+	import { headerTrail } from '#lib/storage.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
 	import HFImportRows from '#lib/components/imports/HFImportRows.svelte';
@@ -34,7 +35,8 @@
 		scopeCrumbs(scope, shell.orgName ?? scope.org, 'Models', data.path, modelsHref)
 	);
 	// The subtitle's trail, under the title "Models": an org's leaves out its own "Models".
-	const subtrail = $derived(scope.project === null ? trail.slice(1) : trail);
+	// Models › folders: without the org's crumb, or the project's, which the header leads with.
+	const subtrail = $derived(trail.filter((_, i) => i !== (scope.project === null ? 1 : 0)));
 	// Members and admins import from Hugging Face (D124); the imports show in their folder.
 	const writer = $derived(shell.access === 'admin' || shell.access === 'member');
 	const imports = $derived(new HFImportList(scope.org));
@@ -45,6 +47,8 @@
 		return writer ? new Selection() : undefined;
 	});
 	const projects = $derived(shell.projects.map((p) => p.name));
+	// The header leads with the org (and project) by itself: Models › folders, the last the title.
+	const header = $derived(headerTrail(subtrail, 'Models'));
 </script>
 
 <svelte:head>
@@ -55,9 +59,7 @@
 	>
 </svelte:head>
 
-{#snippet trailLine()}<Breadcrumbs crumbs={subtrail} />{/snippet}
-
-<!-- One filled action (the import), with the quieter one beside it. -->
+<!-- Quiet actions, as on every header. -->
 {#snippet actions()}
 	<NewFolderButton {scope} path={data.path} />
 	<HFImportButton {scope} kind="model" list={imports} />
@@ -82,9 +84,9 @@
 
 {#if data.kind === 'folder'}
 	<ListPage
-		title="Models"
-		heading="All models"
-		location={subtrail.length ? trailLine : undefined}
+		title={header.title}
+		trail={header.trail}
+		org={false}
 		actions={writer ? actions : undefined}
 		{selection}
 		{selected}

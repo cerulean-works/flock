@@ -86,7 +86,7 @@
 		...folders.map((f) => ({
 			kind: 'folder' as const,
 			key: f.path,
-			name: `${f.name}/`,
+			name: f.name,
 			href: datasetsHref(scope, f.path)
 		})),
 		...files.map((f) => ({
@@ -233,16 +233,16 @@
 				</span>
 			{:else if column === 'version'}
 				<span class="text-muted-foreground">
-					{row.version === undefined ? '—' : row.version === null ? 'Unknown' : `v${row.version}`}
+					{row.version === undefined ? '' : row.version === null ? 'Unknown' : `v${row.version}`}
 				</span>
 			{:else if column === 'size'}
-				<span class="text-muted-foreground">{row.size == null ? '—' : bytes(row.size)}</span>
+				<span class="text-muted-foreground">{row.size == null ? '' : bytes(row.size)}</span>
 			{:else}
 				<span
 					class="text-muted-foreground"
 					{@attach hint(row.updated ? dateTime(row.updated) : undefined)}
 				>
-					{row.updated ? relativeTime(row.updated, now) : '—'}
+					{row.updated ? relativeTime(row.updated, now) : ''}
 				</span>
 			{/if}
 		{/snippet}

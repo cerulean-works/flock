@@ -51,7 +51,7 @@
 	<CreateBucket nameLimit={data.nameLimit} />
 {/snippet}
 
-<ListPage title="Storage" heading="Buckets" {actions}>
+<ListPage title="Storage" org={false} {actions}>
 	<DataTable
 		columns={COLUMNS}
 		rows={data.buckets}

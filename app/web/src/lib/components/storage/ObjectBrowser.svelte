@@ -7,7 +7,7 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import UploadIcon from '@lucide/svelte/icons/upload';
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import DataTable, { type Column, ROW_LINK } from '#lib/components/DataTable.svelte';
@@ -15,7 +15,7 @@
 	import { Selection } from '#lib/selection.svelte.ts';
 	import { PAGE, bucketCall, entries, nameOf, objectHref, s3Uri, typeLabel } from '#lib/storage.ts';
 	import { DATASETS_BUCKET, PROJECTS, datasetsHref } from '#lib/datasets.ts';
-	import type { Crumb } from '#lib/storage.ts';
+	import { headerTrail, type Crumb } from '#lib/storage.ts';
 	import type { Listing, Presigned, ProjectInfo } from '#lib/types.ts';
 	import {
 		UploadQueue,
@@ -27,7 +27,6 @@
 	import { MODELS_BUCKET, modelsHref } from '#lib/models.ts';
 	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyButton from '../CopyButton.svelte';
-	import Breadcrumbs from '../Breadcrumbs.svelte';
 	import CreateFolderDialog from './CreateFolderDialog.svelte';
 	import DeleteObjectsDialog from './DeleteObjectsDialog.svelte';
 	import UploadList from './UploadList.svelte';
@@ -161,17 +160,19 @@
 	}
 
 	let creatingFolder = $state(false);
+	let filtering = $state(false);
+	let filterInput = $state<HTMLInputElement>();
+	// The header leads with the org: Storage › bucket › folders, the last the title.
+	const header = $derived(headerTrail(crumbs, title));
 	let deleting = $state(false);
 </script>
 
-{#snippet path()}<Breadcrumbs {crumbs} />{/snippet}
-
 {#snippet actions()}
 	{#if !readOnly}
-		<Button variant="outline" onclick={() => (creatingFolder = true)}>
+		<Button variant="quiet" size="bar" onclick={() => (creatingFolder = true)}>
 			<FolderPlusIcon /> <span class="max-sm:sr-only">Create folder</span>
 		</Button>
-		<Button onclick={() => picker?.click()}>
+		<Button variant="quiet" size="bar" onclick={() => picker?.click()}>
 			<UploadIcon /> <span class="max-sm:sr-only">Upload</span>
 		</Button>
 	{/if}
@@ -202,31 +203,51 @@
 	{/if}
 {/snippet}
 
-<!-- The folder's S3 URI to copy, and the filter. -->
+<!-- The folder's S3 URI to copy, and the filter: an icon until it's wanted, as on Runs. -->
 {#snippet controls()}
-	<span class="flex min-w-0 items-center gap-1 text-[13px] text-muted-foreground max-md:hidden">
-		<span class="truncate font-mono text-[12.5px]">{s3Uri(bucket, prefix)}</span>
-		<CopyButton text={s3Uri(bucket, prefix)} label="Copy S3 URI" />
-	</span>
-	<div class="relative w-56">
-		<SearchIcon
-			class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-		/>
-		<input
-			class="h-8 w-full rounded-lg border border-input bg-background pr-2.5 pl-8 text-[13px] outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-			placeholder="Filter by name prefix"
+	<!-- The trail already says where this is; the URI is for copying, named in the hint. -->
+	<CopyButton text={s3Uri(bucket, prefix)} label="Copy {s3Uri(bucket, prefix)}" />
+	{#if !filtering && !filter}
+		<Button
+			variant="quiet"
+			size="icon-bar"
 			aria-label="Filter by name prefix"
-			spellcheck="false"
-			bind:value={filter}
-			oninput={filtered}
-		/>
-	</div>
+			{@attach hint('Filter by name prefix')}
+			onclick={async () => {
+				filtering = true;
+				await tick();
+				filterInput?.focus();
+			}}
+		>
+			<SearchIcon />
+		</Button>
+	{:else}
+		<label
+			class="flex h-7 w-52 min-w-0 items-center gap-1.5 rounded-md bg-muted px-2 focus-within:ring-3 focus-within:ring-ring/50"
+		>
+			<SearchIcon class="size-4 flex-none text-muted-foreground" />
+			<input
+				bind:this={filterInput}
+				class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
+				placeholder="Filter by name prefix"
+				aria-label="Filter by name prefix"
+				spellcheck="false"
+				bind:value={filter}
+				oninput={filtered}
+				onblur={() => (filtering = false)}
+				onkeydown={(e) => {
+					if (e.key === 'Escape') e.currentTarget.blur();
+				}}
+			/>
+		</label>
+	{/if}
 {/snippet}
 
 <!-- Files dropped anywhere on the listing upload into this folder; folders keep their paths. -->
 <ListPage
-	{title}
-	location={crumbs.length ? path : undefined}
+	title={header.title}
+	trail={header.trail}
+	org={false}
 	{actions}
 	{controls}
 	{selection}
@@ -285,7 +306,7 @@
 							href={objectHref(org, bucket, row.key)}
 							{@attach hint(row.key)}
 						>
-							{nameOf(row.key)}{row.kind === 'folder' ? '/' : ''}
+							{nameOf(row.key)}
 						</a>
 					</span>
 					{#if link}
@@ -296,11 +317,11 @@
 					{/if}
 				</div>
 			{:else if column === 'size'}
-				<span class="text-muted-foreground">{row.kind === 'folder' ? '–' : bytes(row.size)}</span>
+				<span class="text-muted-foreground">{row.kind === 'folder' ? '' : bytes(row.size)}</span>
 			{:else if column === 'type'}
 				<span class="block truncate text-muted-foreground">{typeLabel(row.key)}</span>
 			{:else if row.kind === 'folder'}
-				<span class="text-faint">–</span>
+				<!-- A folder has no size or date of its own. -->
 			{:else}
 				<span class="text-muted-foreground" {@attach hint(dateTime(row.last_modified))}>
 					{relativeTime(row.last_modified, now)}
@@ -322,9 +343,10 @@
 	{#if failed}
 		<p class="text-[13px] text-destructive" role="alert">{failed}</p>
 	{/if}
-	{#if rows.length}
+	<!-- Counted only while there's more to load. -->
+	{#if rows.length && cursor}
 		<span class="text-[13px] text-muted-foreground tabular-nums">
-			{count(rows.length, 'entry', 'entries')}{cursor ? ' so far' : ''}
+			{count(rows.length, 'entry', 'entries')} so far
 		</span>
 	{/if}
 	{#if cursor}
