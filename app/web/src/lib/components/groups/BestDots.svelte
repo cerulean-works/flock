@@ -24,9 +24,19 @@
 		dots: BestDot[];
 		hovered: string | null;
 		onhover: (run: string | null) => void;
+		/** A best value as the page writes it (an eval suite's as the eval pages do). */
+		format?: (value: number) => string;
+		/** A spread across repeats in the same units. */
+		formatSpread?: (std: number) => string;
 	}
 
-	let { dots, hovered, onhover }: Props = $props();
+	let {
+		dots,
+		hovered,
+		onhover,
+		format = formatNumber,
+		formatSpread = formatNumber
+	}: Props = $props();
 
 	/**
 	 * The y range: the bests with their spread, and the runs' values short of
@@ -95,8 +105,8 @@
 						]}
 						onpointerenter={() => onhover(d.run)}
 						onpointerleave={() => onhover(null)}
-						title="{d.label}: best {formatNumber(d.value)}{d.std != null
-							? ` ± ${formatNumber(d.std)}`
+						title="{d.label}: best {format(d.value)}{d.std != null
+							? ` ± ${formatSpread(d.std)}`
 							: ''} · {count(d.values.length, 'run')}"
 					>
 						{#each d.values as v, i (i)}
@@ -142,7 +152,7 @@
 						<span class="size-2 flex-none rounded-[2px]" style:background={d.color}></span>
 						<span class="truncate">{short[i]}</span>
 					</span>
-					<span class="max-w-full truncate">{formatNumber(d.value)}</span>
+					<span class="max-w-full truncate">{format(d.value)}</span>
 				{:else}
 					<span class="mt-1 h-2 w-full max-w-3 rounded-[2px]" style:background={d.color}></span>
 				{/if}

@@ -80,9 +80,11 @@
 		 * table shows that order until `primary` changes.
 		 */
 		onprimaryorder?: (keys: string[]) => void;
+		/** In Visualize, above the charts rather than beside them. */
+		stacked?: boolean;
 	}
 
-	let { mode, nameW, primary = null, onprimaryorder }: Props = $props();
+	let { mode, nameW, primary = null, onprimaryorder, stacked = false }: Props = $props();
 
 	const ws = getWorkspace();
 	const runs = $derived(ws.page.runs);
@@ -118,6 +120,19 @@
 			: ws.shownColumns
 	);
 	const columns = $derived(shown.map((i) => ws.meta.columns[i]));
+	/**
+	 * Each column's header: its label, or, among the suggested columns (which have no group band),
+	 * a metric's whole key when a setting there has the same label (`lr` and `summary.lr`).
+	 */
+	const labels = $derived(
+		columns.map((col, c) =>
+			c < primaryCount &&
+			col.group === 'summary' &&
+			columns.slice(0, primaryCount).some((o) => o !== col && o.label === col.label)
+				? col.key
+				: col.label
+		)
+	);
 	const groups = $derived.by((): (Omit<ColumnGroupSpan, 'key'> & { key: string })[] => {
 		if (!primaryCount) return columnGroups(columns);
 		const rest = columnGroups(columns.slice(primaryCount)).map((g) => ({
@@ -143,7 +158,7 @@
 		const page = ws.page;
 		return columns.map((col, c) => {
 			if (!f || !FITTED.has(col.kind)) return col.width;
-			let w = textWidth(col.label, f.head) ?? col.width;
+			let w = textWidth(labels[c], f.head) ?? col.width;
 			w += ARROW;
 			const rows = Math.min(page.runs.length, SAMPLE);
 			for (let r = 0; r < rows; r++) {
@@ -488,11 +503,16 @@
 	const first = $derived((query.page - 1) * ws.meta.pageSize);
 </script>
 
-<!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across. -->
+<!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across;
+     above them (stacked), it spans the page and is as tall as `--table-h`. -->
 <div
 	class={[
-		'scroller absolute inset-y-0 left-0 overflow-y-auto overscroll-contain pb-18 [contain:strict]',
-		mode === 'visualize' ? 'w-(--table-w)' : 'right-0',
+		'scroller absolute top-0 left-0 overflow-y-auto overscroll-contain pb-18 [contain:strict]',
+		mode !== 'visualize'
+			? 'right-0 bottom-0'
+			: stacked
+				? 'right-0 h-(--table-h)'
+				: 'bottom-0 w-(--table-w)',
 		wide ? 'overflow-x-auto' : 'overflow-x-hidden',
 		drag && 'cursor-grabbing select-none'
 	]}
@@ -600,7 +620,7 @@
 						onpointerenter={() => hoverSort(col.key)}
 						onpointerleave={leaveSort}
 					>
-						<span class="label truncate">{col.label}</span>
+						<span class="label truncate">{labels[c]}</span>
 						{#if query.sort === col.key}<span class="arrow text-foreground"
 								>{query.order === 'asc' ? '↑' : '↓'}</span
 							>{/if}

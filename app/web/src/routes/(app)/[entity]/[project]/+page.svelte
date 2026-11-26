@@ -97,6 +97,8 @@
 	{readonly}
 	nameW={data.shell.nameW}
 	tableW={data.shell.tableW}
+	stacked={data.shell.stacked}
+	tableH={data.shell.tableH}
 >
 	{#snippet subtitle()}
 		{#if description}

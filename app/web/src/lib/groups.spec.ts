@@ -4,6 +4,7 @@ import {
 	distinctLabels,
 	isInternalKey,
 	bestRun,
+	chartMetrics,
 	changes,
 	classifyColumns,
 	configurations,
@@ -15,9 +16,11 @@ import {
 	groupName,
 	groupsApi,
 	groupsHref,
+	chartKey,
 	inDraft,
 	isRepeatName,
 	lookOf,
+	metricLabel,
 	newGroupHref,
 	ungroupedHref,
 	rowsOf,
@@ -284,6 +287,16 @@ describe('display', () => {
 		expect(formatDelta(-0.0551)).toBe('−0.055');
 		expect(formatDelta(0.02)).toBe('+0.020');
 		expect(formatDelta(0)).toBe('0.000');
+	});
+
+	it('names a metric without its summary prefix, and a suite as the eval pages do', () => {
+		expect(metricLabel('summary.val/loss')).toBe('val/loss');
+		expect(metricLabel('summary.suites/zh_tw:bpb')).toBe('zh_tw:bpb');
+		expect(metricLabel('summary.arc_easy/acc')).toBe('arc_easy/acc');
+		expect(chartKey('summary.suites/zh_tw:bpb')).toBe('suites/zh_tw:bpb');
+		expect(
+			chartMetrics(['summary.loss', 'summary.suites/paloma'], 'summary.suites/paloma')
+		).toEqual(['suites/paloma', 'loss']);
 	});
 
 	it('defaults a group’s charts to its varying keys (D222)', () => {

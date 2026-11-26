@@ -49,7 +49,7 @@ Name the group in the title, then select **Create group**.
 
 ### Start from a suggestion
 
-The sidebar lists groups that Flock spots on its own, marked **Suggested**. They come from runs that share a W&B group (`wandb.init(group=...)`), and from runs whose configs differ in only one or two settings. Select one to open it in **Manual**, ready to create.
+The sidebar lists groups that Flock spots on its own, marked **Suggested**. They come from runs that share a W&B group (`wandb.init(group=...)`), and from runs whose configs differ in only one or two settings. A W&B group that a saved group already filters on isn't suggested again: its later runs show up as that group's new matches. Select one to open it in **Manual**, ready to create.
 
 ## Read the Groups page
 
@@ -70,6 +70,8 @@ Below the table, two charts fill the rest of the page:
 - **each group's best run**: the best-by metric over steps, one line per group in the group's color
 - **every run, by group**: every run's final value as a faint dot, in one column per group, with the best run drawn solid
 
+When the best-by metric was logged only as a summary, such as an eval suite's score, the first chart is left out. An eval suite is named and written as on the eval pages: `zh_tw:bpb`, a bits-per-byte score to three decimals, an accuracy as a percent such as `62.4%`.
+
 Hover a row, a line or a dot to highlight that run everywhere on the page. Select **Best by** to change the metric or its direction for the project.
 
 **Ungrouped runs** are folded under the groups when there are any, ranked by the same metric so a strong run outside any group isn't missed. Select **Add to group** on one to add it to one or more groups.
@@ -88,7 +90,9 @@ Switch views with the selector at the top left, or with the keyboard:
 | **Visualize** | `V` | The table and the charts side by side (the default for a group) |
 | **Charts** | `C` | The charts, with run names beside them |
 
-In **Visualize**, drag the line between the table and the charts to resize them.
+In **Visualize**, drag the line between the table and the charts to resize them. Select **Visualize** again to stack the table above the charts, and again to put them back side by side; its icon shows which. Flock remembers the choice in your browser, for the **Runs** page too. Stacked, and in **Charts**, sections with only a few charts share a row when the charts have room, so `lr`, `train/loss` and `val/loss` sit side by side. Beside the table, each section keeps its own row.
+
+A group of eval runs, whose runs have suite scores from `flock eval log`, opens on **Table** with **Evals** on: its runs by suites, ranked, as on the project's **Runs** page. Select **Evals** to switch back to the plain table.
 
 ### Suggested columns
 
@@ -124,6 +128,8 @@ The **…** menu beside the group's name holds the group's actions:
 2. An organization admin turns the assistant on in **Run groups assistant** on the organization's page, or with `assistant_enabled` in the [Orgs API](api/orgs).
 
 The same section picks the **Proposal model** for the organization, an OpenAI model ID such as `gpt-6.2-sol`. Leave it empty to use the server's default. **Speed** picks OpenAI's service tier for proposals: **Standard**, **Fast** (faster, at a premium per token) or **Ultrafast** (the fastest, on the models that offer it). A faster tier makes each **Auto** turn quicker. It doesn't change the **Manual** assistant or **Suggested** columns.
+
+While the server has no key, the section says so and its controls are disabled.
 
 Only the organization's members can use the assistant. People viewing a public project see groups and their charts, but can't create or change them.
 

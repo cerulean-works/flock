@@ -16,6 +16,10 @@ export const SIDEBAR_W: Width = { cookie: 'flock_sidebar_w', min: 200, max: 420,
 export const NAME_W: Width = { cookie: 'flock_name_w', min: 220, max: 640, initial: 360 };
 /** The runs table beside the charts, in the Visualize view (and the charts take the rest). */
 export const TABLE_W: Width = { cookie: 'flock_table_w', min: 360, max: 1600, initial: 720 };
+/** The runs table above the charts, in the Visualize view stacked (`STACKED_COOKIE`). */
+export const TABLE_H: Width = { cookie: 'flock_table_h', min: 120, max: 1200, initial: 320 };
+/** Set while the viewer keeps Visualize stacked, the table above the charts; unset, side by side. */
+export const STACKED_COOKIE = 'flock_visualize_stacked';
 export const ASSISTANT_W: Width = {
 	cookie: 'flock_assistant_w',
 	min: 280,

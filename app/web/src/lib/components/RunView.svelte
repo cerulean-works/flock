@@ -1,10 +1,24 @@
+<script lang="ts" module>
+	/**
+	 * Visualize's layout as the viewer last left it in this tab, shared across pages: the
+	 * layout's data (from the cookies) is read once per visit, so a change made on one page would
+	 * otherwise be undone on the next.
+	 */
+	const layout = $state<{ stacked: boolean | null; tableH: number | null }>({
+		stacked: null,
+		tableH: null
+	});
+</script>
+
 <script lang="ts">
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
-	import TrophyIcon from '@lucide/svelte/icons/trophy';
+	import ClipboardCheckIcon from '@lucide/svelte/icons/clipboard-check';
+	import Columns2Icon from '@lucide/svelte/icons/columns-2';
+	import Rows2Icon from '@lucide/svelte/icons/rows-2';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { Snippet } from 'svelte';
@@ -20,7 +34,7 @@
 	import { compareHref } from '#lib/evals.ts';
 	import { EvalsView } from '#lib/evals-view.svelte.ts';
 	import { hint } from '#lib/hint.svelte.ts';
-	import { clampWidth, NAME_W, saveWidth, TABLE_W } from '#lib/widths.ts';
+	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
 	import { describeFilters } from '#lib/workspace/filters.ts';
 	import {
 		isProjectView,
@@ -82,12 +96,18 @@
 		/** The width of the name column, and of the table beside the charts, as last dragged. */
 		nameW: number;
 		tableW: number;
+		/** Visualize with the table above the charts, as the viewer last left it (a cookie). */
+		stacked?: boolean;
+		/** The table's height above the charts, stacked. */
+		tableH?: number;
 		/** Outside the org: read-only, with no run actions (D116). */
 		readonly: boolean;
 		/** Whether the filters offer "My runs" (not among a group's few runs). */
 		mine?: boolean;
 		/** Whether the table offers its Evals preset (the Runs page). */
 		evalPreset?: boolean;
+		/** Whether the preset is on until the viewer turns it off (a group of eval runs). */
+		evalsFirst?: boolean;
 	}
 
 	let {
@@ -108,9 +128,12 @@
 		onproject,
 		nameW: savedNameW,
 		tableW: savedTableW,
+		stacked: savedStacked = false,
+		tableH: savedTableH = TABLE_H.initial,
 		readonly,
 		mine = true,
-		evalPreset = false
+		evalPreset = false,
+		evalsFirst = false
 	}: Props = $props();
 
 	const ws = getWorkspace();
@@ -159,6 +182,34 @@
 	/** The table beside the charts (Visualize): always wider than its names. */
 	let tableW = $derived(savedTableW || TABLE_W.initial);
 	const shownTableW = $derived(Math.max(tableW, nameW + 160));
+	/** Visualize stacked: the table above the charts. A second click on Visualize flips it. */
+	const stacked = $derived(layout.stacked ?? savedStacked);
+	function flipStacked() {
+		layout.stacked = !stacked;
+		const age = layout.stacked ? 31536000 : 0;
+		document.cookie = `${STACKED_COOKIE}=1; path=/; max-age=${age}; samesite=lax`;
+	}
+	/**
+	 * Whether Visualize was already on when its tab was pressed, so a click flips only then; and
+	 * whether a key flipped it, so the click a key may also send doesn't flip it back.
+	 */
+	let visualizeOn = false;
+	let flippedByKey = false;
+	function onvisualizeclick(e: MouseEvent) {
+		// A click with no press before it (`detail` 0: a key or assistive technology).
+		const on = e.detail === 0 ? !flippedByKey && view === 'visualize' : visualizeOn;
+		if (on) flipStacked();
+		visualizeOn = flippedByKey = false;
+	}
+	/** The workspace's height; stacked, the table leaves the charts at least `CHARTS_MIN`. */
+	let mainH = $state(0);
+	const CHARTS_MIN = 200;
+	const tableHMax = $derived(
+		Math.min(TABLE_H.max, Math.max(TABLE_H.min, mainH ? mainH - CHARTS_MIN : TABLE_H.max))
+	);
+	const tableH = $derived(layout.tableH ?? savedTableH);
+	/** The same limit in CSS, so the first paint, before the height is known, keeps it too. */
+	const tableHCss = $derived(`min(${tableH}px, max(${TABLE_H.min}px, 100% - ${CHARTS_MIN}px))`);
 
 	// URL is the source of truth for view and full-screen panel, so both survive reloads and
 	// are server-rendered. Neither is read by a load function, so changing them never fetches.
@@ -187,7 +238,8 @@
 	const hasEvals = $derived(
 		evalPreset && ws.meta.columns.some((c) => c.key.startsWith('summary.suites/'))
 	);
-	const evals = $derived(hasEvals && page.url.searchParams.get('preset') === 'evals');
+	const preset = $derived(page.url.searchParams.get('preset'));
+	const evals = $derived(hasEvals && (preset === 'evals' || (evalsFirst && preset === null)));
 	/** The Evals table shows in place of the runs table (the table view only). */
 	const evalsShown = $derived(evals && view === 'table');
 	const evalsView = new EvalsView(ws);
@@ -320,7 +372,8 @@
 	/** Runs are picked in the table: the toolbar is their actions'. */
 	const selecting = $derived(tableShown && ws.selectedRows.length > 0 && !readonly);
 	/** Where the charts start: past the names, or past the table beside them. */
-	const paneLeft = $derived(view === 'visualize' ? shownTableW : nameW);
+	const below = $derived(view === 'visualize' && stacked);
+	const paneLeft = $derived(below ? 0 : view === 'visualize' ? shownTableW : nameW);
 </script>
 
 <svelte:window {onkeydown} />
@@ -328,7 +381,7 @@
 <Page
 	width="full"
 	data-sveltekit-reset={false}
-	style="--name-w: {nameW}px; --table-w: {shownTableW}px; --pane-left: {paneLeft}px"
+	style="--name-w: {nameW}px; --table-w: {shownTableW}px; --table-h: {tableHCss}; --pane-left: {paneLeft}px"
 >
 	<PageHeader {title} {subtitleTitle} {leading} {badges} {subtitle} {actions}>
 		{#snippet toolbar()}
@@ -336,7 +389,27 @@
 				<!-- No counts, so the toggle keeps its width from page to page. -->
 				<Tabs.List aria-label="View">
 					<Tabs.Trigger value="table" {@attach hint('Table (T)')}>Table</Tabs.Trigger>
-					<Tabs.Trigger value="visualize" {@attach hint('Table and charts side by side (V)')}>
+					<!-- Clicked again while on, it flips the table and charts between side by side and
+					     stacked; its icon shows which. -->
+					<Tabs.Trigger
+						value="visualize"
+						onpointerdown={() => (visualizeOn = view === 'visualize')}
+						onclick={onvisualizeclick}
+						onkeydown={(e) => {
+							if ((e.key === 'Enter' || e.key === ' ') && view === 'visualize') {
+								flipStacked();
+								// Only for this activation: the click a key may send comes at once.
+								flippedByKey = true;
+								setTimeout(() => (flippedByKey = false));
+							}
+						}}
+						{@attach hint(
+							stacked
+								? 'Table above the charts (V). Click again for side by side'
+								: 'Table and charts side by side (V). Click again to stack them'
+						)}
+					>
+						{#if stacked}<Rows2Icon />{:else}<Columns2Icon />{/if}
 						Visualize
 					</Tabs.Trigger>
 					<Tabs.Trigger value="charts" {@attach hint('Charts (C)')}>Charts</Tabs.Trigger>
@@ -390,11 +463,15 @@
 						<Button
 							variant={evals ? 'secondary' : 'outline'}
 							aria-pressed={evals}
-							href={hrefWith(evals ? { preset: null, view: 'table' } : { preset: 'evals' })}
+							href={hrefWith(
+								evals
+									? { preset: evalsFirst ? 'off' : null, view: 'table' }
+									: { preset: evalsFirst ? null : 'evals' }
+							)}
 							data-sveltekit-replacestate
 							{@attach hint('Eval runs by suites, ranked')}
 						>
-							<TrophyIcon /> Evals
+							<ClipboardCheckIcon /> Evals
 						</Button>
 					{/if}
 					{#if evalsShown}
@@ -446,17 +523,23 @@
 		{/snippet}
 	</PageHeader>
 
-	<main class="relative min-h-0 flex-1">
+	<main
+		class="relative min-h-0 flex-1"
+		bind:clientHeight={mainH}
+		style:--pager-bottom={below ? 'calc(100% - var(--table-h) + 0.875rem)' : null}
+	>
 		{#if evalsShown}
 			<EvalsTable bind:this={evalsTable} view={evalsView} />
 		{:else}
-			<RunsTable bind:this={table} mode={view} {nameW} {primary} {onprimaryorder} />
+			<RunsTable bind:this={table} mode={view} {nameW} {primary} {onprimaryorder} stacked={below} />
 		{/if}
 		<ChartsPane
 			shown={chartsShown}
 			active={chartsShown && fullscreen == null}
 			{panelHref}
 			onfullscreen={openPanel}
+			{below}
+			pack={view !== 'visualize' || below}
 		/>
 		{#if ws.page.total === 0 && narrowed}
 			<EmptyState
@@ -478,7 +561,11 @@
 			<!-- On the name column's edge, above the table and the charts beside it. The Evals table
 			     sizes its own run column. -->
 			{#if !evalsShown}
-				<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
+				<div
+					class={['pointer-events-none absolute top-0 left-0 z-5', !below && 'bottom-0']}
+					style:width="{nameW}px"
+					style:height={below ? 'var(--table-h)' : null}
+				>
 					<ResizeHandle
 						class="pointer-events-auto"
 						value={nameW}
@@ -489,7 +576,20 @@
 					/>
 				</div>
 			{/if}
-			{#if view === 'visualize'}
+			{#if below}
+				<!-- Between the table and the charts below it. -->
+				<div class="pointer-events-none absolute inset-x-0 top-0 z-5 h-(--table-h)">
+					<ResizeHandle
+						class="pointer-events-auto"
+						axis="y"
+						value={Math.min(tableH, tableHMax)}
+						bounds={{ ...TABLE_H, max: tableHMax }}
+						label="Resize the table above the charts"
+						onresize={(px) => (layout.tableH = px)}
+						oncommit={(px) => saveWidth(TABLE_H, px)}
+					/>
+				</div>
+			{:else if view === 'visualize'}
 				<!-- Between the table and the charts. -->
 				<div
 					class="pointer-events-none absolute inset-y-0 left-0 z-5"

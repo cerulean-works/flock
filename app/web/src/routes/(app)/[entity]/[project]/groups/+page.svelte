@@ -22,6 +22,9 @@
 	import { runPageUrl } from '#lib/data/cache.ts';
 	import type { ProjectEvent } from '#lib/data/live.ts';
 	import { decodeWorkspace } from '#lib/data/snapshot.ts';
+	import { evalTable } from '#lib/eval-table.ts';
+	import { formatScore } from '#lib/evals.ts';
+	import { evalRuns } from '#lib/evals-view.svelte.ts';
 	import { GROUP_HUES } from '#lib/chart/grouping.ts';
 	import {
 		GROUPS,
@@ -33,6 +36,7 @@
 		groupsApi,
 		groupsCall,
 		groupsHref,
+		chartKey,
 		metricLabel,
 		newGroupHref,
 		valueKey,
@@ -139,6 +143,9 @@
 		return { settings, metrics };
 	});
 	const primary = $derived([...suggested.settings, ...suggested.metrics]);
+	/** A suggested metric's header: its whole key when a suggested setting has its name. */
+	const metricName = (key: string) =>
+		suggested.settings.some((k) => displayKey(k) === metricLabel(key)) ? key : metricLabel(key);
 	const keys = $derived(
 		(differencesOnly ? cmp.keys : allKeys).filter((k) => !suggested.settings.includes(k))
 	);
@@ -171,7 +178,7 @@
 
 	/** A key column's width: its label or its widest value, plus a cell's and a chip's padding. */
 	function keyWidth(key: string, metric = false): number {
-		let w = textWidth(metric ? metricLabel(key) : displayKey(key), HEAD_FONT) ?? 112 - 28;
+		let w = textWidth(metric ? metricName(key) : displayKey(key), HEAD_FONT) ?? 112 - 28;
 		for (const r of everyRow) {
 			const v = metric ? r.summary?.[key] : r.config[key];
 			if (v == null) continue;
@@ -264,6 +271,13 @@
 	 */
 	let history = $state.raw<WorkspaceData | null>(null);
 	let historyFailed = $state(false);
+	/**
+	 * The best-by metric was logged as a summary only (an eval run's suite score): no history
+	 * panel, and the best values take the width.
+	 */
+	const summaryOnly = $derived(
+		!!history && !history.meta.metrics.some((m) => m.key === chartKey(cmp.best_key ?? ''))
+	);
 	const historyRuns = $derived([...new Set(lines.map((l) => l.run))].sort());
 	const historyKey = $derived(
 		`${historyRuns.join(',')}|${everyRow.map((r) => r.value ?? '').join(',')}`
@@ -340,7 +354,34 @@
 		return () => live.close();
 	});
 
-	const fmt = (v: number | null) => (v == null ? '–' : formatNumber(v));
+	/**
+	 * An eval suite's scale (accuracy or bits per byte), read from the best runs as the Evals
+	 * preset reads it, so its scores read as on the eval pages: 62.4%, 0.687. Null for other
+	 * metrics, which keep the run table's format.
+	 */
+	const scale = $derived.by(() => {
+		const suite = cmp.best_key?.match(/^summary\.suites\/(.+)$/)?.[1];
+		return suite && history ? (evalTable(evalRuns(history)).columns[suite]?.scale ?? null) : null;
+	});
+	/** A value; `own` is false on a row a group ranks by another metric (D221): plain format. */
+	const fmt = (v: number | null, own = true) =>
+		v == null
+			? '–'
+			: scale && own
+				? formatScore(v, scale === 'accuracy' ? 'acc' : scale)
+				: formatNumber(v);
+	/** A spread across repeats, in the score's units: an accuracy's in points. */
+	const fmtSpread = (s: number, own = true) =>
+		!scale || !own
+			? formatNumber(s)
+			: scale === 'accuracy'
+				? `${(100 * s).toFixed(1)} pts`
+				: s.toFixed(3);
+	/** A change from the best group's: an accuracy's in points, as the compare page has it. */
+	const fmtDelta = (d: number) =>
+		scale === 'accuracy'
+			? `${d < 0 ? '−' : '+'}${Math.abs(100 * d).toFixed(1)} pts`
+			: formatDelta(d);
 	const empty = $derived(!cmp.rows.length && !cmp.ungrouped.length);
 	/** No saved groups: only a viewer who can't create one gets here (the load sends others on). */
 	const noGroups = $derived(!!data.groups && !groups.length);
@@ -411,7 +452,7 @@
 							best:
 							<a class="hover:text-link hover:underline" href={runHref(entity, project, r.run)}
 								>{r.run_name}</a
-							>{#if r.n > 1}{r.run_value != null ? ` ${formatNumber(r.run_value)}` : ''}, mean of {count(
+							>{#if r.n > 1}{r.run_value != null ? ` ${fmt(r.run_value, !other)}` : ''}, mean of {count(
 									r.n,
 									'repeat'
 								)}{/if}
@@ -427,10 +468,10 @@
 			class={[CELL, 'justify-end']}
 			style:flex={fit(VALUE_W)}
 			title={r.n > 1 && r.run_value != null
-				? `Mean of ${r.n} repeats; the best run alone has ${formatNumber(r.run_value)}`
+				? `Mean of ${r.n} repeats; the best run alone has ${fmt(r.run_value, !other)}`
 				: undefined}
 		>
-			{fmt(r.value)}
+			{fmt(r.value, !other)}
 		</div>
 		<div class={[CELL, 'justify-end gap-2']} style:flex={fit(DELTA_W)}>
 			{#if delta == null}
@@ -446,12 +487,12 @@
 					></span>
 				{/if}
 				<span class={better ? 'text-state-finished' : delta === 0 ? 'text-faint' : ''}
-					>{delta === 0 ? 'same' : formatDelta(delta)}</span
+					>{delta === 0 ? 'same' : fmtDelta(delta)}</span
 				>
 			{/if}
 		</div>
 		<div class={[CELL, 'justify-end text-muted-foreground']} style:flex={fit(STD_W)}>
-			{#if r.std != null}± {formatNumber(r.std)}{:else}<span class="text-faint">–</span>{/if}
+			{#if r.std != null}± {fmtSpread(r.std, !other)}{:else}<span class="text-faint">–</span>{/if}
 		</div>
 		<div class={[CELL, 'justify-end text-muted-foreground']} style:flex={fit(RUNS_W)}>
 			{r.runs}
@@ -657,7 +698,7 @@
 										style:flex={fit(widthOf[key])}
 										title="{key} of each group’s best run"
 									>
-										<span class="truncate">{metricLabel(key)}</span>
+										<span class="truncate">{metricName(key)}</span>
 									</div>
 								{/each}
 								{#each keys as key (key)}
@@ -722,37 +763,44 @@
 					class="flex min-h-[340px] flex-1 gap-4 px-5 pt-5 pb-6 max-lg:min-h-[640px] max-lg:flex-col"
 					aria-label="Charts"
 				>
-					<Card.Root class="min-h-[300px] min-w-0 flex-[3] rounded-lg px-1">
-						<Card.Header class="gap-0.5">
-							<Card.Title class="text-[13px]">
-								{metricLabel(cmp.best_key)}
-								<span class="font-normal text-muted-foreground">· each group’s best run</span>
-							</Card.Title>
-							<Card.Description class="text-xs">
-								{order === 'asc' ? 'Lower' : 'Higher'} is better
-							</Card.Description>
-						</Card.Header>
-						<Card.Content class="flex min-h-0 flex-1 flex-col">
-							{#if !lines.length}
-								<div class="grid flex-1 place-items-center text-[13px] text-faint">
-									No group has a best run by {metricLabel(cmp.best_key)} yet
-								</div>
-							{:else if history}
-								<CompareHistory
-									data={history}
-									{lines}
-									metric={metricLabel(cmp.best_key)}
-									{hovered}
-									onhover={(run) => (hovered = run)}
-								/>
-							{:else}
-								<div class="grid flex-1 place-items-center text-[13px] text-faint">
-									{historyFailed ? 'Couldn’t read the runs’ histories' : 'Reading histories…'}
-								</div>
-							{/if}
-						</Card.Content>
-					</Card.Root>
-					<Card.Root class="min-h-[300px] min-w-0 flex-[2] rounded-lg px-1 lg:max-w-[46%]">
+					{#if !summaryOnly}
+						<Card.Root class="min-h-[300px] min-w-0 flex-[3] rounded-lg px-1">
+							<Card.Header class="gap-0.5">
+								<Card.Title class="text-[13px]">
+									{metricLabel(cmp.best_key)}
+									<span class="font-normal text-muted-foreground">· each group’s best run</span>
+								</Card.Title>
+								<Card.Description class="text-xs">
+									{order === 'asc' ? 'Lower' : 'Higher'} is better
+								</Card.Description>
+							</Card.Header>
+							<Card.Content class="flex min-h-0 flex-1 flex-col">
+								{#if !lines.length}
+									<div class="grid flex-1 place-items-center text-[13px] text-faint">
+										No group has a best run by {metricLabel(cmp.best_key)} yet
+									</div>
+								{:else if history}
+									<CompareHistory
+										data={history}
+										{lines}
+										metric={chartKey(cmp.best_key)}
+										{hovered}
+										onhover={(run) => (hovered = run)}
+									/>
+								{:else}
+									<div class="grid flex-1 place-items-center text-[13px] text-faint">
+										{historyFailed ? 'Couldn’t read the runs’ histories' : 'Reading histories…'}
+									</div>
+								{/if}
+							</Card.Content>
+						</Card.Root>
+					{/if}
+					<Card.Root
+						class={[
+							'min-h-[300px] min-w-0 flex-[2] rounded-lg px-1',
+							!summaryOnly && 'lg:max-w-[46%]'
+						]}
+					>
 						<Card.Header class="gap-0.5">
 							<Card.Title class="text-[13px]">
 								{metricLabel(cmp.best_key)}
@@ -764,7 +812,13 @@
 						</Card.Header>
 						<Card.Content class="flex min-h-0 flex-1 flex-col">
 							{#if dots.length}
-								<BestDots {dots} {hovered} onhover={(run) => (hovered = run)} />
+								<BestDots
+									{dots}
+									{hovered}
+									format={fmt}
+									formatSpread={fmtSpread}
+									onhover={(run) => (hovered = run)}
+								/>
 							{:else}
 								<div class="grid flex-1 place-items-center text-[13px] text-faint">
 									No group has a value yet

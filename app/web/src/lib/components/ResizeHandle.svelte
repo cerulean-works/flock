@@ -7,6 +7,8 @@
 		value: number;
 		/** The box's edge it sits on: on the left, dragging left widens the box. */
 		edge?: 'left' | 'right';
+		/** `y`: the handle sits on the box's bottom edge and resizes its height. */
+		axis?: 'x' | 'y';
 		bounds: Width;
 		label: string;
 		/** Every change while dragging or pressing arrow keys. */
@@ -19,6 +21,7 @@
 	let {
 		value,
 		edge = 'right',
+		axis = 'x',
 		bounds,
 		label,
 		onresize,
@@ -35,12 +38,13 @@
 		e.preventDefault();
 		const el = e.currentTarget as HTMLElement;
 		el.setPointerCapture(e.pointerId);
-		const x0 = e.clientX;
+		const at = (ev: PointerEvent) => (axis === 'x' ? ev.clientX : ev.clientY);
+		const p0 = at(e);
 		const w0 = value;
 		let last = w0;
 		dragging = true;
 		const move = (ev: PointerEvent) => {
-			last = clampWidth(bounds, w0 + sign * (ev.clientX - x0));
+			last = clampWidth(bounds, w0 + sign * (at(ev) - p0));
 			onresize(last);
 		};
 		const up = () => {
@@ -56,7 +60,9 @@
 	}
 
 	function onkeydown(e: KeyboardEvent) {
-		const by = { ArrowLeft: -16, ArrowRight: 16 }[e.key];
+		const steps: Record<string, number> =
+			axis === 'x' ? { ArrowLeft: -16, ArrowRight: 16 } : { ArrowUp: -16, ArrowDown: 16 };
+		const by = steps[e.key];
 		if (!by) return;
 		e.preventDefault();
 		onresize(clampWidth(bounds, value + sign * by));
@@ -73,7 +79,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
 	role="separator"
-	aria-orientation="vertical"
+	aria-orientation={axis === 'x' ? 'vertical' : 'horizontal'}
 	aria-label={label}
 	aria-valuenow={value}
 	aria-valuemin={bounds.min}
@@ -81,18 +87,21 @@
 	tabindex="0"
 	{@attach hint('Drag to resize, or double-click to reset')}
 	class={[
-		'group/resize absolute inset-y-0 z-10 w-[7px] cursor-col-resize touch-none outline-none',
-		edge === 'left' ? '-left-[4px]' : '-right-[4px]',
+		'group/resize absolute z-10 touch-none outline-none',
+		axis === 'y'
+			? 'inset-x-0 -bottom-[4px] h-[7px] cursor-row-resize'
+			: ['inset-y-0 w-[7px] cursor-col-resize', edge === 'left' ? '-left-[4px]' : '-right-[4px]'],
 		className
 	]}
 	{onpointerdown}
 	{onkeydown}
-	onkeyup={(e) => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && oncommit(value)}
+	onkeyup={(e) => e.key.startsWith('Arrow') && oncommit(value)}
 	ondblclick={reset}
 >
 	<div
 		class={[
-			'absolute inset-y-0 left-[3px] w-px transition-colors',
+			'absolute transition-colors',
+			axis === 'y' ? 'inset-x-0 top-[3px] h-px' : 'inset-y-0 left-[3px] w-px',
 			dragging
 				? 'bg-ring'
 				: 'bg-transparent group-hover/resize:bg-border group-focus-visible/resize:bg-ring'

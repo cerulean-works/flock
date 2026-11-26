@@ -221,8 +221,9 @@
 	}
 
 	// ------------------------------------------------------------------------------------------
-	// What's shown: every run or the group's, searched; new matches first when that's why the
-	// page was opened.
+	// What's shown: every run or the group's, searched. Editing, the group's saved runs and its
+	// new matches come before the rest (new matches first when that's why the page was opened),
+	// by what was saved, so a row doesn't move when it's ticked.
 
 	let view = $state<'all' | 'in'>('all');
 	let search = $state('');
@@ -236,9 +237,10 @@
 				(view === 'all' || inDraft(draft, r.id)) &&
 				(!q || r.name.toLowerCase().includes(q) || r.id.toLowerCase().includes(q))
 		);
-		if (fresh)
-			out.sort((a, b) => Number(isNewMatch(draft, b.id)) - Number(isNewMatch(draft, a.id)));
-		return out;
+		if (!draft.editing) return out;
+		const rank = (id: string) =>
+			isNewMatch(draft, id) ? Number(!fresh) : draft.members.has(id) ? Number(fresh) : 2;
+		return out.sort((a, b) => rank(a.id) - rank(b.id));
 	});
 	const allShownIn = $derived(shown.length > 0 && shown.every((r) => inDraft(draft, r.id)));
 	const someShownIn = $derived(shown.some((r) => inDraft(draft, r.id)));
@@ -272,7 +274,10 @@
 
 	// svelte-ignore state_referenced_locally
 	let typed = $state<string | null>(group?.name ?? prefill.name);
-	const suggested = $derived(groupName(inGroup.map(configOf), filters, wandbGroupOf(filters)));
+	// No template for an empty draft ("0 runs"): the field shows its placeholder.
+	const suggested = $derived(
+		inGroup.length ? groupName(inGroup.map(configOf), filters, wandbGroupOf(filters)) : ''
+	);
 	const name = $derived(typed ?? suggested);
 
 	// ------------------------------------------------------------------------------------------
@@ -516,7 +521,7 @@
 					class="-ml-[0.045em] w-full min-w-0 truncate rounded-md bg-transparent text-[34px] leading-10 font-normal tracking-[-0.025em] outline-none placeholder:text-faint hover:bg-muted/60 focus-visible:bg-muted/60 {BUTTON_FOCUS}"
 					value={name}
 					oninput={(e) => (typed = e.currentTarget.value)}
-					placeholder="Name the group"
+					placeholder="New group"
 					maxlength={200}
 				/>
 			</label>

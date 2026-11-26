@@ -1,9 +1,25 @@
 import { SvelteSet } from 'svelte/reactivity';
 import { evalTable, type EvalTableRow, type EvalTableRun } from '#lib/eval-table.ts';
+import type { WorkspaceData } from '#lib/types.ts';
 import type { Workspace } from '#lib/workspace/workspace.svelte.ts';
 
 /** A suite's column in the project's table: the key the Columns menu hides and moves. */
 export const suiteKey = (suite: string) => `summary.suites/${suite}`;
+
+/**
+ * A page's runs as the Evals preset reads them: only the columns it needs, which are the suite
+ * scores, the tasks' metrics a suite's scale is read from, and the config `flock eval log` writes.
+ */
+export function evalRuns({ meta, page }: WorkspaceData): EvalTableRun[] {
+	const reads =
+		/^(summary\.suites\/|summary\..*\/(bpb|bits_per_byte|loss_per_token|perplexity|acc[^/]*)$|config\.suite_(members|hashes)\.|config\.(dtype|attention|sdpa_backend|batch_tokens|add_bos|device|model)$)/;
+	const read = meta.columns.flatMap((c, i) => (reads.test(c.key) ? [[c.key, i] as const] : []));
+	return page.runs.map((run, r) => {
+		const values: Record<string, unknown> = {};
+		for (const [key, i] of read) values[key] = page.num[i]?.[r] ?? page.text[i]?.[r];
+		return { row: r, ordinal: run.ordinal, values };
+	});
+}
 
 /**
  * The Evals preset over a workspace's page: its table, the suite columns it shows and in what
@@ -40,19 +56,7 @@ export class EvalsView {
 	readonly table = $derived.by(() => {
 		const ws = this.#ws;
 		void ws.tableVersion;
-		// Only the columns the table reads: suite scores, the tasks' metrics a suite's scale is
-		// read from, and the config `flock eval log` writes.
-		const reads =
-			/^(summary\.suites\/|summary\..*\/(bpb|bits_per_byte|loss_per_token|perplexity|acc[^/]*)$|config\.suite_(members|hashes)\.|config\.(dtype|attention|sdpa_backend|batch_tokens|add_bos|device|model)$)/;
-		const read = ws.meta.columns.flatMap((c, i) =>
-			reads.test(c.key) ? [[c.key, i] as const] : []
-		);
-		const runs: EvalTableRun[] = ws.page.runs.map((run, r) => {
-			const values: Record<string, unknown> = {};
-			for (const [key, i] of read) values[key] = ws.page.num[i]?.[r] ?? ws.page.text[i]?.[r];
-			return { row: r, ordinal: run.ordinal, values };
-		});
-		return evalTable(runs, this.hidden);
+		return evalTable(evalRuns(ws), this.hidden);
 	});
 
 	/**
