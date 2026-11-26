@@ -364,12 +364,16 @@
 		const suite = cmp.best_key?.match(/^summary\.suites\/(.+)$/)?.[1];
 		return suite && history ? (evalTable(evalRuns(history)).columns[suite]?.scale ?? null) : null;
 	});
-	const fmt = (v: number | null) =>
+	/** A value; `own` is false on a row a group ranks by another metric (D221): plain format. */
+	const fmt = (v: number | null, own = true) =>
 		v == null
 			? '–'
-			: scale
+			: scale && own
 				? formatScore(v, scale === 'accuracy' ? 'acc' : scale)
 				: formatNumber(v);
+	/** A spread across repeats, in the score's units: an accuracy's in points. */
+	const fmtSpread = (s: number, own = true) =>
+		scale === 'accuracy' && own ? `${(100 * s).toFixed(1)} pts` : formatNumber(s);
 	/** A change from the best group's: an accuracy's in points, as the compare page has it. */
 	const fmtDelta = (d: number) =>
 		scale === 'accuracy'
@@ -445,7 +449,7 @@
 							best:
 							<a class="hover:text-link hover:underline" href={runHref(entity, project, r.run)}
 								>{r.run_name}</a
-							>{#if r.n > 1}{r.run_value != null ? ` ${fmt(r.run_value)}` : ''}, mean of {count(
+							>{#if r.n > 1}{r.run_value != null ? ` ${fmt(r.run_value, !other)}` : ''}, mean of {count(
 									r.n,
 									'repeat'
 								)}{/if}
@@ -461,10 +465,10 @@
 			class={[CELL, 'justify-end']}
 			style:flex={fit(VALUE_W)}
 			title={r.n > 1 && r.run_value != null
-				? `Mean of ${r.n} repeats; the best run alone has ${fmt(r.run_value)}`
+				? `Mean of ${r.n} repeats; the best run alone has ${fmt(r.run_value, !other)}`
 				: undefined}
 		>
-			{fmt(r.value)}
+			{fmt(r.value, !other)}
 		</div>
 		<div class={[CELL, 'justify-end gap-2']} style:flex={fit(DELTA_W)}>
 			{#if delta == null}
@@ -485,7 +489,7 @@
 			{/if}
 		</div>
 		<div class={[CELL, 'justify-end text-muted-foreground']} style:flex={fit(STD_W)}>
-			{#if r.std != null}± {formatNumber(r.std)}{:else}<span class="text-faint">–</span>{/if}
+			{#if r.std != null}± {fmtSpread(r.std, !other)}{:else}<span class="text-faint">–</span>{/if}
 		</div>
 		<div class={[CELL, 'justify-end text-muted-foreground']} style:flex={fit(RUNS_W)}>
 			{r.runs}
@@ -805,7 +809,13 @@
 						</Card.Header>
 						<Card.Content class="flex min-h-0 flex-1 flex-col">
 							{#if dots.length}
-								<BestDots {dots} {hovered} format={fmt} onhover={(run) => (hovered = run)} />
+								<BestDots
+									{dots}
+									{hovered}
+									format={fmt}
+									formatSpread={fmtSpread}
+									onhover={(run) => (hovered = run)}
+								/>
 							{:else}
 								<div class="grid flex-1 place-items-center text-[13px] text-faint">
 									No group has a value yet
