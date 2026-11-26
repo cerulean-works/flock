@@ -2,7 +2,15 @@ import { redirect } from '@sveltejs/kit';
 import { authConfig } from '#lib/server/auth.ts';
 import { flock, flockAnswer } from '#lib/server/flock.ts';
 import type { Access, OrgEntry, OrgInfo, ProjectInfo, UserInfo } from '#lib/types.ts';
-import { ASSISTANT_W, NAME_W, readWidth, SIDEBAR_W, TABLE_W } from '#lib/widths.ts';
+import {
+	ASSISTANT_W,
+	NAME_W,
+	readWidth,
+	SIDEBAR_W,
+	STACKED_COOKIE,
+	TABLE_H,
+	TABLE_W
+} from '#lib/widths.ts';
 import { cookieView, VIEW_COOKIE } from '#lib/workspace/project-view.svelte.ts';
 import type { LayoutServerLoad } from './$types';
 
@@ -107,6 +115,9 @@ export const load: LayoutServerLoad = async ({ params, cookies, locals }) => {
 			sidebarW: readWidth(SIDEBAR_W, cookies.get(SIDEBAR_W.cookie)),
 			nameW: readWidth(NAME_W, cookies.get(NAME_W.cookie)),
 			tableW: readWidth(TABLE_W, cookies.get(TABLE_W.cookie)),
+			/** Visualize stacked, the table above the charts, and that table's height. */
+			stacked: cookies.get(STACKED_COOKIE) === '1',
+			tableH: readWidth(TABLE_H, cookies.get(TABLE_H.cookie)),
 			assistantW: readWidth(ASSISTANT_W, cookies.get(ASSISTANT_W.cookie)),
 			/** The view projects open in, the one last picked: in a cookie for the same reason. */
 			projectView: cookieView(cookies.get(VIEW_COOKIE))

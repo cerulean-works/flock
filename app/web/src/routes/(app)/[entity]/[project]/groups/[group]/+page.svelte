@@ -338,6 +338,8 @@
 	mine={false}
 	nameW={data.shell.nameW}
 	tableW={data.shell.tableW}
+	stacked={data.shell.stacked}
+	tableH={data.shell.tableH}
 >
 	{#snippet leading()}
 		<span class="size-3.5 rounded-[4px]" style:background={group.color} title={about}></span>

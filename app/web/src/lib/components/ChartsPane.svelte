@@ -28,9 +28,11 @@
 		 * (a run's page).
 		 */
 		beside?: boolean;
+		/** Below the runs table (Visualize stacked), from `--table-h` down, across the page. */
+		below?: boolean;
 	}
 
-	let { shown, active, panelHref, onfullscreen, beside = true }: Props = $props();
+	let { shown, active, panelHref, onfullscreen, beside = true, below = false }: Props = $props();
 
 	const ws = getWorkspace();
 	let root = $state<HTMLDivElement | null>(null);
@@ -403,13 +405,17 @@
      holds the pointer and nothing in it reacts to hover. -->
 <div
 	class={[
-		'pane absolute inset-y-0 right-0 z-4 overflow-y-auto overscroll-contain bg-background px-5 pb-10',
-		beside ? 'left-[var(--pane-left,var(--name-w))] shadow-[-1px_0_0_var(--divider)]' : 'left-0',
+		'pane absolute right-0 bottom-0 z-4 overflow-y-auto overscroll-contain bg-background px-5 pb-10',
+		below
+			? 'top-(--table-h) left-0 shadow-[0_-1px_0_var(--divider)]'
+			: beside
+				? 'top-0 left-[var(--pane-left,var(--name-w))] shadow-[-1px_0_0_var(--divider)]'
+				: 'top-0 left-0',
 		'transition-[opacity,translate,visibility] duration-150 ease-out',
 		shown ? 'visible translate-x-0 opacity-100' : 'invisible translate-x-3 opacity-0',
 		ws.dragging && (rowsDrag ? 'cursor-row-resize' : 'cursor-grabbing')
 	]}
-	style:padding-top="{beside ? BAND_H : 0}px"
+	style:padding-top="{beside && !below ? BAND_H : 0}px"
 	style:--section-h="{HEAD_H}px"
 	bind:this={root}
 	inert={!shown}

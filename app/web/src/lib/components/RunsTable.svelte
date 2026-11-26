@@ -80,9 +80,11 @@
 		 * table shows that order until `primary` changes.
 		 */
 		onprimaryorder?: (keys: string[]) => void;
+		/** In Visualize, above the charts rather than beside them. */
+		stacked?: boolean;
 	}
 
-	let { mode, nameW, primary = null, onprimaryorder }: Props = $props();
+	let { mode, nameW, primary = null, onprimaryorder, stacked = false }: Props = $props();
 
 	const ws = getWorkspace();
 	const runs = $derived(ws.page.runs);
@@ -501,11 +503,16 @@
 	const first = $derived((query.page - 1) * ws.meta.pageSize);
 </script>
 
-<!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across. -->
+<!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across;
+     above them (stacked), it spans the page and is as tall as `--table-h`. -->
 <div
 	class={[
-		'scroller absolute inset-y-0 left-0 overflow-y-auto overscroll-contain pb-18 [contain:strict]',
-		mode === 'visualize' ? 'w-(--table-w)' : 'right-0',
+		'scroller absolute top-0 left-0 overflow-y-auto overscroll-contain pb-18 [contain:strict]',
+		mode !== 'visualize'
+			? 'right-0 bottom-0'
+			: stacked
+				? 'right-0 h-(--table-h) pb-2'
+				: 'bottom-0 w-(--table-w)',
 		wide ? 'overflow-x-auto' : 'overflow-x-hidden',
 		drag && 'cursor-grabbing select-none'
 	]}

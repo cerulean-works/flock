@@ -5,6 +5,8 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import ClipboardCheckIcon from '@lucide/svelte/icons/clipboard-check';
+	import Columns2Icon from '@lucide/svelte/icons/columns-2';
+	import Rows2Icon from '@lucide/svelte/icons/rows-2';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { Snippet } from 'svelte';
@@ -20,7 +22,7 @@
 	import { compareHref } from '#lib/evals.ts';
 	import { EvalsView } from '#lib/evals-view.svelte.ts';
 	import { hint } from '#lib/hint.svelte.ts';
-	import { clampWidth, NAME_W, saveWidth, TABLE_W } from '#lib/widths.ts';
+	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
 	import { describeFilters } from '#lib/workspace/filters.ts';
 	import {
 		isProjectView,
@@ -82,6 +84,10 @@
 		/** The width of the name column, and of the table beside the charts, as last dragged. */
 		nameW: number;
 		tableW: number;
+		/** Visualize with the table above the charts, as the viewer last left it (a cookie). */
+		stacked?: boolean;
+		/** The table's height above the charts, stacked. */
+		tableH?: number;
 		/** Outside the org: read-only, with no run actions (D116). */
 		readonly: boolean;
 		/** Whether the filters offer "My runs" (not among a group's few runs). */
@@ -110,6 +116,8 @@
 		onproject,
 		nameW: savedNameW,
 		tableW: savedTableW,
+		stacked: savedStacked = false,
+		tableH: savedTableH = TABLE_H.initial,
 		readonly,
 		mine = true,
 		evalPreset = false,
@@ -162,6 +170,13 @@
 	/** The table beside the charts (Visualize): always wider than its names. */
 	let tableW = $derived(savedTableW || TABLE_W.initial);
 	const shownTableW = $derived(Math.max(tableW, nameW + 160));
+	/** Visualize stacked: the table above the charts. A second click on Visualize flips it. */
+	let stacked = $derived(savedStacked);
+	let tableH = $derived(savedTableH);
+	function flipStacked() {
+		stacked = !stacked;
+		document.cookie = `${STACKED_COOKIE}=${stacked ? '1' : ''}; path=/; max-age=${stacked ? 31536000 : 0}; samesite=lax`;
+	}
 
 	// URL is the source of truth for view and full-screen panel, so both survive reloads and
 	// are server-rendered. Neither is read by a load function, so changing them never fetches.
@@ -324,7 +339,8 @@
 	/** Runs are picked in the table: the toolbar is their actions'. */
 	const selecting = $derived(tableShown && ws.selectedRows.length > 0 && !readonly);
 	/** Where the charts start: past the names, or past the table beside them. */
-	const paneLeft = $derived(view === 'visualize' ? shownTableW : nameW);
+	const below = $derived(view === 'visualize' && stacked);
+	const paneLeft = $derived(below ? 0 : view === 'visualize' ? shownTableW : nameW);
 </script>
 
 <svelte:window {onkeydown} />
@@ -332,7 +348,7 @@
 <Page
 	width="full"
 	data-sveltekit-reset={false}
-	style="--name-w: {nameW}px; --table-w: {shownTableW}px; --pane-left: {paneLeft}px"
+	style="--name-w: {nameW}px; --table-w: {shownTableW}px; --table-h: {tableH}px; --pane-left: {paneLeft}px"
 >
 	<PageHeader {title} {subtitleTitle} {leading} {badges} {subtitle} {actions}>
 		{#snippet toolbar()}
@@ -340,7 +356,18 @@
 				<!-- No counts, so the toggle keeps its width from page to page. -->
 				<Tabs.List aria-label="View">
 					<Tabs.Trigger value="table" {@attach hint('Table (T)')}>Table</Tabs.Trigger>
-					<Tabs.Trigger value="visualize" {@attach hint('Table and charts side by side (V)')}>
+					<!-- Clicked again while on, it flips the table and charts between side by side and
+					     stacked; its icon shows which. -->
+					<Tabs.Trigger
+						value="visualize"
+						onclick={() => view === 'visualize' && flipStacked()}
+						{@attach hint(
+							stacked
+								? 'Table above the charts (V). Click again for side by side'
+								: 'Table and charts side by side (V). Click again to stack them'
+						)}
+					>
+						{#if stacked}<Rows2Icon />{:else}<Columns2Icon />{/if}
 						Visualize
 					</Tabs.Trigger>
 					<Tabs.Trigger value="charts" {@attach hint('Charts (C)')}>Charts</Tabs.Trigger>
@@ -458,13 +485,14 @@
 		{#if evalsShown}
 			<EvalsTable bind:this={evalsTable} view={evalsView} />
 		{:else}
-			<RunsTable bind:this={table} mode={view} {nameW} {primary} {onprimaryorder} />
+			<RunsTable bind:this={table} mode={view} {nameW} {primary} {onprimaryorder} stacked={below} />
 		{/if}
 		<ChartsPane
 			shown={chartsShown}
 			active={chartsShown && fullscreen == null}
 			{panelHref}
 			onfullscreen={openPanel}
+			{below}
 		/>
 		{#if ws.page.total === 0 && narrowed}
 			<EmptyState
@@ -497,7 +525,20 @@
 					/>
 				</div>
 			{/if}
-			{#if view === 'visualize'}
+			{#if below}
+				<!-- Between the table and the charts below it. -->
+				<div class="pointer-events-none absolute inset-x-0 top-0 z-5" style:height="{tableH}px">
+					<ResizeHandle
+						class="pointer-events-auto"
+						axis="y"
+						value={tableH}
+						bounds={TABLE_H}
+						label="Resize the table above the charts"
+						onresize={(px) => (tableH = px)}
+						oncommit={(px) => saveWidth(TABLE_H, px)}
+					/>
+				</div>
+			{:else if view === 'visualize'}
 				<!-- Between the table and the charts. -->
 				<div
 					class="pointer-events-none absolute inset-y-0 left-0 z-5"
