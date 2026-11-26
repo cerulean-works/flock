@@ -8,6 +8,8 @@
 	import type { ResolvedPathname } from '$app/types';
 	import { bestRows, chartStyle } from '#lib/chart/grouping.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import { evalTable } from '#lib/eval-table.ts';
+	import { evalRuns } from '#lib/evals-view.svelte.ts';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
 	import RunView from '#lib/components/RunView.svelte';
 	import BestByPicker from '#lib/components/groups/BestByPicker.svelte';
@@ -134,6 +136,12 @@
 		}
 	);
 	setWorkspace(ws);
+
+	/**
+	 * A group of eval runs (some run has a suite score; the columns are the project's) opens on
+	 * the Evals preset of the table, its runs ranked by suites, as on the Runs page.
+	 */
+	const evalGroup = $derived(evalTable(evalRuns(ws)).rows.length > 0);
 
 	/** The page's runs' configs, for the kind rules when the API couldn't say. */
 	function configs() {
@@ -319,7 +327,9 @@
 
 <RunView
 	title={group.name}
-	initialView="visualize"
+	initialView={evalGroup ? 'table' : 'visualize'}
+	evalPreset
+	evalsFirst={evalGroup}
 	compactTools
 	{primary}
 	{onprimaryorder}

@@ -88,6 +88,8 @@
 		mine?: boolean;
 		/** Whether the table offers its Evals preset (the Runs page). */
 		evalPreset?: boolean;
+		/** Whether the preset is on until the viewer turns it off (a group of eval runs). */
+		evalsFirst?: boolean;
 	}
 
 	let {
@@ -110,7 +112,8 @@
 		tableW: savedTableW,
 		readonly,
 		mine = true,
-		evalPreset = false
+		evalPreset = false,
+		evalsFirst = false
 	}: Props = $props();
 
 	const ws = getWorkspace();
@@ -187,7 +190,8 @@
 	const hasEvals = $derived(
 		evalPreset && ws.meta.columns.some((c) => c.key.startsWith('summary.suites/'))
 	);
-	const evals = $derived(hasEvals && page.url.searchParams.get('preset') === 'evals');
+	const preset = $derived(page.url.searchParams.get('preset'));
+	const evals = $derived(hasEvals && (preset === 'evals' || (evalsFirst && preset === null)));
 	/** The Evals table shows in place of the runs table (the table view only). */
 	const evalsShown = $derived(evals && view === 'table');
 	const evalsView = new EvalsView(ws);
@@ -390,7 +394,11 @@
 						<Button
 							variant={evals ? 'secondary' : 'outline'}
 							aria-pressed={evals}
-							href={hrefWith(evals ? { preset: null, view: 'table' } : { preset: 'evals' })}
+							href={hrefWith(
+								evals
+									? { preset: evalsFirst ? 'off' : null, view: 'table' }
+									: { preset: evalsFirst ? null : 'evals' }
+							)}
 							data-sveltekit-replacestate
 							{@attach hint('Eval runs by suites, ranked')}
 						>
