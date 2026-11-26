@@ -26,13 +26,13 @@
 {#if data.org && data.feed && data.budget}
 	<Page width="full">
 		<PageHeader title="Home" live={running}>
-			{#snippet toolbar()}
+			<!-- No view tabs here: the filters sit in the header row, one row as in Linear's Inbox. -->
+			{#snippet actions()}
 				<FeedFilters
 					projects={data.shell.projects.map((p) => p.name)}
 					project={data.project ?? null}
 					kinds={data.kinds}
 				/>
-				<span class="flex-1"></span>
 				<Button
 					variant={data.mine ? 'quiet-on' : 'quiet'}
 					size="bar"

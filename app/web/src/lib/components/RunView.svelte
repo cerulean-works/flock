@@ -671,7 +671,7 @@
 			{panelHref}
 			onfullscreen={openPanel}
 			{below}
-			pack={view !== 'visualize' || below}
+			pack={false}
 		/>
 		{#if ws.page.total === 0 && narrowed}
 			<EmptyState

@@ -43,7 +43,10 @@
      windows it folds into one line above the feed, opened on request. -->
 <section aria-labelledby="budget-title" class="grid grid-cols-1 gap-5 text-[13px]">
 	<div class="flex h-7 items-center gap-1">
-		<h2 id="budget-title" class="flex-1 font-medium text-muted-foreground">Budget</h2>
+		<!-- The whole workspace's, whatever the feed beside it shows. -->
+		<h2 id="budget-title" class="min-w-0 flex-1 truncate font-medium text-muted-foreground">
+			Budget · {page.data.shell?.orgName ?? budget.org}
+		</h2>
 		<Button
 			variant="quiet"
 			size="icon-bar"

@@ -10,6 +10,14 @@
 	let { item, now }: { item: FeedItem; now: number } = $props();
 
 	const project = $derived(projectHref(item.org, item.project));
+	/** What happened at the row's time, for its hover. */
+	const VERB: Record<FeedItem['kind'], string> = {
+		run_started: 'Started',
+		run_finished: 'Finished',
+		run_failed: 'Failed',
+		run_crashed: 'Crashed',
+		project_created: 'Created'
+	};
 	const run = $derived(item.run);
 	/** What the row leaves out, for its hover: hardware, job type, group and tags. */
 	const details = $derived(
@@ -75,7 +83,7 @@
 	<time
 		class="relative z-1 w-14 flex-none text-right text-muted-foreground tabular-nums"
 		datetime={new Date(item.at * 1000).toISOString()}
-		{@attach hint(dateTime(item.at))}
+		{@attach hint(`${VERB[item.kind] ?? ''} ${dateTime(item.at)}`.trim())}
 	>
 		{relativeTime(item.at, now)}
 	</time>

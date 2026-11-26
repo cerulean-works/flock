@@ -45,7 +45,12 @@
 	}: Props = $props();
 
 	const selecting = $derived(!!selection?.size && !!selected);
-	const toolbar = $derived(heading || location || controls || selecting ? bar : undefined);
+	// Without a heading or a place to name, the controls need no row of their own: they join the
+	// header's actions.
+	const inline = $derived(!heading && !location && !selecting && !!controls);
+	const toolbar = $derived(
+		heading || location || selecting || (controls && !inline) ? bar : undefined
+	);
 </script>
 
 <!--
@@ -68,8 +73,13 @@
 	{/if}
 {/snippet}
 
+{#snippet both()}
+	{#if controls}{@render controls()}{/if}
+	{#if actions}{@render actions()}{/if}
+{/snippet}
+
 <Page width="full">
-	<PageHeader {title} {live} {badges} {subtitle} {actions} {toolbar} />
+	<PageHeader {title} {live} {badges} {subtitle} actions={inline ? both : actions} {toolbar} />
 	<main {...main} class={['relative min-h-0 flex-1 overflow-y-auto pb-10', main.class]}>
 		{@render children()}
 	</main>
