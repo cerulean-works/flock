@@ -274,7 +274,10 @@
 
 	// svelte-ignore state_referenced_locally
 	let typed = $state<string | null>(group?.name ?? prefill.name);
-	const suggested = $derived(groupName(inGroup.map(configOf), filters, wandbGroupOf(filters)));
+	// No template for an empty draft ("0 runs"): the field shows its placeholder.
+	const suggested = $derived(
+		inGroup.length ? groupName(inGroup.map(configOf), filters, wandbGroupOf(filters)) : ''
+	);
 	const name = $derived(typed ?? suggested);
 
 	// ------------------------------------------------------------------------------------------
@@ -518,7 +521,7 @@
 					class="-ml-[0.045em] w-full min-w-0 truncate rounded-md bg-transparent text-[34px] leading-10 font-normal tracking-[-0.025em] outline-none placeholder:text-faint hover:bg-muted/60 focus-visible:bg-muted/60 {BUTTON_FOCUS}"
 					value={name}
 					oninput={(e) => (typed = e.currentTarget.value)}
-					placeholder="Name the group"
+					placeholder="New group"
 					maxlength={200}
 				/>
 			</label>
