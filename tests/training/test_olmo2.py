@@ -390,6 +390,15 @@ def test_presets(config: Olmo2Config, expected_count: int) -> None:
     assert config.max_position_embeddings == 4096
 
 
+def test_flops_per_token_count_as_torchtitan_does() -> None:
+    # 6 × (1,484,916,736 parameters − the 100,352 × 2,048 input embedding), plus attention:
+    # 12 × 16 layers × 2,048 wide × the sequence (torchtitan v0.3.0, models/utils.py).
+    with torch.device("meta"):
+        model = Olmo2(OLMO2_1B_CONFIG)
+    assert model.num_flops_per_token(4096) == 9_286_987_776
+    assert model.num_flops_per_token(2048) == 9_286_987_776 - 12 * 16 * 2048 * 2048
+
+
 @pytest.mark.parametrize(
     "changes",
     [

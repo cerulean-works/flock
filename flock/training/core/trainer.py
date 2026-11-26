@@ -1,8 +1,10 @@
+import functools
 import logging
 import math
 import random
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Literal, Self
 
 import torch
@@ -28,9 +30,11 @@ from flock.training.core.chunks import TokenChunkDataset
 from flock.training.core.compilation import compile_if_enabled
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
 from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
+from flock.training.core.hardware import peak_flops_per_second
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
 from flock.training.core.optimizers import OptimizerConfig, OptimizerInterface, prepare_for_compile
+from flock.training.core.optimizers.muon import MuonWithCompanion
 
 
 class TrainerConfig(PydanticBaseModel):
@@ -317,12 +321,27 @@ class TrainerCheckpoint(PydanticBaseModel):
 
 
 class TrainerState(nn.Module):
-    """Accumulate device-resident counters and metrics as checkpointable buffers.
+    """Track training progress and the metrics logged for each window.
 
-    Loss means are weighted by valid target tokens. Gradient norm means are
-    weighted by updates. Window resets preserve global step and token counts.
-    The trainer supplies synchronized losses and token counts, and the norm of
-    DDP-synchronized gradients. State updates perform no communication.
+    A window runs from one log to the next. Progress and the window's loss,
+    gradient-norm and token counts are device buffers that checkpoints save. Loss
+    means are weighted by valid target tokens. Gradient norm means are weighted by
+    updates. Window resets preserve global step and token counts. The trainer
+    supplies synchronized losses and token counts, and the norm of DDP-synchronized
+    gradients. State updates perform no communication.
+
+    Wall time, data wait and FLOPs are host values that checkpoints leave out.
+    `get_logging_metrics` reads the clock right after it synchronizes the device,
+    so the window's time covers its updates without another synchronization.
+
+    Args:
+        flops_per_token (`Callable[[int], int]`): Training FLOPs per token for a batch width.
+        peak_flops (`float` or `None`): Peak FLOPs per second of one device, or `None`
+            to log no MFU.
+        world_size (`int`): Ranks whose valid targets the token counts sum.
+        optimizer (`torch.optim.Optimizer`): Optimizer whose rates are logged: Muon's as
+            `train/lr_muon` and `train/lr_adamw` for its companion, AdamW's as
+            `train/lr_adamw`.
     """
 
     loss_sum: torch.Tensor
@@ -335,8 +354,15 @@ class TrainerState(nn.Module):
     window_tokens: torch.Tensor
     window_steps: torch.Tensor
 
-    def __init__(self) -> None:
-        """Initialize scalar FP32 metric buffers and int64 counters to zero."""
+    def __init__(
+        self,
+        *,
+        flops_per_token: Callable[[int], int],
+        peak_flops: float | None,
+        world_size: int,
+        optimizer: Optimizer,
+    ) -> None:
+        """Initialize scalar FP32 metric buffers and int64 counters to zero, and start the clock."""
         super().__init__()
         self.register_buffer("loss_sum", torch.zeros((), dtype=torch.float))
         self.register_buffer("loss_max", torch.zeros((), dtype=torch.float))
@@ -348,6 +374,22 @@ class TrainerState(nn.Module):
         self.register_buffer("window_tokens", torch.zeros((), dtype=torch.int64))
         self.register_buffer("window_steps", torch.zeros((), dtype=torch.int64))
 
+        # Widths repeat and are bounded by the model's length limit.
+        self.flops_per_token = functools.cache(flops_per_token)
+        self.peak_flops = peak_flops
+        self.world_size = world_size
+        self.optimizer = optimizer
+        # Muon's matrices form the first parameter group and its AdamW companion's the second.
+        self.lr_names = ["muon", "adamw"] if isinstance(optimizer, MuonWithCompanion) else ["adamw"]
+        self._start_clock()
+
+    def _start_clock(self) -> None:
+        """Start timing a window on the host."""
+        self._window_start = perf_counter()
+        self._data_wait = 0.0
+        self._positions = 0
+        self._flops = 0
+
     def validate_state_dict(self, state_dict: Mapping[str, Any]) -> None:
         """Reject malformed counters and metric buffers without changing live state."""
         CheckpointTrainerState.model_validate(dict(state_dict))
@@ -358,6 +400,25 @@ class TrainerState(nn.Module):
         """Validate all buffers before restoring them with PyTorch's loading semantics."""
         self.validate_state_dict(state_dict)
         super().load_state_dict(state_dict, strict=strict, assign=assign)
+
+    def batches(self, dataloader: Iterable[Batch]) -> Iterator[Batch]:
+        """Yield the loader's batches, timing the wait for each and counting its work.
+
+        The clock restarts when iteration starts, so the first window leaves out setup.
+        """
+        self._start_clock()
+        start = self._window_start
+        batches = iter(dataloader)
+        while True:
+            batch = next(batches, None)
+            if batch is None:
+                break
+            self._data_wait += perf_counter() - start
+            input_ids = batch["input_ids"]
+            self._positions += input_ids.numel()
+            self._flops += self.flops_per_token(input_ids.shape[1]) * input_ids.numel()
+            yield batch
+            start = perf_counter()
 
     @torch.no_grad()
     def update(
@@ -389,10 +450,13 @@ class TrainerState(nn.Module):
         self.window_steps.add_(1)
 
     def get_logging_metrics(self) -> dict[str, int | float]:
-        """Return global step, window means/maxima and valid-target counts as host values.
+        """Return the window's metrics as host values.
 
-        Call after at least one update: the gradient mean divides by window steps.
-        Converting the stacked tensors to a list synchronizes accelerator work.
+        These are the global step, loss and gradient-norm means and maxima,
+        valid-target counts, learning rates, and `perf/` throughput.
+        Call after at least one update: means divide by window steps. Converting the
+        stacked tensors to a list synchronizes accelerator work. The trainer logs before
+        the scheduler steps, so the rates are the ones the window's last update used.
         """
         step, mean_loss, max_loss, mean_grad, max_grad = torch.stack(
             (
@@ -404,9 +468,18 @@ class TrainerState(nn.Module):
             )
         ).tolist()
         # Stacking with the FP32 means would make counts above 2**24 inexact; keep them int64.
-        window_tokens, total_tokens = torch.stack((self.window_tokens, self.total_tokens)).tolist()
+        window_tokens, total_tokens, window_steps = torch.stack(
+            (self.window_tokens, self.total_tokens, self.window_steps)
+        ).tolist()
 
-        return {
+        # The device has finished the window's updates, so its time is final.
+        seconds = perf_counter() - self._window_start
+        flops = self._flops / seconds
+        learning_rates = {
+            f"train/lr_{name}": float(group["lr"])
+            for name, group in zip(self.lr_names, self.optimizer.param_groups, strict=True)
+        }
+        metrics: dict[str, int | float] = {
             "global_step": step,
             "train/loss_mean": mean_loss,
             "train/loss_window_max": max_loss,
@@ -414,11 +487,20 @@ class TrainerState(nn.Module):
             "train/grad_norm_window_max": max_grad,
             "train/tokens": window_tokens,
             "train/total_tokens": total_tokens,
+            **learning_rates,
+            "perf/step_seconds": seconds / window_steps,
+            "perf/data_wait_percent": 100 * self._data_wait / seconds,
+            "perf/tokens_per_second": window_tokens / self.world_size / seconds,
+            "perf/padded_tokens_per_second": self._positions / seconds,
+            "perf/tflops": flops / 1e12,
         }
+        if self.peak_flops is not None:
+            metrics["perf/mfu_percent"] = 100 * flops / self.peak_flops
+        return metrics
 
     @torch.no_grad()
     def reset_window(self) -> None:
-        """Clear window metrics and counts while preserving global progress."""
+        """Clear window metrics and counts while preserving global progress, and restart the clock."""
         for name in (
             "loss_sum",
             "loss_max",
@@ -428,6 +510,7 @@ class TrainerState(nn.Module):
             "window_steps",
         ):
             getattr(self, name).zero_()
+        self._start_clock()
 
     @torch.no_grad()
     def reset_global(self) -> None:
@@ -493,7 +576,6 @@ class Trainer:
         self.device = self.runtime.device
         if self.device.type == "cuda":
             torch.cuda.set_device(self.device)
-        self.state = TrainerState().to(self.device)
 
         if self.runtime.enabled and not dist.is_initialized():
             raise RuntimeError(
@@ -541,6 +623,12 @@ class Trainer:
         self.lr_scheduler = StepLRScheduler(
             self.optimizer, config.lr_scheduler_config, self.total_steps
         )
+        self.state = TrainerState(
+            flops_per_token=self.model.num_flops_per_token,
+            peak_flops=peak_flops_per_second(self.device, self.model_dtype),
+            world_size=self.runtime.world_size,
+            optimizer=self.optimizer,
+        ).to(self.device)
 
         # torch compile method
         self.torch_compile: bool = config.torch_compile
@@ -590,6 +678,7 @@ class Trainer:
         )
         self.run.define_metric("global_step")
         self.run.define_metric("train/*", step_metric="global_step")
+        self.run.define_metric("perf/*", step_metric="global_step")
         self.run.define_metric("eval/*", step_metric="global_step")
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
@@ -692,7 +781,7 @@ class Trainer:
 
     def _inner_training_loop(self, dataloader: Iterable[Batch], start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
-        for step, batch in enumerate(dataloader, start=start_step + 1):
+        for step, batch in enumerate(self.state.batches(dataloader), start=start_step + 1):
             # Mark the step begin for CUDA Graphs if torch.compile is enabled.
             if self.torch_compile:
                 torch.compiler.cudagraph_mark_step_begin()
@@ -711,7 +800,6 @@ class Trainer:
             # TODO: try compiled autograd to capture the whole backward once the forward has no graph breaks (right now it still does), but the total effect is uncertainty.
             loss.backward()
             grad_norm = self._clip_and_step()
-            self.lr_scheduler.step()
 
             self.state.update(add_step=1, loss=losses, grad_norm=grad_norm, tokens=num_tokens)
 
@@ -720,6 +808,9 @@ class Trainer:
                     metrics_dict = self.state.get_logging_metrics()
                     self._log_metrics(metrics_dict)
                 self.state.reset_window()
+
+            # Step after logging, so the logged rate is the one this update used.
+            self.lr_scheduler.step()
 
             # Cleanup handles the final model save, so we only save at intervals here.
             if self.save_steps is not None and (step % self.save_steps == 0):

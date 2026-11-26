@@ -62,12 +62,15 @@ class RecordingRun:
     id: str = "run123"
     definitions: list = field(default_factory=list)
     metrics: list = field(default_factory=list)
+    perf: list = field(default_factory=list)
 
     def define_metric(self, *args: Any, **kwargs: Any) -> None:
         self.definitions.append((args, kwargs))
 
     def log(self, metrics: dict[str, Any]) -> None:
-        self.metrics.append(dict(metrics))
+        # Timings differ between otherwise identical runs, so `perf/` keys are kept apart.
+        self.metrics.append({k: v for k, v in metrics.items() if not k.startswith("perf/")})
+        self.perf.append({k: v for k, v in metrics.items() if k.startswith("perf/")})
 
 
 type TrainerBundle = tuple[Trainer, RecordingRun, list[dict[str, Any]]]
@@ -153,8 +156,22 @@ def test_trainer_initializes_schedule_and_metric_step(
     assert run.definitions == [
         (("global_step",), {}),
         (("train/*",), {"step_metric": "global_step"}),
+        (("perf/*",), {"step_metric": "global_step"}),
         (("eval/*",), {"step_metric": "global_step"}),
     ]
+
+
+def test_training_logs_throughput(trainer_factory: TrainerFactory) -> None:
+    trainer, run, _ = trainer_factory()
+    trainer.train()
+    assert [metrics["global_step"] for metrics in run.metrics] == [1, 2, 3]
+    for metrics, perf in zip(run.metrics, run.perf, strict=True):
+        # One update per window on one rank: the token rate over the update time is its tokens.
+        assert perf["perf/tokens_per_second"] * perf["perf/step_seconds"] == pytest.approx(
+            metrics["train/tokens"]
+        )
+        assert perf["perf/padded_tokens_per_second"] >= perf["perf/tokens_per_second"]
+        assert "perf/mfu_percent" not in perf  # The CPU has no peak to compare with.
 
 
 @pytest.mark.parametrize("max_steps", [3, 100])
@@ -2166,16 +2183,21 @@ def test_all_ignored_logging_windows_remain_finite(
     monkeypatch.setattr(trainer, "_get_training_dataloader", lambda: [batch] * 3)
     trainer.train()
     assert [metrics["global_step"] for metrics in run.metrics] == expected_steps
+    # Each log precedes the scheduler's step, so it carries the rate its update used.
+    rates = [0.01, 0.01 * 0.775, 0.01 * 0.325]
     for metrics in run.metrics:
-        assert metrics == {
-            "global_step": metrics["global_step"],
-            "train/loss_mean": 0.0,
-            "train/loss_window_max": 0.0,
-            "train/grad_norm_mean": 0.0,
-            "train/grad_norm_window_max": 0.0,
-            "train/tokens": 0,
-            "train/total_tokens": 0,
-        }
+        assert metrics == pytest.approx(
+            {
+                "global_step": metrics["global_step"],
+                "train/loss_mean": 0.0,
+                "train/loss_window_max": 0.0,
+                "train/grad_norm_mean": 0.0,
+                "train/grad_norm_window_max": 0.0,
+                "train/tokens": 0,
+                "train/total_tokens": 0,
+                "train/lr_adamw": rates[int(metrics["global_step"]) - 1],
+            }
+        )
 
 
 def reference_epoch(
@@ -2237,12 +2259,15 @@ def test_training_updates_and_token_weighted_logging(
             rtol=2e-5,
             msg=lambda error, name=name: f"{name}: {error}",
         )
+    # Each log precedes the scheduler's step, so it carries the rate its update used.
+    rates = [0.01, 0.01 * 0.775, 0.01 * 0.325]
     expected_logs = []
     for start in range(0, len(records), logging_steps):
         window = records[start : start + logging_steps]
         expected_logs.append(
             {
                 "global_step": start + len(window),
+                "train/lr_adamw": rates[start + len(window) - 1],
                 "train/loss_mean": sum(loss * tokens for loss, tokens, _ in window)
                 / sum(tokens for _, tokens, _ in window),
                 "train/loss_window_max": max(loss for loss, _, _ in window),
@@ -2265,7 +2290,10 @@ def test_training_updates_and_token_weighted_logging(
 
 
 def test_token_counts_stay_exact_beyond_fp32_integers() -> None:
-    state = TrainerState()
+    optimizer = torch.optim.SGD([torch.zeros(1, requires_grad=True)], lr=0.1)
+    state = TrainerState(
+        flops_per_token=lambda width: 0, peak_flops=None, world_size=1, optimizer=optimizer
+    )
     one = torch.tensor(1.0)
     state.update(add_step=1, loss=one, grad_norm=one, tokens=torch.tensor(2**24 + 1))
     state.reset_window()

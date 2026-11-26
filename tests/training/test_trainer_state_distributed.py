@@ -33,6 +33,15 @@ if TYPE_CHECKING:
     from flock.training.core.models.olmo2 import Olmo2Config
 
 
+def _checkpointed_metrics(state: TrainerState) -> dict[str, int | float]:
+    """Return the logged metrics that come from checkpointed buffers.
+
+    Timings are host values that checkpoints leave out.
+    """
+    metrics = state.get_logging_metrics()
+    return {key: value for key, value in metrics.items() if not key.startswith("perf/")}
+
+
 def _check_distributed_metrics(rank: int, rendezvous: str, logging_steps: int) -> None:
     torch.set_num_threads(1)
     dist.init_process_group(
@@ -52,7 +61,9 @@ def _check_distributed_metrics(rank: int, rendezvous: str, logging_steps: int) -
         trainer = object.__new__(Trainer)
         trainer.runtime = DistributedRuntime(rank, rank, 2, torch.device("cpu"))
         trainer.torch_compile = False
-        state = TrainerState()
+        state = TrainerState(
+            flops_per_token=lambda width: 0, peak_flops=None, world_size=2, optimizer=optimizer
+        )
         inputs = torch.linspace(-1, 2, 12).reshape(2, 3, 2)
         # Unequal counts, each rank empty in turn, and an entirely ignored batch.
         label_batches = [
@@ -125,7 +136,7 @@ def _check_distributed_metrics(rank: int, rendezvous: str, logging_steps: int) -
                 (reference_loss.item(), count, local_losses.max().item(), reference_norm.item())
             )
             window_tokens = sum(record[1] for record in window)
-            metrics = state.get_logging_metrics()
+            metrics = _checkpointed_metrics(state)
             assert metrics == pytest.approx(
                 {
                     "global_step": step,
@@ -136,6 +147,7 @@ def _check_distributed_metrics(rank: int, rendezvous: str, logging_steps: int) -
                     "train/grad_norm_window_max": max(record[3] for record in window),
                     "train/tokens": window_tokens,
                     "train/total_tokens": total_tokens,
+                    "train/lr_adamw": 0.1,
                 }
             )
             assert all(not buffer.requires_grad for buffer in state.buffers())
@@ -146,9 +158,14 @@ def _check_distributed_metrics(rank: int, rendezvous: str, logging_steps: int) -
             )
             assert snapshots[0] == snapshots[1]
             if step == 2:
-                restored = TrainerState()
+                restored = TrainerState(
+                    flops_per_token=lambda width: 0,
+                    peak_flops=None,
+                    world_size=2,
+                    optimizer=optimizer,
+                )
                 restored.load_state_dict(copy.deepcopy(state.state_dict()))
-                assert restored.get_logging_metrics() == metrics
+                assert _checkpointed_metrics(restored) == metrics
                 state = restored
             if step % logging_steps == 0 or step == len(label_batches):
                 state.reset_window()

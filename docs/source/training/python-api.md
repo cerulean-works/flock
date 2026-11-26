@@ -166,6 +166,7 @@ fresh weights; their `hf_repo` values identify tokenizers.
 [[autodoc]] training.core.models.BaseModel
     - get_hf_tokenizer
     - forward
+    - num_flops_per_token
 
 [[autodoc]] training.core.models.Olmo2
     - none

@@ -35,7 +35,8 @@ class BaseModel(nn.Module, ABC):
 
     Subclasses set `config` to a frozen dataclass and accept it as their only
     constructor argument, so Hub loading can rebuild them from `config.json`.
-    Build subclass modules inside `_initialize_weights()` and implement `_forward`.
+    Build subclass modules inside `_initialize_weights()`, and implement `_forward` and
+    `num_flops_per_token`.
 
     Args:
         max_position_embeddings (`int`): Positive maximum input sequence length.
@@ -195,6 +196,25 @@ class BaseModel(nn.Module, ABC):
         """
         input_ids, attention_mask, position_ids, cu_seq_lens = self._check_batch(batch)
         return self._forward(input_ids, attention_mask, position_ids, cu_seq_lens=cu_seq_lens)
+
+    @abstractmethod
+    def num_flops_per_token(self, seq_len: int) -> int:
+        """Return the training FLOPs of one token in a sequence of `seq_len` positions.
+
+        Count forward and backward matrix multiplications as torchtitan and PaLM
+        (arXiv 2204.02311, App. B) do: 6 for each parameter that is not an input
+        embedding, plus 12 × layers × attention width × `seq_len` for attention scores
+        and values. Attention is counted over the full sequence, without causal masking,
+        and FlashAttention's backward recomputation is left out. The trainer uses this
+        for logged TFLOPs and MFU.
+
+        Args:
+            seq_len (`int`): Positions in each row of the batch, padding included.
+
+        Returns:
+            `int`: Training FLOPs per token.
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def _forward(
