@@ -5,6 +5,7 @@
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Popover from '#lib/components/ui/popover/index.js';
 	import type { Budget } from '#lib/types.ts';
 	import { count, gpus, hours, money, monthName, shiftMonth } from '#lib/utils.ts';
 	import { orgHref, projectHref, runHref, withParam } from '#lib/workspace/url.ts';
@@ -15,9 +16,11 @@
 		thisMonth: string;
 		/** Admins set the budget and prices, and manage deleted projects. */
 		admin: boolean;
+		/** Where it shows: in the header (hidden on phones) or above the feed (phones only). */
+		class?: string;
 	}
 
-	let { budget, thisMonth, admin }: Props = $props();
+	let { budget, thisMonth, admin, class: className }: Props = $props();
 
 	/** The breakdown lists the costliest projects and runs only. */
 	const TOP_PROJECTS = 5;
@@ -27,73 +30,87 @@
 
 	const used = $derived(budget.budget ? budget.spent / budget.budget : 0);
 	const over = $derived(budget.remaining != null && budget.remaining < 0);
+	const near = $derived(!over && used >= 0.8);
 	// Static class strings, so Tailwind sees each one.
 	const tone = $derived(
-		over || used >= 1 ? 'bg-state-failed' : used >= 0.8 ? 'bg-state-preempting' : 'bg-link'
+		over || used >= 1 ? 'bg-state-failed' : near ? 'bg-state-preempting' : 'bg-link'
 	);
 	const maxCost = $derived(Math.max(...budget.projects.map((p) => p.cost), 0));
 	const current = $derived(budget.month === thisMonth);
-	let expanded = $state(false);
+	const set = $derived(budget.budget != null && budget.remaining != null);
+	let open = $state(false);
 
 	const monthHref = (month: string) =>
 		withParam(page.url, 'month', month === thisMonth ? null : month);
 </script>
 
-<!-- A quiet rail beside the feed: the month's figure, one bar, then where it went. On narrow
-     windows it folds into one line above the feed, opened on request. -->
-<section aria-labelledby="budget-title" class="grid grid-cols-1 gap-5 text-[13px]">
-	<div class="flex h-7 items-center gap-1">
-		<!-- The whole workspace's, whatever the feed beside it shows. -->
-		<h2 id="budget-title" class="min-w-0 flex-1 truncate font-medium text-muted-foreground">
-			Budget · {page.data.shell?.orgName ?? budget.org}
-		</h2>
-		<Button
-			variant="quiet"
-			size="icon-bar"
-			href={monthHref(shiftMonth(budget.month, -1))}
-			data-sveltekit-noscroll
-			aria-label="Previous month"
-			{@attach hint('Previous month')}
-		>
-			<ChevronLeftIcon />
-		</Button>
-		<span class="w-26 text-center text-muted-foreground tabular-nums"
-			>{monthName(budget.month)}</span
-		>
-		<Button
-			variant="quiet"
-			size="icon-bar"
-			class={current ? 'pointer-events-none opacity-40' : undefined}
-			href={current ? undefined : monthHref(shiftMonth(budget.month, 1))}
-			data-sveltekit-noscroll
-			aria-label="Next month"
-			{@attach hint('Next month')}
-			aria-disabled={current}
-		>
-			<ChevronRightIcon />
-		</Button>
-	</div>
-
-	<button
-		type="button"
-		class="-mt-3 flex items-center gap-1.5 justify-self-start rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 xl:hidden"
-		aria-expanded={expanded}
-		onclick={() => (expanded = !expanded)}
-	>
-		{#if budget.remaining != null && budget.budget != null}
-			<span class={['text-foreground tabular-nums', over && 'text-destructive']}
-				>{fmt(Math.abs(budget.remaining))}</span
+<!-- The month's budget as one line in the header; the breakdown opens beside it on request.
+     The line turns amber from 80% used and red when over, so a warning needs no click. -->
+<Popover.Root bind:open>
+	<Popover.Trigger>
+		{#snippet child({ props })}
+			<Button
+				{...props}
+				variant={open ? 'quiet-on' : 'quiet'}
+				size="bar"
+				class={[
+					'tabular-nums',
+					className,
+					over ? 'text-destructive' : near && 'text-state-preempting'
+				]}
+				{@attach hint(`Budget, ${monthName(budget.month)}`)}
 			>
-			{over ? 'over' : 'left'} of {fmt(budget.budget)}
-		{:else}
-			<span class="text-foreground tabular-nums">{fmt(budget.spent)}</span> spent
-		{/if}
-		<ChevronDownIcon class={['size-3.5 transition-transform', expanded && 'rotate-180']} />
-	</button>
+				{#if set}
+					{fmt(Math.abs(budget.remaining!))}
+					{over ? 'over' : 'left'}
+				{:else}
+					{fmt(budget.spent)} spent
+				{/if}
+				{#if !current}<span class="text-muted-foreground">· {monthName(budget.month)}</span>{/if}
+				<ChevronDownIcon class={['transition-transform', open && 'rotate-180']} />
+			</Button>
+		{/snippet}
+	</Popover.Trigger>
+	<Popover.Content
+		align="end"
+		collisionPadding={16}
+		class="grid w-[min(20rem,calc(100vw-2rem))] grid-cols-1 gap-5 p-4 text-[13px]"
+		aria-labelledby="budget-title"
+	>
+		<div class="-mt-1 -mr-1 flex h-7 items-center gap-1">
+			<!-- The whole workspace's, whatever the feed shows. -->
+			<h2 id="budget-title" class="min-w-0 flex-1 truncate font-medium text-muted-foreground">
+				Budget · {page.data.shell?.orgName ?? budget.org}
+			</h2>
+			<Button
+				variant="quiet"
+				size="icon-bar"
+				href={monthHref(shiftMonth(budget.month, -1))}
+				data-sveltekit-noscroll
+				aria-label="Previous month"
+				{@attach hint('Previous month')}
+			>
+				<ChevronLeftIcon />
+			</Button>
+			<span class="w-26 text-center text-muted-foreground tabular-nums"
+				>{monthName(budget.month)}</span
+			>
+			<Button
+				variant="quiet"
+				size="icon-bar"
+				class={current ? 'pointer-events-none opacity-40' : undefined}
+				href={current ? undefined : monthHref(shiftMonth(budget.month, 1))}
+				data-sveltekit-noscroll
+				aria-label="Next month"
+				{@attach hint('Next month')}
+				aria-disabled={current}
+			>
+				<ChevronRightIcon />
+			</Button>
+		</div>
 
-	<div class={['grid grid-cols-1 gap-6', !expanded && 'hidden xl:grid']}>
 		<div class="grid gap-2">
-			{#if budget.budget != null && budget.remaining != null}
+			{#if set}
 				<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
 					<span
 						class={[
@@ -101,10 +118,10 @@
 							over && 'text-destructive'
 						]}
 					>
-						{fmt(Math.abs(budget.remaining))}
+						{fmt(Math.abs(budget.remaining!))}
 					</span>
 					<span class="whitespace-nowrap text-muted-foreground">
-						{over ? 'over' : 'left'} of {fmt(budget.budget)}
+						{over ? 'over' : 'left'} of {fmt(budget.budget!)}
 					</span>
 				</p>
 				<div
@@ -218,5 +235,5 @@
 				</ol>
 			</div>
 		{/if}
-	</div>
-</section>
+	</Popover.Content>
+</Popover.Root>

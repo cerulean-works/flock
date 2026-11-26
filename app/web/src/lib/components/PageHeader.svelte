@@ -171,12 +171,14 @@
 					<span
 						class="flex items-center gap-1.5 text-[13px] text-muted-foreground tabular-nums"
 						role="status"
+						{@attach hint(`${live} running`)}
 					>
 						<span
 							class="size-1.5 animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none"
 							aria-hidden="true"
 						></span>
-						{live} running
+						<!-- On a phone the number alone, so the title keeps its room. -->
+						<span>{live}<span class="max-sm:sr-only">&nbsp;running</span></span>
 					</span>
 				{/if}
 				{#if actions}{@render actions()}{/if}

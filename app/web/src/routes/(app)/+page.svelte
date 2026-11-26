@@ -28,6 +28,12 @@
 		<PageHeader title="Home" live={running}>
 			<!-- No view tabs here: the filters sit in the header row, one row as in Linear's Inbox. -->
 			{#snippet actions()}
+				<BudgetPanel
+					budget={data.budget}
+					thisMonth={data.thisMonth}
+					admin={data.shell.access === 'admin'}
+					class="max-sm:hidden"
+				/>
 				<FeedFilters
 					projects={data.shell.projects.map((p) => p.name)}
 					project={data.project ?? null}
@@ -38,39 +44,37 @@
 					size="bar"
 					href={withParam(page.url, 'feed', data.mine ? null : 'mine')}
 					aria-pressed={!!data.mine}
+					aria-label="My runs"
 					data-sveltekit-replacestate
 					{@attach hint(data.mine ? 'Show everyone’s runs' : 'Show only the runs you logged')}
 				>
-					<UserIcon /> My runs
+					<UserIcon /> <span class="max-sm:hidden">My runs</span>
 				</Button>
 			{/snippet}
 		</PageHeader>
 		<main class="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-16">
-			<!-- The feed, and the budget as a quiet rail beside it (above it, folded, on narrow
-			     windows). -->
-			<div class="grid gap-x-12 gap-y-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-				<aside class="min-w-0 xl:order-last" aria-label="Budget">
-					<BudgetPanel
-						budget={data.budget}
-						thisMonth={data.thisMonth}
-						admin={data.shell.access === 'admin'}
+			<!-- The feed takes the width; the budget is a line in the header (above the feed on
+			     phones, where the header has no room). -->
+			<BudgetPanel
+				budget={data.budget}
+				thisMonth={data.thisMonth}
+				admin={data.shell.access === 'admin'}
+				class="mb-2 -ml-2 sm:hidden"
+			/>
+			<section aria-label="Activity" class="min-w-0">
+				{#key JSON.stringify(data.query)}
+					<FeedList
+						first={() => data.feed!}
+						query={data.query}
+						now={data.now}
+						empty={data.kinds || data.project
+							? 'Nothing like that has happened here yet.'
+							: data.mine
+								? 'You haven’t logged any runs here yet.'
+								: 'Nothing has happened here yet.'}
 					/>
-				</aside>
-				<section aria-label="Activity" class="min-w-0">
-					{#key JSON.stringify(data.query)}
-						<FeedList
-							first={() => data.feed!}
-							query={data.query}
-							now={data.now}
-							empty={data.kinds || data.project
-								? 'Nothing like that has happened here yet.'
-								: data.mine
-									? 'You haven’t logged any runs here yet.'
-									: 'Nothing has happened here yet.'}
-						/>
-					{/key}
-				</section>
-			</div>
+				{/key}
+			</section>
 		</main>
 	</Page>
 {:else}
