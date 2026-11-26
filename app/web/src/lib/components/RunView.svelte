@@ -36,6 +36,7 @@
 	import type { Crumb } from '#lib/storage.ts';
 	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
 	import { describeFilters } from '#lib/workspace/filters.ts';
+	import { applyRunQuery } from '#lib/workspace/url.ts';
 	import {
 		isProjectView,
 		rememberView,
@@ -362,12 +363,26 @@
 	const focusPinned = $derived(ws.focus != null && ws.pinned === ws.focus && ws.hover == null);
 
 	/** The runs shown are a search's or a filter's, not all of the page's. */
+	let filterControl = $state<{ edit: () => void } | null>(null);
+	const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
+
+	/** The filters without the one at `i`, from the first page. */
+	function dropFilter(i: number) {
+		const params = new URLSearchParams(page.url.search);
+		applyRunQuery(params, {
+			...ws.page.query,
+			filters: ws.page.query.filters.filter((_, j) => j !== i),
+			page: 1
+		});
+		ws.selected.clear();
+		void goto(ws.href(params), { reset: false });
+	}
+
 	const narrowed = $derived(!!ws.page.query.search || ws.page.query.filters.length > 0);
 
 	const noMatch = $derived.by(() => {
 		const { search, filters } = ws.page.query;
 		if (!filters.length) return `No run’s name or id contains “${search}”.`;
-		const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
 		const where = describeFilters(filters, kindOf, false, ws.people);
 		if (!search) return `No run matches ${where}.`;
 		return `No run matching “${search}” has ${where}.`;
@@ -480,7 +495,7 @@
 			{:else if ws.page.total > 0 || narrowed}
 				<!-- With no runs yet, only the view tabs: nothing here could act. -->
 				<RunSearch />
-				<RunFilters noMine={!mine} compact={compactTools} />
+				<RunFilters bind:this={filterControl} noMine={!mine} compact={compactTools} />
 
 				{#if tableShown}
 					{#if hasEvals && view === 'table'}
@@ -551,6 +566,36 @@
 			{/if}
 		{/snippet}
 	</PageHeader>
+	{#if ws.page.query.filters.length && !selecting}
+		<!-- The filters in effect, one chip each: a click edits them, the cross drops one. -->
+		<div
+			class="flex min-h-9 flex-none flex-wrap items-center gap-1.5 border-b border-divider py-1 pr-4 pl-5"
+			aria-label="Filters"
+			role="group"
+		>
+			{#each ws.page.query.filters as f, i (i)}
+				{@const text = describeFilters([f], kindOf, false, ws.people)}
+				<span class="inline-flex h-6 max-w-80 items-center rounded-md bg-muted text-xs">
+					<button
+						type="button"
+						class="min-w-0 truncate rounded-l-md py-0.5 pr-1 pl-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+						onclick={() => filterControl?.edit()}
+						{@attach hint(text)}
+					>
+						{text}
+					</button>
+					<button
+						type="button"
+						class="grid h-6 w-6 flex-none place-items-center rounded-r-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+						aria-label="Remove filter {text}"
+						onclick={() => dropFilter(i)}
+					>
+						<XIcon class="size-3" />
+					</button>
+				</span>
+			{/each}
+		</div>
+	{/if}
 
 	<main
 		class="relative min-h-0 flex-1"

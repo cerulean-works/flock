@@ -13,6 +13,16 @@ type Column = Pick<ColumnDef, 'key' | 'label' | 'group'>;
 /** Columns every table shows: a run's state and id. */
 export const LOCKED_COLUMNS: ReadonlySet<string> = new Set(['state', 'name']);
 
+/**
+ * A column's name as the UI shows it: the run's own columns as words (State, ID, Job type),
+ * logged config and summary keys as they were logged.
+ */
+export function columnLabel(col: Pick<ColumnDef, 'label' | 'group'>): string {
+	if (col.group !== 'info') return col.label;
+	const words = col.label.replace(/_/g, ' ');
+	return words === 'id' ? 'ID' : words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 const GROUP_LABELS: Record<ColumnDef['group'], string> = {
 	info: 'Run',
 	config: 'Config',

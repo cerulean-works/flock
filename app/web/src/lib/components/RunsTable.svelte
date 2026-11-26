@@ -48,6 +48,7 @@
 		relativeTime
 	} from '#lib/utils.ts';
 	import {
+		columnLabel,
 		LOCKED_COLUMNS,
 		columnDrops,
 		columnTree,
@@ -131,16 +132,9 @@
 			col.group === 'summary' &&
 			columns.slice(0, primaryCount).some((o) => o !== col && o.label === col.label)
 				? col.key
-				: col.group === 'info'
-					? sentence(col.label)
-					: col.label
+				: columnLabel(col)
 		)
 	);
-	/** The run's own columns read as words (State, ID, Job type); logged keys keep their names. */
-	function sentence(label: string) {
-		const words = label.replace(/_/g, ' ');
-		return words === 'id' ? 'ID' : words.charAt(0).toUpperCase() + words.slice(1);
-	}
 	/** Which group (Suggested, Run, Config, Summary) each shown column is in, for its header. */
 	const groupOf = $derived.by(() => {
 		const out: { label: string; first: boolean }[] = [];
