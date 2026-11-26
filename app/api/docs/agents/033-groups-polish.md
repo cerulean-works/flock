@@ -5,7 +5,7 @@
 | Status | implemented, pending review |
 | Date | 2026-11-26 |
 | Builds on | [026](026-run-groups.md) (D215 to D230: groups), [032](032-eval-runs-by-suite.md) (D210 to D214: the Evals preset) |
-| Amends | [026](026-run-groups.md): D219 (suggestions), D221 (Compare's charts), D222 (a group's default view, Visualize's layout) |
+| Amends | [026](026-run-groups.md): D219 (suggestions), D221 (Compare's charts), D222 (a group's default view, Visualize's layout); [018](018-workspace-panels.md): sections share a row |
 | Keeps | every route, stored setting and the assistant's requests |
 
 ## 1. Goal
@@ -38,7 +38,11 @@ D219 suggested W&B groups from the runs in no saved group. Runs logged later int
 
 Side by side suits many runs and few charts; a group's few runs read better in a short table above charts that span the page. Selecting **Visualize** while it is on flips between the two; a small icon in the tab (columns or rows) shows which, and its hint says a second click flips it. The choice is the viewer's, kept in a cookie (`flock_visualize_stacked`) like the dragged widths, so the server renders it with no jump, and it holds on the Runs page and a group's alike. Side by side stays the default. Stacked, the divider is a horizontal bar that resizes the table's height (`TABLE_H`, 120 to 1200 px, 320 at first), and `ResizeHandle` gains a vertical axis for it.
 
-### D236. Smaller fixes
+### D236. Small sections share a row
+
+A section with fewer panels than a row fits takes only their columns, so small sections sit side by side: a group logging `lr`, `train/loss` and `val/loss` shows `charts | train | val` in one row of three instead of three rows of one. A section with a row or more of panels spans the row as before, and a folded one takes one column. The sections flow on the panels' own column grid (up to four, none under 340 px), so a packed section's panels line up with a full one's, and a narrow pane (beside the table) still shows one section per row. Headers stay with their sections; a packed header has no edge-to-edge bleed.
+
+### D237. Smaller fixes
 
 - **Best by** is a trophy and the metric on every page (Compare, a group, the editor), as on a group's toolbar before; "Best by" is its tooltip and screen-reader text. The Evals preset's button (D210) takes a clipboard with a check instead of its trophy, so the trophy means only the best.
 - Among Suggested columns, which have no group band, a metric with a setting's name is headed by its key (`summary.lr` beside `lr`), on Compare and in a group's table.
@@ -57,6 +61,7 @@ Side by side suits many runs and few charts; a group's few runs read better in a
 5. Suggestions: the saved W&B groups, with a test.
 6. Docs: the groups guide.
 7. Visualize stacked, flipped by a second click.
+8. Small sections share a row.
 
 ## 4. How it was actually built
 
@@ -66,6 +71,8 @@ Side by side suits many runs and few charts; a group's few runs read better in a
 - Unit tests cover `metricLabel` on a suite, `chartKey` and the chart metrics of a suite.
 
 ## 5. Known gaps
+
+- Sections in one row reorder by keyboard (a section's grip and the arrow keys), not by dragging sideways: a drag still moves a section by height, past the whole row.
 
 - A suite's scale on Compare comes from the best runs' snapshot, read once the page has loaded; until then, and for a suite whose scale is unknown, scores show in the plain number format.
 - A group with both eval and training runs opens on the preset, which lists only its eval runs; **Evals** shows the rest. Whether a group is one of eval runs is read from the page of runs on screen, so in such a mixed group a search or a page without eval runs opens **Visualize** instead.
