@@ -50,7 +50,7 @@ def test_org_crud(flock: FlockServer) -> None:
         "s3_ephemeral_ttl": 8 * 3600,  # S3 key lifetimes (D56)
         "s3_key_max_ttl": 30 * 86400,
         "model_retention": None,  # keep every model version (D109)
-        "assistant_enabled": False,  # the group pages' assistant is off by default (D191)
+        "assistant_enabled": False,  # the group pages' assistant is off by default (D224)
     }
     assert admin.post(ORGS, {"name": "lab"}).status == 409
     assert admin.post(ORGS, {"name": "a/b"}).status == 422

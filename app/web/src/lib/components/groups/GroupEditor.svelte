@@ -67,10 +67,10 @@
 	import { INFO_COLUMNS, suggestPrompts } from './editor.ts';
 
 	/**
-	 * The create page and the edit dialog (D190): every run of the project, ticked in or out of
+	 * The create page and the edit dialog (D223): every run of the project, ticked in or out of
 	 * the group.
 	 * Filters tick the runs they match (on a new group) or offer them as new matches (on a saved
-	 * one, D183); hand ticks win over both. The assistant (D191) sets the same filters and ticks,
+	 * one, D216); hand ticks win over both. The assistant (D224) sets the same filters and ticks,
 	 * each step undoable.
 	 */
 
@@ -152,7 +152,7 @@
 	const toAdd = $derived([...added].filter((id) => !members.has(id)).length);
 	const newMatches = $derived(ids.filter((id) => isNewMatch(draft, id) && !added.has(id)));
 
-	// Best by: the draft's own setting, else the project's (D184).
+	// Best by: the draft's own setting, else the project's (D217).
 	// svelte-ignore state_referenced_locally
 	let best = $state<{ key: string; order: BestOrder } | null>(
 		group?.best_key ? { key: group.best_key, order: group.best_order ?? 'asc' } : null
@@ -243,7 +243,7 @@
 	const allShownIn = $derived(shown.length > 0 && shown.every((r) => inDraft(draft, r.id)));
 	const someShownIn = $derived(shown.some((r) => inDraft(draft, r.id)));
 
-	// Columns: what varies among the group's runs (D185), else among every run.
+	// Columns: what varies among the group's runs (D218), else among every run.
 	const varies = $derived.by(() => {
 		const source = inGroup.length >= 2 ? inGroup : rows;
 		return keysOf(classifyColumns(source.map(configOf)), 'varies').slice(0, 8);
@@ -268,7 +268,7 @@
 		metric && metric.key === bestKey ? metric.values.get(id) : undefined;
 
 	// ------------------------------------------------------------------------------------------
-	// The name: a template from the draft (D192), until it's typed over.
+	// The name: a template from the draft (D225), until it's typed over.
 
 	// svelte-ignore state_referenced_locally
 	let typed = $state<string | null>(group?.name ?? prefill.name);
@@ -276,7 +276,7 @@
 	const name = $derived(typed ?? suggested);
 
 	// ------------------------------------------------------------------------------------------
-	// The assistant (D191): only when the API says the viewer may use it.
+	// The assistant (D224): only when the API says the viewer may use it.
 
 	const assistant = $derived(!!groupList?.assistant);
 	const suggestions = $derived(
@@ -411,7 +411,7 @@
 			if (!group) {
 				const created = await groupsCall<Group>(groupsApi(entity, project), {
 					method: 'POST',
-					// Exactly the ticked runs: matches left out are recorded as dropped (D183).
+					// Exactly the ticked runs: matches left out are recorded as dropped (D216).
 					body: {
 						name: trimmed,
 						filter,
@@ -501,7 +501,7 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<header class="flex-none">
-		<!-- As PageHeader's workspace rows, with the name editable in the title (D192). -->
+		<!-- As PageHeader's workspace rows, with the name editable in the title (D225). -->
 		<div class="box-content flex h-10 items-center gap-x-3 pt-5 pr-7 pb-3 pl-5">
 			<span
 				class="size-3.5 flex-none rounded-[4px] {group
@@ -701,7 +701,7 @@
 					{/if}
 				</div>
 			</div>
-			<!-- What the group would be, by how each run came to be in or out (D190). -->
+			<!-- What the group would be, by how each run came to be in or out (D223). -->
 			<footer
 				class="flex min-h-11 flex-none flex-wrap items-center gap-x-4 gap-y-1 border-t border-divider px-5 py-2 text-[13px]"
 				role="status"

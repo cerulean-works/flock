@@ -13,7 +13,7 @@ import type { LayoutLoad } from './$types';
 // or an unreachable flock, is reported by the snapshot. (Flocks older than projects/CRUD don't
 // serve the project endpoint at all.)
 //
-// The project's groups and suggested groups are read here too, for the sidebar's Groups (D182)
+// The project's groups and suggested groups are read here too, for the sidebar's Groups (D215)
 // and the group pages: a change to a group invalidates `GROUPS`, which runs this again. Members
 // only are offered suggestions, which they'd save as groups. Flocks without groups serve
 // neither, and the sidebar shows none.
@@ -25,7 +25,7 @@ export const load: LayoutLoad = async ({ fetch, params, parent, depends }) => {
 	};
 	// The shell already knows whether the viewer is outside the org: ask for the right list
 	// alongside the project, not after it.
-	// Suggestions are streamed, not awaited: on a cold cache they take seconds to cluster (D186),
+	// Suggestions are streamed, not awaited: on a cold cache they take seconds to cluster (D219),
 	// and the Runs page shouldn't wait on them. The sidebar shows them when they arrive.
 	const suggestions = parent()
 		.then(async ({ shell }) =>

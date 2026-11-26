@@ -55,7 +55,7 @@
 		signedIn
 	});
 
-	/** On a project's pages with groups (D182), the rail links to them, as the sidebar does. */
+	/** On a project's pages with groups (D215), the rail links to them, as the sidebar does. */
 	const groupsProject = $derived(
 		data.shell.org &&
 			page.params.project &&

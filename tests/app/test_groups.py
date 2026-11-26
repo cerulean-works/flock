@@ -1,6 +1,6 @@
-"""Run groups (025): a group is a list of runs (D183), its new matches, bests with seeds
-(D184), column kinds (D185), suggestions (D186), Compare (D188), who may read and change
-groups (D193), and the proposals route (D196)."""
+"""Run groups (026): a group is a list of runs (D216), its new matches, bests with seeds
+(D217), column kinds (D218), suggestions (D219), Compare (D221), who may read and change
+groups (D226), and the proposals route (D229)."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ def three_runs(api: Client) -> None:
     log(api, "c", {"opt": "sgd", "lr": 0.1})
 
 
-# ---------------------------------------------------------------------- membership (D183)
+# ---------------------------------------------------------------------- membership (D216)
 
 
 def test_create_from_a_filter_by_hand_and_both(api: Client) -> None:
@@ -225,7 +225,7 @@ def test_deleted_and_moved_runs_leave_their_groups(api: Client) -> None:
     moved = api.post(f"{P}/runs/move", {"runs": ["b"], "to": "q", "create": True})
     assert moved.status == 200, moved.body
     assert group(api, made["id"])["runs"] == ["c"]
-    # Moved back, it's a new match again: its rows went with the move (D183).
+    # Moved back, it's a new match again: its rows went with the move (D216).
     assert api.post("/api/v1/projects/flock/q/runs/move", {"runs": ["b"], "to": "p"}).status == 200
     assert group(api, made["id"])["runs"] == ["c"]
     assert new_ids(api, made["id"]) == ["b"]
@@ -297,7 +297,7 @@ def test_seeds_and_nan_is_never_best(api: Client) -> None:
     single = create(api, name="nan", runs=["r4"])
     assert group(api, single["id"])["best"] is None
 
-    # The project's default best by is summary.val/loss, lowest first (D184).
+    # The project's default best by is summary.val/loss, lowest first (D217).
     body = api.get(G).json()
     assert (body["best_key"], body["best_order"]) == ("summary.val/loss", "asc")
     resp = api.request(
@@ -366,7 +366,7 @@ def test_compare(api: Client) -> None:
     assert body["ungrouped_count"] == 3
 
 
-# ---------------------------------------------------------------------- suggestions (D186)
+# ---------------------------------------------------------------------- suggestions (D219)
 
 
 def test_suggestions_from_wandb_groups_and_config_differences(api: Client) -> None:
@@ -398,7 +398,7 @@ def test_suggestions_from_wandb_groups_and_config_differences(api: Client) -> No
     assert all("c0" not in s["runs"] for s in api.get(f"{G}/suggestions").json()["suggestions"])
 
 
-# ---------------------------------------------------------------------- access (D193)
+# ---------------------------------------------------------------------- access (D226)
 
 
 def test_outsiders_read_groups_of_public_projects_and_members_change_them(
@@ -439,7 +439,7 @@ def test_outsiders_read_groups_of_public_projects_and_members_change_them(
         for method, path, body in reads:
             resp = client.request(method, path, body=body)
             assert resp.status == 200, (method, path, resp.body)
-        assert client.get(G).json()["assistant"] is False  # never for outsiders (D191)
+        assert client.get(G).json()["assistant"] is False  # never for outsiders (D224)
         for method, path, body in writes:
             expected = 401 if client is anon else 404
             assert client.request(method, path, body=body).status == expected, (method, path)
@@ -468,7 +468,7 @@ def test_the_assistant_is_off_until_an_org_admin_turns_it_on(flock: FlockServer)
     assert api.post(f"{G}/assist", {"request": "adam runs"}).status == 404
 
 
-# ---------------------------------------------------------------------- proposals (D196)
+# ---------------------------------------------------------------------- proposals (D229)
 
 
 def test_proposals_answer_403_while_the_assistant_is_off(flock: FlockServer) -> None:

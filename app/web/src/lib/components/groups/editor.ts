@@ -17,7 +17,7 @@ type Fetch = typeof fetch;
 export const INFO_COLUMNS = ['display_name', 'state', 'created_at', 'group', 'tags', 'job_type'];
 
 /**
- * What the create and edit page (D190) read: every run of the project (newest first, at most
+ * What the create and edit page (D223) read: every run of the project (newest first, at most
  * `MAX_RUNS`) with its attributes and config, and the project's summary columns (a query of no
  * runs still names the columns a pattern matches). Summary values are read per column, for
  * the Best by column only (`runsQuery` with that column), as a project can log hundreds.
@@ -44,7 +44,7 @@ export const FALLBACK_PROMPTS = [
 ] as const;
 
 /**
- * Three requests the assistant's empty thread offers (D191), from the project's own runs where
+ * Three requests the assistant's empty thread offers (D224), from the project's own runs where
  * they say enough: a state the runs are in, a config number that varies and a middle value of
  * it, and a run to add by hand (`addable`, the runs not in the draft). Each falls back to its
  * `FALLBACK_PROMPTS` entry.

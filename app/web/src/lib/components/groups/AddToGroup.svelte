@@ -17,9 +17,9 @@
 	} from '#lib/groups.ts';
 
 	/**
-	 * **Add to group** for an ungrouped run (D187): every group, searchable, with checkboxes, and
+	 * **Add to group** for an ungrouped run (D220): every group, searchable, with checkboxes, and
 	 * **New group with this run…**. Nothing is pre-checked or recommended. The run is added by
-	 * hand, so it stays whatever the groups' filters say (D183).
+	 * hand, so it stays whatever the groups' filters say (D216).
 	 */
 
 	interface Props {

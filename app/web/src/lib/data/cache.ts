@@ -50,7 +50,7 @@ export const ownersUrl = (entity: string, project: string) =>
 
 /**
  * Where a page of runs is read: the project's, or with `group` set only that group's members
- * (025), which its page shows with the same table and charts.
+ * (026), which its page shows with the same table and charts.
  */
 export function runPageUrl(entity: string, project: string, q: RunQuery, group?: number | null) {
 	const base = projectUrl(entity, project);

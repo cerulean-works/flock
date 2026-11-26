@@ -61,11 +61,11 @@
 	// ------------------------------------------------------------------------------------------
 	// Columns: the value, its change from the best group's, the spread across repeats, the run
 	// count, the suggested settings and metrics, then the config keys that differ between the
-	// rows (D188), or every key with the toggle off.
+	// rows (D221), or every key with the toggle off.
 
 	/**
 	 * A group ranked by another best-by column than the page's: the API puts it last, and its
-	 * row is greyed with the metric named (D188).
+	 * row is greyed with the metric named (D221).
 	 */
 	function otherMetric(row: CompareRow): string | null {
 		const key = row.best_key ?? (row.group == null ? null : byId.get(row.group)?.best_key);
@@ -210,7 +210,7 @@
 		!!top && row !== top && valueKey(row.config[key]) !== valueKey(top.config[key]);
 
 	// ------------------------------------------------------------------------------------------
-	// Ungrouped runs (D187): folded under the groups; open, the best 3, and the rest on request.
+	// Ungrouped runs (D220): folded under the groups; open, the best 3, and the rest on request.
 
 	const UNGROUPED_SHOWN = 3;
 	let ungroupedOpen = $state(false);
@@ -315,7 +315,7 @@
 	}
 
 	// ------------------------------------------------------------------------------------------
-	// Live updates (D195): values and counts are read again; the rows' runs are watched.
+	// Live updates (D228): values and counts are read again; the rows' runs are watched.
 
 	function onproject(e: ProjectEvent) {
 		if (e.visibility === 'private') {

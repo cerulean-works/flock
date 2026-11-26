@@ -1,5 +1,5 @@
 """The run groups assistant: plain-language requests turned into filters, picks and best-by
-settings through OpenAI's Decisions API (D191).
+settings through OpenAI's Decisions API (D224).
 
 The Decisions API answers typed questions about one input (a predicate's probability, or a
 choice among 2 to 255 listed values) and never writes text. So Flock lists the candidates and
@@ -38,13 +38,13 @@ type Op = Literal["eq", "ne", "gt", "gte", "lt", "lte", "contains", "exists", "m
 type ActionType = Literal["filter", "add_runs", "drop_runs", "set_best", "none"]
 
 MODEL = "gpt-6-luna"
-TOP_COLUMNS = 50  # columns with most runs always asked about (D191)
+TOP_COLUMNS = 50  # columns with most runs always asked about (D224)
 MAX_QUESTIONS = 380  # the first request's questions, of the API's 400
 VALUE_ROOM = 60  # of those, kept for questions about small categorical columns' values
 NAMING_COLUMNS = frozenset({"name", "display_name"})
 MAX_REQUEST = 400  # questions the API takes in one request
 MAX_CHOICES = 255  # values a choice question takes
-PICKED = 0.5  # the probability at which a column, run or action is taken (D191)
+PICKED = 0.5  # the probability at which a column, run or action is taken (D224)
 ALTERNATIVES = 5  # other readings kept per condition
 MIN_ALTERNATIVE = 0.05  # readings less likely than this aren't offered
 
@@ -128,7 +128,7 @@ class Reading:
 
 @dataclass(frozen=True)
 class Action:
-    """One assistant turn's result, shown as an action card (D191)."""
+    """One assistant turn's result, shown as an action card (D224)."""
 
     type: ActionType
     conditions: tuple[tuple[Reading, tuple[Reading, ...]], ...] = ()  # chosen, others best first
@@ -223,7 +223,7 @@ async def assist(
     client: DecisionsClient,
 ) -> Action:
     """The action ``request`` asks for, given the project's columns and runs and the draft's
-    current filters, in the two requests of D191."""
+    current filters, in the two requests of D224."""
     request = request.strip()
     if not request:
         return NONE
@@ -295,7 +295,7 @@ def _value_questions(candidates: Sequence[Column]) -> list[tuple[Column, str, Va
 def candidate_columns(request: str, columns: Sequence[Column]) -> list[Column]:
     """The columns asked about: the run's own attributes (``state``, ``tags``, ``group``…), then
     the 50 ``config.*``/``summary.*`` columns with most runs, then those sharing a word with the
-    request, by runs, up to 319 so the action choice and 60 value questions fit in 380 (D191).
+    request, by runs, up to 319 so the action choice and 60 value questions fit in 380 (D224).
     ``name`` and ``display_name`` are left out: naming runs is what adding and dropping by hand
     are for, and asked about, the model picked ``name`` for almost every request.
 
@@ -423,7 +423,7 @@ async def _operators(
         if op_answer["type"] == "refusal":
             continue
         choices = _distribution(op_answer, [*ops, UNSET])
-        # A second guard against a column picked only for being related (D191): the operator
+        # A second guard against a column picked only for being related (D224): the operator
         # question can say the request sets no condition on it, and then it's left out.
         if not choices or choices[0][0] == UNSET:
             continue
@@ -480,7 +480,7 @@ def _ops(column: Column, *, has_values: bool) -> list[Op]:
 
 def _value_choices(column: Column, mentioned: Sequence[float] = ()) -> dict[str | bool, Value]:
     """A column's candidate values by their choice label: its observed values, or for a numeric
-    column with more than 255, 255 of them at even quantiles (D191). A numeric column is also
+    column with more than 255, 255 of them at even quantiles (D224). A numeric column is also
     offered the numbers the request names, first, since a bound like "lr below 1e-3" is rarely
     an observed value in a random search. Choice values must be strings or booleans, so numbers
     travel as their text and are decoded through this map."""
@@ -558,7 +558,7 @@ async def _runs(
 
 def candidate_runs(request: str, runs: Sequence[RunRef]) -> list[RunRef]:
     """Up to 255 runs whose names share a substring with the request: those containing the
-    most of its words first, else, when no name matches, the first 255 (D191)."""
+    most of its words first, else, when no name matches, the first 255 (D224)."""
     if len(runs) <= MAX_CHOICES:
         return list(runs)
     words = _words(request) - REQUEST_WORDS_IGNORED
@@ -648,7 +648,7 @@ def _distribution[T](answer: dict, allowed: Sequence[T] | dict[T, Any]) -> list[
     return sorted(((keys[k], p) for k, p in found.items()), key=lambda vp: -vp[1])
 
 
-# ---------------------------------------------------------------------- primary columns (D191)
+# ---------------------------------------------------------------------- primary columns (D224)
 # The group page's table shows a few columns first, wider, as "Suggested": the settings that
 # matter most for comparing the group's runs, then its metrics to compare them on. One request
 # asks a predicate per candidate column; without the model, the varying config keys, the best-by
@@ -670,7 +670,7 @@ class GroupColumn:
     """A column of a group's runs, as the primary columns question reads it."""
 
     key: str  # "config.lr", "summary.val/loss"
-    kind: str  # D185's varies | repeat | same | unique, or "metric" for a summary column
+    kind: str  # D218's varies | repeat | same | unique, or "metric" for a summary column
     runs: int  # runs with a value
     values: tuple[Value, ...]  # distinct values, numbers ascending
 

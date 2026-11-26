@@ -1,4 +1,4 @@
-"""The run groups assistant (D191): which candidates and questions each Decisions API request
+"""The run groups assistant (D224): which candidates and questions each Decisions API request
 sends, the thresholds that turn answers into an action, and errors. The API is an httpx mock."""
 
 from __future__ import annotations
@@ -460,7 +460,7 @@ def test_empty_request_sends_nothing() -> None:
 
 
 def test_numbers_the_request_names_are_offered_as_values_first() -> None:
-    # A random search never logged lr = 1e-3, but "lr below 1e-3" means that bound (D191).
+    # A random search never logged lr = 1e-3, but "lr below 1e-3" means that bound (D224).
     assert assistant._numbers("lr below 1e-3 and dropout above 0.1, bs 64") == [0.001, 0.1, 64.0]
     assert assistant._numbers("sweep-rri5cl9u v2.1") == []
     column = Column("config.lr", "num", 3, (0.00091, 0.0021, 0.0004))

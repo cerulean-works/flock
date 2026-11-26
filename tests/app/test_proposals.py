@@ -1,4 +1,4 @@
-"""Proposed groups (D196): what the model reads, the Responses API request and its errors,
+"""Proposed groups (D229): what the model reads, the Responses API request and its errors,
 and how a reply is checked and completed (runs, axes, values, grid, best, seeds). The API is
 an httpx mock; filters are matched by a fake."""
 
@@ -329,7 +329,7 @@ def test_ids_are_unique_slugs_and_names_unique_and_never_a_saved_groups() -> Non
     }
     turn = finished(reply, saved=[SavedGroup("Old", {}, ("b1", "x1"))])
     assert [p["id"] for p in turn.proposals] == ["lr-sweep", "lr-sweep-2", "bs-32-64"]
-    # An unusable name takes the D192 template.
+    # An unusable name takes the D225 template.
     assert [p["name"] for p in turn.proposals] == ["old (2)", "old (3)", "bs: 32, 64"]
 
 

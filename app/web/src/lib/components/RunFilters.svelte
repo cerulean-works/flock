@@ -34,7 +34,7 @@
 
 	interface Props {
 		/**
-		 * Filters edited by the caller instead of the workspace's URL (the group pages, 025):
+		 * Filters edited by the caller instead of the workspace's URL (the group pages, 026):
 		 * `onapply` gets them, and `columns` and `people` stand in for the workspace's.
 		 */
 		filters?: RunFilter[];

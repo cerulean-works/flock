@@ -5,8 +5,8 @@ import { loginHref } from '#lib/workspace/url.ts';
 import type { PageLoad } from './$types';
 
 /**
- * A group's edit page (D190): every run of the project with the group's ticked, and with
- * `?new=1`, its new matches first (D183). Outsiders can't edit groups (D193).
+ * A group's edit page (D223): every run of the project with the group's ticked, and with
+ * `?new=1`, its new matches first (D216). Outsiders can't edit groups (D226).
  */
 export const load: PageLoad = async ({ fetch, params, url, parent }) => {
 	const id = Number(params.group);

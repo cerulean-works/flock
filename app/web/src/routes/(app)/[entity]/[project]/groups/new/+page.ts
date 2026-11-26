@@ -6,8 +6,8 @@ import { loginHref } from '#lib/workspace/url.ts';
 import type { PageLoad } from './$types';
 
 /**
- * The create page (D190): every run of the project, and what the URL brings along (a
- * suggestion's runs and filters, an ungrouped run, a name). Outsiders can't create groups (D193).
+ * The create page (D223): every run of the project, and what the URL brings along (a
+ * suggestion's runs and filters, an ungrouped run, a name). Outsiders can't create groups (D226).
  */
 export const load: PageLoad = async ({ fetch, params, url, parent }) => {
 	const { shell, user, groups } = await parent();

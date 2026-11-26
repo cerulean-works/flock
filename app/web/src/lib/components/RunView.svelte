@@ -44,7 +44,7 @@
 	/**
 	 * A page of runs with the Runs page's tools: the table, the charts, or both side by side,
 	 * with search, filters, columns, plot settings, full-screen panels and the run dialogs. The
-	 * Runs page shows the project's runs in it, and a group's page its members (025): the page
+	 * Runs page shows the project's runs in it, and a group's page its members (026): the page
 	 * makes the workspace (`setWorkspace`) with where its runs come from, and gives the header.
 	 */
 	interface Props {

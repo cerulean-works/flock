@@ -9,7 +9,7 @@
 	import { loadEditor } from './editor.ts';
 
 	/**
-	 * **Edit group** (D190): the editor in a dialog over the group's page. The project's runs
+	 * **Edit group** (D223): the editor in a dialog over the group's page. The project's runs
 	 * are read each time it opens, and each opening starts a fresh draft. Saving patches the
 	 * group, invalidates `GROUPS` (which reads the group's page and the sidebar again) and
 	 * closes; **Cancel** and Escape close without saving.
@@ -18,7 +18,7 @@
 	interface Props {
 		open?: boolean;
 		group: GroupDetail;
-		/** Opened from **N new matches**: they come first (D183). */
+		/** Opened from **N new matches**: they come first (D216). */
 		fresh?: boolean;
 	}
 

@@ -108,7 +108,7 @@
 	const shownProject = $derived(project ?? lastProject);
 	const projectRoute = '/(app)/[entity]/[project]';
 
-	// The project's groups and suggestions (D182), from its layout's load; kept, like the
+	// The project's groups and suggestions (D215), from its layout's load; kept, like the
 	// project, while the panel slides back out.
 	// Suggestions arrive as a promise the layout doesn't wait for: they're shown once it resolves,
 	// and a different project's are cleared at once rather than shown under this one.
@@ -148,7 +148,7 @@
 	const groupRoute = `${projectRoute}/groups`;
 	const groupId = $derived(Number(page.params.group));
 
-	/** Dismissing a suggestion remembers it (D186): it isn't offered again unless its runs change. */
+	/** Dismissing a suggestion remembers it (D219): it isn't offered again unless its runs change. */
 	async function dismiss(org: string, s: Suggestion) {
 		if (!shownProject) return;
 		try {
@@ -162,7 +162,7 @@
 		}
 	}
 
-	/** A suggestion opens the create page with its runs, and a W&B group's filter (D186). */
+	/** A suggestion opens the create page with its runs, and a W&B group's filter (D219). */
 	const suggestionHref = (org: string, s: Suggestion) =>
 		newGroupHref(org, shownProject!, {
 			runs: s.filter ? [] : s.runs,
@@ -448,7 +448,7 @@
 							<ActivityIcon /> Runs
 						</a>
 						{#if groupList}
-							<!-- Groups and its children, always expanded (D182). -->
+							<!-- Groups and its children, always expanded (D215). -->
 							<a
 								class={ITEM}
 								href={groupsHref(org, shownProject)}

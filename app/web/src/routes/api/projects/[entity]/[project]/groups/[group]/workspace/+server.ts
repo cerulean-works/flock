@@ -4,7 +4,7 @@ import { relaySnapshot } from '#lib/server/snapshot.ts';
 import type { RequestHandler } from './$types';
 
 /**
- * One page of a group's runs as Flock's binary workspace snapshot (025): the Runs page's view,
+ * One page of a group's runs as Flock's binary workspace snapshot (026): the Runs page's view,
  * pointed at the group's members (see `relaySnapshot`).
  */
 export const GET: RequestHandler = ({ params, url }) => {

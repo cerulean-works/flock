@@ -1,7 +1,7 @@
 <script lang="ts" module>
 	import type { AssistAction, Reading } from '#lib/groups.ts';
 
-	/** One line of the assistant's thread (D191). */
+	/** One line of the assistant's thread (D224). */
 	export type Entry =
 		| { kind: 'request'; text: string }
 		| {
@@ -32,7 +32,7 @@
 	import { opLabel, UNARY, type RunCondition } from '#lib/workspace/filters.ts';
 
 	/**
-	 * The assistant on the create and edit page (D191). A request comes back as one action
+	 * The assistant on the create and edit page (D224). A request comes back as one action
 	 * card: **Set filters** with chips, **Added by hand** or **Dropped** with run names, **Set
 	 * best by**, or **Nothing changed**, each with **Undo**. A chip picked with less than 0.8
 	 * shows its probability, and lists the other readings. The model never asks anything back,
@@ -59,7 +59,7 @@
 	let text = $state('');
 	let thread = $state<HTMLElement>();
 
-	/** Below this, a chip shows how likely its reading was (D191). */
+	/** Below this, a chip shows how likely its reading was (D224). */
 	const SURE = 0.8;
 
 	function send(e: SubmitEvent) {

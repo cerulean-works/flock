@@ -32,7 +32,7 @@
 
 	/**
 	 * The charts' engine and `LinePlot` as the Runs page has them, over a page of only these
-	 * runs, each in its group's color (D188).
+	 * runs, each in its group's color (D221).
 	 */
 	const ws = new Workspace(
 		() => data.meta,

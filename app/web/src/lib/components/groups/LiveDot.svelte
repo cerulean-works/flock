@@ -1,5 +1,5 @@
 <script lang="ts">
-	/** Whether a group page's live stream is connected (D195), as the workspace's LiveStatus. */
+	/** Whether a group page's live stream is connected (D228), as the workspace's LiveStatus. */
 	let { connection }: { connection: 'connecting' | 'live' | 'offline' } = $props();
 </script>
 

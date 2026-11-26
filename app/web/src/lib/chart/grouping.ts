@@ -1,5 +1,5 @@
 /**
- * How a group's charts color and average its runs (D189): each Group by value gets a hue of its
+ * How a group's charts color and average its runs (D222): each Group by value gets a hue of its
  * own, its runs are shaded faint to strong by their Color by value, and repeats (runs that differ
  * only in their seed) can be drawn as one mean line with a ± std band. Pure, so it is tested
  * apart from the canvas; the workspace's charts draw what it returns (`Workspace.style`).
@@ -130,7 +130,7 @@ export interface ChartStyle {
 }
 
 /**
- * The colors, means and legend of a group's charts (D189), or null when nothing sets them (no
+ * The colors, means and legend of a group's charts (D222), or null when nothing sets them (no
  * Group by, no Color by and no means): the workspace's own colors then.
  *
  * - Each Group by value gets a hue (`GROUP_HUES`, in `orderValues` order), all runs of a group

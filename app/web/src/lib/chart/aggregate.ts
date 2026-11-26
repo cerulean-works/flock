@@ -1,5 +1,5 @@
 /**
- * Seed bands (D189): one mean line with a shaded band, across the runs of a configuration
+ * Seed bands (D222): one mean line with a shaded band, across the runs of a configuration
  * that differ only in their seed.
  *
  * Alignment. Runs are sampled at their own x values (the history API downsamples each curve

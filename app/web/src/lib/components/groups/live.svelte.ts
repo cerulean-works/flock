@@ -1,11 +1,11 @@
 import type { ProjectEvent } from '#lib/data/live.ts';
 
 /**
- * Live updates for the group pages (D195), from the project's event stream (D129), which the
+ * Live updates for the group pages (D228), from the project's event stream (D129), which the
  * workspace's `LiveConnection` reads too. These pages hold no curves to grow: an event only
  * means their values or counts may have changed (a member's summary, a run created, deleted or
  * moved away), so they are read again, at most once every `wait` ms and not while a menu or
- * popover is open. A new matching run is offered by the next read's counts, never added (D183).
+ * popover is open. A new matching run is offered by the next read's counts, never added (D216).
  *
  * The stream watches `runs` without replaying their histories (no line counts): only their
  * `run` events (state, summary) are wanted. Created and deleted runs reach every subscriber.

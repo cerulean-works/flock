@@ -52,7 +52,7 @@
 	const group = $derived(data.group);
 
 	// ------------------------------------------------------------------------------------------
-	// Columns (D185): the API's kinds, or the same rules here when it couldn't say.
+	// Columns (D218): the API's kinds, or the same rules here when it couldn't say.
 
 	const kinds = $derived.by((): Record<string, Kind> => {
 		const out: Record<string, Kind> = data.columns
@@ -73,7 +73,7 @@
 	const bestOrder = $derived<BestOrder | null>(group.best_order ?? data.groups?.best_order ?? null);
 
 	// ------------------------------------------------------------------------------------------
-	// The runs, with the Runs page's table and charts (D189): the group's members only.
+	// The runs, with the Runs page's table and charts (D222): the group's members only.
 
 	/** Its settings as saved, or as just picked while the save is on its way. */
 	let viewOverride = $state<GroupView | null>(null);
@@ -188,7 +188,7 @@
 	}
 
 	// ------------------------------------------------------------------------------------------
-	// Settings saved on the group: its charts' view (D189) and its Best by (D184).
+	// Settings saved on the group: its charts' view (D222) and its Best by (D217).
 
 	async function save(body: Record<string, unknown>, what: string) {
 		if (readonly) return;
@@ -266,8 +266,8 @@
 	});
 
 	// ------------------------------------------------------------------------------------------
-	// The header: the filter in words (D189), in its color's hover and its menu, and editing the
-	// group (D190).
+	// The header: the filter in words (D222), in its color's hover and its menu, and editing the
+	// group (D223).
 
 	const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
 	const groupFilters = $derived(fromFlockFilter(group.filter));
@@ -286,7 +286,7 @@
 	let editing = $state(false);
 	/** The "Delete group…" confirmation is open. */
 	let deleting = $state(false);
-	/** Opened from its new matches, which then come first (D183). */
+	/** Opened from its new matches, which then come first (D216). */
 	let fresh = $state(false);
 	function edit(withNew = false) {
 		fresh = withNew;
@@ -294,7 +294,7 @@
 	}
 
 	// ------------------------------------------------------------------------------------------
-	// Live updates (D195): the project renamed, deleted or made private.
+	// Live updates (D228): the project renamed, deleted or made private.
 
 	function onproject(e: ProjectEvent) {
 		if (e.visibility === 'private') {

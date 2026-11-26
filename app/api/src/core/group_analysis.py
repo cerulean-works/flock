@@ -1,5 +1,5 @@
-"""Run groups' analysis (025): column kinds (D185), a group's best (D184), the keys that differ
-between configurations (D188), default names (D192) and suggested groups (D186).
+"""Run groups' analysis (026): column kinds (D218), a group's best (D217), the keys that differ
+between configurations (D221), default names (D225) and suggested groups (D219).
 
 Pure functions over ``RunRow``s; the caller loads runs from ``run_values`` and stores nothing
 computed here. A value of None counts as absent, as in ``run_values`` (``values.py``).
@@ -21,27 +21,27 @@ type Value = int | float | str | bool | list | None
 type Kind = Literal["varies", "repeat", "same", "unique"]
 type Order = Literal["asc", "desc"]
 
-# D184: the project's default best-by column, the first of these it has (lowest is best).
+# D217: the project's default best-by column, the first of these it has (lowest is best).
 BEST_KEYS = ("summary.val/loss", "summary.eval/loss", "summary.loss")
 
-# D185: a group with fewer runs than this treats strings distinct in every run as Varies (3 runs
+# D218: a group with fewer runs than this treats strings distinct in every run as Varies (3 runs
 # with 3 ``data_mix`` values is an axis, not a path).
 UNIQUE_MIN_RUNS = 4
 
-# D185: names of repeat keys, matched on the key's last dotted segment.
+# D218: names of repeat keys, matched on the key's last dotted segment.
 REPEAT_NAMES = frozenset({"seed", "random_state", "rng"})
 REPEAT_SUFFIX = "_seed"
 
-# D186: the fewest runs a W&B group needs to be suggested. A lone run in a W&B group isn't a
+# D219: the fewest runs a W&B group needs to be suggested. A lone run in a W&B group isn't a
 # group; it falls through to config clustering.
 MIN_WANDB_GROUP = 2
-# D186: config clusters differ in at most this many keys and need at least this many runs.
+# D219: config clusters differ in at most this many keys and need at least this many runs.
 MAX_CLUSTER_KEYS = 2
 MIN_CLUSTER = 3
-# D186: a cluster takes a wider set of differing keys only when it brings in this many more runs.
+# D219: a cluster takes a wider set of differing keys only when it brings in this many more runs.
 MIN_GAIN = 2
 
-# D192: one key is named by its values when it has at most this many.
+# D225: one key is named by its values when it has at most this many.
 MAX_NAMED_VALUES = 3
 
 
@@ -93,7 +93,7 @@ def _finite(value: Value) -> float | None:
 
 
 def display_key(key: str) -> str:
-    """A key as names show it, without the ``config.`` prefix (D192)."""
+    """A key as names show it, without the ``config.`` prefix (D225)."""
     return key.removeprefix("config.")
 
 
@@ -107,11 +107,11 @@ def _format(value: Value) -> str:
     return str(value)
 
 
-# ---------------------------------------------------------------------- kinds (D185)
+# ---------------------------------------------------------------------- kinds (D218)
 
 
 def is_repeat_name(key: str) -> bool:
-    """Whether ``key`` is named like a seed (D185): its last dotted segment after ``config.`` is
+    """Whether ``key`` is named like a seed (D218): its last dotted segment after ``config.`` is
     ``seed``, ``*_seed``, ``random_state`` or ``rng`` (case-insensitive)."""
     name = display_key(key).rsplit(".", 1)[-1].lower()
     return name in REPEAT_NAMES or name.endswith(REPEAT_SUFFIX)
@@ -136,7 +136,7 @@ def _kind(values: Sequence[Value], runs: int) -> Kind:
 
 def classify_columns(runs: Sequence[RunRow], overrides: Mapping[str, Kind] = {}) -> dict[str, Kind]:
     """Each config key seen in any of ``runs`` (with a non-None value), sorted, mapped to its
-    kind (D185). A repeat name wins over the value rules, and ``overrides`` win over both;
+    kind (D218). A repeat name wins over the value rules, and ``overrides`` win over both;
     overrides for keys no run has are left out."""
     seen: dict[str, list[Value]] = defaultdict(list)
     for run in runs:
@@ -158,12 +158,12 @@ def _of_kind(kinds: Mapping[str, Kind], kind: Kind) -> list[str]:
     return sorted(key for key, found in kinds.items() if found == kind)
 
 
-# ---------------------------------------------------------------------- best (D184)
+# ---------------------------------------------------------------------- best (D217)
 
 
 def default_best_key(summary_keys: Iterable[str]) -> str | None:
     """The first of ``BEST_KEYS`` among ``summary_keys``, or None: the setting stays unset until
-    someone picks one (D184)."""
+    someone picks one (D217)."""
     keys = set(summary_keys)
     return next((key for key in BEST_KEYS if key in keys), None)
 
@@ -194,7 +194,7 @@ def _metric(run: RunRow, key: str) -> float | None:
 
 
 def best(runs: Sequence[RunRow], key: str, order: Order, kinds: Mapping[str, Kind]) -> Best:
-    """The best of ``runs`` by ``key`` in ``order`` (D184).
+    """The best of ``runs`` by ``key`` in ``order`` (D217).
 
     NaN, infinities and a missing value are never best. Without a repeat key each run is its
     own configuration. With one, runs sharing every Varies value form a configuration whose
@@ -238,17 +238,17 @@ def best(runs: Sequence[RunRow], key: str, order: Order, kinds: Mapping[str, Kin
     return Best(run_id, top.value, top.std, top.n, tuple(configs), sign * run_value)
 
 
-# ---------------------------------------------------------------------- Compare (D188)
+# ---------------------------------------------------------------------- Compare (D221)
 
 
 def differing_keys(configs: Sequence[Mapping[str, Value]]) -> list[str]:
-    """The keys whose values aren't the same in every one of ``configs``, sorted (D188). A key
+    """The keys whose values aren't the same in every one of ``configs``, sorted (D221). A key
     missing (or None) in some and present in others differs."""
     keys = sorted({key for config in configs for key in config})
     return [key for key in keys if len({_canon(config.get(key)) for config in configs}) > 1]
 
 
-# ---------------------------------------------------------------------- names (D192)
+# ---------------------------------------------------------------------- names (D225)
 
 
 def _fixed_state(filter: Mapping | None) -> str | None:
@@ -321,7 +321,7 @@ def group_name(
     filter: Mapping | None,
     wandb_group: str | None = None,
 ) -> str:
-    """A new group's default name from its Varies keys and filter (D192), ``config.`` stripped.
+    """A new group's default name from its Varies keys and filter (D225), ``config.`` stripped.
 
     - two keys: ``lr × batch_size``; three or more: the first two (by key) and
       ``+ N more``, as ``lr × wd + 2 more``;
@@ -349,12 +349,12 @@ def group_name(
     return name
 
 
-# ---------------------------------------------------------------------- suggestions (D186)
+# ---------------------------------------------------------------------- suggestions (D219)
 
 
 @dataclass(frozen=True)
 class Suggestion:
-    signature: bytes  # sha256 of the sorted run ids joined by "\n" (D186)
+    signature: bytes  # sha256 of the sorted run ids joined by "\n" (D219)
     source: Literal["wandb_group", "config_diff"]
     name: str
     filter: dict | None  # {"group": name} for a W&B group; None for a cluster (hand picks)
@@ -362,7 +362,7 @@ class Suggestion:
 
 
 def signature(run_ids: Iterable[str]) -> bytes:
-    """A suggestion's signature (D186): sha256 of its sorted run ids joined by newlines. It
+    """A suggestion's signature (D219): sha256 of its sorted run ids joined by newlines. It
     changes when the runs do, so a dismissed suggestion comes back only with other runs."""
     return hashlib.sha256("\n".join(sorted(run_ids)).encode()).digest()
 
@@ -375,7 +375,7 @@ def _around(
     seed: int, free: Iterable[int], canon: Sequence[Mapping[str, tuple]]
 ) -> tuple[frozenset[str], list[int]]:
     """The cluster around run ``seed``: the free runs equal to it on every key outside a set
-    ``K`` of at most ``MAX_CLUSTER_KEYS`` keys (D186), and that ``K``.
+    ``K`` of at most ``MAX_CLUSTER_KEYS`` keys (D219), and that ``K``.
 
     ``K`` grows from nothing, and takes a larger set only when it brings in at least
     ``MIN_GAIN`` more runs (the smallest such set, then the one bringing the most). So a key
@@ -406,7 +406,7 @@ def _around(
 
 
 def _clusters(runs: Sequence[RunRow], ignored: AbstractSet[str]) -> list[list[RunRow]]:
-    """Greedy config clusters of ``runs`` (D186): the largest cluster around any run
+    """Greedy config clusters of ``runs`` (D219): the largest cluster around any run
     (``_around``; ties to fewer keys, then the earlier run in ``runs``) is taken first, then
     the largest among the runs left, until none has ``MIN_CLUSTER`` runs. Clusters come
     largest first, each in ``runs``' order."""
@@ -442,7 +442,7 @@ def _clusters(runs: Sequence[RunRow], ignored: AbstractSet[str]) -> list[list[Ru
 def suggest(
     runs: Sequence[RunRow], grouped: AbstractSet[str], dismissed: AbstractSet[bytes]
 ) -> list[Suggestion]:
-    """Suggested groups (D186) from the runs in no saved group (``grouped``: run ids).
+    """Suggested groups (D219) from the runs in no saved group (``grouped``: run ids).
 
     Sources in order, each run placed by the first that claims it:
 

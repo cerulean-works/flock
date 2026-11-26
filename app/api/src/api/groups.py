@@ -1,5 +1,5 @@
-"""Run groups (025): saved groups of a project's runs, Compare, suggestions and the assistant
-(D194). Reads answer outsiders on public projects; writes need membership (D193)."""
+"""Run groups (026): saved groups of a project's runs, Compare, suggestions and the assistant
+(D227). Reads answer outsiders on public projects; writes need membership (D226)."""
 
 import logging
 from typing import Annotated, Any, Literal
@@ -39,7 +39,7 @@ from app.api.src.core.groups import (
 from app.api.src.core.store import Project, Store
 
 router = APIRouter(prefix="/api/v1", tags=["groups"], dependencies=[Depends(rest_user)])
-# Reads that answer outsiders too, on public projects (D193).
+# Reads that answer outsiders too, on public projects (D226).
 public = APIRouter(prefix="/api/v1", tags=["groups"])
 
 log = logging.getLogger(__name__)
@@ -105,7 +105,7 @@ class GroupUpdate(GroupSettings):
     restore: list[str] = Field(
         default_factory=list, description="dropped runs to offer again as new matches"
     )
-    loaded: bool = Field(False, description="move the load time to now (D183)")
+    loaded: bool = Field(False, description="move the load time to now (D216)")
 
 
 class BestSettings(BaseModel):
@@ -219,7 +219,7 @@ async def group_infos(
                 "filter": group.filter,
                 "run_count": len(found.members),
                 "new_count": await api.new_count(project, group, found),
-                # The group's own setting; null takes the project's (D184).
+                # The group's own setting; null takes the project's (D217).
                 "best_key": group.best_key,
                 "best_order": group.best_order,
                 "best": best,
@@ -243,7 +243,7 @@ async def group_detail(store: Store, project: Project, group: Group) -> dict[str
         **info,
         "runs": [names[pk] for pk in found.members],
         "dropped": [names[pk] for pk in found.dropped],
-        # How each member joined, for the edit page's "+ by hand" (D190): filter or hand.
+        # How each member joined, for the edit page's "+ by hand" (D223): filter or hand.
         "added_by": {names[pk]: added_by.get(pk) for pk in found.members},
         "repeat_key": repeat_key(group, kinds(group, members)),
         "columns": group.columns,
@@ -252,7 +252,7 @@ async def group_detail(store: Store, project: Project, group: Group) -> dict[str
 
 
 async def assistant_on(store: Store, project: Project, viewer: User | None) -> bool:
-    """Whether the assistant answers ``viewer`` on ``project`` (D191): the server has an
+    """Whether the assistant answers ``viewer`` on ``project`` (D224): the server has an
     OpenAI key, an org admin turned it on, and the viewer is a member."""
     if not store.settings.openai_api_key or store.accounts.role(viewer, project.org) is None:
         return False
@@ -295,7 +295,7 @@ def compare_row(
     group: Group | None, rows: list[RunRow], run: RunRow | None, found: analysis.Best | None,
     key: str | None, order: Order | None,
 ) -> dict[str, Any]:  # fmt: skip
-    """One row of Compare (D188): a group's best, or a single run (``group`` None)."""
+    """One row of Compare (D221): a group's best, or a single run (``group`` None)."""
     if group is None:
         assert run is not None
         value = finite(run.summary.get(key)) if key else None
@@ -344,8 +344,8 @@ def ranked(rows: list[dict[str, Any]], order: Order | None) -> list[dict[str, An
 
 @public.get(f"{P}/compare")
 async def compare(project: ReadableProjectDep, store: StoreDep) -> Response:
-    """Compare (D188): each group's best, the config keys that differ between them, and the
-    ungrouped runs ranked by the same column (D187).
+    """Compare (D221): each group's best, the config keys that differ between them, and the
+    ungrouped runs ranked by the same column (D220).
 
     Rows of groups ranked by another column than the project's come last; their ``best_key``
     says which. Each row's ``summary`` is its run's summary numbers."""
@@ -405,7 +405,7 @@ async def compare(project: ReadableProjectDep, store: StoreDep) -> Response:
 
 @public.get(f"{P}/suggestions")
 async def list_suggestions(project: ReadableProjectDep, store: StoreDep) -> Response:
-    """Suggested groups (D186): W&B groups, then clusters of runs with similar configs, from
+    """Suggested groups (D219): W&B groups, then clusters of runs with similar configs, from
     the runs in no group. Dismissed suggestions aren't offered again."""
     found = await Groups(store).suggestions(project)
     return JSONResponse(
@@ -475,7 +475,7 @@ async def group_workspace(
 
 @public.get(P + "/{group}/columns")
 async def group_columns(project: ReadableProjectDep, group: int, store: StoreDep) -> Response:
-    """Each config key of the group's runs, with its kind (D185), its number of distinct
+    """Each config key of the group's runs, with its kind (D218), its number of distinct
     values, and whether its kind was set by hand."""
     found = await find_group(store, project, group)
     api = Groups(store)
@@ -498,7 +498,7 @@ async def group_columns(project: ReadableProjectDep, group: int, store: StoreDep
 
 @public.get(P + "/{group}/new")
 async def new_matches(project: ReadableProjectDep, group: int, store: StoreDep) -> Response:
-    """The group's new matches (D183): runs its filter matches that are neither in it nor
+    """The group's new matches (D216): runs its filter matches that are neither in it nor
     dropped, newest first. They are offered, never added."""
     found = await find_group(store, project, group)
     api = Groups(store)
@@ -518,7 +518,7 @@ async def new_matches(project: ReadableProjectDep, group: int, store: StoreDep) 
 async def primary_columns(
     project: ReadableProjectDep, group: int, store: StoreDep, viewer: ViewerDep
 ) -> Response:
-    """The few columns shown first in the group's table (D191): the ones that matter most for
+    """The few columns shown first in the group's table (D224): the ones that matter most for
     comparing its runs, as the assistant predicts them (``source: "model"``), else the varying
     config keys (``"analysis"``). Always with the best-by column; never an error of OpenAI's."""
     found = await find_group(store, project, group)
@@ -539,7 +539,7 @@ async def primary_columns(
     )
     if (cached := assistant.cached_primary(found.pk, signature)) is not None:
         return JSONResponse({"keys": list(cached), "source": "model"})
-    # Only members' visits ask OpenAI (D191); outsiders read what a member's visit predicted.
+    # Only members' visits ask OpenAI (D224); outsiders read what a member's visit predicted.
     if store.accounts.role(viewer, project.org) is None:
         return JSONResponse(fallback)
     input = assistant.primary_input(found.name, found.filter, len(rows), columns, best)
@@ -559,7 +559,7 @@ async def primary_columns(
 
 @router.put(P + "/settings")
 async def set_best(project: MemberProjectDep, body: BestSettings, store: StoreDep) -> Response:
-    """Set the project's best by column and direction (D184); a null ``best_key`` goes back to
+    """Set the project's best by column and direction (D217); a null ``best_key`` goes back to
     the default."""
     await Groups(store).set_project_best(project, body.best_key, body.best_order)
     key, order = await Groups(store).project_best(project)
@@ -570,7 +570,7 @@ async def set_best(project: MemberProjectDep, body: BestSettings, store: StoreDe
 async def create_group(
     project: MemberProjectDep, body: GroupCreate, store: StoreDep, user: UserDep
 ) -> Response:
-    """Create a group of the runs ``runs``, built with ``filter`` (D183). Runs the filter
+    """Create a group of the runs ``runs``, built with ``filter`` (D216). Runs the filter
     matches that aren't in ``runs`` are dropped: they were left out on purpose."""
     api = Groups(store)
     found = await resolve(api, project, body.runs)
@@ -594,7 +594,7 @@ async def create_group(
 async def dismiss_suggestion(
     project: MemberProjectDep, body: Dismissal, store: StoreDep
 ) -> Response:
-    """Stop suggesting a suggestion, until its runs change (D186)."""
+    """Stop suggesting a suggestion, until its runs change (D219)."""
     await Groups(store).dismiss(project, bytes.fromhex(body.signature))
     return Response(status_code=204)
 
@@ -618,7 +618,7 @@ def column_kind(column: query.Column) -> str:
 async def assist(
     project: MemberProjectDep, body: AssistRequest, store: StoreDep, user: UserDep
 ) -> Response:
-    """One assistant turn (D191): the request and the draft's filters in, an action out. 404
+    """One assistant turn (D224): the request and the draft's filters in, an action out. 404
     while the assistant is off; 502 when the Decisions API fails."""
     if not await assistant_on(store, project, user):
         raise APIError(404, "the assistant is off")
@@ -651,7 +651,7 @@ async def assist(
 
 
 async def proposal_context(store: Store, project: Project) -> proposals.Context:
-    """The project as the proposals model reads it (D196): its live runs with their config
+    """The project as the proposals model reads it (D229): its live runs with their config
     and summary metrics, its best by, saved groups and the heuristic suggestions."""
     api = Groups(store)
     best = await api.project_best(project)
@@ -690,7 +690,7 @@ async def proposal_context(store: Store, project: Project) -> proposals.Context:
 async def propose_groups(
     project: MemberProjectDep, body: ProposeRequest, store: StoreDep, user: UserDep
 ) -> Response:
-    """One turn of the Auto tab's chat (D196): the conversation and the proposals on screen
+    """One turn of the Auto tab's chat (D229): the conversation and the proposals on screen
     in, the model's reply and the full set of proposals out, each checked and completed from
     the project's runs. 403 while the assistant is off; 502 when the model fails."""
     if not await assistant_on(store, project, user):
@@ -738,7 +738,7 @@ async def update_group(
     project: MemberProjectDep, group: int, body: GroupUpdate, store: StoreDep
 ) -> Response:
     """Change a group's name, filter or settings, add, drop or restore runs, and with
-    ``"loaded": true`` move its load time to now (D183). A new filter never removes a run."""
+    ``"loaded": true`` move its load time to now (D216). A new filter never removes a run."""
     found = await find_group(store, project, group)
     api = Groups(store)
     given = body.model_fields_set

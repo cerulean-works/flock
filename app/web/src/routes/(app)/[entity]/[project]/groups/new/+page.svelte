@@ -18,7 +18,7 @@
 
 	/**
 	 * Two ways to make groups: **Auto**, where the assistant proposes them in a conversation
-	 * (the default when it's on), and **Manual**, the editor (D190). A URL that brings a draft
+	 * (the default when it's on), and **Manual**, the editor (D223). A URL that brings a draft
 	 * along (a suggestion, an ungrouped run) opens Manual; `?tab=` picks one.
 	 */
 	type Tab = 'auto' | 'manual';

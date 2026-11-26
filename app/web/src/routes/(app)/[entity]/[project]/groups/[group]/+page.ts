@@ -5,11 +5,11 @@ import { loginHref, readRunQuery } from '#lib/workspace/url.ts';
 import type { PageLoad } from './$types';
 
 /**
- * A group's page (D189): the group, a page of its runs as the Runs page reads them (the
+ * A group's page (D222): the group, a page of its runs as the Runs page reads them (the
  * workspace snapshot, searched, filtered, sorted and paged by the URL), and each config key's
- * kind (D185). Its primary columns are streamed, not awaited: they may take a model's turn,
+ * kind (D218). Its primary columns are streamed, not awaited: they may take a model's turn,
  * and the table shows the Varies columns until they come. Read again when a group changes or
- * live events say values did (D195).
+ * live events say values did (D228).
  */
 export const load: PageLoad = async ({ fetch, params, url, parent, depends }) => {
 	depends(GROUPS);

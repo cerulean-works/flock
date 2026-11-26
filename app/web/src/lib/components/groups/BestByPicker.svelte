@@ -5,7 +5,7 @@
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { bestLabel, bestWords, isInternalKey, metricLabel, type BestOrder } from '#lib/groups.ts';
 
-	/** **Best by**: a summary column and lowest or highest (D184). */
+	/** **Best by**: a summary column and lowest or highest (D217). */
 
 	interface Props {
 		key: string | null;

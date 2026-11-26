@@ -28,7 +28,7 @@ export interface PlotSeries {
 	/** Values to draw (smoothed when smoothing is on), aligned with `series.x`. */
 	values: Float32Array;
 	/**
-	 * A shaded band around the line (a mean's seed spread, D189; see #lib/chart/aggregate.ts),
+	 * A shaded band around the line (a mean's seed spread, D222; see #lib/chart/aggregate.ts),
 	 * aligned with `series.x`; NaN where there is none. Workspace lines have none.
 	 */
 	band?: Band;

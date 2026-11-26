@@ -70,7 +70,7 @@ class OrgUpdate(BaseModel):
     s3_key_max_ttl: int | None = None
     # Keep the newest N untagged versions of each model (D109); null turns retention off.
     model_retention: int | None = Field(None, ge=1, le=1_000_000)
-    # The assistant on the group pages (D191); it also needs the server's OpenAI key.
+    # The assistant on the group pages (D224); it also needs the server's OpenAI key.
     assistant_enabled: bool | None = None
 
 
@@ -212,7 +212,7 @@ async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: St
     aren't primary, have no tag other than ``checkpoint-{step}`` and have no eval runs go to
     the trash. Null (the default) keeps every version.
 
-    ``assistant_enabled`` turns the group pages' assistant on or off for the org (D191). It
+    ``assistant_enabled`` turns the group pages' assistant on or off for the org (D224). It
     sends requests, column names, observed values and run names to OpenAI, and answers only
     while the server has an OpenAI API key.
     """

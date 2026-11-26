@@ -1,7 +1,7 @@
 /**
- * Run groups (025): their URLs, the calls the pages make, and the rules the pages apply to a
- * group's runs: column kinds (D185), configurations and the best of them (D184), default names
- * (D192) and the create and edit page's row looks (D190). The API computes the same kinds and
+ * Run groups (026): their URLs, the calls the pages make, and the rules the pages apply to a
+ * group's runs: column kinds (D218), configurations and the best of them (D217), default names
+ * (D225) and the create and edit page's row looks (D223). The API computes the same kinds and
  * bests for its own answers (`core/group_analysis.py`); the pages repeat them only where they
  * work on runs the API hasn't seen yet (a draft) or lay a group's rows out (configurations).
  */
@@ -23,16 +23,16 @@ import { projectHref } from './workspace/url.ts';
 // ----------------------------------------------------------------------------------------------
 // What the API answers (`app/api/src/api/groups.py`)
 
-/** D185: a config key's kind within a group's runs. */
+/** D218: a config key's kind within a group's runs. */
 export type Kind = 'varies' | 'repeat' | 'same' | 'unique';
 
-/** Lowest (`asc`) or highest (`desc`) is best (D184). */
+/** Lowest (`asc`) or highest (`desc`) is best (D217). */
 export type BestOrder = 'asc' | 'desc';
 
 /** A Mongo-style filter, as `POST .../runs/query` takes it (D77). */
 export type FlockFilter = Record<string, unknown>;
 
-/** A group's best run, or best configuration's best run when it has repeats (D184). */
+/** A group's best run, or best configuration's best run when it has repeats (D217). */
 export interface GroupBest {
 	run: string;
 	name: string;
@@ -51,7 +51,7 @@ export interface Group {
 	color: string;
 	filter: FlockFilter;
 	run_count: number;
-	/** Runs matching its filter that are neither in it nor dropped (D183). */
+	/** Runs matching its filter that are neither in it nor dropped (D216). */
 	new_count: number;
 	/** Null: the project's default. */
 	best_key: string | null;
@@ -63,22 +63,22 @@ export interface Group {
 
 export interface GroupList {
 	groups: Group[];
-	/** Runs in no saved group (D187). */
+	/** Runs in no saved group (D220). */
 	ungrouped_count: number;
 	/**
-	 * The project's best-by setting in effect (D184); null until someone picks one. A group's
+	 * The project's best-by setting in effect (D217); null until someone picks one. A group's
 	 * own `best_key` is its override, null for this one.
 	 */
 	best_key: string | null;
 	best_order: BestOrder | null;
-	/** Whether the viewer may use the assistant (D191): a key, the org's setting, a member. */
+	/** Whether the viewer may use the assistant (D224): a key, the org's setting, a member. */
 	assistant: boolean;
 }
 
-/** How a group's charts draw seeds (D189). */
+/** How a group's charts draw seeds (D222). */
 export type SeedsMode = 'std' | 'minmax' | 'runs';
 
-/** A group's chart settings (D189), saved on the group. */
+/** A group's chart settings (D222), saved on the group. */
 export interface GroupView {
 	split: string | null;
 	color: string | null;
@@ -93,11 +93,11 @@ export type ShowMode = 'all' | 'best';
 export interface GroupDetail extends Group {
 	runs: string[];
 	dropped: string[];
-	/** The repeat key set by hand, else the one detected (D185). */
+	/** The repeat key set by hand, else the one detected (D218). */
 	repeat_key: string | null;
-	/** How each member joined (D193): matched by the filter, or added by hand. */
+	/** How each member joined (D226): matched by the filter, or added by hand. */
 	added_by?: Record<string, 'filter' | 'hand'>;
-	/** Kinds set by hand (D185). */
+	/** Kinds set by hand (D218). */
 	columns: Record<string, Kind>;
 	view: Partial<GroupView> & Record<string, unknown>;
 }
@@ -110,13 +110,13 @@ export interface GroupColumn {
 	overridden: boolean;
 }
 
-/** A row of Compare (D188): a group's best, or an ungrouped run. */
+/** A row of Compare (D221): a group's best, or an ungrouped run. */
 export interface CompareRow {
 	/** Null for an ungrouped run. */
 	group: number | null;
 	name: string;
 	color: string | null;
-	/** The row's best-by setting: a group ranked by another metric comes last, greyed (D188). */
+	/** The row's best-by setting: a group ranked by another metric comes last, greyed (D221). */
 	best_key?: string | null;
 	best_order?: BestOrder | null;
 	/** Null for a group with no best (no run has a finite value). */
@@ -147,7 +147,7 @@ export interface Comparison {
 	ungrouped_count: number;
 }
 
-/** A suggested group (D186). */
+/** A suggested group (D219). */
 export interface Suggestion {
 	/** Hex sha256 of its sorted run ids, which dismissing it remembers. */
 	signature: string;
@@ -158,7 +158,7 @@ export interface Suggestion {
 	runs: string[];
 }
 
-/** One reading of a request: a condition and how likely the model found it (D191). */
+/** One reading of a request: a condition and how likely the model found it (D224). */
 export interface Reading extends RunCondition {
 	probability: number;
 }
@@ -168,7 +168,7 @@ export interface ActionCondition extends Reading {
 	alternatives: Reading[];
 }
 
-/** One assistant turn's answer (`POST .../groups/assist`, D191). */
+/** One assistant turn's answer (`POST .../groups/assist`, D224). */
 export interface AssistAction {
 	type: 'filter' | 'add_runs' | 'drop_runs' | 'set_best' | 'none';
 	conditions: ActionCondition[];
@@ -263,15 +263,15 @@ export interface RunsResult {
 // ----------------------------------------------------------------------------------------------
 // URLs
 
-/** Compare: every group's best, side by side (D188). */
+/** Compare: every group's best, side by side (D221). */
 export const groupsHref = (entity: string, project: string) =>
 	`${projectHref(entity, project)}/groups` as ResolvedPathname;
 
-/** Compare's ungrouped section (D187), where the sidebar's **Ungrouped runs** leads. */
+/** Compare's ungrouped section (D220), where the sidebar's **Ungrouped runs** leads. */
 export const ungroupedHref = (entity: string, project: string) =>
 	`${groupsHref(entity, project)}#ungrouped` as ResolvedPathname;
 
-/** A group's page (D189). */
+/** A group's page (D222). */
 export const groupHref = (entity: string, project: string, group: number) =>
 	`${groupsHref(entity, project)}/${group}` as ResolvedPathname;
 
@@ -282,7 +282,7 @@ export interface Prefill {
 	name?: string;
 }
 
-/** The create page (D190), optionally prefilled. */
+/** The create page (D223), optionally prefilled. */
 export function newGroupHref(entity: string, project: string, prefill: Prefill = {}) {
 	const search = new URLSearchParams();
 	if (prefill.runs?.length) search.set('runs', prefill.runs.join(','));
@@ -293,7 +293,7 @@ export function newGroupHref(entity: string, project: string, prefill: Prefill =
 	return `${groupsHref(entity, project)}/new${qs ? `?${qs}` : ''}` as ResolvedPathname;
 }
 
-/** A group's edit page (D190); `fresh` opens it on its new matches (D183). */
+/** A group's edit page (D223); `fresh` opens it on its new matches (D216). */
 export const editGroupHref = (entity: string, project: string, group: number, fresh = false) =>
 	`${groupHref(entity, project, group)}/edit${fresh ? '?new=1' : ''}` as ResolvedPathname;
 
@@ -427,13 +427,13 @@ export function configOf(row: RunRow): Record<string, unknown> {
 	return out;
 }
 
-/** The finite number in a cell, or null (NaN, infinities and the rest are never best, D184). */
+/** The finite number in a cell, or null (NaN, infinities and the rest are never best, D217). */
 export function finite(v: unknown): number | null {
 	return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 // ----------------------------------------------------------------------------------------------
-// Filters: the group's Mongo-style filter (D183) as the workspace's filters, and back
+// Filters: the group's Mongo-style filter (D216) as the workspace's filters, and back
 
 /** The Mongo-style filter for some of the workspace's filters; `{}` for every run. */
 export const toFlockFilter = (filters: readonly RunFilter[]): FlockFilter =>
@@ -525,13 +525,13 @@ export function fromFlockFilter(filter: unknown): RunFilter[] | null {
 	return allOf(filter);
 }
 
-/** The top-level conditions of some filters (the assistant reads only those, D191). */
+/** The top-level conditions of some filters (the assistant reads only those, D224). */
 export const topConditions = (filters: readonly RunFilter[]): RunCondition[] =>
 	filters.filter((f): f is RunCondition => !isGroup(f));
 
 /**
  * Filters with `conditions` set: each replaces the top-level conditions on its column, and the
- * rest are kept (an assistant's **Set filters**, D191).
+ * rest are kept (an assistant's **Set filters**, D224).
  */
 export function setConditions(
 	filters: readonly RunFilter[],
@@ -543,7 +543,7 @@ export function setConditions(
 }
 
 // ----------------------------------------------------------------------------------------------
-// Column kinds (D185), mirroring `classify_columns`
+// Column kinds (D218), mirroring `classify_columns`
 
 /** A comparable stand-in for a value: equal values (every NaN, equal lists) read the same. */
 export function valueKey(v: unknown): string {
@@ -560,7 +560,7 @@ export function valueKey(v: unknown): string {
 	return `o:${String(v)}`;
 }
 
-/** D185: a group with fewer runs than this treats strings distinct in every run as Varies. */
+/** D218: a group with fewer runs than this treats strings distinct in every run as Varies. */
 export const UNIQUE_MIN_RUNS = 4;
 
 /** A key named like a seed: `seed`, `*_seed`, `random_state` or `rng` (its last segment). */
@@ -582,7 +582,7 @@ function kindOf(values: unknown[], runs: number): Kind {
 }
 
 /**
- * Each config key of `configs` (with a value), sorted, and its kind (D185). A repeat name wins
+ * Each config key of `configs` (with a value), sorted, and its kind (D218). A repeat name wins
  * over the value rules, and `overrides` over both.
  */
 export function classifyColumns(
@@ -611,7 +611,7 @@ export const keysOf = (kinds: Readonly<Record<string, Kind>>, kind: Kind) =>
 		.sort();
 
 // ----------------------------------------------------------------------------------------------
-// Configurations and the best (D184), mirroring `best`
+// Configurations and the best (D217), mirroring `best`
 
 export interface Configuration<R> {
 	/** The Varies values that define it, by key; empty without a repeat key (a run each). */
@@ -625,7 +625,7 @@ export interface Configuration<R> {
 }
 
 /**
- * Runs as configurations, best first (D184). Without a repeat key each run is its own. With
+ * Runs as configurations, best first (D217). Without a repeat key each run is its own. With
  * one, runs sharing every Varies value form one, whose value is the mean over its finite values.
  * Configurations without a value come last; ties keep the runs' id order.
  */
@@ -670,7 +670,7 @@ export function configurations<R extends { id: string; cells: Record<string, unk
 	});
 }
 
-/** The best of `rows` by a column: the best configuration's best run (D184); null without one. */
+/** The best of `rows` by a column: the best configuration's best run (D217); null without one. */
 export function bestRun<R extends { id: string; cells: Record<string, unknown> }>(
 	configs: readonly Configuration<R>[],
 	key: string | null,
@@ -689,7 +689,7 @@ export function bestRun<R extends { id: string; cells: Record<string, unknown> }
 }
 
 // ----------------------------------------------------------------------------------------------
-// Names (D192), mirroring `group_name`
+// Names (D225), mirroring `group_name`
 
 /** One key is named by its values when it has at most this many. */
 const MAX_NAMED_VALUES = 3;
@@ -738,7 +738,7 @@ export function fixedState(filters: readonly RunFilter[]): string | null {
 }
 
 /**
- * A new group's name (D192): `lr × batch_size` for two Varies keys, `qk_norm on / off` for one
+ * A new group's name (D225): `lr × batch_size` for two Varies keys, `qk_norm on / off` for one
  * boolean, `data_mix: web-v2, web-v3` for one key with up to 3 values; `N runs` when nothing
  * varies. A W&B group's name comes first, and `, finished` follows when the filters fix the state.
  */
@@ -767,7 +767,7 @@ export function wandbGroupOf(filters: readonly RunFilter[]): string | null {
 }
 
 // ----------------------------------------------------------------------------------------------
-// The create and edit page's rows (D190)
+// The create and edit page's rows (D223)
 
 /**
  * How a run sits in a draft group:
@@ -805,7 +805,7 @@ export function inDraft(d: Draft, id: string): boolean {
 }
 
 /**
- * Whether a run is a new match (D183): matched by the filters, neither in the group nor
+ * Whether a run is a new match (D216): matched by the filters, neither in the group nor
  * dropped from it. Only a saved group has them.
  */
 export const isNewMatch = (d: Draft, id: string) =>
@@ -840,7 +840,7 @@ export function tick(
 }
 
 /**
- * What saving an edited group sends (D183, D190): runs to add (dropped runs ticked back in
+ * What saving an edited group sends (D216, D223): runs to add (dropped runs ticked back in
  * too: `add` takes them back, where `restore` would only offer them again) and members to drop.
  * The filter only changes which runs are offered; it never removes a member.
  */
@@ -863,7 +863,7 @@ export function draftCounts(d: Draft, ids: readonly string[]) {
 // ----------------------------------------------------------------------------------------------
 // Display
 
-/** The kind of a column for the Filter popover, from its key and the values seen (D185 aside). */
+/** The kind of a column for the Filter popover, from its key and the values seen (D218 aside). */
 export function columnKind(key: string, values: readonly unknown[]): ColumnKind | undefined {
 	if (key === 'state') return 'state';
 	if (key === 'created_at' || key === 'updated_at' || key === 'heartbeat_at') return 'time';
@@ -901,7 +901,7 @@ export const beats = (value: number, other: number, order: BestOrder) =>
 	order === 'asc' ? value < other : value > other;
 
 /**
- * A group's chart settings (D189: Group by, Color by and how repeats are drawn) with defaults
+ * A group's chart settings (D222: Group by, Color by and how repeats are drawn) with defaults
  * for what isn't saved. One varying key: Color by it. More: Group by the one with the fewest
  * values (2 to 8 of them, `distinct` counts them; else the second key), and Color by the one
  * with the most of the rest (else the first), so a few hues are each shaded by a sweep's axis.

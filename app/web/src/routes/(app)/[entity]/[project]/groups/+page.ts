@@ -12,7 +12,7 @@ import { loginHref } from '#lib/workspace/url.ts';
 import type { PageLoad } from './$types';
 
 /**
- * Compare (D188): every group's best, side by side, and the ungrouped runs (D187). The groups
+ * Compare (D221): every group's best, side by side, and the ungrouped runs (D220). The groups
  * themselves come from the project's layout; their suggested columns are read by the page,
  * without holding it up. The project's summary columns are what
  * **Best by** offers: a runs query of no runs still names the columns a pattern matches.

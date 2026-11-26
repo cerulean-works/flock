@@ -1,8 +1,8 @@
-"""Proposed groups (D196): a chat with a model about how to group a project's runs.
+"""Proposed groups (D229): a chat with a model about how to group a project's runs.
 
 On the Auto tab of New group, a model reads the project (its runs, the config keys that vary
 with their values, a summary metric, its W&B groups, saved groups and the heuristic
-suggestions of D186) and the conversation, and proposes groups through OpenAI's Responses API
+suggestions of D219) and the conversation, and proposes groups through OpenAI's Responses API
 with a strict JSON schema. The user refines them in plain language; accepting one creates it
 with ``POST .../groups``.
 
@@ -286,7 +286,7 @@ class Context:
 
     project: str  # "entity/project"
     rows: Sequence[RunRow]  # its live runs, oldest first, with ``metrics`` in their summaries
-    best: tuple[str | None, Order | None]  # the project's best by (D184)
+    best: tuple[str | None, Order | None]  # the project's best by (D217)
     metrics: Sequence[str] = ()  # its summary metrics, most runs first
     saved: Sequence[SavedGroup] = ()
     suggestions: Sequence[analysis.Suggestion] = ()
@@ -738,7 +738,7 @@ async def finish(
                 "best_order": order if key else None,
                 "best": best,
                 "repeat_key": _repeat_key(members, found_kinds),
-                # The body of ``POST .../groups`` that saves it as shown (D183, D184).
+                # The body of ``POST .../groups`` that saves it as shown (D216, D217).
                 "create": {
                     "name": name,
                     "runs": ids,

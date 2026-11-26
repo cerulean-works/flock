@@ -1,7 +1,7 @@
-"""Run groups (025): saved lists of runs, their new matches, ungrouped runs, Compare's rows and
-suggestions, over the tables of D193.
+"""Run groups (026): saved lists of runs, their new matches, ungrouped runs, Compare's rows and
+suggestions, over the tables of D226.
 
-A group is its list of runs (D183). Its filter only decides which runs it offers as new
+A group is its list of runs (D216). Its filter only decides which runs it offers as new
 matches: runs that match it and are neither in the group nor dropped from it. Nothing here
 adds a run to a group except an explicit ``add``. Kinds, bests, names and suggestions are
 ``group_analysis``'s pure functions over ``RunRow``s that ``rows`` loads from ``run_values``.
@@ -50,7 +50,7 @@ _SET_RUNS = """
         WHERE run_group_runs.status <> excluded.status
 """
 
-# The live runs of project $1 that are a member of none of its groups: the ungrouped runs (D187).
+# The live runs of project $1 that are a member of none of its groups: the ungrouped runs (D220).
 # Groups of the project only: a row a group write left on a run moved away meanwhile is stale.
 _UNGROUPED = """
     SELECT r.pk FROM runs r WHERE r.project_pk = $1 AND r.deleted_at IS NULL
@@ -100,7 +100,7 @@ class Membership:
 
 
 def finite(value: Any) -> float | None:
-    """``value`` as a float if it's a finite number (D184: NaN, infinities and missing values
+    """``value`` as a float if it's a finite number (D217: NaN, infinities and missing values
     are never best), else None."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
@@ -108,7 +108,7 @@ def finite(value: Any) -> float | None:
 
 
 def kinds(group: Group, rows: Sequence[RunRow]) -> dict[str, Kind]:
-    """The kind of each config key of a group's runs (D185), with the group's overrides and
+    """The kind of each config key of a group's runs (D218), with the group's overrides and
     its repeat key set by hand."""
     overrides: dict[str, Kind] = dict(group.columns)
     if group.repeat_key:
@@ -126,7 +126,7 @@ def repeat_key(group: Group, found: Mapping[str, Kind]) -> str | None:
 def best_by(
     group: Group, project_best: tuple[str | None, Order | None]
 ) -> tuple[str | None, Order | None]:
-    """The column and direction a group is ranked by (D184): its own, else the project's."""
+    """The column and direction a group is ranked by (D217): its own, else the project's."""
     if group.best_key:
         return group.best_key, group.best_order or "asc"
     return project_best
@@ -157,7 +157,7 @@ class Groups:
     # ------------------------------------------------------------------ settings
 
     async def project_best(self, project: Project) -> tuple[str | None, Order | None]:
-        """The project's best by setting (D184). Until someone sets one, the first of
+        """The project's best by setting (D217). Until someone sets one, the first of
         ``summary.val/loss``, ``summary.eval/loss`` and ``summary.loss`` the project has,
         lowest first, or (None, None)."""
         record = await self.pool.fetchrow(
@@ -178,7 +178,7 @@ class Groups:
         )
 
     async def assistant_enabled(self, org: Org) -> bool:
-        """Whether an org admin turned the assistant on for the org (D191)."""
+        """Whether an org admin turned the assistant on for the org (D224)."""
         return bool(
             await self.pool.fetchval("SELECT assistant_enabled FROM orgs WHERE pk = $1", org.pk)
         )
@@ -222,7 +222,7 @@ class Groups:
     async def matching(
         conn: asyncpg.Connection | asyncpg.Pool, project_pk: int, filter: Mapping[str, Any]
     ) -> set[int]:
-        """The pks of the runs a group's filter matches; none for an empty filter (D183: a
+        """The pks of the runs a group's filter matches; none for an empty filter (D216: a
         group without a filter never has new matches)."""
         if not filter:
             return set()
@@ -244,7 +244,7 @@ class Groups:
         view: Mapping[str, Any] | None = None,
         creator: int | None = None,
     ) -> Group:
-        """Create a group of the runs ``runs`` (pks), built with ``filter`` (D183).
+        """Create a group of the runs ``runs`` (pks), built with ``filter`` (D216).
 
         Its runs are the ones listed: those the filter matches join as ``filter``, the others
         as ``hand``. Runs the filter matches now but that aren't listed were unticked on the
@@ -318,7 +318,7 @@ class Groups:
     ) -> Group:
         """Change a group's settings (``FIELDS``), add runs (pks), drop runs, restore dropped
         runs (they're offered as new matches again if they match), and with ``loaded`` move
-        the load time to now (D183). A changed filter only changes which runs are offered: no
+        the load time to now (D216). A changed filter only changes which runs are offered: no
         member is removed."""
         sets, args = ["updated_at = now()"], [group.pk]
         for field, value in fields.items():
@@ -355,7 +355,7 @@ class Groups:
         return updated
 
     async def delete(self, group: Group) -> None:
-        """Delete a group; its runs stay (D194)."""
+        """Delete a group; its runs stay (D227)."""
         await self.pool.execute("DELETE FROM run_groups WHERE pk = $1", group.pk)
 
     # ------------------------------------------------------------------ runs
@@ -377,7 +377,7 @@ class Groups:
         return out
 
     async def added_by(self, group: Group) -> dict[int, str]:
-        """How each member joined (D190): ``filter`` or ``hand``, by run pk."""
+        """How each member joined (D223): ``filter`` or ``hand``, by run pk."""
         return dict(
             await self.pool.fetch(
                 "SELECT run_pk, added_by FROM run_group_runs "
@@ -395,7 +395,7 @@ class Groups:
     async def new_matches(
         self, project: Project, group: Group, membership: Membership
     ) -> list[asyncpg.Record]:
-        """The group's new matches (D183): runs its filter matches that are neither in it nor
+        """The group's new matches (D216): runs its filter matches that are neither in it nor
         dropped, newest first, as ``(pk, name, display_name, state, created_at, total)``
         (``total``: the filter's matches, ``Selection.runs``' last column)."""
         if not group.filter:
@@ -412,7 +412,7 @@ class Groups:
         return len(await self.matching(self.pool, project.pk, group.filter) - membership.all())
 
     async def ungrouped(self, project: Project) -> list[int]:
-        """The pks of the runs in no group (D187)."""
+        """The pks of the runs in no group (D220)."""
         return [pk for (pk,) in await self.pool.fetch(_UNGROUPED, project.pk)]
 
     async def ungrouped_count(self, project: Project) -> int:
@@ -485,7 +485,7 @@ class Groups:
         }
 
     async def dismiss(self, project: Project, signature: bytes) -> None:
-        """Stop suggesting the suggestion with this signature (D186)."""
+        """Stop suggesting the suggestion with this signature (D219)."""
         await self.pool.execute(
             "INSERT INTO run_group_dismissals (project_pk, signature) VALUES ($1, $2) "
             "ON CONFLICT DO NOTHING",
@@ -494,11 +494,11 @@ class Groups:
         )
 
     async def suggestions(self, project: Project) -> list[analysis.Suggestion]:
-        """Suggested groups (D186), from every run of the project that is in no group.
+        """Suggested groups (D219), from every run of the project that is in no group.
 
         Clustering takes ~2 s at 500 free runs, and the project layout reads suggestions on every
         dashboard refresh, so they're kept per replica until the project's runs, groups or
-        dismissals change (D186: "recomputed when the project's runs change"). The key leaves out
+        dismissals change (D219: "recomputed when the project's runs change"). The key leaves out
         `runs.updated_at`, which moves with every logged step of a running run, though
         suggestions only read configs: a config changed mid-run shows on the next run change.
         """
@@ -535,7 +535,7 @@ class Groups:
 
     async def observed(self, project: Project, cap: int = 1000) -> dict[str, list[Any]]:
         """Up to ``cap`` distinct values of each of the project's columns, for the assistant's
-        candidates (D191). A list's elements count as its values (``tags`` is ``x`` matches a
+        candidates (D224). A list's elements count as its values (``tags`` is ``x`` matches a
         run tagged ``x``)."""
         out: dict[str, list[Any]] = {}
         seen: dict[str, set[bytes]] = {}

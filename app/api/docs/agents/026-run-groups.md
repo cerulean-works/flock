@@ -1,4 +1,4 @@
-# 025: run groups, and comparing the best of each
+# 026: run groups, and comparing the best of each
 
 | | |
 | --- | --- |
@@ -25,10 +25,10 @@ This stage adds **groups**: saved sets of runs, in their own area beside Runs. A
 
 Flock suggests groups from W&B groups and config differences. An assistant can
 set filters and pick runs from plain-language requests. It runs on OpenAI's Decisions API
-([D191](#d191)), which returns typed answers, never text, so every change it makes is an
+([D224](#d224)), which returns typed answers, never text, so every change it makes is an
 ordinary filter or hand pick that you can see and undo.
 When you create groups, a second model proposes them for the whole project, and you refine
-them in a chat ([D196](#d196)). Flock recomputes everything it shows about each proposal from
+them in a chat ([D229](#d229)). Flock recomputes everything it shows about each proposal from
 the runs.
 
 Mockups: the "Groups v3" page of the design canvas
@@ -41,7 +41,7 @@ Mockups: the "Groups v3" page of the design canvas
 - parameter importance and parallel coordinates;
 - groups spanning projects;
 - "best" over a metric's history (minimum over all steps): best reads the summary value;
-- a heatmap panel for two-axis sweeps (Split by and Color by cover it for now, [D189](#d189));
+- a heatmap panel for two-axis sweeps (Split by and Color by cover it for now, [D222](#d222));
 - free-text answers from the assistant, such as an explanation of a result.
 
 ---
@@ -50,7 +50,7 @@ Mockups: the "Groups v3" page of the design canvas
 
 The numbering continues from 024 (D181).
 
-### D182. Groups are their own area beside Runs
+### D215. Groups are their own area beside Runs
 
 The project's sidebar panel gains **Groups** under **Runs**. Its children are always
 expanded, in this order:
@@ -58,10 +58,10 @@ expanded, in this order:
 1. each saved group, with its color and run count;
 2. **Ungrouped runs**, the runs in no saved group;
 3. **New group**;
-4. suggested groups (dashed, with a **Suggested** label; [D186](#d186)).
+4. suggested groups (dashed, with a **Suggested** label; [D219](#d219)).
 
-Clicking **Groups** opens Compare ([D188](#d188)). Clicking a group opens that group
-([D189](#d189)).
+Clicking **Groups** opens Compare ([D221](#d221)). Clicking a group opens that group
+([D222](#d222)).
 
 The Runs page doesn't change. It stays the place to see everything that was logged, in the
 order it was logged.
@@ -69,9 +69,9 @@ order it was logged.
 - **Why not a mode of the Runs page.** An earlier mockup put groups inside the Runs table
   as collapsible sections. It mixed two jobs, browsing everything logged and reading one
   experiment, on one page with one column set. Each group needs its own columns
-  ([D185](#d185)), and the Runs table has one header.
+  ([D218](#d218)), and the Runs table has one header.
 
-### D183. A group is a list of runs; new matches are offered, never added for you
+### D216. A group is a list of runs; new matches are offered, never added for you
 
 A group stores:
 
@@ -88,7 +88,7 @@ ticked by hand, minus the ones unticked.
 dropped are *new matches*. They are runs logged since the last load, and older runs that
 match only now (a run that was `running` when the group was made and has since finished).
 The group's header shows **N new matches** when there are any. It opens the edit page
-([D190](#d190)) with those runs marked and unticked. You tick the ones to add, or **Add
+([D223](#d223)) with those runs marked and unticked. You tick the ones to add, or **Add
 all**. The load time then moves to now.
 
 - **Why not join automatically.** A group is a record of an experiment as you meant it. If
@@ -96,7 +96,7 @@ all**. The load time then moves to now.
   group would move its best and its averages without anyone noticing. Offering new matches
   keeps the filter useful without letting it edit the group.
 - **Adding and dropping by hand** works at any time, from the edit page or from **Add to
-  group** ([D187](#d187)). A run added by hand needn't match the filter.
+  group** ([D220](#d220)). A run added by hand needn't match the filter.
 - Reading a group's runs is the runs query with `{"name": {"$in": <its runs>}}` as the
   filter, so the existing query path serves it unchanged.
 - A run can belong to several groups.
@@ -105,7 +105,7 @@ all**. The load time then moves to now.
   same transaction.
 - A group with no filter never has new matches. It changes only by hand.
 
-### D184. "Best" is one summary column and a direction
+### D217. "Best" is one summary column and a direction
 
 Each project has a default **best by** setting: a `summary.*` column and `lowest` or
 `highest`. A group can override it. The first time a project needs one, the default is the
@@ -115,11 +115,11 @@ Otherwise the setting stays unset until someone picks one, and Compare asks for 
 - The value is the run's summary as logged: the last value, unless the client set
   `define_metric(summary=...)`.
 - NaN and infinities are never best. A run without the column is never best.
-- **Seeds.** When a group has a repeat key ([D185](#d185)), runs that share every other
+- **Seeds.** When a group has a repeat key ([D218](#d218)), runs that share every other
   varying value form one *configuration*. A configuration's value is the mean over its runs,
   shown as `mean ± std`. Best is then the best configuration, not the luckiest seed.
 
-### D185. Columns are sorted into four kinds, from the group's own runs
+### D218. Columns are sorted into four kinds, from the group's own runs
 
 For a set of runs, each `config.*` key falls into one kind. The kind is computed in one SQL
 pass over `run_values`: distinct values, runs with a value, and the largest number of runs
@@ -128,7 +128,7 @@ sharing one value.
 | Kind | Rule | Shown |
 | --- | --- | --- |
 | **Varies** | 2 or more distinct values, and some value is shared by 2 or more runs. Also numbers that are distinct in every run (a random search samples `lr` per run). | as a column |
-| **Repeat** | named `seed`, `*_seed`, `random_state` or `rng`, or set to repeat by hand | as `± std` ([D184](#d184)) |
+| **Repeat** | named `seed`, `*_seed`, `random_state` or `rng`, or set to repeat by hand | as `± std` ([D217](#d217)) |
 | **Same everywhere** | 1 distinct value, present in every run | hidden behind **+N hidden** |
 | **Different every run** | strings or lists distinct in every run (paths, ids, timestamps) | hidden behind **+N hidden** |
 
@@ -144,7 +144,7 @@ sharing one value.
   with 3 `data_mix` values. A group with fewer than 4 runs treats unique strings as
   **Varies**.
 
-### D186. Groups are suggested from W&B groups and config differences
+### D219. Groups are suggested from W&B groups and config differences
 
 Suggestions come from these sources, in order. A run is placed by the first source that
 claims it:
@@ -166,7 +166,7 @@ offered again unless its runs change.
 Suggestions are computed when Groups is opened, not stored. Each one is recomputed when the
 project's run count or newest update changes.
 
-### D187. Ungrouped runs are listed, ranked, and added to groups by hand
+### D220. Ungrouped runs are listed, ranked, and added to groups by hand
 
 A run in no saved group is ungrouped. Compare lists ungrouped runs in their own section, ranked
 by the same metric as the groups, so a strong ungrouped run isn't missed. It shows the best 3
@@ -177,15 +177,15 @@ with checkboxes, plus **New group with this run…**. Nothing is pre-checked or 
 An earlier mockup suggested the nearest group by config distance. It was dropped: the
 suggestion was right only when the user already knew where the run belonged.
 
-### D188. Groups opens on Compare: the best of each group, side by side
+### D221. Groups opens on Compare: the best of each group, side by side
 
 Compare is one table with a row per group, best first:
 
 - the group's best run, or best configuration when it has repeats;
 - its value, the change from the best group's, `± std` across seeds, and its run count;
 - a **Suggested** section, roomier and ended by a bolder divider as in a group's table
-  ([D189](#d189)): the settings and metrics that matter for comparing the groups. They're
-  the union of each group's primary columns (`GET .../groups/{group}/primary`, [D191](#d191)),
+  ([D222](#d222)): the settings and metrics that matter for comparing the groups. They're
+  the union of each group's primary columns (`GET .../groups/{group}/primary`, [D224](#d224)),
   ranked by how many groups pick them, settings then metrics, at most 4 of each. Settings are
   the config keys that differ between the rows; a metric cell is the best run's value. The
   page shows without them, and while they load or if they fail the table has no section;
@@ -204,9 +204,9 @@ its row greyed, with the metric named.
 
 Compare has no assistant or chat bar. An earlier mockup put one at the bottom as a
 shortcut into creating a group. It was dropped: the assistant lives only on the create and
-edit page ([D190](#d190)), where its changes are visible in the table.
+edit page ([D223](#d223)), where its changes are visible in the table.
 
-### D189. A group shows its runs with the Runs page's view
+### D222. A group shows its runs with the Runs page's view
 
 A group's page is the Runs page's view (`RunView`: the table, the charts, full-screen
 panels, smoothing, the panel editor, per-run visibility, search, filters, paging) pointed at
@@ -217,8 +217,8 @@ coloring hook (`Workspace.style`, #lib/chart/grouping.ts) and a primary section 
 - **Views:** **Table**, **Visualize** (the table on the left, the charts on the right; a
   group's default) and **Charts**. The Runs page has all three too.
 - **Header:** the name with a **⋯** menu (**Edit group…**, which opens the editor of
-  [D190](#d190) in a dialog, and **Review N new matches…**), the filter in words, the run
-  count, **N new matches** as a quiet link when there are any ([D183](#d183)), **Best by**
+  [D223](#d223) in a dialog, and **Review N new matches…**), the filter in words, the run
+  count, **N new matches** as a quiet link when there are any ([D216](#d216)), **Best by**
   and the live status.
 - **Table:** a **Primary** section first, roomier, with a light scroll snap where it ends:
   the columns `GET .../groups/{group}/primary` names, else the **Varies** columns, then the
@@ -238,7 +238,7 @@ coloring hook (`Workspace.style`, #lib/chart/grouping.ts) and a primary section 
 - Group by, Color by and Repeats are saved on the group (`view`: `split`, `color`, `seeds`);
   the panel layout and hidden runs per group in the browser, starting from the project's.
 
-### D190. Creating and editing a group show the whole table
+### D223. Creating and editing a group show the whole table
 
 **New group** opens a page with every run in the project:
 
@@ -250,19 +250,19 @@ coloring hook (`Workspace.style`, #lib/chart/grouping.ts) and a primary section 
 
   The checkbox carries in or out; the look only says why, so it needs no column of its own.
 - A footer counts each kind. A toggle shows **All runs** or **In group** only.
-- The assistant panel sits on the right ([D191](#d191)). Its left edge drags to resize it
+- The assistant panel sits on the right ([D224](#d224)). Its left edge drags to resize it
   (280–640px, kept in a cookie like the sidebar's width). An empty thread offers three
   requests to start from, as clickable cards, drawn from the project where it says enough:
   a state its runs are in, a varying config number and a middle value, a run to add.
 - **Create group · N runs** saves the ticked runs as the group's list, and the filter with
-  them. The name is editable in the title and starts from a template ([D192](#d192)).
+  them. The name is editable in the title and starts from a template ([D225](#d225)).
 
 **Edit group** and **N new matches** open the same editor for an existing group, in a dialog
 over the group's page, so saving lands back on the page it was opened from. The
 `.../groups/{id}/edit` URL still renders the editor as a page, for links and reloads:
 
 - its runs are ticked;
-- new matches ([D183](#d183)) are unticked, amber, and labeled **new match**, with **Add
+- new matches ([D216](#d216)) are unticked, amber, and labeled **new match**, with **Add
   all** in the footer;
 - dropped runs are struck through, labeled **dropped**, and can be ticked back in.
 
@@ -270,7 +270,7 @@ Changing the filter here changes only which runs are offered as new matches. It 
 removes a run already in the group. **Save** records the ticked runs and moves the load time
 to now.
 
-### D191. The assistant picks from candidates Flock lists, through the Decisions API
+### D224. The assistant picks from candidates Flock lists, through the Decisions API
 
 The assistant uses OpenAI's Decisions API (`POST /v1/decisions`, model `gpt-6-luna`). It
 answers typed questions about one input:
@@ -321,7 +321,7 @@ in the same thread.
   group's runs, best by column or kinds change. With the assistant off, or when OpenAI
   fails, they're the varying keys and the best by column.
 
-### D192. Group names come from templates
+### D225. Group names come from templates
 
 The Decisions API can't write a name. A new group is named from its **Varies** keys and
 filters:
@@ -333,9 +333,9 @@ filters:
 `, finished` is added when the filter fixes `state`. A suggestion from a W&B group starts
 with the group's name. The name is editable on the create page and in the group's header.
 
-### D193. Storage
+### D226. Storage
 
-An expand migration (`0025_run_groups.sql`) adds:
+An expand migration (`0026_run_groups.sql`) adds:
 
 ```sql
 CREATE TABLE run_groups (
@@ -344,12 +344,12 @@ CREATE TABLE run_groups (
     name text NOT NULL,
     color text NOT NULL,
     filter jsonb NOT NULL DEFAULT '{}',
-    loaded_at timestamptz NOT NULL DEFAULT now(),   -- D183: the last time runs were loaded
+    loaded_at timestamptz NOT NULL DEFAULT now(),   -- D216: the last time runs were loaded
     best_key text,              -- null: the project's default
     best_order text CHECK (best_order IN ('asc', 'desc')),
     repeat_key text,
-    columns jsonb NOT NULL DEFAULT '{}',   -- D185 overrides: {"config.x": "varies", ...}
-    view jsonb NOT NULL DEFAULT '{}',      -- D189 split/color/seeds and panel layout
+    columns jsonb NOT NULL DEFAULT '{}',   -- D218 overrides: {"config.x": "varies", ...}
+    view jsonb NOT NULL DEFAULT '{}',      -- D222 split/color/seeds and panel layout
     created_by bigint REFERENCES users ON DELETE SET NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
@@ -374,32 +374,32 @@ ALTER TABLE orgs ADD COLUMN assistant_enabled boolean NOT NULL DEFAULT false;
 ```
 
 - `run_group_runs` stores run pks, so a renamed run stays in its groups. The `$in` filter
-  of [D183](#d183) is built with the runs' current ids.
+  of [D216](#d216) is built with the runs' current ids.
 - `added_by` is kept so the edit page can show how a run joined. It doesn't change what the
   group means.
-- The index on `run_pk` serves the ungrouped query ([D187](#d187)), "runs in no group".
+- The index on `run_pk` serves the ungrouped query ([D220](#d220)), "runs in no group".
 - **Permissions** follow runs': org members create and edit groups, and outsiders on a
   public project read them (D110). A group's filter and name are shown to outsiders like
   run names are.
 
-### D194. API
+### D227. API
 
 | Route | Does |
 | --- | --- |
 | `GET .../groups` | groups with counts, best run and value; the ungrouped count |
 | `POST .../groups` | creates a group from a name, filter, its runs and settings |
 | `PATCH .../groups/{group}` | changes the name, filter or settings, adds runs, drops runs, and can move the load time to now |
-| `GET .../groups/{group}/new` | the group's new matches ([D183](#d183)) |
+| `GET .../groups/{group}/new` | the group's new matches ([D216](#d216)) |
 | `DELETE .../groups/{group}` | deletes the group (its runs stay) |
 | `POST .../groups/{group}/runs/query` | the runs query (`RunsQuery`) over the group's runs |
-| `GET .../groups/{group}/workspace` | the workspace snapshot of the group's runs, for its page's table and charts ([D189](#d189)) |
-| `GET .../groups/{group}/columns` | each config key's kind and distinct count ([D185](#d185)) |
-| `GET .../groups/{group}/primary` | the columns its table shows first, from the model or the analysis ([D191](#d191)) |
-| `GET .../groups/compare` | Compare's rows and differing keys ([D188](#d188)) |
-| `GET .../groups/suggestions` | suggested groups ([D186](#d186)) |
+| `GET .../groups/{group}/workspace` | the workspace snapshot of the group's runs, for its page's table and charts ([D222](#d222)) |
+| `GET .../groups/{group}/columns` | each config key's kind and distinct count ([D218](#d218)) |
+| `GET .../groups/{group}/primary` | the columns its table shows first, from the model or the analysis ([D224](#d224)) |
+| `GET .../groups/compare` | Compare's rows and differing keys ([D221](#d221)) |
+| `GET .../groups/suggestions` | suggested groups ([D219](#d219)) |
 | `POST .../groups/suggestions/dismiss` | dismisses one |
-| `POST .../groups/assist` | one assistant turn: the request and the draft in, an action out ([D191](#d191)) |
-| `POST .../groups/propose` | one turn of the proposals chat: the conversation and the proposals on screen in, the model's reply and checked proposals out ([D196](#d196)) |
+| `POST .../groups/assist` | one assistant turn: the request and the draft in, an action out ([D224](#d224)) |
+| `POST .../groups/propose` | one turn of the proposals chat: the conversation and the proposals on screen in, the model's reply and checked proposals out ([D229](#d229)) |
 
 `...` is `/projects/{entity}/{project}`. Every read route is on the `public` router, and
 every write route needs membership. `groups/assist` answers `404` when the assistant is
@@ -407,7 +407,7 @@ off. `groups/{group}/primary` never fails because of OpenAI: it falls back to th
 Only members' visits ask the model; the group's name and filter, and its columns' names and
 a few values, are sent.
 
-### D195. Live updates change values and counts, never a group's runs
+### D228. Live updates change values and counts, never a group's runs
 
 The project's live events (D129) already announce new runs, removed runs and new metrics.
 On those events:
@@ -416,14 +416,14 @@ On those events:
 - **N new matches** in a group's header, and the count beside the group in the sidebar,
   are recounted.
 
-A new matching run is never added to a group by an event ([D183](#d183)).
+A new matching run is never added to a group by an event ([D216](#d216)).
 
-### D196. Proposals: a chat with gpt-6.2-sol
+### D229. Proposals: a chat with gpt-6.2-sol
 
 **New group** gains an **Auto** tab, and opens on it. When it opens, a model proposes how to
 group the project's runs, as cards. You refine them in words ("split the lr sweep by
 optimizer", "leave out crashed runs", "merge those two"), and accepting a card creates its
-group. The manual editor of [D190](#d190) stays as the other tab.
+group. The manual editor of [D223](#d223) stays as the other tab.
 
 It uses OpenAI's Responses API with a strict JSON schema, model `gpt-6.2-sol`
 (`FLOCK_OPENAI_PROPOSAL_MODEL`), at medium reasoning effort. One turn is one request:
@@ -432,7 +432,7 @@ It uses OpenAI's Responses API with a strict JSON schema, model `gpt-6.2-sol`
   time, which saved groups hold it, the config keys that vary across the project, and the
   best-by value. Before them: each varying key with its values and their counts (a range for
   numbers with more than 12), the seed keys, the summary metrics' names, the W&B groups, the
-  saved groups (name, filter, size), and the suggestions of [D186](#d186) as hints. Then the
+  saved groups (name, filter, size), and the suggestions of [D219](#d219) as hints. Then the
   conversation, with the proposals on screen just before the latest request. Run histories,
   files and logs are never sent.
 - **Big projects:** past ~40,000 characters of runs (about 300 runs of 20 keys), keys with
@@ -445,7 +445,7 @@ It uses OpenAI's Responses API with a strict JSON schema, model `gpt-6.2-sol`
 - **Asked for:** groups that each compare one controlled change (a sweep of one or two
   settings, a toggle, an ablation; a random search counts as one), seeds together, one-off
   runs left out rather than forced in, no saved group again, filters rather than hand lists
-  where a clean one exists, names in the style of [D192](#d192).
+  where a clean one exists, names in the style of [D225](#d225).
 
 Everything shown about a proposal is computed by Flock from the runs it ends up with, never
 taken from the model:
@@ -454,15 +454,15 @@ taken from the model:
   unknown ids are dropped (display names are resolved);
 - a proposal of fewer than 2 runs, or with the same runs as another proposal or a saved
   group, is dropped;
-- axes are its **Varies** keys ([D185](#d185)), the model's order first; with 1 or 2 axes
+- axes are its **Varies** keys ([D218](#d218)), the model's order first; with 1 or 2 axes
   of at most 24 values, a grid shows each cell's runs and best, so an unfinished sweep shows
   its holes;
-- best, seeds and the repeat key come from [D184](#d184) and [D185](#d185).
+- best, seeds and the repeat key come from [D217](#d217) and [D218](#d218).
 
 Accepting a proposal is `POST .../groups` with the body the proposal carries (`create`): its
-runs, and its filter, so runs logged later are offered as new matches ([D183](#d183)).
+runs, and its filter, so runs logged later are offered as new matches ([D216](#d216)).
 
-- **Why a second model, and why text.** The Decisions API ([D191](#d191)) picks among listed
+- **Why a second model, and why text.** The Decisions API ([D224](#d224)) picks among listed
   candidates; it can't write a name, explain a group in a sentence, or answer "merge those
   two" about cards it can't see. Proposals are few, and they're read before anything is
   saved, so a slower model that writes is worth it here. A turn takes 5 to 15 s on the seeded
@@ -479,12 +479,12 @@ runs, and its filter, so runs logged later are offered as new matches ([D183](#d
 
 ## 3. Plan
 
-1. Migration `0025_run_groups.sql` ([D193](#d193)).
+1. Migration `0026_run_groups.sql` ([D226](#d226)).
 2. `core/groups.py`:
-   - a group's runs, and its new matches ([D183](#d183));
-   - the column kinds query ([D185](#d185));
-   - picking a configuration's and a group's best ([D184](#d184));
-   - suggestions ([D186](#d186)).
+   - a group's runs, and its new matches ([D216](#d216));
+   - the column kinds query ([D218](#d218));
+   - picking a configuration's and a group's best ([D217](#d217));
+   - suggestions ([D219](#d219)).
 
    Tests in `tests/app/test_groups.py`:
    - creating from a filter, by hand, and both;
@@ -496,23 +496,23 @@ runs, and its filter, so runs logged later are offered as new matches ([D183](#d
    - every kind rule, including a random search and a 3-run group;
    - seeds, and NaN is never best;
    - both suggestion sources, and a run's `sweep` attribute is ignored.
-3. API routes ([D194](#d194)) and their access tests in `test_public.py`.
+3. API routes ([D227](#d227)) and their access tests in `test_public.py`.
 4. Web:
-   1. the sidebar's **Groups** section ([D182](#d182));
-   2. Compare, with the ungrouped section and **Add to group** ([D187](#d187), [D188](#d188));
+   1. the sidebar's **Groups** section ([D215](#d215));
+   2. Compare, with the ungrouped section and **Add to group** ([D220](#d220), [D221](#d221));
    3. the group page: table, then charts with Split by and Color by, then seed bands in
-      `LinePlot` ([D189](#d189));
-   4. the create and edit page ([D190](#d190)).
+      `LinePlot` ([D222](#d222));
+   4. the create and edit page ([D223](#d223)).
 5. The assistant:
    1. `settings.openai_api_key` and the org setting;
-   2. the Decisions client with the two-call flow ([D191](#d191));
+   2. the Decisions client with the two-call flow ([D224](#d224));
    3. the panel's action cards and Undo.
 
    Tests mock the API and check which candidates and questions are sent, the thresholds,
    and that nothing is sent when the assistant is off.
 6. Docs: a guide page `docs/source/app/groups.md`, covering groups, compare, the assistant
    and what it sends to OpenAI. Also new routes in the Projects API reference.
-7. Proposals ([D196](#d196)): `core/proposals.py` (the prompt, the Responses client, the
+7. Proposals ([D229](#d229)): `core/proposals.py` (the prompt, the Responses client, the
    checks), `POST .../groups/propose`, the Auto tab. Tests in `tests/app/test_proposals.py`
    with a mock Responses API, and the route in `tests/app/test_groups.py`.
 
@@ -526,26 +526,26 @@ runs, and its filter, so runs logged later are offered as new matches ([D183](#d
 - **The assistant's numeric values are observed values or quantiles**, not any number. "lr
   below 5e-4" picks the nearest observed value as the bound. The chip shows it, and it can be
   edited.
-- **Projects with more than ~380 columns:** the assistant sees a subset ([D191](#d191)). A
+- **Projects with more than ~380 columns:** the assistant sees a subset ([D224](#d224)). A
   column outside it can't be named in a request, only set with **Filter**.
 - **Not verified with OpenAI:** whether a shared input is billed once or once per question,
   the cache-read price, and rate limits. These decide the cost of a request with hundreds of
   questions. Measure them before turning the assistant on for every org.
-- **Two-axis sweeps** read as a grid of panels, not a heatmap ([D189](#d189)). A heatmap
+- **Two-axis sweeps** read as a grid of panels, not a heatmap ([D222](#d222)). A heatmap
   panel is the obvious next panel type.
 - **Runs page entry point:** adding the selected runs to a group from the Runs page's
   selection bar would be natural. It is left out because the Runs page doesn't change in this
-  stage ([D182](#d182)).
+  stage ([D215](#d215)).
 - **New matches come only from the filter.** A related run that doesn't match it, such as a
   rerun with a new W&B group name, isn't offered. It has to be added by hand, or the filter
   widened on the edit page.
 - **A member that stops matching stays.** A run in a `state is finished` group that is
   later resumed and running stays in the group until it is dropped by hand. This is
-  deliberate ([D183](#d183)).
-- **No sweep suggestions** until Flock supports W&B sweeps ([D186](#d186)).
+  deliberate ([D216](#d216)).
+- **No sweep suggestions** until Flock supports W&B sweeps ([D219](#d219)).
 - **A proposal's runs can go stale before it's accepted.** It's created with the runs it
   showed and its filter. A run logged in between matches the filter but isn't listed, so the
-  create route drops it ([D183](#d183)) and it's never offered. Rare on an onboarding screen;
+  create route drops it ([D216](#d216)) and it's never offered. Rare on an onboarding screen;
   the fix is a create flag that leaves unlisted matches as new matches.
 - **The model's words aren't checked.** Its name and sentence can claim an axis the runs
   don't vary on. The axes, values, grid and best shown beside them are right.

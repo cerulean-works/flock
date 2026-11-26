@@ -169,7 +169,7 @@ export const PLOT_H = 196;
 export const MIN_PLOT_H = 120;
 export const MAX_PLOT_H = 720;
 
-/** A group's own keys (025) follow its project's: `flock:panels:acme/bert/groups/12`. */
+/** A group's own keys (026) follow its project's: `flock:panels:acme/bert/groups/12`. */
 const scoped = (entity: string, project: string, group?: number | null) =>
 	`${entity}/${project}${group == null ? '' : `/groups/${group}`}`;
 const layoutKey = (entity: string, project: string, group?: number | null) =>
@@ -208,7 +208,7 @@ function store(key: string, value: unknown) {
 
 /**
  * Where a workspace's runs come from, when not every run of the project (the Runs page): a
- * group's page (025) shows only the group's members, with the same table and charts.
+ * group's page (026) shows only the group's members, with the same table and charts.
  */
 export interface WorkspaceOptions {
 	/** The group whose members are shown; its panel layout and hidden runs are its own. */
@@ -939,7 +939,7 @@ export class Workspace {
 	 * the run it shows is never hidden. A project with no hidden runs saved plots only its
 	 * `NEWEST_SHOWN` newest runs of the page; a group plots all of its runs.
 	 *
-	 * A group's layout is its own (D189), and starts as a copy of its project's.
+	 * A group's layout is its own (D222), and starts as a copy of its project's.
 	 */
 	restoreLayout({ hidden: withHidden = true } = {}) {
 		const { entity, project } = this.meta;

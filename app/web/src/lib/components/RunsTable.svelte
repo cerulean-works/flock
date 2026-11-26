@@ -68,7 +68,7 @@
 		/** The name column's width, which the viewer can drag. */
 		nameW: number;
 		/**
-		 * Keys of the suggested columns, the ones that matter most here (a group's, 025): first,
+		 * Keys of the suggested columns, the ones that matter most here (a group's, 026): first,
 		 * roomier, under a "Suggested" band of their own, ended by a bolder divider. The rest follow
 		 * at the table's usual density. Keys the page has no column for are left out.
 		 */

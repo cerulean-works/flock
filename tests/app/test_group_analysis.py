@@ -1,5 +1,5 @@
-"""Run groups' analysis (025): column kinds (D185), best (D184), differing keys (D188), names
-(D192) and suggestions (D186). Pure; no database."""
+"""Run groups' analysis (026): column kinds (D218), best (D217), differing keys (D221), names
+(D225) and suggestions (D219). Pure; no database."""
 
 from __future__ import annotations
 

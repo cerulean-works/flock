@@ -197,7 +197,7 @@ function onlyConfig(cells: Record<string, unknown>) {
 }
 
 describe('names', () => {
-	it('names groups from what varies (D192)', () => {
+	it('names groups from what varies (D225)', () => {
 		const two = [
 			{ 'config.lr': 1, 'config.batch_size': 32 },
 			{ 'config.lr': 1, 'config.batch_size': 64 },
@@ -222,7 +222,7 @@ describe('names', () => {
 	});
 });
 
-describe('drafts (D190)', () => {
+describe('drafts (D223)', () => {
 	const base: Draft = {
 		matched: new Set(['a', 'b', 'c']),
 		members: new Set(),
@@ -286,7 +286,7 @@ describe('display', () => {
 		expect(formatDelta(0)).toBe('0.000');
 	});
 
-	it('defaults a group’s charts to its varying keys (D189)', () => {
+	it('defaults a group’s charts to its varying keys (D222)', () => {
 		expect(viewOf({}, ['config.lr'])).toEqual({
 			split: null,
 			color: 'config.lr',
