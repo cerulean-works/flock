@@ -51,6 +51,15 @@ uv run --no-sync modal run tests/modal_gpu.py
 uv run --no-sync modal run tests/modal_gpu.py --pytest-args "-q tests/training -m 'gpu and fa4'" --workers 4
 ```
 
+End-to-end tests compare models against pretrained checkpoints they download, so they
+need a GPU and a Hugging Face token with access to those checkpoints (Llama 3.2 is gated).
+They are excluded from both the default and `-m gpu` runs. Run them on a Modal H200 with
+your local token:
+
+```sh
+HF_TOKEN=... uv run --no-sync modal run tests/modal_gpu.py --pytest-args "-q tests/training -m e2e" --workers 1 --gpu H200
+```
+
 Compiled Inductor, Triton and FlashAttention-4 kernels persist between runs in the
 `flock-gpu-compile-cache` Modal Volume. Delete it with `modal volume delete
 flock-gpu-compile-cache` to compile everything from scratch.

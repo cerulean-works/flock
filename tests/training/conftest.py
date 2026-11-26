@@ -10,6 +10,7 @@ import torch
 from tokenizers import Tokenizer, models, pre_tokenizers
 from transformers import TokenizersBackend
 
+from flock.training.core.models.llama32 import Llama32Config
 from flock.training.core.models.olmo2 import Olmo2Config
 
 if TYPE_CHECKING:
@@ -52,6 +53,23 @@ def config() -> Olmo2Config:
         num_attention_heads=4,
         num_key_value_heads=4,
         max_position_embeddings=16,
+    )
+
+
+@pytest.fixture
+def llama32_config() -> Llama32Config:
+    # A small base and original context put head width 8's frequencies in every Llama 3
+    # RoPE band (kept, smoothed and divided) and make scaling visible at short positions.
+    return Llama32Config(
+        vocab_size=32,
+        hidden_size=32,
+        intermediate_size=48,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        max_position_embeddings=64,
+        rope_theta=100.0,
+        rope_original_max_position_embeddings=32,
     )
 
 

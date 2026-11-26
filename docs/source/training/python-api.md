@@ -153,15 +153,22 @@ The batch, collator and sampler live in `flock.training.core.data_utils`.
 ## Models
 
 Import model implementations and presets from `flock.training.core.models`.
-`Olmo2Config` is also exported from `flock.training`. Both presets initialize
-fresh weights; their `hf_repo` values identify tokenizers.
+`Olmo2Config` and `Llama32Config` are also exported from `flock.training`. Every preset
+initializes fresh weights. Their `hf_repo` values identify tokenizers.
 
 | Preset | Vocabulary | Hidden width | MLP width | Layers | Query/KV heads | Context |
 |---|---|---|---|---|---|---|
 | `OLMO2_1B_CONFIG` | `100352` | `2048` | `8192` | `16` | `16 / 16` | `4096` |
 | `OLMO2_7B_CONFIG` | `100352` | `4096` | `11008` | `32` | `32 / 32` | `4096` |
+| `LLAMA32_1B_CONFIG` | `128256` | `2048` | `8192` | `16` | `32 / 8` | `131072` |
+
+`LLAMA32_1B_CONFIG` matches Meta's Llama 3.2 1B text model, including its scaled RoPE
+and tied input and output embeddings. Its parameter names match `transformers`, so you
+can load that checkpoint's weights into `Llama32` with `load_state_dict`.
 
 [[autodoc]] training.Olmo2Config
+
+[[autodoc]] training.Llama32Config
 
 [[autodoc]] training.core.models.BaseModel
     - get_hf_tokenizer
@@ -171,7 +178,10 @@ fresh weights; their `hf_repo` values identify tokenizers.
 [[autodoc]] training.core.models.Olmo2
     - none
 
-The `Olmo2` forward and tokenizer methods follow the `BaseModel` contract above.
+[[autodoc]] training.core.models.Llama32
+    - none
+
+The `Olmo2` and `Llama32` forward and tokenizer methods follow the `BaseModel` contract above.
 
 [[autodoc]] training.core.models.HFCompatibleConfig
 
