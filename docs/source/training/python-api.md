@@ -37,7 +37,8 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 | `run_name` | Required | Default checkpoint folder name and evaluation label. Does not set the W&B run name. |
 | `input_column` | Required | Text column in each dataset row. |
 | `batch_size` | Required | Positive rows or cached chunks per rank per optimizer update. |
-| `max_steps` | `None` | Positive cap on optimizer updates; schedules plan over the capped run. `None` trains the full pass. |
+| `max_steps` | `None` | Positive cap on optimizer updates; schedules plan over the capped run. `None` trains the full pass. Required with `max_tokens_per_device`, where it is the run length. |
+| `max_tokens_per_device` | `None` | Pack text rows into one row of this many input positions per rank per update. Requires `max_steps` and `batch_size=1`. See [Pack text rows](trainer#pack-text-rows). |
 | `optimizer_config` | Required | `AdamWConfig` for AdamW or `MuonConfig` for Muon with a companion optimizer. |
 | `lr_scheduler_config` | Required | `LRSchedulerConfig` containing learning-rate segments. |
 | `wandb_project` | Required | Tracking project started during construction on rank zero. |
@@ -167,6 +168,13 @@ The batch, collator and sampler live in `flock.training.core.data_utils`.
 [[autodoc]] training.core.data_utils.LanceBatchCollator
 
 [[autodoc]] training.core.data_utils.ResumableBatchDataSampler
+
+[[autodoc]] training.core.data_utils.TokenBudgetBatchSampler
+    - document_cursor_after
+
+[[autodoc]] training.core.data_utils.DocumentLengths
+
+[[autodoc]] training.core.data_utils.tokenize_documents
 
 ## Models
 

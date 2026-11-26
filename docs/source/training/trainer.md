@@ -237,6 +237,41 @@ Resume a packed run with `packing=True`: packing changes the data the checkpoint
 records. Packing runs once in each process that opens the dataset, before training
 starts.
 
+## Pack text rows
+
+Set `max_tokens_per_device` to pack the text rows of a `SafeLanceDataset` without
+preparing a token cache. Each rank's update is one row of exactly that many input
+positions. The tokenizer truncates each document to its `model_max_length`, so set
+that to the document length you want, such as `4096`; longer documents are
+truncated, not split. Documents fill the row whole, in the shuffled order. The first
+that would exceed the budget starts the next update, so no document is dropped or
+repeated. The row's unused tail is padding. Attention and positions restart at each
+document, through `cu_seq_lens`, so use an attention backend with a packed path,
+such as `"sdpa"`, `"flash_attention_3"` or `"flash_attention_4"`.
+
+```python
+config = TrainerConfig(
+    ...,
+    batch_size=1,  # one packed row per rank per update
+    max_tokens_per_device=65536,  # 16 documents of 4096 tokens
+    max_steps=10_000,
+)
+tokenizer.model_max_length = 4096
+```
+
+Because an update holds as many documents as fit, `max_steps` sets the run
+length and is required; `batch_size` must be `1`. Rank `r` reads positions `r`,
+`r + world_size`, ... of the same seeded permutation the row sampler uses. A rank
+that runs out of documents trains on empty rows until `max_steps`. The loss is
+the mean over every rank's valid targets.
+
+Planning an update needs each document's length, so the sampler tokenizes ahead on
+a background thread in the training process, and the loader's workers tokenize
+again to build rows. Checkpoints record each rank's document cursor with the
+update count, and resume reads from it: resumed training sees exactly the
+documents an uninterrupted run would. The budget, the document length and the
+tokenizer join the checkpoint's data contract, so changing them rejects a resume.
+
 ## Launch distributed training
 
 Use `torchrun` to start one process per GPU. Each process keeps a full copy of

@@ -28,7 +28,13 @@ from flock.eval.tasks import TASKS
 from flock.training.core.checkpoint import CheckpointManager
 from flock.training.core.chunks import TokenChunkDataset
 from flock.training.core.compilation import compile_if_enabled
-from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
+from flock.training.core.data_utils import (
+    Batch,
+    DocumentLengths,
+    LanceBatchCollator,
+    ResumableBatchDataSampler,
+    TokenBudgetBatchSampler,
+)
 from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
 from flock.training.core.hardware import get_device_peak_flops
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
@@ -47,12 +53,19 @@ class TrainerConfig(PydanticBaseModel):
             Name used for the default checkpoint directory and evaluation labels.
             This is not passed to `wandb.init` as the tracking run's name.
         input_column (`str`): Text column read from each Lance row.
-        batch_size (`int`): Positive number of dataset items per rank per optimizer update; chunks when using a token cache, or rows when it packs them.
+        batch_size (`int`): Positive number of dataset items per rank per optimizer update; chunks when using a token cache, or rows when it packs them. Must be `1` with `max_tokens_per_device`: one packed row.
         max_steps (`int`, *optional*):
             Positive cap on optimizer updates. The run ends at the cap, or at the end of
             the pass if that comes first. Fractional schedule times are fractions of the
             capped run; a schedule whose update counts exceed it is rejected when the
-            trainer is built.
+            trainer is built. Required with `max_tokens_per_device`, where it is the run length.
+        max_tokens_per_device (`int`, *optional*):
+            Pack text rows: each rank's update is one row of this many input positions,
+            filled with whole documents in the shuffled order and padded at the end.
+            Each document is truncated to the tokenizer's `model_max_length`, not split.
+            A document that would exceed the budget starts the next update. Attention and
+            positions restart at each document. Not for `TokenChunkDataset`, which packs
+            its own rows.
         optimizer_config (`OptimizerConfig`):
             Optimizer settings: `AdamWConfig`, or `MuonConfig` for Muon with a companion.
             The optimizer factory receives the model, so embeddings can be grouped apart.
@@ -117,6 +130,7 @@ class TrainerConfig(PydanticBaseModel):
     input_column: str
     batch_size: int = Field(gt=0)
     max_steps: int | None = Field(default=None, gt=0)
+    max_tokens_per_device: int | None = Field(default=None, gt=0)
 
     optimizer_config: OptimizerConfig
     lr_scheduler_config: LRSchedulerConfig
@@ -165,6 +179,11 @@ class TrainerConfig(PydanticBaseModel):
             raise ValueError(
                 "dataloader_prefetch_factor must be None when dataloader_num_workers is 0"
             )
+        if self.max_tokens_per_device is not None:
+            if self.max_steps is None:
+                raise ValueError("max_tokens_per_device requires max_steps, the run length")
+            if self.batch_size != 1:
+                raise ValueError("max_tokens_per_device packs one row per update; set batch_size=1")
         return self
 
 
@@ -237,7 +256,8 @@ class CheckpointRankState(PydanticBaseModel):
         cpu_rng_state (`torch.Tensor`): PyTorch CPU RNG state.
         cuda_rng_state (`list[torch.Tensor]` or `None`): This process's CUDA RNG states.
         python_rng_state (`tuple`): Python `random` state.
-        data_state (`dict[str, int]`): Completed global batches in `batch_cursor`.
+        data_state (`dict[str, int]`): Completed global batches in `batch_cursor`, and with
+            packed text, this rank's consumed documents in `document_cursor`.
     """
 
     model_config = ConfigDict(
@@ -319,7 +339,11 @@ class TrainerCheckpoint(PydanticBaseModel):
         if not self.rank_states or any(rank < 0 or rank >= world_size for rank in self.rank_states):
             raise ValueError("Checkpoint contains invalid rank states")
         for rank_state in self.rank_states.values():
-            if rank_state.data_state != {"batch_cursor": step}:
+            data_state = rank_state.data_state
+            if data_state.get("batch_cursor") != step or set(data_state) - {
+                "batch_cursor",
+                "document_cursor",
+            }:
                 raise ValueError("Checkpoint sampler cursor and trainer progress do not match")
 
         if info.context is not None:
@@ -565,6 +589,23 @@ class Trainer:
             digest = TokenChunkDataset.tokenizer_fingerprint(tokenizer)
             if dataset.manifest["tokenizer"] != digest:
                 raise ValueError("Chunk cache tokenizer does not match Trainer tokenizer")
+        self.max_tokens_per_device = config.max_tokens_per_device
+        if self.max_tokens_per_device is not None:
+            if isinstance(dataset, TokenChunkDataset):
+                raise ValueError(
+                    "max_tokens_per_device packs text rows; TokenChunkDataset packs its own"
+                )
+            # Each truncated document must fit one row, and the row must fit the model.
+            if tokenizer.model_max_length - 1 > self.max_tokens_per_device:
+                raise ValueError(
+                    f"Tokenizer model_max_length {tokenizer.model_max_length} does not fit "
+                    f"max_tokens_per_device {self.max_tokens_per_device}; set model_max_length "
+                    "to the document length"
+                )
+            if self.max_tokens_per_device > model.max_position_embeddings:
+                raise ValueError(
+                    "max_tokens_per_device exceeds the model's max_position_embeddings"
+                )
         self.run_name = config.run_name
         self.seed = config.seed
 
@@ -609,7 +650,11 @@ class Trainer:
         self.total_steps = math.ceil(
             len(self.dataset) / (self.batch_size * self.runtime.world_size)
         )
-        if config.max_steps is not None:
+        if self.max_tokens_per_device is not None:
+            # Packed updates hold a varying number of rows, so max_steps sets the run length.
+            assert config.max_steps is not None
+            self.total_steps = config.max_steps
+        elif config.max_steps is not None:
             # The schedule and the checkpoint check plan over the capped run.
             self.total_steps = min(self.total_steps, config.max_steps)
         optimizer_factory = OptimizerInterface.get_interface(type(config.optimizer_config))
@@ -624,6 +669,10 @@ class Trainer:
         ).to(self.device)
         # Widths repeat and are bounded by the model's length limit.
         self.flops_per_token = functools.cache(self.model.num_flops_per_token)
+        # Packed text: this rank's documents consumed by completed updates, and the sampler
+        # that reports them.
+        self._document_cursor = 0
+        self._packing_sampler: TokenBudgetBatchSampler | None = None
 
         # torch compile method
         self.torch_compile: bool = config.torch_compile
@@ -677,23 +726,42 @@ class Trainer:
         self.run.define_metric("eval/*", step_metric="global_step")
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
-        """Build a seeded, resumable loader with spawned workers and CUDA pinning."""
+        """Build a seeded, resumable loader with spawned workers and CUDA pinning.
+
+        Packed text resumes from this rank's saved document cursor.
+        """
         collator = LanceBatchCollator(
             self.tokenizer,
             self.ds_input_column,
             token_chunks=isinstance(self.dataset, TokenChunkDataset),
+            packed_tokens=self.max_tokens_per_device,
         )
-        sampler = ResumableBatchDataSampler(
-            batch_size=self.batch_size,
-            dataset_size=len(self.dataset),
-            shuffle=True,
-            seed=self.seed,
-            batch_cursor=skip_batches,
-            rank=self.runtime.rank,
-            world_size=self.runtime.world_size,
-            yield_empty_last_batch=True if self.runtime.enabled else None,
-            max_batches=self.total_steps,
-        )
+        sampler: ResumableBatchDataSampler | TokenBudgetBatchSampler
+        if self.max_tokens_per_device is not None:
+            sampler = TokenBudgetBatchSampler(
+                dataset_size=len(self.dataset),
+                lengths=DocumentLengths(self.dataset, self.tokenizer, self.ds_input_column),
+                max_tokens=self.max_tokens_per_device,
+                max_batches=self.total_steps,
+                seed=self.seed,
+                rank=self.runtime.rank,
+                world_size=self.runtime.world_size,
+                batch_cursor=skip_batches,
+                document_cursor=self._document_cursor,
+            )
+            self._packing_sampler = sampler
+        else:
+            sampler = ResumableBatchDataSampler(
+                batch_size=self.batch_size,
+                dataset_size=len(self.dataset),
+                shuffle=True,
+                seed=self.seed,
+                batch_cursor=skip_batches,
+                rank=self.runtime.rank,
+                world_size=self.runtime.world_size,
+                yield_empty_last_batch=True if self.runtime.enabled else None,
+                max_batches=self.total_steps,
+            )
 
         return DataLoader(
             self.dataset,
@@ -783,7 +851,7 @@ class Trainer:
         for step, batch in enumerate(dataloader, start=start_step + 1):
             data_wait = perf_counter() - fetch_start
             padded_tokens = batch["input_ids"].numel()
-            flops = self.flops_per_token(batch["input_ids"].shape[1]) * padded_tokens
+            flops = self._batch_flops(batch)
             # Mark the step begin for CUDA Graphs if torch.compile is enabled.
             if self.torch_compile:
                 torch.compiler.cudagraph_mark_step_begin()
@@ -820,6 +888,9 @@ class Trainer:
                 flops=flops,
             )
             update_start = update_end
+            if self._packing_sampler is not None:
+                # The cursor follows completed updates, so a save records where to resume.
+                self._document_cursor = self._packing_sampler.document_cursor_after(step)
 
             if log:
                 if self.runtime.is_master:
@@ -840,6 +911,15 @@ class Trainer:
                 self.evaluate()
 
             fetch_start = perf_counter()
+
+    def _batch_flops(self, batch: Batch) -> float:
+        """Estimate a batch's model FLOPs, with attention over each packed document."""
+        cu_seq_lens = batch.get("cu_seq_lens")
+        if cu_seq_lens is None:
+            return self.flops_per_token(batch["input_ids"].shape[1]) * batch["input_ids"].numel()
+        # Documents attend only within themselves, padding segments included.
+        lengths = cu_seq_lens.diff().tolist()
+        return sum(self.flops_per_token(length) * length for length in lengths if length > 0)
 
     def _learning_rates(self) -> dict[str, float]:
         """Return each parameter group's current learning rate, named by optimizer.
@@ -892,6 +972,7 @@ class Trainer:
                     "Resume from a checkpoint or specify an empty directory."
                 )
             self.state.reset_global()
+            self._document_cursor = 0
             start_step = 0
             self.logger.info("Initializing training dataloader")
             dataloader = self._get_training_dataloader()
@@ -1043,22 +1124,40 @@ class Trainer:
                         torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
                     ),
                     "python_rng_state": random.getstate(),
-                    "data_state": {"batch_cursor": int(self.state.step.item())},
+                    "data_state": self._data_state(),
                 }
             },
-            "config": {
-                "chunk_fingerprint": (
-                    self.dataset.fingerprint
-                    if isinstance(self.dataset, TokenChunkDataset)
-                    else None
-                ),
-                "dataset_size": len(self.dataset),
-                "batch_size": self.batch_size,
-                "seed": self.seed,
-                "input_column": self.ds_input_column,
-                "world_size": self.runtime.world_size,
-            },
+            "config": self._run_contract(),
         }
+
+    def _data_state(self) -> dict[str, int]:
+        """Return this rank's sampler cursors after the completed updates."""
+        state = {"batch_cursor": int(self.state.step.item())}
+        if self.max_tokens_per_device is not None:
+            state["document_cursor"] = self._document_cursor
+        return state
+
+    def _run_contract(self) -> dict[str, int | str | None]:
+        """Return the settings a checkpoint's data order depends on.
+
+        Packed text adds its budget, document length and tokenizer, which decide where
+        each update's documents end. Other runs keep their earlier keys.
+        """
+        contract: dict[str, int | str | None] = {
+            "chunk_fingerprint": (
+                self.dataset.fingerprint if isinstance(self.dataset, TokenChunkDataset) else None
+            ),
+            "dataset_size": len(self.dataset),
+            "batch_size": self.batch_size,
+            "seed": self.seed,
+            "input_column": self.ds_input_column,
+            "world_size": self.runtime.world_size,
+        }
+        if self.max_tokens_per_device is not None:
+            contract["max_tokens_per_device"] = self.max_tokens_per_device
+            contract["document_length"] = self.tokenizer.model_max_length
+            contract["tokenizer"] = TokenChunkDataset.tokenizer_fingerprint(self.tokenizer)
+        return contract
 
     def validate_state_dict(
         self, state: Mapping[str, Any] | TrainerCheckpoint
@@ -1079,22 +1178,14 @@ class Trainer:
         checkpoint = TrainerCheckpoint.model_validate(
             state,
             context={
-                "config": {
-                    "chunk_fingerprint": (
-                        self.dataset.fingerprint
-                        if isinstance(self.dataset, TokenChunkDataset)
-                        else None
-                    ),
-                    "dataset_size": len(self.dataset),
-                    "batch_size": self.batch_size,
-                    "seed": self.seed,
-                    "input_column": self.ds_input_column,
-                    "world_size": self.runtime.world_size,
-                },
+                "config": self._run_contract(),
                 "total_steps": self.total_steps,
                 "rank": self.runtime.rank,
             },
         )
+        data_state = checkpoint.rank_states[self.runtime.rank].data_state
+        if (self.max_tokens_per_device is not None) != ("document_cursor" in data_state):
+            raise ValueError("Checkpoint document cursor does not match this run's packing")
         cuda_rng = checkpoint.rank_states[self.runtime.rank].cuda_rng_state
         if (
             torch.cuda.is_available()
@@ -1146,6 +1237,7 @@ class Trainer:
         self.lr_scheduler.load_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
 
         rank_state = checkpoint.rank_states[self.runtime.rank]
+        self._document_cursor = rank_state.data_state.get("document_cursor", 0)
         torch.set_rng_state(rank_state.cpu_rng_state)
         random.setstate(rank_state.python_rng_state)
         if torch.cuda.is_available():

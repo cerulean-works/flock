@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
 # These tests check trainer mechanics against `torch.optim.AdamW(lr, betas)`: one group with
 # PyTorch's default weight decay. test_optimizers covers the embedding group.
-ONE_GROUP = {"weight_decay": 0.01, "no_decay_embeddings": False}
+ONE_GROUP: dict[str, Any] = {"weight_decay": 0.01, "no_decay_embeddings": False}
 
 
 @dataclass
