@@ -143,6 +143,9 @@
 		return { settings, metrics };
 	});
 	const primary = $derived([...suggested.settings, ...suggested.metrics]);
+	/** A suggested metric's header: its whole key when a suggested setting has its name. */
+	const metricName = (key: string) =>
+		suggested.settings.some((k) => displayKey(k) === metricLabel(key)) ? key : metricLabel(key);
 	const keys = $derived(
 		(differencesOnly ? cmp.keys : allKeys).filter((k) => !suggested.settings.includes(k))
 	);
@@ -175,7 +178,7 @@
 
 	/** A key column's width: its label or its widest value, plus a cell's and a chip's padding. */
 	function keyWidth(key: string, metric = false): number {
-		let w = textWidth(metric ? metricLabel(key) : displayKey(key), HEAD_FONT) ?? 112 - 28;
+		let w = textWidth(metric ? metricName(key) : displayKey(key), HEAD_FONT) ?? 112 - 28;
 		for (const r of everyRow) {
 			const v = metric ? r.summary?.[key] : r.config[key];
 			if (v == null) continue;
@@ -688,7 +691,7 @@
 										style:flex={fit(widthOf[key])}
 										title="{key} of each group’s best run"
 									>
-										<span class="truncate">{metricLabel(key)}</span>
+										<span class="truncate">{metricName(key)}</span>
 									</div>
 								{/each}
 								{#each keys as key (key)}

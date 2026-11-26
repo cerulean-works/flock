@@ -118,6 +118,19 @@
 			: ws.shownColumns
 	);
 	const columns = $derived(shown.map((i) => ws.meta.columns[i]));
+	/**
+	 * Each column's header: its label, or, among the suggested columns (which have no group band),
+	 * a metric's whole key when a setting there has the same label (`lr` and `summary.lr`).
+	 */
+	const labels = $derived(
+		columns.map((col, c) =>
+			c < primaryCount &&
+			col.group === 'summary' &&
+			columns.slice(0, primaryCount).some((o) => o !== col && o.label === col.label)
+				? col.key
+				: col.label
+		)
+	);
 	const groups = $derived.by((): (Omit<ColumnGroupSpan, 'key'> & { key: string })[] => {
 		if (!primaryCount) return columnGroups(columns);
 		const rest = columnGroups(columns.slice(primaryCount)).map((g) => ({
@@ -143,7 +156,7 @@
 		const page = ws.page;
 		return columns.map((col, c) => {
 			if (!f || !FITTED.has(col.kind)) return col.width;
-			let w = textWidth(col.label, f.head) ?? col.width;
+			let w = textWidth(labels[c], f.head) ?? col.width;
 			w += ARROW;
 			const rows = Math.min(page.runs.length, SAMPLE);
 			for (let r = 0; r < rows; r++) {
@@ -600,7 +613,7 @@
 						onpointerenter={() => hoverSort(col.key)}
 						onpointerleave={leaveSort}
 					>
-						<span class="label truncate">{col.label}</span>
+						<span class="label truncate">{labels[c]}</span>
 						{#if query.sort === col.key}<span class="arrow text-foreground"
 								>{query.order === 'asc' ? '↑' : '↓'}</span
 							>{/if}
