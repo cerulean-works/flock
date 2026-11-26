@@ -320,7 +320,8 @@ class Groups:
         runs (they're offered as new matches again if they match), and with ``loaded`` move
         the load time to now (D216). A changed filter only changes which runs are offered: no
         member is removed."""
-        sets, args = ["updated_at = now()"], [group.pk]
+        sets: list[str] = ["updated_at = now()"]
+        args: list[Any] = [group.pk]
         for field, value in fields.items():
             jsonb = self.FIELDS[field]
             args.append(orjson.dumps(value).decode() if jsonb else value)

@@ -25,7 +25,7 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import httpx
 import orjson
@@ -374,7 +374,7 @@ async def _filter(
     direct = {}
     for column in picked:
         if values := sorted(asked.get(column.key, ()), key=lambda v: -v[1]):
-            readings = [Reading(Condition(column.key, "eq", v), p) for v, p in values]
+            readings = [Reading(Condition(column.key, "eq", cast(Any, v)), p) for v, p in values]
             others = tuple(r for r in readings[1:] if r.probability >= MIN_ALTERNATIVE)
             direct[column.key] = (readings[0], others[:ALTERNATIVES])
     rest = [c for c in picked if c.key not in direct][: MAX_REQUEST // 2]
@@ -603,7 +603,7 @@ def _predicate(name: str, instructions: str) -> dict:
     return {"type": "predicate", "name": name, "instructions": instructions}
 
 
-def _choice(name: str, instructions: str, choices: dict[Any, str | None]) -> dict:
+def _choice(name: str, instructions: str, choices: Mapping[Any, str | None]) -> dict:
     return {
         "type": "choice",
         "name": name,
@@ -636,7 +636,7 @@ def _top(answer: dict) -> tuple[Any, float]:
 def _distribution[T](answer: dict, allowed: Sequence[T] | dict[T, Any]) -> list[tuple[T, float]]:
     """A choice's probability per listed value, most likely first. String and boolean values
     are distinct, so ``"true"`` never reads as ``True``."""
-    keys = {(type(k), k): k for k in allowed}
+    keys: dict[tuple[type, Any], T] = {(type(k), k): k for k in allowed}
     found: dict[tuple[type, Any], float] = {}
     for item in answer.get("probabilities") or ():
         value = item.get("value")
@@ -703,7 +703,7 @@ def _distinct(values: Sequence[Value]) -> tuple[Value, ...]:
         seen.setdefault(orjson.dumps(value), value)
     found = list(seen.values())
     if all(_scalar_number(v) for v in found):
-        found.sort()  # type: ignore[arg-type]
+        found.sort(key=lambda v: cast(float, v))
     return tuple(found)
 
 

@@ -221,7 +221,8 @@ def test_filter_picks_columns_and_applies_the_top_operator_and_value() -> None:
 
     assert action.type == "filter"
     (lr, lr_others), (opt, opt_others) = action.conditions
-    assert lr == Reading(Condition("config.lr", "lt", 0.001), pytest.approx(0.56))
+    assert lr.condition == Condition("config.lr", "lt", 0.001)
+    assert lr.probability == pytest.approx(0.56)
     # Alternatives by probability, decoded back to numbers.
     assert [(r.condition.op, r.condition.value) for r in lr_others] == [
         ("lte", 0.001),

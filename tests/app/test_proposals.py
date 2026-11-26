@@ -29,8 +29,9 @@ from app.api.src.core.proposals import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
+    from app.api.src.core.group_analysis import Kind
     from app.api.src.core.proposals import Context, Turn
 
 
@@ -190,11 +191,11 @@ class FakeResponses:
             return self.reply
         return httpx.Response(200, json=self.reply)
 
-    def turn(self, messages: list[Message] = (), match: Callable | None = None) -> Turn:  # type: ignore[assignment]
+    def turn(self, messages: Sequence[Message] = (), match: Callable | None = None) -> Turn:
         async def main() -> Turn:
             async with httpx.AsyncClient(transport=httpx.MockTransport(self.handler)) as http:
                 client = ResponsesClient("sk-test", model="gpt-test", http=http)
-                return await propose(ctx(), messages, None, match or matcher({}), client)
+                return await propose(ctx(), list(messages), None, match or matcher({}), client)
 
         return asyncio.run(main())
 
@@ -369,7 +370,7 @@ def test_a_metric_the_runs_dont_have_isnt_taken() -> None:
 
 def test_the_grid_covers_the_sweep() -> None:
     members = RUNS[:4]
-    kinds = {"config.lr": "varies", "config.bs": "varies", "config.seed": "repeat"}
+    kinds: dict[str, Kind] = {"config.lr": "varies", "config.bs": "varies", "config.seed": "repeat"}
     found = grid(members, ["config.lr", "config.bs"], kinds, ("summary.loss", "asc"))
     assert found is not None
     assert (found["x"], found["y"]) == ("config.lr", "config.bs")

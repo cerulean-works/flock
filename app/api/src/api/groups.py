@@ -353,7 +353,9 @@ async def compare(project: ReadableProjectDep, store: StoreDep) -> Response:
     key, order = await api.project_best(project)
     groups = await api.of_project(project)
     membership = await api.membership(project, groups)
-    keys = {k for group in groups if (k := best_by(group, (key, order))[0])} | {key} - {None}
+    keys = {k for group in groups if (k := best_by(group, (key, order))[0])}
+    if key:
+        keys.add(key)
     rows = await api.rows(project, None, keys)
 
     group_rows, other_rows, ignored = [], [], set()
@@ -641,7 +643,9 @@ async def assist(
         assistant.Condition(item["key"], item["op"], item.get("value"))
         for item in flatten_conditions(body.filter)
     ]
-    client = assistant.DecisionsClient(store.settings.openai_api_key)
+    key = store.settings.openai_api_key
+    assert key  # assistant_on checked it
+    client = assistant.DecisionsClient(key)
     try:
         # An AssistantError is a BadGateway: 502.
         action = await assistant.assist(body.request, columns, runs, current, client)
