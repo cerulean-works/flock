@@ -511,7 +511,7 @@
 		mode !== 'visualize'
 			? 'right-0 bottom-0'
 			: stacked
-				? 'right-0 h-(--table-h) pb-2'
+				? 'right-0 h-(--table-h)'
 				: 'bottom-0 w-(--table-w)',
 		wide ? 'overflow-x-auto' : 'overflow-x-hidden',
 		drag && 'cursor-grabbing select-none'

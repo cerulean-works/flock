@@ -1,3 +1,15 @@
+<script lang="ts" module>
+	/**
+	 * Visualize's layout as the viewer last left it in this tab, shared across pages: the
+	 * layout's data (from the cookies) is read once per visit, so a change made on one page would
+	 * otherwise be undone on the next.
+	 */
+	const layout = $state<{ stacked: boolean | null; tableH: number | null }>({
+		stacked: null,
+		tableH: null
+	});
+</script>
+
 <script lang="ts">
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
@@ -171,12 +183,19 @@
 	let tableW = $derived(savedTableW || TABLE_W.initial);
 	const shownTableW = $derived(Math.max(tableW, nameW + 160));
 	/** Visualize stacked: the table above the charts. A second click on Visualize flips it. */
-	let stacked = $derived(savedStacked);
-	let tableH = $derived(savedTableH);
+	const stacked = $derived(layout.stacked ?? savedStacked);
 	function flipStacked() {
-		stacked = !stacked;
-		document.cookie = `${STACKED_COOKIE}=${stacked ? '1' : ''}; path=/; max-age=${stacked ? 31536000 : 0}; samesite=lax`;
+		layout.stacked = !stacked;
+		const age = layout.stacked ? 31536000 : 0;
+		document.cookie = `${STACKED_COOKIE}=1; path=/; max-age=${age}; samesite=lax`;
 	}
+	/** Whether Visualize was already on when its tab was pressed: only then does a click flip. */
+	let visualizeOn = false;
+	/** The workspace's height; stacked, the table leaves the charts at least `CHARTS_MIN`. */
+	let mainH = $state(0);
+	const CHARTS_MIN = 200;
+	const tableHMax = $derived(Math.max(TABLE_H.min, mainH - CHARTS_MIN));
+	const tableH = $derived(Math.min(layout.tableH ?? savedTableH, mainH ? tableHMax : Infinity));
 
 	// URL is the source of truth for view and full-screen panel, so both survive reloads and
 	// are server-rendered. Neither is read by a load function, so changing them never fetches.
@@ -360,7 +379,13 @@
 					     stacked; its icon shows which. -->
 					<Tabs.Trigger
 						value="visualize"
-						onclick={() => view === 'visualize' && flipStacked()}
+						onpointerdown={() => (visualizeOn = view === 'visualize')}
+						onclick={() => {
+							if (visualizeOn) flipStacked();
+							visualizeOn = false;
+						}}
+						onkeydown={(e) =>
+							(e.key === 'Enter' || e.key === ' ') && view === 'visualize' && flipStacked()}
 						{@attach hint(
 							stacked
 								? 'Table above the charts (V). Click again for side by side'
@@ -481,7 +506,11 @@
 		{/snippet}
 	</PageHeader>
 
-	<main class="relative min-h-0 flex-1">
+	<main
+		class="relative min-h-0 flex-1"
+		bind:clientHeight={mainH}
+		style:--pager-bottom={below ? `calc(100% - ${tableH}px + 0.875rem)` : null}
+	>
 		{#if evalsShown}
 			<EvalsTable bind:this={evalsTable} view={evalsView} />
 		{:else}
@@ -514,7 +543,11 @@
 			<!-- On the name column's edge, above the table and the charts beside it. The Evals table
 			     sizes its own run column. -->
 			{#if !evalsShown}
-				<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
+				<div
+					class={['pointer-events-none absolute top-0 left-0 z-5', !below && 'bottom-0']}
+					style:width="{nameW}px"
+					style:height={below ? `${tableH}px` : null}
+				>
 					<ResizeHandle
 						class="pointer-events-auto"
 						value={nameW}
@@ -532,9 +565,9 @@
 						class="pointer-events-auto"
 						axis="y"
 						value={tableH}
-						bounds={TABLE_H}
+						bounds={{ ...TABLE_H, max: tableHMax }}
 						label="Resize the table above the charts"
-						onresize={(px) => (tableH = px)}
+						onresize={(px) => (layout.tableH = px)}
 						oncommit={(px) => saveWidth(TABLE_H, px)}
 					/>
 				</div>

@@ -372,7 +372,11 @@
 				: formatNumber(v);
 	/** A spread across repeats, in the score's units: an accuracy's in points. */
 	const fmtSpread = (s: number, own = true) =>
-		scale === 'accuracy' && own ? `${(100 * s).toFixed(1)} pts` : formatNumber(s);
+		!scale || !own
+			? formatNumber(s)
+			: scale === 'accuracy'
+				? `${(100 * s).toFixed(1)} pts`
+				: s.toFixed(3);
 	/** A change from the best group's: an accuracy's in points, as the compare page has it. */
 	const fmtDelta = (d: number) =>
 		scale === 'accuracy'
