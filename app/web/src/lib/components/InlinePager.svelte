@@ -5,7 +5,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 
 	interface Props {
-		/** The rows shown, 1-based, and how many there are (`60+` while more can load). */
+		/** The rows shown, 1-based, and how many there are (`many` while more can load). */
 		from: number;
 		to: number;
 		total: string;
@@ -23,7 +23,10 @@
 <!-- The pager's inline form (Nov 24): under a list that's part of a page, not floating. -->
 <nav class="flex items-center gap-1 text-[13px] tabular-nums" aria-label={label}>
 	<span>{from}–{to}</span>
-	<span class="mr-1 text-muted-foreground">of {total}</span>
+	<!-- A total only once it's known: the feed loads as it pages. -->
+	{#if total !== 'many'}<span class="mr-1 text-muted-foreground">of {total}</span>{:else}<span
+			class="mr-1"
+		></span>{/if}
 	<Button
 		variant="quiet"
 		size="icon-bar"

@@ -28,7 +28,7 @@
 
 <!-- One 36px line per run, showing its latest state; a new project is a line of its own. -->
 <li
-	class="-mx-2 flex h-9 items-center gap-3 border-b border-divider px-2 text-[13px] data-cursor:bg-muted"
+	class="relative -mx-2 flex h-9 items-center gap-3 border-b border-divider px-2 text-[13px] hover:bg-muted data-cursor:bg-muted"
 	data-keyrow
 >
 	{#if item.kind === 'project_created'}
@@ -36,11 +36,15 @@
 			<FolderPlusIcon class="size-4" />
 		</span>
 		<p class="min-w-0 flex-1 truncate">
-			<a class="hover:text-link" href={project} {@attach hint(item.description)}>{item.project}</a>
+			<a
+				class="after:absolute after:inset-0 hover:text-link"
+				href={project}
+				{@attach hint(item.description)}>{item.project}</a
+			>
 			<span class="text-muted-foreground">created</span>
 		</p>
 	{:else if run}
-		<span class="flex-none" {@attach hint(item.actor?.name)}>
+		<span class="relative z-1 flex-none" {@attach hint(item.actor?.name)}>
 			<Avatar
 				name={item.actor?.name ?? '?'}
 				src={item.actor?.avatar_url}
@@ -48,8 +52,9 @@
 			/>
 		</span>
 		<p class="flex min-w-0 flex-1 items-baseline gap-2">
+			<!-- Its link covers the row; the project's sits above it. -->
 			<a
-				class="min-w-0 truncate hover:text-link"
+				class="min-w-0 truncate after:absolute after:inset-0 hover:text-link"
 				href={runHref(item.org, item.project, run.id)}
 				{@attach hint(details)}
 			>
@@ -68,7 +73,7 @@
 		</span>
 	{/if}
 	<time
-		class="w-14 flex-none text-right text-muted-foreground tabular-nums"
+		class="relative z-1 w-14 flex-none text-right text-muted-foreground tabular-nums"
 		datetime={new Date(item.at * 1000).toISOString()}
 		{@attach hint(dateTime(item.at))}
 	>

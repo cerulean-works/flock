@@ -40,9 +40,24 @@ export class FeedPages {
 		return this.index * this.#size + 1;
 	}
 
+	/** All of them once the feed has none left to load; "many" until then. */
 	get total() {
-		return `${this.rows.length}${this.#pager.next ? '+' : ''}`;
+		return this.#pager.next ? 'many' : String(this.rows.length);
 	}
+
+	/**
+	 * Loads until the page in view is full (one run's events merge into one row, so a fetched
+	 * page of events can come out short), or there's nothing left.
+	 */
+	fill = async () => {
+		while (
+			this.shown.length < this.#size &&
+			this.#pager.next &&
+			!this.#pager.loading &&
+			!this.#pager.failed
+		)
+			await this.#pager.more();
+	};
 
 	get hasPrev() {
 		return this.index > 0;

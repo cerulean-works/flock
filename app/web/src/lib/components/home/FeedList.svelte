@@ -1,6 +1,7 @@
 <script lang="ts">
 	import InlinePager from '#lib/components/InlinePager.svelte';
-	import { listKeys } from '#lib/keys.svelte.ts';
+	import { keyboard, listKeys } from '#lib/keys.svelte.ts';
+	import { runHref } from '#lib/workspace/url.ts';
 	import { FeedPages } from '#lib/data/feed-pages.svelte.ts';
 	import { FeedPager } from '#lib/data/feed.svelte.ts';
 	import type { FeedPage } from '#lib/types.ts';
@@ -20,6 +21,20 @@
 	// svelte-ignore state_referenced_locally
 	const pager = new FeedPager(first, query);
 	const pages = new FeedPages(pager, 25);
+	// A page short of rows (merged events) loads more before it shows.
+	$effect(() => {
+		void pages.fill();
+	});
+	// The runs in view, for the command menu.
+	$effect(() => {
+		keyboard.runs = pages.rows
+			.filter((item) => item.run)
+			.map((item) => ({
+				label: item.run!.display_name ?? item.run!.id,
+				href: runHref(item.org, item.project, item.run!.id)
+			}));
+		return () => (keyboard.runs = []);
+	});
 </script>
 
 <ul class="border-t border-divider" {@attach listKeys()}>

@@ -35,6 +35,10 @@
 	];
 	// One row per run, its latest state, 50 to a page.
 	const pages = new FeedPages(pager, 50, (item) => !!item.run);
+	// A page short of rows (merged events) loads more before it shows.
+	$effect(() => {
+		void pages.fill();
+	});
 </script>
 
 <DataTable

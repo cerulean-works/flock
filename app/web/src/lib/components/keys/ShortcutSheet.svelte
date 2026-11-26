@@ -1,9 +1,13 @@
 <script lang="ts">
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 
+	import { page } from '$app/state';
+
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 
-	const GROUPS: [string, [string, string][]][] = [
+	// Datasets and Models exist only on a server with storage.
+	const s3 = $derived(!!page.data.shell?.s3);
+	const GROUPS = $derived<[string, [string, string][]][]>([
 		[
 			'Anywhere',
 			[
@@ -12,8 +16,12 @@
 				['[', 'Hide or show the sidebar'],
 				['G then H', 'Go to Home'],
 				['G then R', 'Go to Runs'],
-				['G then D', 'Go to Datasets'],
-				['G then M', 'Go to Models'],
+				...(s3
+					? ([
+							['G then D', 'Go to Datasets'],
+							['G then M', 'Go to Models']
+						] as [string, string][])
+					: []),
 				['G then S', 'Go to Settings']
 			]
 		],
@@ -34,7 +42,7 @@
 				['F', 'Filter runs']
 			]
 		]
-	];
+	]);
 </script>
 
 <!-- The '?' sheet (Nov 24): every key, in place of the hints that sat under lists. -->

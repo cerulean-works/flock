@@ -36,7 +36,7 @@
 			<Select.Trigger class={QUIET} aria-label="Kind of activity">
 				{FEED_KINDS.find(([k]) => k === kinds)?.[1] ?? 'All activity'}
 			</Select.Trigger>
-			<Select.Content>
+			<Select.Content side="bottom" align="start">
 				<Select.Item value={ALL} label="All activity">All activity</Select.Item>
 				{#each FEED_KINDS as [value, label] (value)}
 					<Select.Item {value} {label}>{label}</Select.Item>
@@ -49,7 +49,7 @@
 			<Select.Trigger class={[QUIET, 'max-w-56']} aria-label="Project">
 				<span class="truncate">{project ?? 'All projects'}</span>
 			</Select.Trigger>
-			<Select.Content>
+			<Select.Content side="bottom" align="start">
 				<Select.Item value={ALL} label="All projects">All projects</Select.Item>
 				{#each projects as name (name)}
 					<Select.Item value={name} label={name}>{name}</Select.Item>
