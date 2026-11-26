@@ -252,17 +252,6 @@ class Olmo2(BaseModel):
             self.model = Olmo2Model(config)
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-    def num_flops_per_token(self, seq_len: int) -> int:
-        """Return training FLOPs per token, counted as [`~training.core.models.BaseModel`] says.
-
-        The input embedding is a lookup, so its parameters are left out; the untied
-        `lm_head` is a matrix multiplication and counts.
-        """
-        parameters = sum(p.numel() for p in self.parameters())
-        matmul_parameters = parameters - self.model.embed_tokens.weight.numel()
-        attention = 12 * self.config.num_hidden_layers * self.config.hidden_size * seq_len
-        return 6 * matmul_parameters + attention
-
     def _forward(
         self,
         input_ids: torch.Tensor,

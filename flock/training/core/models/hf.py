@@ -260,24 +260,18 @@ class HFCompatibleModel(BaseModel):
         return model
 
     def num_flops_per_token(self, seq_len: int) -> int:
-        """Return training FLOPs per token, counted as [`~training.core.models.BaseModel`] says.
-
-        The input embedding is left out unless the output projection shares its weight.
-        Every layer counts as dense, full attention over `seq_len`, as torchtitan counts
-        dense models.
-        """
+        """Estimate training FLOPs per token as the base model does, from the wrapped config."""
         config = self.model.config
         embeddings = self.model.get_input_embeddings()
         output = self.model.get_output_embeddings()
         parameters = sum(p.numel() for p in self.parameters())
-        tied = output is not None and output.weight is embeddings.weight
-        embedding_parameters = sum(p.numel() for p in embeddings.parameters())
-        matmul_parameters = parameters if tied else parameters - embedding_parameters
+        if output is None or output.weight is not embeddings.weight:
+            parameters -= sum(p.numel() for p in embeddings.parameters())
         head_dim = getattr(config, "head_dim", None) or (
             config.hidden_size // config.num_attention_heads
         )
         width = config.num_attention_heads * head_dim
-        return 6 * matmul_parameters + 12 * config.num_hidden_layers * width * seq_len
+        return 6 * parameters + 12 * config.num_hidden_layers * width * seq_len
 
     def _forward(
         self,
