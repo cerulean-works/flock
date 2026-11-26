@@ -48,8 +48,14 @@ export const membersUrl = (org: string) => `/api/orgs/${encodeURIComponent(org)}
 export const ownersUrl = (entity: string, project: string) =>
 	`${projectUrl(entity, project)}/owners`;
 
-export function runPageUrl(entity: string, project: string, q: RunQuery) {
-	return `${projectUrl(entity, project)}/runs?${runQueryString(q)}`;
+/**
+ * Where a page of runs is read: the project's, or with `group` set only that group's members
+ * (026), which its page shows with the same table and charts.
+ */
+export function runPageUrl(entity: string, project: string, q: RunQuery, group?: number | null) {
+	const base = projectUrl(entity, project);
+	const from = group == null ? `${base}/runs` : `${base}/groups/${group}/workspace`;
+	return `${from}?${runQueryString(q)}`;
 }
 
 /** The hydration replay must request exactly what SSR requested, so it is tracked explicitly. */
@@ -59,9 +65,10 @@ export function loadRunPage(
 	fetchFn: Fetch,
 	entity: string,
 	project: string,
-	q: RunQuery
+	q: RunQuery,
+	group?: number | null
 ): Promise<WorkspaceData> {
-	const url = runPageUrl(entity, project, q);
+	const url = runPageUrl(entity, project, q, group);
 	const inline = !browser || hydrating;
 	hydrating = false;
 	const run = () =>
@@ -88,14 +95,24 @@ export function loadRunPage(
 	return hit;
 }
 
-export function isRunPageCached(entity: string, project: string, q: RunQuery) {
-	return pages.has(runPageUrl(entity, project, q));
+export function isRunPageCached(
+	entity: string,
+	project: string,
+	q: RunQuery,
+	group?: number | null
+) {
+	return pages.has(runPageUrl(entity, project, q, group));
 }
 
 /** Warm the cache for a page without navigating. Failures are ignored; navigation will retry. */
-export function prefetchRunPage(entity: string, project: string, q: RunQuery) {
-	if (!browser || isRunPageCached(entity, project, q)) return;
-	loadRunPage(fetch, entity, project, q).catch(() => {});
+export function prefetchRunPage(
+	entity: string,
+	project: string,
+	q: RunQuery,
+	group?: number | null
+) {
+	if (!browser || isRunPageCached(entity, project, q, group)) return;
+	loadRunPage(fetch, entity, project, q, group).catch(() => {});
 }
 
 /** Forget every cached page, e.g. when new runs shift page boundaries. */

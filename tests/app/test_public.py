@@ -35,6 +35,9 @@ READABLE = [
     ("GET", "/p/runs/r1/files", None),
     ("GET", "/p/runs/r1/files/config.yaml", None),
     ("GET", "/p/workspace", None),
+    ("GET", "/p/groups", None),
+    ("GET", "/p/groups/compare", None),
+    ("GET", "/p/groups/suggestions", None),
 ]
 # The routes only members reach, even on a public project.
 MEMBERS_ONLY = [
@@ -46,6 +49,10 @@ MEMBERS_ONLY = [
     ("POST", "/p/runs/delete", {"runs": ["r1"]}),
     ("POST", "/p/runs/move", {"runs": ["r1"], "to": "q"}),
     ("GET", "/p/runs/r1/models", None),
+    ("POST", "/p/groups", {"name": "g", "runs": ["r1"]}),
+    ("PUT", "/p/groups/settings", {"best_key": "summary.loss"}),
+    ("POST", "/p/groups/suggestions/dismiss", {"signature": "00" * 32}),
+    ("POST", "/p/groups/assist", {"request": "runs with lr 0.1"}),
 ]
 
 

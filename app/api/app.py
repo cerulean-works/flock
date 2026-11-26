@@ -17,6 +17,7 @@ from app.api.src.api import (
     avatars,
     dashboard,
     datasets,
+    groups,
     hf_imports,
     home,
     models,
@@ -189,6 +190,8 @@ def create_app(store: Store) -> FastAPI:
     app.include_router(projects.router)
     app.include_router(runs.public)
     app.include_router(runs.router)
+    app.include_router(groups.public)
+    app.include_router(groups.router)
     app.include_router(dashboard.public)
     app.include_router(home.router)
     app.include_router(avatars.public)

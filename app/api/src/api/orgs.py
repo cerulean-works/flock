@@ -20,6 +20,7 @@ from app.api.src.api.deps import (
     rest_user,
 )
 from app.api.src.core.accounts import Invite, User
+from app.api.src.core.groups import Groups
 from app.api.src.core.store import Org, Store
 from app.api.src.core.wandb_source import WandbAuthError, WandbError, WandbNotFound, WandbSource
 
@@ -69,6 +70,8 @@ class OrgUpdate(BaseModel):
     s3_key_max_ttl: int | None = None
     # Keep the newest N untagged versions of each model (D109); null turns retention off.
     model_retention: int | None = Field(None, ge=1, le=1_000_000)
+    # The assistant on the group pages (D224); it also needs the server's OpenAI key.
+    assistant_enabled: bool | None = None
 
 
 class RoleBody(BaseModel):
@@ -99,6 +102,7 @@ async def org_info(store: Store, org: Org, user: User) -> dict:
         "s3_ephemeral_ttl": org.s3_ephemeral_ttl,
         "s3_key_max_ttl": org.s3_key_max_ttl,
         "model_retention": org.model_retention,
+        "assistant_enabled": await Groups(store).assistant_enabled(org),
     }
 
 
@@ -207,6 +211,10 @@ async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: St
     ``model_retention`` keeps the newest N untagged versions of each model: older ones that
     aren't primary, have no tag other than ``checkpoint-{step}`` and have no eval runs go to
     the trash. Null (the default) keeps every version.
+
+    ``assistant_enabled`` turns the group pages' assistant on or off for the org (D224). It
+    sends requests, column names, observed values and run names to OpenAI, and answers only
+    while the server has an OpenAI API key.
     """
     if body.name is not None and body.name != org.name:
         raise APIError(400, "an organization's ID (name) can't be changed")
@@ -217,6 +225,8 @@ async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: St
         await store.s3.set_ttls(org, ttls)
     if "model_retention" in body.model_fields_set:
         await store.set_model_retention(org, body.model_retention)
+    if body.assistant_enabled is not None:
+        await Groups(store).set_assistant_enabled(org, body.assistant_enabled)
     if body.display_name is not None:
         await store.set_org_display_name(org, body.display_name)
     return JSONResponse(await org_info(store, org, user))

@@ -25,15 +25,44 @@
 		valueText,
 		type FilterMatch,
 		type FilterOp,
-		type RunFilter
+		type RunFilter,
+		type People
 	} from '#lib/workspace/filters.ts';
-	import { applyRunQuery, workspaceHref } from '#lib/workspace/url.ts';
-	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
+	import { applyRunQuery } from '#lib/workspace/url.ts';
+	import { getWorkspace, type Workspace } from '#lib/workspace/workspace.svelte.ts';
 	import Autocomplete, { type AutocompleteOption } from './Autocomplete.svelte';
 	import FormError from './FormError.svelte';
 
-	const ws = getWorkspace();
-	const applied = $derived(ws.page.query.filters);
+	interface Props {
+		/**
+		 * Filters edited by the caller instead of the workspace's URL (the group pages, 026):
+		 * `onapply` gets them, and `columns` and `people` stand in for the workspace's.
+		 */
+		filters?: RunFilter[];
+		columns?: { key: string; kind?: ColumnKind }[];
+		people?: People;
+		onapply?: (filters: RunFilter[]) => void;
+		/** Without the "My runs" button. */
+		noMine?: boolean;
+		/** An icon button, its filters counted in a badge (a group's crowded toolbar). */
+		compact?: boolean;
+	}
+
+	let {
+		filters,
+		columns: given,
+		people: givenPeople,
+		onapply,
+		noMine = false,
+		compact = false
+	}: Props = $props();
+
+	// The workspace's, unless the caller edits its own filters (there is no workspace then).
+	// svelte-ignore state_referenced_locally
+	const ws = onapply ? null : getWorkspace();
+	const applied = $derived(filters ?? ws?.page.query.filters ?? []);
+	const people = $derived<People>(givenPeople ?? ws?.people ?? new Map());
+	const known = $derived<{ key: string; kind?: ColumnKind }[]>(given ?? ws?.meta.columns ?? []);
 	const count = $derived(countConditions(applied));
 	/** Who is looking: "My runs" keeps the runs they logged. */
 	const me = $derived(page.data.shell?.me?.id);
@@ -45,7 +74,7 @@
 	const suggestions = $derived<Partial<Record<ColumnKind, AutocompleteOption[]>>>({
 		state: STATES.map((value) => ({ value })),
 		bool: [{ value: 'true' }, { value: 'false' }],
-		user: [...ws.people.values()].map((p) =>
+		user: [...people.values()].map((p) =>
 			p.email ? { value: p.email, hint: p.name } : { value: p.name }
 		)
 	});
@@ -61,9 +90,11 @@
 		json: 'list'
 	};
 
-	const columns = $derived(ws.meta.columns.map((c) => ({ value: c.key, hint: KINDS[c.kind] })));
+	const columns = $derived(
+		known.map((c) => ({ value: c.key, hint: c.kind ? KINDS[c.kind] : undefined }))
+	);
 
-	const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key.trim())?.kind;
+	const kindOf = (key: string) => known.find((c) => c.key === key.trim())?.kind;
 
 	/** A condition as edited: its value still the text typed. */
 	interface DraftCondition {
@@ -88,7 +119,7 @@
 
 	function draft(f: RunFilter): DraftItem {
 		if (isGroup(f)) return { id: ++lastId, match: f.match, items: f.filters.map(draft) };
-		const text = valueText(f.value, kindOf(f.key), ws.people);
+		const text = valueText(f.value, kindOf(f.key), people);
 		return { id: ++lastId, key: f.key, op: f.op, text };
 	}
 
@@ -153,16 +184,20 @@
 		if (!ops.some((o) => o.op === d.op)) d.op = ops[0].op;
 	}
 
-	function hrefWith(filters: RunFilter[]) {
+	function hrefWith(ws: Workspace, filters: RunFilter[]) {
 		const params = new URLSearchParams(page.url.search);
 		// A different selection starts from its first page.
 		applyRunQuery(params, { ...ws.page.query, filters, page: 1 } satisfies RunQuery);
-		return workspaceHref(ws.meta.entity, ws.meta.project, params);
+		return ws.href(params);
 	}
 
 	function show(filters: RunFilter[]) {
+		if (onapply || !ws) {
+			onapply?.(filters);
+			return;
+		}
 		ws.selected.clear();
-		void goto(hrefWith(filters), { reset: false });
+		void goto(hrefWith(ws, filters), { reset: false });
 	}
 
 	/** Filters from drafts, leaving out blank rows and empty groups; null after an error. */
@@ -181,7 +216,7 @@
 				out.push({ key, op: d.op, value: null });
 				continue;
 			}
-			const parsed = parseValue(d.text, kindOf(key), ws.people);
+			const parsed = parseValue(d.text, kindOf(key), people);
 			if ('error' in parsed) {
 				error = `${key}: ${parsed.error}`;
 				return null;
@@ -314,7 +349,7 @@
 	</div>
 {/snippet}
 
-{#if me != null}
+{#if me != null && !noMine}
 	<Button
 		variant={mine ? 'secondary' : 'outline'}
 		aria-pressed={mine}
@@ -329,17 +364,38 @@
 	<Popover.Root bind:open {onOpenChange}>
 		<Popover.Trigger>
 			{#snippet child({ props })}
-				<Button
-					{...props}
-					variant={count ? 'secondary' : 'outline'}
-					class={count ? 'rounded-r-none' : ''}
-					{@attach hint(count ? describeFilters(applied, kindOf, true, ws.people) : 'Filter runs')}
-				>
-					<ListFilterIcon /> Filter
-					{#if count}
-						<span class="tabular-nums">{count}</span>
-					{/if}
-				</Button>
+				{#if compact}
+					<Button
+						{...props}
+						variant={count ? 'secondary' : 'outline'}
+						size="icon"
+						class="relative"
+						aria-label={count ? `Filter runs, ${count} applied` : 'Filter runs'}
+						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
+					>
+						<ListFilterIcon />
+						{#if count}
+							<span
+								class="absolute -top-1.5 -right-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] leading-none font-medium text-primary-foreground tabular-nums"
+								aria-hidden="true"
+							>
+								{count}
+							</span>
+						{/if}
+					</Button>
+				{:else}
+					<Button
+						{...props}
+						variant={count ? 'secondary' : 'outline'}
+						class={count ? 'rounded-r-none' : ''}
+						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
+					>
+						<ListFilterIcon /> Filter
+						{#if count}
+							<span class="tabular-nums">{count}</span>
+						{/if}
+					</Button>
+				{/if}
 			{/snippet}
 		</Popover.Trigger>
 		<Popover.Content
@@ -389,7 +445,8 @@
 			</form>
 		</Popover.Content>
 	</Popover.Root>
-	{#if count}
+	<!-- Compact, the filters are cleared from their popover (Clear all). -->
+	{#if count && !compact}
 		<Button
 			variant="secondary"
 			size="icon"

@@ -1,12 +1,18 @@
-/** A project page's two views. */
-export type ProjectView = 'table' | 'charts';
+/**
+ * A runs view's three views: the table, the charts beside the names, or both side by side
+ * (`visualize`: the table on the left, the charts on the right).
+ */
+export type ProjectView = 'table' | 'visualize' | 'charts';
+
+export const isProjectView = (v: unknown): v is ProjectView =>
+	v === 'table' || v === 'visualize' || v === 'charts';
 
 /** Holds the view last picked, so the server renders the next project in it too. */
 export const VIEW_COOKIE = 'flock_project_view';
 
-/** The view a `VIEW_COOKIE` holds: table unless it says charts. */
+/** The view a `VIEW_COOKIE` holds: table unless it says another. */
 export const cookieView = (value: string | undefined): ProjectView =>
-	value === 'charts' ? 'charts' : 'table';
+	isProjectView(value) ? value : 'table';
 
 /** The view last picked in this tab; until then the layout's, read from the cookie. */
 let picked = $state<ProjectView | null>(null);

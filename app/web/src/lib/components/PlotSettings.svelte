@@ -12,6 +12,9 @@
 	import SmoothingPicker from './SmoothingPicker.svelte';
 	import XAxisPicker from './XAxisPicker.svelte';
 
+	/** `compact`: an icon button, its name in the tooltip (a group page's dense toolbar). */
+	let { compact = false }: { compact?: boolean } = $props();
+
 	const ws = getWorkspace();
 	let content = $state<HTMLElement | null>(null);
 </script>
@@ -20,9 +23,21 @@
 <Popover.Root>
 	<Popover.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} variant="outline" {@attach hint('Line plot settings')}>
-				<SlidersHorizontalIcon /> Settings
-			</Button>
+			{#if compact}
+				<Button
+					{...props}
+					variant="outline"
+					size="icon"
+					aria-label="Line plot settings"
+					{@attach hint('Line plot settings')}
+				>
+					<SlidersHorizontalIcon />
+				</Button>
+			{:else}
+				<Button {...props} variant="outline" {@attach hint('Line plot settings')}>
+					<SlidersHorizontalIcon /> Settings
+				</Button>
+			{/if}
 		{/snippet}
 	</Popover.Trigger>
 	<!-- Focus starts on the popover, not in the x-axis picker, whose list would cover the rest. -->

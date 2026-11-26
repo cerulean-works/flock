@@ -27,6 +27,17 @@ export interface PlotSeries {
 	series: Series;
 	/** Values to draw (smoothed when smoothing is on), aligned with `series.x`. */
 	values: Float32Array;
+	/**
+	 * A shaded band around the line (a mean's seed spread, D222; see #lib/chart/aggregate.ts),
+	 * aligned with `series.x`; NaN where there is none. Workspace lines have none.
+	 */
+	band?: Band;
+}
+
+/** The ends of a band, in data units (not log10). */
+export interface Band {
+	lo: Float32Array;
+	hi: Float32Array;
 }
 
 export interface DomainOptions {
@@ -104,9 +115,17 @@ export function computeDomain(lines: readonly PlotSeries[], opts: DomainOptions)
 	const fast = !opts.zoom && !opts.log && !opts.ignoreOutliers;
 	if (fast) {
 		// Series keep their extents up to date as points arrive; smoothed values stay within them.
-		for (const { series: s } of series) {
+		for (const { series: s, band } of series) {
 			if (s.min < lo) lo = s.min;
 			if (s.max > hi) hi = s.max;
+			if (!band) continue;
+			// A band reaches past its line: fit it too.
+			for (const ys of [band.lo, band.hi])
+				for (let i = 0; i < Math.min(s.n, ys.length); i++) {
+					const v = ys[i];
+					if (v < lo) lo = v;
+					if (v > hi) hi = v;
+				}
 		}
 	} else {
 		const sample: number[] = [];
@@ -118,12 +137,14 @@ export function computeDomain(lines: readonly PlotSeries[], opts: DomainOptions)
 				if (v > hi) hi = v;
 			}
 		};
-		for (const { series: s, values } of series) {
+		for (const { series: s, values, band } of series) {
 			if (!s.n) continue;
 			const [i0, i1] = opts.zoom ? inside(s, x0, x1) : [0, s.n - 1];
 			const raw = s.y;
-			// Fit what is drawn: the smoothed line and the faded original.
-			for (const ys of values.buffer === raw.buffer ? [raw] : [raw, values]) {
+			// Fit what is drawn: the smoothed line and the faded original, and a band.
+			const drawn = values.buffer === raw.buffer ? [raw] : [raw, values];
+			if (band) drawn.push(band.lo, band.hi);
+			for (const ys of drawn) {
 				const n = Math.min(s.n, ys.length);
 				const at = (i: number) => (opts.log ? (ys[i] > 0 ? Math.log10(ys[i]) : NaN) : ys[i]);
 				for (let i = Math.max(0, i0); i <= Math.min(i1, n - 1); i++) add(at(i));
@@ -259,6 +280,42 @@ function trace(
 	}
 }
 
+/**
+ * Fill a band between `lo` and `hi`: one polygon per run of points where both ends are finite
+ * (and positive, on a log axis), so a band stops where fewer than two runs have values.
+ */
+function fillBand({ ctx, w, h }: Surface, series: Series, band: Band, d: Domain, zoomed: boolean) {
+	const n = Math.min(series.n, band.lo.length, band.hi.length);
+	if (n < 2) return;
+	const xs = series.x;
+	const sx = w / (d.x1 - d.x0);
+	const sy = h / (d.y1 - d.y0);
+	const at = (v: number) => (d.log ? (v > 0 ? Math.log10(v) : NaN) : v);
+	const ok = (i: number) => Number.isFinite(at(band.lo[i])) && Number.isFinite(at(band.hi[i]));
+	const X = (i: number) => (xs[i] - d.x0) * sx;
+	const Y = (v: number) => h - (at(v) - d.y0) * sy;
+	const [i0, i1] = window(series, d.x0, d.x1, zoomed);
+	let i = i0;
+	while (i <= Math.min(i1, n - 1)) {
+		if (!ok(i)) {
+			i++;
+			continue;
+		}
+		let j = i;
+		while (j + 1 <= Math.min(i1, n - 1) && ok(j + 1)) j++;
+		if (j > i) {
+			ctx.moveTo(X(i), Y(band.hi[i]));
+			for (let k = i + 1; k <= j; k++) ctx.lineTo(X(k), Y(band.hi[k]));
+			for (let k = j; k >= i; k--) ctx.lineTo(X(k), Y(band.lo[k]));
+			ctx.closePath();
+		}
+		i = j + 1;
+	}
+}
+
+/** How strongly bands are shaded: enough to read overlapping bands through each other. */
+const BAND_ALPHA = 0.16;
+
 export interface BaseOptions {
 	smoothing: boolean;
 	showOriginal: boolean;
@@ -277,6 +334,15 @@ export function drawBase(s: Surface, series: PlotSeries[], d: Domain, o: BaseOpt
 	ctx.clip();
 	ctx.lineJoin = 'bevel';
 	ctx.lineCap = 'butt';
+	// Bands under every line, so no line is hidden behind another's band.
+	ctx.globalAlpha = BAND_ALPHA;
+	for (const p of series) {
+		if (!p.band) continue;
+		ctx.beginPath();
+		fillBand(s, p.series, p.band, d, o.zoomed);
+		ctx.fillStyle = p.color;
+		ctx.fill();
+	}
 	if (o.smoothing && o.showOriginal) {
 		ctx.globalAlpha = 0.18;
 		ctx.lineWidth = 1;

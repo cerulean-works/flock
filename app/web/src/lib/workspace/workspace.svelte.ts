@@ -10,7 +10,9 @@ import {
 	unmapAt,
 	type XAxis
 } from '#lib/chart/axes.ts';
+import type { ChartStyle } from '#lib/chart/grouping.ts';
 import { NO_SMOOTHING, slotOf, type Series, type Smoothing } from '#lib/chart/series.ts';
+import type { ResolvedPathname } from '$app/types';
 import {
 	LIVE_STATES,
 	type MetricStream,
@@ -51,6 +53,7 @@ import {
 	type PlotSettings
 } from './layout.ts';
 import { resolvePanel, type PanelView } from './panels.ts';
+import { workspaceHref } from './url.ts';
 
 export type { PanelConfig, PanelLayout } from './layout.ts';
 export type { PanelView } from './panels.ts';
@@ -166,9 +169,14 @@ export const PLOT_H = 196;
 export const MIN_PLOT_H = 120;
 export const MAX_PLOT_H = 720;
 
-const layoutKey = (entity: string, project: string) => `flock:panels:${entity}/${project}`;
+/** A group's own keys (026) follow its project's: `flock:panels:acme/bert/groups/12`. */
+const scoped = (entity: string, project: string, group?: number | null) =>
+	`${entity}/${project}${group == null ? '' : `/groups/${group}`}`;
+const layoutKey = (entity: string, project: string, group?: number | null) =>
+	`flock:panels:${scoped(entity, project, group)}`;
 const columnsKey = (entity: string, project: string) => `flock:columns:${entity}/${project}`;
-const hiddenKey = (entity: string, project: string) => `flock:hidden:${entity}/${project}`;
+const hiddenKey = (entity: string, project: string, group?: number | null) =>
+	`flock:hidden:${scoped(entity, project, group)}`;
 
 /** Hidden runs kept per project, the latest hidden last: enough for any sweep. */
 const HIDDEN_MAX = 5000;
@@ -198,6 +206,32 @@ function store(key: string, value: unknown) {
 	}
 }
 
+/**
+ * Where a workspace's runs come from, when not every run of the project (the Runs page): a
+ * group's page (026) shows only the group's members, with the same table and charts.
+ */
+export interface WorkspaceOptions {
+	/** The group whose members are shown; its panel layout and hidden runs are its own. */
+	group?: () => number | null;
+	/** The page's URL with these search params: where paging, sorting and searching go. */
+	href?: (params: URLSearchParams) => ResolvedPathname;
+	/**
+	 * How the charts draw the runs, when not a line each in the run palette: a group's Group by,
+	 * Color by and averaged repeats (see #lib/chart/grouping.ts).
+	 */
+	style?: () => ChartStyle | null;
+}
+
+/** A line the charts draw: one run's (`rows` is just `row`), or the mean of several. */
+export interface ChartLine {
+	/** The page row hovering and pinning it stands for: its first visible run. */
+	row: number;
+	/** Visible page rows it is drawn from. */
+	rows: readonly number[];
+	/** A mean's name, in place of its run's. */
+	label: string | null;
+}
+
 /** A change to some runs, asked for from a row's menu or for the selection. */
 export interface RunDialog {
 	kind: 'edit' | 'tag' | 'move' | 'delete';
@@ -219,6 +253,7 @@ export class Workspace {
 	#meta: () => ProjectMeta;
 	#page: () => RunPage;
 	#members: () => readonly Owner[];
+	#options: WorkspaceOptions;
 
 	/**
 	 * Run ids hidden from charts. Kept across pages so a hidden run stays hidden, and in this
@@ -292,11 +327,13 @@ export class Workspace {
 	constructor(
 		meta: () => ProjectMeta,
 		page: () => RunPage,
-		members: () => readonly Owner[] = () => []
+		members: () => readonly Owner[] = () => [],
+		options: WorkspaceOptions = {}
 	) {
 		this.#meta = meta;
 		this.#page = page;
 		this.#members = members;
+		this.#options = options;
 		this.activeRuns = page().active;
 	}
 
@@ -308,6 +345,21 @@ export class Workspace {
 		return this.#page();
 	}
 
+	/** The group whose members are shown, or null for the project's runs. */
+	get group(): number | null {
+		return this.#options.group?.() ?? null;
+	}
+
+	/** The view's URL with `params`: the project's workspace, or the group's page. */
+	href(params: URLSearchParams): ResolvedPathname {
+		return (
+			this.#options.href?.(params) ?? workspaceHref(this.meta.entity, this.meta.project, params)
+		);
+	}
+
+	/** How the charts draw the runs, when the page says (a group's); null for a line each. */
+	style: ChartStyle | null = $derived.by(() => this.#options.style?.() ?? null);
+
 	/**
 	 * Who logged the runs, by id, as the `owner` column has them: the org's members, or the
 	 * project's owners for a viewer outside the org.
@@ -317,7 +369,7 @@ export class Workspace {
 		() => new Map(this.#members().map((m) => [m.id, m]))
 	);
 
-	colors = $derived(this.page.runs.map((r) => runColor(r.ordinal)));
+	colors = $derived(this.style?.colors ?? this.page.runs.map((r) => runColor(r.ordinal)));
 
 	/** Page rows plotted in charts, in table order. */
 	visible = $derived.by(() => {
@@ -326,6 +378,40 @@ export class Workspace {
 			if (!this.hidden.has(r.id)) out.push(i);
 		});
 		return out;
+	});
+
+	/**
+	 * The lines the charts draw, in table order: each visible run's, but runs the style averages
+	 * (`ChartStyle.means`) are one line, of those of them that are visible; only the rows of
+	 * `ChartStyle.only`, when the style names some.
+	 */
+	lines = $derived.by((): ChartLine[] => {
+		const means = this.style?.means;
+		const only = this.style?.only;
+		const visible = only ? this.visible.filter((row) => only.has(row)) : this.visible;
+		if (!means?.length) return visible.map((row) => ({ row, rows: [row], label: null }));
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a lookup, never rendered
+		const meanOf = new Map<number, number>();
+		means.forEach((m, i) => m.rows.forEach((r) => meanOf.set(r, i)));
+		const out: (ChartLine & { rows: number[] })[] = [];
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a lookup, never rendered
+		const at = new Map<number, ChartLine & { rows: number[] }>();
+		for (const row of visible) {
+			const m = meanOf.get(row);
+			if (m === undefined) {
+				out.push({ row, rows: [row], label: null });
+				continue;
+			}
+			const line = at.get(m);
+			if (line) line.rows.push(row);
+			else {
+				const made = { row, rows: [row], label: means[m].label };
+				at.set(m, made);
+				out.push(made);
+			}
+		}
+		// A mean of one visible run is that run's line.
+		return out.map((l) => (l.rows.length === 1 ? { ...l, label: null } : l));
 	});
 
 	pinned = $derived.by(() => {
@@ -528,7 +614,7 @@ export class Workspace {
 
 	/** Keep the hidden runs, when they were read for this project (not on a run's page). */
 	#saveHidden() {
-		const key = hiddenKey(this.meta.entity, this.meta.project);
+		const key = hiddenKey(this.meta.entity, this.meta.project, this.group);
 		if (this.#hiddenFor === key) store(key, [...this.hidden].slice(-HIDDEN_MAX));
 	}
 
@@ -730,7 +816,7 @@ export class Workspace {
 
 	/** This project's panel layout. */
 	get layout(): PanelLayout {
-		return this.layouts[layoutKey(this.meta.entity, this.meta.project)] ?? EMPTY_LAYOUT;
+		return this.layouts[layoutKey(this.meta.entity, this.meta.project, this.group)] ?? EMPTY_LAYOUT;
 	}
 
 	// ------------------------------------------------------------------------------------------
@@ -851,21 +937,27 @@ export class Workspace {
 	 * from the browser. Called after hydration, so the page the server rendered (in the default
 	 * layout) is what hydrates. A run's own page (`hidden` false) leaves out the hidden runs, so
 	 * the run it shows is never hidden. A project with no hidden runs saved plots only its
-	 * `NEWEST_SHOWN` newest runs of the page.
+	 * `NEWEST_SHOWN` newest runs of the page; a group plots all of its runs.
+	 *
+	 * A group's layout is its own (D222), and starts as a copy of its project's.
 	 */
 	restoreLayout({ hidden: withHidden = true } = {}) {
 		const { entity, project } = this.meta;
-		const key = layoutKey(entity, project);
-		if (!(key in this.layouts))
-			this.layouts = { ...this.layouts, [key]: parseLayout(readStored(key)) };
-		const hidden = hiddenKey(entity, project);
+		const group = this.group;
+		const key = layoutKey(entity, project, group);
+		if (!(key in this.layouts)) {
+			const saved =
+				readStored(key) ?? (group == null ? null : readStored(layoutKey(entity, project)));
+			this.layouts = { ...this.layouts, [key]: parseLayout(saved) };
+		}
+		const hidden = hiddenKey(entity, project, group);
 		if (withHidden && this.#hiddenFor !== hidden) {
 			this.#hiddenFor = hidden;
 			this.hidden.clear();
 			const saved = readStored(hidden);
 			if (Array.isArray(saved)) {
 				for (const id of saved) if (typeof id === 'string') this.hidden.add(id);
-			} else {
+			} else if (group == null) {
 				// Opened here for the first time: only its newest runs are plotted, and that's
 				// kept like any other choice.
 				const newest = this.page.runs
@@ -884,7 +976,7 @@ export class Workspace {
 	}
 
 	#saveLayout(layout: PanelLayout, persist = true) {
-		const key = layoutKey(this.meta.entity, this.meta.project);
+		const key = layoutKey(this.meta.entity, this.meta.project, this.group);
 		this.layouts = { ...this.layouts, [key]: layout };
 		if (persist) store(key, layout);
 	}

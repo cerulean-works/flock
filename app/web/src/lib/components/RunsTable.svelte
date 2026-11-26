@@ -2,24 +2,60 @@
 	export const ROW_H = 40;
 	export const HEAD_H = 40;
 	export const BAND_H = 26;
+
+	/** What the table shows: every column, the names beside the charts, or both side by side. */
+	export type TableMode = 'table' | 'visualize' | 'charts';
+
+	/** A suggested column's width: a little roomier than its content (see `primary`). */
+	export const primaryWidth = (w: number) => Math.min(240, Math.round(w + 16));
+
+	/** Kinds whose columns fit their content (up to their default width); others keep it. */
+	const FITTED = new Set(['num', 'duration', 'str', 'bool', 'json']);
+	const MIN_W = 64;
+	/** A cell's padding (px-3 each side), and room for the header's sort arrow. */
+	const PAD = 24;
+	const ARROW = 14;
+	/** Rows measured per page: enough to see its widest values, cheap on long pages. */
+	const SAMPLE = 200;
+
+	let measurer: CanvasRenderingContext2D | null | undefined;
+	/** Rendered width of `text` in `font`; null where there's no canvas (the server). */
+	export function textWidth(text: string, font: string): number | null {
+		if (measurer === undefined)
+			measurer =
+				typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
+		if (!measurer) return null;
+		measurer.font = font;
+		return measurer.measureText(text).width;
+	}
 </script>
 
 <script lang="ts">
+	import GripHorizontalIcon from '@lucide/svelte/icons/grip-horizontal';
+	import { untrack } from 'svelte';
 	import { hint } from '#lib/hint.svelte.ts';
 	import { page as appPage } from '$app/state';
 	import { prefetchRunPage } from '#lib/data/cache.ts';
 	import { columnGroups } from '#lib/data/snapshot.ts';
-	import type { ColumnDef, RunQuery } from '#lib/types.ts';
+	import type { ColumnDef, ColumnGroupSpan, RunQuery } from '#lib/types.ts';
 	import {
 		dateTime,
 		duration,
-		formatNumber,
 		formatValue,
+		numberFormat,
 		range,
 		relativeTime
 	} from '#lib/utils.ts';
+	import {
+		LOCKED_COLUMNS,
+		columnDrops,
+		columnTree,
+		listDrops,
+		nearestGap
+	} from '#lib/workspace/columns.ts';
 	import { writeFilters } from '#lib/workspace/filters.ts';
-	import { applyRunQuery, runHref, workspaceHref } from '#lib/workspace/url.ts';
+	import { moveKey } from '#lib/workspace/layout.ts';
+	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
@@ -30,28 +66,100 @@
 	import StateBadge from './StateBadge.svelte';
 
 	interface Props {
-		mode: 'table' | 'charts';
+		mode: TableMode;
 		/** The name column's width, which the viewer can drag. */
 		nameW: number;
+		/**
+		 * Keys of the suggested columns, the ones that matter most here (a group's, 026): first,
+		 * roomier, under a "Suggested" band of their own, ended by a bolder divider. The rest follow
+		 * at the table's usual density. Keys the page has no column for are left out.
+		 */
+		primary?: readonly string[] | null;
+		/**
+		 * The viewer dragged the suggested columns into a new order (the keys shown, in it). The
+		 * table shows that order until `primary` changes.
+		 */
+		onprimaryorder?: (keys: string[]) => void;
 	}
 
-	let { mode, nameW }: Props = $props();
+	let { mode, nameW, primary = null, onprimaryorder }: Props = $props();
 
 	const ws = getWorkspace();
 	const runs = $derived(ws.page.runs);
 	/** Outside the org nothing can be changed: no selecting, no run menus (D116). */
 	const readonly = $derived(appPage.data.shell?.access === 'public');
-	const selectable = $derived(mode === 'table' && !readonly);
+	const selectable = $derived(mode !== 'charts' && !readonly);
+	/** The charts are beside the table: hovering a row focuses its run there. */
+	const charting = $derived(mode !== 'table');
+	/** Columns beside the names: every one, or none beside the charts alone. */
+	const wide = $derived(mode !== 'charts');
+
+	/** The suggested keys, in the order last dragged into here, until the page gives others. */
+	let primaryKeys = $derived(primary);
+
+	/** Indices into the project's columns of the suggested ones, in their order. */
+	const primaryCols = $derived.by(() => {
+		if (!primaryKeys?.length) return [];
+		const out: number[] = [];
+		for (const key of primaryKeys) {
+			const i = ws.meta.columns.findIndex((c) => c.key === key);
+			if (i !== -1 && !out.includes(i)) out.push(i);
+		}
+		return out;
+	});
+	const primaryCount = $derived(primaryCols.length);
+
 	// The columns the viewer shows: `shown[c]` is shown column c's index into the project's
-	// columns (and the page's cells); everything below indexes shown columns.
-	const shown = $derived(ws.shownColumns);
+	// columns (and the page's cells); everything below indexes shown columns. Suggested columns
+	// come first, whether or not the viewer hid them.
+	const shown = $derived(
+		primaryCount
+			? [...primaryCols, ...ws.shownColumns.filter((i) => !primaryCols.includes(i))]
+			: ws.shownColumns
+	);
 	const columns = $derived(shown.map((i) => ws.meta.columns[i]));
-	const groups = $derived(columnGroups(columns));
+	const groups = $derived.by((): (Omit<ColumnGroupSpan, 'key'> & { key: string })[] => {
+		if (!primaryCount) return columnGroups(columns);
+		const rest = columnGroups(columns.slice(primaryCount)).map((g) => ({
+			...g,
+			start: g.start + primaryCount,
+			end: g.end + primaryCount
+		}));
+		return [{ key: 'suggested', label: 'Suggested', start: 0, end: primaryCount }, ...rest];
+	});
 
 	// Widths are user-resizable. Overrides are kept by column key because the column list can
 	// change from page to page as runs log new config or summary keys.
 	let widthOverrides = $state.raw<Readonly<Record<string, number>>>({});
-	const widths = $derived(columns.map((c) => widthOverrides[c.key] ?? c.width));
+	/** The table's fonts, read once it's on screen; until then columns keep their defaults. */
+	let fonts = $state<{ cell: string; head: string } | null>(null);
+	/**
+	 * Each column's width from its content: its header or its widest value on this page (a
+	 * sample of rows), whichever is wider, within [MIN_W, its kind's default]. Measured per
+	 * page, not per live update, so columns don't twitch as values tick.
+	 */
+	const fitted = $derived.by(() => {
+		const f = fonts;
+		const page = ws.page;
+		return columns.map((col, c) => {
+			if (!f || !FITTED.has(col.kind)) return col.width;
+			let w = textWidth(col.label, f.head) ?? col.width;
+			w += ARROW;
+			const rows = Math.min(page.runs.length, SAMPLE);
+			for (let r = 0; r < rows; r++) {
+				const text = untrack(() => cellText(c, r));
+				if (text.length * 9 < w) continue; // can't be wider than what we have
+				// Tabular digits run a little wider than the canvas measures them.
+				w = Math.max(w, (textWidth(text, f.cell) ?? 0) * 1.06);
+			}
+			return Math.max(MIN_W, Math.min(col.width, Math.ceil(w + PAD)));
+		});
+	});
+	const widths = $derived(
+		columns.map(
+			(c, i) => widthOverrides[c.key] ?? (i < primaryCount ? primaryWidth(fitted[i]) : fitted[i])
+		)
+	);
 	const offsets = $derived.by(() => {
 		const out = new Float64Array(widths.length + 1);
 		for (let i = 0; i < widths.length; i++) out[i + 1] = out[i] + widths[i];
@@ -81,9 +189,9 @@
 		return lo;
 	}
 
-	const colStart = $derived(mode === 'charts' ? 0 : Math.max(0, colAt(scrollX) - OVERSCAN_COLS));
+	const colStart = $derived(!wide ? 0 : Math.max(0, colAt(scrollX) - OVERSCAN_COLS));
 	const colEnd = $derived(
-		mode === 'charts'
+		!wide
 			? 0
 			: Math.min(widths.length, colAt(scrollX + Math.max(0, viewW - nameW)) + 1 + OVERSCAN_COLS)
 	);
@@ -104,6 +212,11 @@
 	}
 
 	function measure(el: HTMLDivElement) {
+		const style = getComputedStyle(el);
+		fonts = {
+			cell: `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`,
+			head: `500 12px ${style.fontFamily}`
+		};
 		const ro = new ResizeObserver(() => {
 			viewW = el.clientWidth;
 			viewH = el.clientHeight;
@@ -133,6 +246,21 @@
 	// ------------------------------------------------------------------------------------------
 	// Cells
 
+	/**
+	 * Each numeric column's formatter, so a column writes its numbers one way (`numberFormat`);
+	 * made when first needed, again for each page and table version.
+	 */
+	const formats = $derived.by(() => {
+		void ws.tableVersion;
+		void ws.page;
+		return new Map<number, (v: number) => string>();
+	});
+	function formatIn(i: number): (v: number) => string {
+		let f = formats.get(i);
+		if (!f) formats.set(i, (f = numberFormat(ws.page.num[i] ?? [])));
+		return f;
+	}
+
 	/** Cell text; reads the table version so live summary updates re-render visible cells. */
 	function cellText(c: number, r: number): string {
 		void ws.tableVersion;
@@ -144,7 +272,7 @@
 			if (col.kind === 'time')
 				return col.key === 'created_at' ? relativeTime(v, ws.meta.now) : dateTime(v);
 			if (col.kind === 'duration') return duration(v);
-			return formatNumber(v);
+			return formatIn(i)(v);
 		}
 		return formatValue(v);
 	}
@@ -175,18 +303,146 @@
 	function sortHref(key: string) {
 		const params = new URLSearchParams(appPage.url.search);
 		applyRunQuery(params, sortQuery(key));
-		return workspaceHref(ws.meta.entity, ws.meta.project, params);
+		return ws.href(params);
 	}
 
 	let intent: ReturnType<typeof setTimeout> | undefined;
 	function hoverSort(key: string) {
 		clearTimeout(intent);
 		intent = setTimeout(
-			() => prefetchRunPage(ws.meta.entity, ws.meta.project, sortQuery(key)),
+			() => prefetchRunPage(ws.meta.entity, ws.meta.project, sortQuery(key), ws.group),
 			120
 		);
 	}
 	const leaveSort = () => clearTimeout(intent);
+
+	// ------------------------------------------------------------------------------------------
+	// Moving columns: a header dragged sideways lands in the gap nearest the pointer. Suggested
+	// columns move among themselves; the rest within their folder, as in the Columns menu (and
+	// saved the same way). The header follows the pointer, a line marks where it would land, and
+	// nothing moves until it's dropped; Escape cancels. A press that doesn't move still sorts.
+
+	/** The header being dragged (shown column `c`), how far it has gone, and where it would land. */
+	let drag = $state<{ c: number; dx: number; gap: number | null; moves: boolean } | null>(null);
+
+	const DRAG_SLOP = 4; // px the pointer moves before a press becomes a drag
+	const DRAG_EDGE = 48; // px from the table's sides where dragging scrolls it
+
+	/** Whether shown column `c` can be dragged: a suggested one, or any but the locked ones. */
+	const movable = (c: number) => c < primaryCount || !LOCKED_COLUMNS.has(columns[c].key);
+
+	/** Where shown column `c` can be dropped, and what dropping it in a gap does. */
+	function dropsFor(c: number) {
+		if (c < primaryCount) {
+			const keys = columns.slice(0, primaryCount).map((col) => col.key);
+			return {
+				from: c,
+				gaps: listDrops(primaryCount, c),
+				commit: (to: number) => {
+					const next = moveKey(keys, c, to);
+					primaryKeys = next;
+					onprimaryorder?.(next);
+				}
+			};
+		}
+		const tree = columnTree(ws.arrangedColumns.map((i) => ws.meta.columns[i]));
+		const rest = columns.slice(primaryCount).map((col) => col.key);
+		const drops = columnDrops(tree, rest, columns[c].key);
+		if (!drops) return null;
+		return {
+			from: drops.from,
+			gaps: new Map([...drops.gaps].map(([g, to]) => [g + primaryCount, to])),
+			commit: (to: number) => ws.moveColumn(drops.parent, drops.from, to)
+		};
+	}
+
+	function grab(e: PointerEvent, c: number) {
+		if (e.button !== 0 || !scroller || !movable(c)) return;
+		const el = scroller;
+		const drops = dropsFor(c);
+		if (!drops) return;
+		const x0 = e.clientX;
+		const y0 = e.clientY;
+		const sx0 = el.scrollLeft;
+		let pointerX = x0;
+		let started = false;
+		let frame = 0;
+
+		function follow() {
+			if (!drag) return;
+			drag.dx = pointerX - x0 + el.scrollLeft - sx0;
+			const x = pointerX - el.getBoundingClientRect().left + el.scrollLeft;
+			const gap = nearestGap(drops!.gaps, (g) => nameW + offsets[g], x);
+			drag.gap = gap;
+			drag.moves = gap !== null && drops!.gaps.get(gap) !== drops!.from;
+		}
+
+		// Held near a side, the table scrolls on under the pointer.
+		function scroll() {
+			frame = 0;
+			if (!drag) return;
+			const r = el.getBoundingClientRect();
+			const left = r.left + nameW;
+			const by =
+				pointerX < left + DRAG_EDGE
+					? -(left + DRAG_EDGE - pointerX) / 4
+					: pointerX > r.right - DRAG_EDGE
+						? (pointerX - (r.right - DRAG_EDGE)) / 4
+						: 0;
+			if (!by) return;
+			el.scrollLeft += by;
+			follow();
+			frame = requestAnimationFrame(scroll);
+		}
+
+		// The release ends a drag with a click on the header's sort link: not a sort.
+		const swallow = (ev: MouseEvent) => {
+			ev.preventDefault();
+			ev.stopPropagation();
+			window.removeEventListener('click', swallow, true);
+		};
+
+		const move = (ev: PointerEvent) => {
+			pointerX = ev.clientX;
+			if (!started) {
+				if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < DRAG_SLOP) return;
+				started = true;
+				leaveSort();
+				window.getSelection()?.removeAllRanges();
+				window.addEventListener('click', swallow, true);
+				drag = { c, dx: 0, gap: null, moves: false };
+			}
+			follow();
+			if (!frame) frame = requestAnimationFrame(scroll);
+		};
+		const cancel = (ev: KeyboardEvent) => {
+			if (ev.key !== 'Escape' || !drag) return;
+			ev.preventDefault();
+			ev.stopPropagation();
+			stop();
+		};
+		function stop() {
+			cancelAnimationFrame(frame);
+			frame = 0;
+			drag = null;
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('keydown', cancel, true);
+		}
+		const up = (ev: PointerEvent) => {
+			const done = drag;
+			stop();
+			window.removeEventListener('pointerup', up);
+			window.removeEventListener('pointercancel', up);
+			if (started) setTimeout(() => window.removeEventListener('click', swallow, true));
+			if (ev.type === 'pointerup' && done?.moves && done.gap !== null) {
+				drops.commit(drops.gaps.get(done.gap)!);
+			}
+		};
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', up);
+		window.addEventListener('pointercancel', up);
+		window.addEventListener('keydown', cancel, true);
+	}
 
 	// ------------------------------------------------------------------------------------------
 	// Row hover feeds chart focus only when charts are showing.
@@ -197,13 +453,13 @@
 	}
 
 	function onpointerover(e: PointerEvent) {
-		if (mode !== 'charts') return;
+		if (!charting) return;
 		const r = rowFromEvent(e);
 		if (r != null && ws.hover !== r) ws.hover = r;
 	}
 
 	function onpointerleave() {
-		if (mode === 'charts') ws.hover = null;
+		if (charting) ws.hover = null;
 	}
 
 	/** The column last jumped to, marked for a moment so the eye finds it. */
@@ -232,10 +488,13 @@
 	const first = $derived((query.page - 1) * ws.meta.pageSize);
 </script>
 
+<!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across. -->
 <div
 	class={[
-		'scroller absolute inset-0 overflow-y-auto overscroll-contain pb-18 [contain:strict]',
-		mode === 'charts' ? 'overflow-x-hidden' : 'overflow-x-auto'
+		'scroller absolute inset-y-0 left-0 overflow-y-auto overscroll-contain pb-18 [contain:strict]',
+		mode === 'visualize' ? 'w-(--table-w)' : 'right-0',
+		wide ? 'overflow-x-auto' : 'overflow-x-hidden',
+		drag && 'cursor-grabbing select-none'
 	]}
 	bind:this={scroller}
 	{onscroll}
@@ -245,12 +504,19 @@
 >
 	<div class="sticky top-0 z-3 bg-background" style:width="{nameW + totalW}px">
 		<div class="relative flex" style:height="{BAND_H}px">
-			<div class="sticky left-0 z-2 w-(--name-w) flex-none bg-background"></div>
-			{#if mode === 'table'}
+			<!-- The name column's divider runs up through the band, drawn the same way (its last
+			     pixel); later groups' dividers sit on the same pixel as the header's. -->
+			<div
+				class="sticky left-0 z-2 w-(--name-w) flex-none bg-background shadow-[inset_-1px_0_0_var(--divider)]"
+			></div>
+			{#if wide}
 				{#each groups as g (g.key)}
 					<div
-						class="absolute inset-y-0 border-l border-divider text-xs text-muted-foreground"
-						style:left="{nameW + offsets[g.start]}px"
+						class={[
+							'absolute inset-y-0 text-xs text-muted-foreground',
+							g.start > 0 && 'border-l border-divider'
+						]}
+						style:left="{nameW + offsets[g.start] - (g.start > 0 ? 1 : 0)}px"
 						style:width="{offsets[g.end] - offsets[g.start]}px"
 					>
 						<span class="sticky left-[calc(var(--name-w)+12px)] inline-block px-3 pt-1.5">
@@ -295,7 +561,7 @@
 						>{/if}
 				</a>
 				<span class="ml-auto font-normal whitespace-nowrap text-faint">
-					{#if mode === 'charts'}
+					{#if !wide}
 						{ws.visible.length} of {runs.length} plotted
 					{:else}
 						{first + 1}–{first + runs.length} of {ws.page.total}
@@ -305,17 +571,31 @@
 			<div class="flex-none" style:width="{offsets[colStart]}px"></div>
 			{#each visibleCols as c (c)}
 				{@const col = columns[c]}
+				{@const grabbable = wide && movable(c)}
+				<!-- A press that moves drags the column; one that doesn't sorts by it. -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					class={[
-						'hcell group/h relative flex flex-none items-center px-3 transition-colors duration-500 hover:bg-muted',
+						'hcell group/h relative flex flex-none items-center px-3 transition-colors duration-500 select-none',
+						drag?.c === c ? 'opacity-40' : !drag && 'hover:bg-muted',
 						jumped === col.key && 'bg-selection/60'
 					]}
 					style:width="{widths[c]}px"
+					onpointerdown={grabbable ? (e) => grab(e, c) : undefined}
 				>
+					{#if grabbable && !drag}
+						<span
+							class="pointer-events-none absolute top-0 left-1/2 flex h-3 -translate-x-1/2 items-center text-faint opacity-0 group-hover/h:opacity-100"
+							aria-hidden="true"
+						>
+							<GripHorizontalIcon class="size-3.5" />
+						</span>
+					{/if}
 					<a
 						class={['flex size-full min-w-0 items-center gap-1', isNumeric(col) && 'justify-end']}
 						href={sortHref(col.key)}
-						{@attach hint(col.key)}
+						{@attach hint(grabbable ? `${col.key} (click to sort, drag to move)` : col.key)}
+						draggable="false"
 						data-sveltekit-preload-data="tap"
 						onpointerenter={() => hoverSort(col.key)}
 						onpointerleave={leaveSort}
@@ -332,6 +612,35 @@
 				</div>
 			{/each}
 		</div>
+		{#if wide && primaryCount}
+			<!-- Where the suggested columns end: a bolder divider, through the band and the rows. -->
+			<div
+				class="pointer-events-none absolute top-0 bottom-0 z-1 w-0.5 bg-border"
+				style:left="{nameW + offsets[primaryCount] - 1}px"
+			></div>
+		{/if}
+		{#if drag}
+			{@const col = columns[drag.c]}
+			{#if drag.moves && drag.gap !== null}
+				<div
+					class="pointer-events-none absolute top-0 bottom-0 z-1 w-0.5 bg-ring"
+					style:left="{nameW + offsets[drag.gap] - 1}px"
+				></div>
+			{/if}
+			<!-- The header, following the pointer. -->
+			<div
+				class={[
+					'pointer-events-none absolute z-1 flex items-center gap-1 rounded-md bg-popover px-3 text-xs font-medium text-foreground shadow-lg ring-1 ring-foreground/15',
+					isNumeric(col) && 'justify-end'
+				]}
+				style:top="{BAND_H + 4}px"
+				style:height="{HEAD_H - 8}px"
+				style:left="{nameW + offsets[drag.c] + drag.dx}px"
+				style:width="{widths[drag.c]}px"
+			>
+				<span class="truncate">{col.label}</span>
+			</div>
+		{/if}
 	</div>
 
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -342,12 +651,24 @@
 		{onpointerover}
 		{onpointerleave}
 	>
+		{#if wide && primaryCount}
+			<div
+				class="pointer-events-none absolute inset-y-0 z-1 w-0.5 bg-border"
+				style:left="{nameW + offsets[primaryCount] - 1}px"
+			></div>
+		{/if}
+		{#if drag?.moves && drag.gap !== null}
+			<div
+				class="pointer-events-none absolute inset-y-0 z-1 w-0.5 bg-ring"
+				style:left="{nameW + offsets[drag.gap] - 1}px"
+			></div>
+		{/if}
 		{#each visibleRows as r (r)}
 			{@const run = runs[r]}
 			{@const shown = !ws.hidden.has(run.id)}
 			{@const pinned = ws.pinned === r}
-			{@const selected = mode === 'table' && ws.selected.has(run.id)}
-			{@const focused = mode === 'charts' && ws.focus === r}
+			{@const selected = selectable && ws.selected.has(run.id)}
+			{@const focused = charting && ws.focus === r}
 			<div
 				class={[
 					'row group/row absolute inset-x-0 flex h-(--row-h) items-stretch border-b border-divider tabular-nums',
@@ -385,7 +706,7 @@
 					<a
 						class={[
 							'run-name min-w-0 flex-1 truncate underline-offset-3 hover:text-link hover:underline',
-							mode === 'charts' && !shown ? 'text-faint' : 'text-foreground'
+							charting && !shown ? 'text-faint' : 'text-foreground'
 						]}
 						href={runHref(ws.meta.entity, ws.meta.project, run.id)}
 						data-sveltekit-preload-data="tap"

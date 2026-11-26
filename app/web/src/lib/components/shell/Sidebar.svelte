@@ -11,13 +11,32 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
+	import { untrack } from 'svelte';
+	import LayersIcon from '@lucide/svelte/icons/layers';
+	import XIcon from '@lucide/svelte/icons/x';
+	import { toast } from 'svelte-sonner';
+	import { invalidate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import LogoMark from '#lib/components/LogoMark.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
+	import GroupMenu from '#lib/components/groups/GroupMenu.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
+	import {
+		GROUPS,
+		GroupsError,
+		fromFlockFilter,
+		groupHref,
+		groupsApi,
+		groupsCall,
+		groupsHref,
+		newGroupHref,
+		ungroupedHref,
+		type GroupList,
+		type Suggestion
+	} from '#lib/groups.ts';
 	import { modelsHref } from '#lib/models.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import type { Access, OrgEntry, ProjectInfo } from '#lib/types.ts';
@@ -89,6 +108,72 @@
 	});
 	const shownProject = $derived(project ?? lastProject);
 	const projectRoute = '/(app)/[entity]/[project]';
+
+	// The project's groups and suggestions (D215), from its layout's load; kept, like the
+	// project, while the panel slides back out.
+	// Suggestions arrive as a promise the layout doesn't wait for: they're shown once it resolves,
+	// and a different project's are cleared at once rather than shown under this one.
+	let streamed = $state<{ project: string | null; list: Suggestion[] }>({
+		project: null,
+		list: []
+	});
+	$effect(() => {
+		const pending = page.data.suggestions as Promise<Suggestion[]> | Suggestion[] | undefined;
+		const name = project;
+		if (!name) return;
+		// Read without tracking: this effect writes `streamed`, and must re-run only for new data.
+		if (untrack(() => streamed.project) !== name) streamed = { project: name, list: [] };
+		let current = true;
+		void Promise.resolve(pending ?? []).then((list) => {
+			if (current) streamed = { project: name, list };
+		});
+		return () => {
+			current = false;
+		};
+	});
+	let lastGroups = $state<{ list: GroupList | null; suggestions: Suggestion[] }>({
+		list: null,
+		suggestions: []
+	});
+	$effect.pre(() => {
+		if (project)
+			lastGroups = {
+				list: (page.data.groups as GroupList | null | undefined) ?? null,
+				suggestions: streamed.list
+			};
+	});
+	const groupList = $derived(
+		project ? ((page.data.groups as GroupList | null | undefined) ?? null) : lastGroups.list
+	);
+	const suggestions = $derived(project ? streamed.list : lastGroups.suggestions);
+	const groupRoute = `${projectRoute}/groups`;
+	const groupId = $derived(Number(page.params.group));
+
+	/** Dismissing a suggestion remembers it (D219): it isn't offered again unless its runs change. */
+	async function dismiss(org: string, s: Suggestion) {
+		if (!shownProject) return;
+		try {
+			await groupsCall(groupsApi(org, shownProject, 'suggestions/dismiss'), {
+				method: 'POST',
+				body: { signature: s.signature }
+			});
+			await invalidate(GROUPS);
+		} catch (err) {
+			toast.error(err instanceof GroupsError ? err.message : 'Couldn’t dismiss the suggestion');
+		}
+	}
+
+	/** A suggestion opens the create page with its runs, and a W&B group's filter (D219). */
+	const suggestionHref = (org: string, s: Suggestion) =>
+		newGroupHref(org, shownProject!, {
+			runs: s.filter ? [] : s.runs,
+			filters: (s.filter && fromFlockFilter(s.filter)) || [],
+			name: s.name
+		});
+
+	// The group rows: a 20px slot for the color square, so names line up with each other.
+	const SUB =
+		'flex h-7 items-center gap-2 rounded-md px-1.5 text-[13px] text-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-[current=page]:bg-muted aria-[current=page]:font-medium';
 
 	const SHOWN = 12;
 	let showAll = $state(false);
@@ -363,6 +448,130 @@
 						>
 							<ActivityIcon /> Runs
 						</a>
+						{#if groupList}
+							<!-- Groups and its children, always expanded (D215). -->
+							<a
+								class={ITEM}
+								href={groupsHref(org, shownProject)}
+								aria-current={route === groupRoute ? 'page' : undefined}
+							>
+								<LayersIcon /> Groups
+								<span class="ml-auto pr-1.5 text-xs font-normal text-muted-foreground tabular-nums">
+									{groupList.groups.length || ''}
+								</span>
+							</a>
+							<ul class="ml-[17px] grid grid-cols-1 gap-px border-l border-divider pl-[9px]">
+								{#each groupList.groups as g (g.id)}
+									<!-- The group's menu shows over the count while hovered, focused or open. -->
+									<li class="group/grp relative">
+										<a
+											class={SUB}
+											href={groupHref(org, shownProject, g.id)}
+											aria-current={route?.startsWith(`${groupRoute}/[group]`) && groupId === g.id
+												? 'page'
+												: undefined}
+											title={g.name}
+										>
+											<span
+												class="size-2 flex-none rounded-[2px]"
+												style:background={g.color}
+												aria-hidden="true"
+											></span>
+											<span class="min-w-0 flex-1 truncate">{g.name}</span>
+											{#if g.new_count > 0 && !outside}
+												<span
+													class="size-1.5 flex-none rounded-full bg-state-preempting"
+													title="{g.new_count} new {g.new_count === 1 ? 'match' : 'matches'}"
+												></span>
+												<span class="sr-only">, {g.new_count} new</span>
+											{/if}
+											<span
+												class={[
+													'text-xs font-normal text-muted-foreground tabular-nums',
+													!outside &&
+														'group-focus-within/grp:invisible group-hover/grp:invisible group-has-aria-expanded/grp:invisible'
+												]}
+											>
+												{g.run_count}
+											</span>
+										</a>
+										{#if !outside}
+											<div class="absolute inset-y-0 right-0.5 flex items-center">
+												<GroupMenu
+													entity={org}
+													project={shownProject}
+													group={g}
+													class="text-muted-foreground opacity-0 group-focus-within/grp:opacity-100 group-hover/grp:opacity-100 aria-expanded:opacity-100"
+												/>
+											</div>
+										{/if}
+									</li>
+								{/each}
+								<!-- Only while some runs are in no group: none left, nothing to show. -->
+								{#if groupList.ungrouped_count > 0}
+									<li>
+										<a
+											class={cn(SUB, 'text-muted-foreground')}
+											href={ungroupedHref(org, shownProject)}
+										>
+											<span
+												class="size-2 flex-none rounded-full border-[1.5px] border-faint"
+												aria-hidden="true"
+											></span>
+											<span class="min-w-0 flex-1 truncate">Ungrouped runs</span>
+											<span class="text-xs tabular-nums">{groupList.ungrouped_count}</span>
+										</a>
+									</li>
+								{/if}
+								{#if !outside}
+									<li>
+										<a
+											class={cn(SUB, 'text-muted-foreground aria-[current=page]:text-foreground')}
+											href={newGroupHref(org, shownProject)}
+											aria-current={route === `${groupRoute}/new` ? 'page' : undefined}
+										>
+											<PlusIcon class="-ml-0.5 size-3 flex-none" />
+											<span class="min-w-0 flex-1 truncate">New group</span>
+										</a>
+									</li>
+									{#if suggestions.length}
+										<li class="mx-1.5 my-1 h-px bg-divider" role="presentation"></li>
+									{/if}
+									{#each suggestions as s (s.signature)}
+										<li class="group/suggestion relative">
+											<a
+												class={cn(SUB, 'pr-7 text-muted-foreground')}
+												href={suggestionHref(org, s)}
+												title="Suggested from {s.source === 'wandb_group'
+													? 'a W&B group'
+													: 'runs whose configs differ in a few keys'}: {s.name}"
+											>
+												<span
+													class="size-2 flex-none rounded-[2px] border-[1.5px] border-dashed border-state-preempting"
+													aria-hidden="true"
+												></span>
+												<span class="min-w-0 flex-1 truncate">{s.name}</span>
+												<span
+													class="rounded-[4px] border border-border px-1 text-[11px] leading-4 group-focus-within/suggestion:invisible group-hover/suggestion:invisible"
+												>
+													Suggested
+												</span>
+											</a>
+											<Button
+												variant="ghost"
+												size="icon-xs"
+												class="absolute top-0.5 right-0.5 text-muted-foreground opacity-0 group-focus-within/suggestion:opacity-100 group-hover/suggestion:opacity-100"
+												aria-label="Dismiss suggestion {s.name}"
+												title="Dismiss"
+												onclick={() => dismiss(org, s)}
+											>
+												<XIcon />
+											</Button>
+										</li>
+									{/each}
+								{/if}
+							</ul>
+						{/if}
 						<!-- A project's datasets and models are its org's members' only (D165). -->
 						{#if s3 && !outside}
 							<a

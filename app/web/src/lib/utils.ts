@@ -172,6 +172,22 @@ export function formatNumber(v: number): string {
 	return dot === -1 ? group(s) : group(s.slice(0, dot)) + s.slice(dot);
 }
 
+/**
+ * A formatter that writes a column's numbers one way. `formatNumber` alone switches to an
+ * exponent under 1e-4, so a learning-rate column reads `0.0003` beside `6e-5`; when any of
+ * `values` needs an exponent, every fraction under 0.01 gets one (`3e-4`, `6e-5`).
+ */
+export function numberFormat(values: Iterable<unknown>): (v: number) => string {
+	for (const v of values) {
+		if (typeof v !== 'number' || !Number.isFinite(v) || v === 0 || Number.isInteger(v)) continue;
+		if (Math.abs(v) < 1e-4) {
+			return (x) =>
+				Number.isFinite(x) && x !== 0 && Math.abs(x) < 0.01 ? expo(x, 3) : formatNumber(x);
+		}
+	}
+	return formatNumber;
+}
+
 const SI = [
 	{ v: 1e12, s: 'T' },
 	{ v: 1e9, s: 'B' },

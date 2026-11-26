@@ -9,11 +9,12 @@
 		yToPx,
 		type PlotSeries
 	} from '#lib/chart/engine.ts';
+	import { meanLine } from '#lib/chart/aggregate.ts';
 	import { formatX, formatXTick, formatXValue } from '#lib/chart/axes.ts';
 	import { forecastOf } from '#lib/chart/forecast.ts';
 	import { placeTip, Readout, tipSide, type TipBox } from '#lib/chart/readout.ts';
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
-	import { pointAt, SNAP_PX, smoothed, smooths, snapStep } from '#lib/chart/series.ts';
+	import { pointAt, SNAP_PX, smoothed, smooths, snapStep, type Series } from '#lib/chart/series.ts';
 	import { panelSmoothing } from '#lib/workspace/layout.ts';
 	import { FORECAST_TIMES } from '#lib/workspace/panels.ts';
 	import { scheme } from '#lib/theme.svelte.ts';
@@ -40,8 +41,16 @@
 
 	let { panel, surface, active, root = null, view: preview }: Props = $props();
 
-	/** A line: one run's curve of one of the panel's metrics, or its forecast. */
-	type Line = PlotSeries & { metric: number; forecast?: boolean };
+	/**
+	 * A line: one run's curve of one of the panel's metrics, or the mean of several runs' with
+	 * its band (`rows`, `label`: see `Workspace.lines`), or its forecast.
+	 */
+	type Line = PlotSeries & {
+		metric: number;
+		forecast?: boolean;
+		rows?: readonly number[];
+		label?: string | null;
+	};
 
 	const ws = getWorkspace();
 	// Canvas colors come from the theme tokens (read once the plot is in the document, and again
@@ -65,11 +74,20 @@
 	const series = $derived.by((): Line[] => {
 		void ws.version(view);
 		const out: Line[] = [];
-		for (const row of ws.visible) {
+		const band = ws.style?.band ?? 'std';
+		for (const { row, rows, label } of ws.lines) {
 			view.metrics.forEach((metric, k) => {
+				const color = ws.lineColor(view, row, k);
+				if (rows.length > 1) {
+					const curves = rows
+						.map((r) => ws.lineSeries(r, metric, axis))
+						.filter((s): s is Series => !!s?.n);
+					if (!curves.length) return;
+					out.push({ row, rows, label, metric, color, ...meanLine(curves, smoothing, band) });
+					return;
+				}
 				const s = ws.lineSeries(row, metric, axis);
 				if (!s?.n) return;
-				const color = ws.lineColor(view, row, k);
 				out.push({ row, metric, color, series: s, values: smoothed(s, smoothing) });
 			});
 		}
@@ -91,7 +109,7 @@
 		const out: Line[] = [];
 		for (const l of series) {
 			const f = forecastOf(l.series, to);
-			if (f) out.push({ ...l, series: f, values: f.y, forecast: true });
+			if (f) out.push({ ...l, series: f, values: f.y, band: undefined, forecast: true });
 		}
 		return out;
 	});
@@ -293,7 +311,7 @@
 	const focused = $derived.by((): Line[] => {
 		const f = ws.focus;
 		if (f == null) return [];
-		const mine = series.filter((s) => s.row === f);
+		const mine = series.filter((s) => (s.rows ? s.rows.includes(f) : s.row === f));
 		if (here && cursor!.nearest === f && cursor!.line != null) {
 			const hit = mine.find((s) => s.metric === cursor!.line);
 			if (hit) return [hit];
@@ -392,7 +410,7 @@
 				value: formatMetric(readout.value[k], fmt),
 				raw: raw && !line.forecast ? formatMetric(line.series.y[readout.point[k]], fmt) : null,
 				forecast: !!line.forecast,
-				name: byMetric ? label : ws.page.runs[line.row].name,
+				name: byMetric ? label : (line.label ?? ws.page.runs[line.row].name),
 				metric: !byMetric && several ? label : null,
 				step: xAt !== step ? formatXValue(axis, xAt) : null,
 				focused: readout.focused[k] === 1

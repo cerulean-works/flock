@@ -1,7 +1,8 @@
 /**
- * Widths the viewer can drag: the app's sidebar, the runs table's name column and the eval items'
- * columns. Kept in cookies, like the sidebar's open state. The server renders the first two, so
- * nothing jumps; the items are fetched in the browser, which reads their widths there.
+ * Widths the viewer can drag: the app's sidebar, the runs table's name column, the group
+ * editor's assistant and the eval items' columns. Kept in cookies, like the sidebar's open
+ * state. The server renders the first three, so nothing jumps; the items are fetched in the
+ * browser, which reads their widths there.
  */
 export interface Width {
 	cookie: string;
@@ -13,6 +14,14 @@ export interface Width {
 
 export const SIDEBAR_W: Width = { cookie: 'flock_sidebar_w', min: 200, max: 420, initial: 256 };
 export const NAME_W: Width = { cookie: 'flock_name_w', min: 220, max: 640, initial: 360 };
+/** The runs table beside the charts, in the Visualize view (and the charts take the rest). */
+export const TABLE_W: Width = { cookie: 'flock_table_w', min: 360, max: 1600, initial: 720 };
+export const ASSISTANT_W: Width = {
+	cookie: 'flock_assistant_w',
+	min: 280,
+	max: 640,
+	initial: 320
+};
 
 export const clampWidth = (w: Width, px: number) =>
 	Math.round(Math.min(w.max, Math.max(w.min, px)));

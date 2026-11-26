@@ -60,6 +60,8 @@ guide:
       title: Track an experiment
     - local: app/explore-runs
       title: Explore and organize experiments
+    - local: app/compare-groups
+      title: Compare runs with groups
     - local: app/storage-and-datasets
       title: Browse storage and datasets
     - local: app/browse-models
