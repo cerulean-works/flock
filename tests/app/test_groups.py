@@ -398,6 +398,22 @@ def test_suggestions_from_wandb_groups_and_config_differences(api: Client) -> No
     assert all("c0" not in s["runs"] for s in api.get(f"{G}/suggestions").json()["suggestions"])
 
 
+def test_a_wandb_group_a_saved_group_filters_on_isnt_suggested_again(api: Client) -> None:
+    log(api, "o1", {"lr": 0.1}, group="other")
+    log(api, "o2", {"lr": 0.2}, group="other")
+    # As a suggestion saves its filter, and as the filter popover does.
+    for name, saved in (("s", {"group": "s"}), ("t", {"group": {"$eq": "t"}})):
+        log(api, f"{name}1", {"lr": 0.1}, group=name)
+        log(api, f"{name}2", {"lr": 0.2}, group=name)
+        made = create(api, name=name, filter=saved, runs=[f"{name}1", f"{name}2"])
+        # Two later runs of the W&B group are the saved group's new matches, not a suggestion.
+        log(api, f"{name}3", {"lr": 0.3}, group=name)
+        log(api, f"{name}4", {"lr": 0.4}, group=name)
+        found = api.get(f"{G}/suggestions").json()["suggestions"]
+        assert [s["filter"] for s in found] == [{"group": "other"}]
+        assert new_ids(api, made["id"]) == [f"{name}3", f"{name}4"]
+
+
 # ---------------------------------------------------------------------- access (D226)
 
 

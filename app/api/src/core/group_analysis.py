@@ -440,7 +440,10 @@ def _clusters(runs: Sequence[RunRow], ignored: AbstractSet[str]) -> list[list[Ru
 
 
 def suggest(
-    runs: Sequence[RunRow], grouped: AbstractSet[str], dismissed: AbstractSet[bytes]
+    runs: Sequence[RunRow],
+    grouped: AbstractSet[str],
+    dismissed: AbstractSet[bytes],
+    taken: AbstractSet[str] = frozenset(),
 ) -> list[Suggestion]:
     """Suggested groups (D219) from the runs in no saved group (``grouped``: run ids).
 
@@ -451,8 +454,10 @@ def suggest(
     2. greedy config clusters of the rest (``_clusters``), largest first, with no filter.
        Keys of kind Different every run or Repeat, over these runs, are ignored.
 
-    Dismissed suggestions (by ``signature``) are left out, but their runs stay claimed, so
-    dismissing one doesn't reshuffle the others. The ``sweep`` attribute is never used (W&B
+    A W&B group a saved group already filters on (``taken``: names) isn't suggested again: its
+    free runs are that group's new matches (D216), and they stay claimed. Dismissed suggestions
+    (by ``signature``) are left out, but their runs stay claimed too, so dismissing one doesn't
+    reshuffle the others. The ``sweep`` attribute is never used (W&B
     sweeps aren't supported yet). Runs within a suggestion are ordered by creation, then id.
     """
     free = sorted(
@@ -467,6 +472,9 @@ def suggest(
     claimed: set[str] = set()
     for name in sorted(by_group):
         members = by_group[name]
+        if name in taken:
+            claimed.update(run.id for run in members)
+            continue
         if len(members) < MIN_WANDB_GROUP:
             continue
         claimed.update(run.id for run in members)

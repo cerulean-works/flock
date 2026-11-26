@@ -525,6 +525,7 @@ class Groups:
                    (SELECT max(pk) FROM runs WHERE project_pk = $1 AND deleted_at IS NULL),
                    (SELECT count(*) FROM run_groups WHERE project_pk = $1),
                    (SELECT max(pk) FROM run_groups WHERE project_pk = $1),
+                   (SELECT max(updated_at) FROM run_groups WHERE project_pk = $1),
                    (SELECT count(*) FROM run_group_runs gr
                     JOIN run_groups g ON g.pk = gr.group_pk WHERE g.project_pk = $1),
                    (SELECT max(gr.changed_at) FROM run_group_runs gr
@@ -540,7 +541,18 @@ class Groups:
         rows = await self.rows(project)
         grouped = set(rows) - set(await self.ungrouped(project))
         ids = {rows[pk].id for pk in grouped if pk in rows}
-        found = analysis.suggest(list(rows.values()), ids, await self.dismissed(project))
+        # W&B groups a saved group filters on, as a suggestion saves it (`{"group": name}`) or
+        # the filter popover does (`{"group": {"$eq": name}}`): their later runs are its new
+        # matches.
+        taken = set()
+        for group in await self.of_project(project):
+            name = group.filter.get("group") if set(group.filter) == {"group"} else None
+            if isinstance(name, dict) and set(name) == {"$eq"}:
+                name = name["$eq"]
+            if isinstance(name, str):
+                taken.add(name)
+        dismissed = await self.dismissed(project)
+        found = analysis.suggest(list(rows.values()), ids, dismissed, taken)
         _SUGGESTIONS.pop(project.pk, None)
         _SUGGESTIONS[project.pk] = (fingerprint, found)
         while len(_SUGGESTIONS) > _SUGGESTIONS_MAX:
