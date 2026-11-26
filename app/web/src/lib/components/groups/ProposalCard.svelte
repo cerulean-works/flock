@@ -327,6 +327,16 @@
 									{formatNumber(p.best.value)}
 								</span>
 							</span>
+							{#if p.best.mean != null && (p.best.n ?? 0) > 1}
+								<span
+									class="text-muted-foreground"
+									title="Groups are ranked by the mean over each configuration's repeats"
+								>
+									· mean of {p.best.n}
+									<span class="text-foreground tabular-nums">{formatNumber(p.best.mean)}</span
+									>{#if p.best.std != null}&nbsp;± {formatNumber(p.best.std)}{/if}
+								</span>
+							{/if}
 						{/if}
 					</span>
 				{/if}

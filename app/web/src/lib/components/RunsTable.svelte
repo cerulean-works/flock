@@ -40,8 +40,8 @@
 	import {
 		dateTime,
 		duration,
-		formatNumber,
 		formatValue,
+		numberFormat,
 		range,
 		relativeTime
 	} from '#lib/utils.ts';
@@ -244,6 +244,21 @@
 	// ------------------------------------------------------------------------------------------
 	// Cells
 
+	/**
+	 * Each numeric column's formatter, so a column writes its numbers one way (`numberFormat`);
+	 * made when first needed, again for each page and table version.
+	 */
+	const formats = $derived.by(() => {
+		void ws.tableVersion;
+		void ws.page;
+		return new Map<number, (v: number) => string>();
+	});
+	function formatIn(i: number): (v: number) => string {
+		let f = formats.get(i);
+		if (!f) formats.set(i, (f = numberFormat(ws.page.num[i] ?? [])));
+		return f;
+	}
+
 	/** Cell text; reads the table version so live summary updates re-render visible cells. */
 	function cellText(c: number, r: number): string {
 		void ws.tableVersion;
@@ -255,7 +270,7 @@
 			if (col.kind === 'time')
 				return col.key === 'created_at' ? relativeTime(v, ws.meta.now) : dateTime(v);
 			if (col.kind === 'duration') return duration(v);
-			return formatNumber(v);
+			return formatIn(i)(v);
 		}
 		return formatValue(v);
 	}

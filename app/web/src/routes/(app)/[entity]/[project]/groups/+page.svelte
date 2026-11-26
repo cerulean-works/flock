@@ -42,7 +42,7 @@
 	} from '#lib/groups.ts';
 	import { scheme } from '#lib/theme.svelte.ts';
 	import type { RunQuery, WorkspaceData } from '#lib/types.ts';
-	import { count, formatNumber, formatValue } from '#lib/utils.ts';
+	import { count, formatNumber, formatValue, numberFormat } from '#lib/utils.ts';
 	import { entityHref, runHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
@@ -155,13 +155,32 @@
 	const KEY_MAX = 200;
 	const FONT = "13px 'Host Grotesk', Arial, sans-serif";
 	const HEAD_FONT = "500 12px 'Host Grotesk', Arial, sans-serif";
+	/** Each setting column's number format, one per column (an lr column reads `3e-4`, `6e-5`). */
+	const formatOf = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this derivation
+		const out = new Map<string, (v: number) => string>();
+		for (const key of new Set([...suggested.settings, ...keys]))
+			out.set(key, numberFormat(everyRow.map((r) => r.config[key])));
+		return out;
+	});
+	/** A row's setting as its column writes it. */
+	const setting = (r: CompareRow, key: string): string => {
+		const v = r.config[key];
+		return typeof v === 'number' ? (formatOf.get(key) ?? formatNumber)(v) : formatValue(v);
+	};
+
 	/** A key column's width: its label or its widest value, plus a cell's and a chip's padding. */
 	function keyWidth(key: string, metric = false): number {
 		let w = textWidth(metric ? metricLabel(key) : displayKey(key), HEAD_FONT) ?? 112 - 28;
 		for (const r of everyRow) {
 			const v = metric ? r.summary?.[key] : r.config[key];
 			if (v == null) continue;
-			const text = metric && typeof v === 'number' ? formatNumber(v) : formatValue(v);
+			const text =
+				metric && typeof v === 'number'
+					? formatNumber(v)
+					: metric
+						? formatValue(v)
+						: setting(r, key);
 			w = Math.max(w, (textWidth(text, FONT) ?? 0) * 1.06);
 		}
 		return Math.max(KEY_MIN, Math.min(KEY_MAX, Math.ceil(w + 28)));
@@ -212,7 +231,7 @@
 		charted.forEach((r, i) => {
 			if (seen.has(r.run!)) return;
 			seen.add(r.run!);
-			out.push({ run: r.run!, label: r.name, color: colorOf(r, i) });
+			out.push({ run: r.run!, label: r.name, color: colorOf(r, i), value: r.run_value ?? r.value });
 		});
 		return out;
 	});
@@ -392,7 +411,10 @@
 							best:
 							<a class="hover:text-link hover:underline" href={runHref(entity, project, r.run)}
 								>{r.run_name}</a
-							>{r.n > 1 ? `, ${count(r.n, 'repeat')}` : ''}
+							>{#if r.n > 1}{r.run_value != null ? ` ${formatNumber(r.run_value)}` : ''}, mean of {count(
+									r.n,
+									'repeat'
+								)}{/if}
 						{/if}
 					</span>
 				{/if}
@@ -401,7 +423,15 @@
 				<AddToGroup {entity} {project} run={{ id: r.run, name: r.run_name ?? r.run }} {groups} />
 			{/if}
 		</div>
-		<div class={[CELL, 'justify-end']} style:flex={fit(VALUE_W)}>{fmt(r.value)}</div>
+		<div
+			class={[CELL, 'justify-end']}
+			style:flex={fit(VALUE_W)}
+			title={r.n > 1 && r.run_value != null
+				? `Mean of ${r.n} repeats; the best run alone has ${formatNumber(r.run_value)}`
+				: undefined}
+		>
+			{fmt(r.value)}
+		</div>
 		<div class={[CELL, 'justify-end gap-2']} style:flex={fit(DELTA_W)}>
 			{#if delta == null}
 				<span class="text-faint">–</span>
@@ -437,7 +467,7 @@
 						'truncate rounded-[5px] px-1.5 py-0.5',
 						diff ? 'bg-selection font-semibold text-foreground' : 'text-foreground'
 					]}
-					title={formatValue(r.config[key])}>{formatValue(r.config[key])}</span
+					title={setting(r, key)}>{setting(r, key)}</span
 				>
 			</div>
 		{/each}
@@ -462,7 +492,7 @@
 						'truncate rounded-[5px] px-1.5 py-0.5',
 						diff ? 'bg-selection font-semibold text-foreground' : 'text-faint'
 					]}
-					title={formatValue(r.config[key])}>{formatValue(r.config[key])}</span
+					title={setting(r, key)}>{setting(r, key)}</span
 				>
 			</div>
 		{/each}

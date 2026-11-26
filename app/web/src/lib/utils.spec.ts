@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	numberFormat,
 	avatarFileError,
 	dateTime,
 	formatValue,
@@ -230,5 +231,18 @@ describe('byte formats', () => {
 		expect(formatMetric(999, 'bytes')).toBe('999 B');
 		expect(formatMetric(2048, 'mb')).toBe('2.048 GB');
 		expect(formatMetric(3e6, 'bytes/s')).toBe('3 MB/s');
+	});
+});
+
+describe('numberFormat', () => {
+	it('writes a column one way when any value needs an exponent', () => {
+		const f = numberFormat([3e-4, 6e-5, 1e-3, 'x', null]);
+		expect([3e-4, 6e-5, 1e-3].map(f)).toEqual(['3e-4', '6e-5', '1e-3']);
+		expect(f(0.1)).toBe('0.1');
+		expect(f(0)).toBe('0');
+	});
+	it('keeps plain numbers when none needs one', () => {
+		const f = numberFormat([3e-4, 1e-3, 64]);
+		expect([3e-4, 1e-3, 64].map(f)).toEqual(['0.0003', '0.001', '64']);
 	});
 });

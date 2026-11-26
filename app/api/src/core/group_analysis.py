@@ -8,11 +8,13 @@ computed here. A value of None counts as absent, as in ``run_values`` (``values.
 import hashlib
 import heapq
 import math
+import re
 import statistics
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Any, Literal
 
 type Value = int | float | str | bool | list | None
@@ -182,6 +184,7 @@ class Best:
     std: float | None
     n: int
     configurations: tuple[Configuration, ...]  # best first; configurations without a value last
+    run_value: float | None = None  # the best run's own value (differs from ``value`` with repeats)
 
 
 def _metric(run: RunRow, key: str) -> float | None:
@@ -231,7 +234,8 @@ def best(runs: Sequence[RunRow], key: str, order: Order, kinds: Mapping[str, Kin
         return Best(None, None, None, 0, tuple(configs))
     by_id = {run.id: run for run in runs}
     scored = [(sign * v, rid) for rid in top.run_ids if (v := _metric(by_id[rid], key)) is not None]
-    return Best(min(scored)[1], top.value, top.std, top.n, tuple(configs))
+    run_value, run_id = min(scored)
+    return Best(run_id, top.value, top.std, top.n, tuple(configs), sign * run_value)
 
 
 # ---------------------------------------------------------------------- Compare (D188)
@@ -290,6 +294,27 @@ def _template(runs: Sequence[RunRow], kinds: Mapping[str, Kind]) -> str | None:
     return f"{names[0]} × {names[1]} + {len(keys) - 2} more"
 
 
+def is_opaque(name: str) -> bool:
+    """Whether a W&B group's name is an id rather than words: a hash or sweep id such as
+    ``sweep-x8k2ab3c`` or ``3f9a1c7e``. Such names all look alike side by side."""
+    for token in re.split(r"[-_./: ]+", name):
+        if len(token) < 6:
+            continue
+        # Letters and digits interleaved (x8k2ab3c), unlike words with a number (warmup2000).
+        switches = sum(a.isdigit() != b.isdigit() for a, b in pairwise(token))
+        # Random letters pile up consonants no word has (3evqlkwy: "vqlkwy").
+        run = max((len(r) for r in re.findall(r"[b-df-hj-np-tv-z]+", token.lower())), default=0)
+        digit = any(c.isdigit() for c in token)
+        # W&B's own ids (runs, sweeps) are 8 lowercase letters and digits.
+        wandb_id = len(token) == 8 and digit and token.isalnum() and token == token.lower()
+        if wandb_id or switches >= 3 or (digit and run >= 4) or run >= 5:
+            return True
+        hexed = all(c in "0123456789abcdefABCDEF" for c in token)
+        if len(token) >= 7 and hexed and any(c.isdigit() for c in token):
+            return True
+    return False
+
+
 def group_name(
     runs: Sequence[RunRow],
     kinds: Mapping[str, Kind],
@@ -306,11 +331,14 @@ def group_name(
     - nothing varies: ``N runs`` (``1 run``).
 
     A W&B group's name comes first, as ``pretrain-1b, lr × batch_size`` (or the group's name
-    alone when nothing varies). ``, finished`` (or whichever state) is added when the filter
-    fixes ``state``.
+    alone when nothing varies). An opaque one (a hash or sweep id, ``is_opaque``) goes last
+    instead, as ``lr × batch_size (sweep-x8k2ab3c)``, so names differ where they're read
+    first. ``, finished`` (or whichever state) is added when the filter fixes ``state``.
     """
     template = _template(runs, kinds)
-    if wandb_group:
+    if wandb_group and template and is_opaque(wandb_group):
+        name = f"{template} ({wandb_group})"
+    elif wandb_group:
         name = f"{wandb_group}, {template}" if template else wandb_group
     elif template:
         name = template

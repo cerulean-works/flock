@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { flockFilter, type RunFilter } from './workspace/filters.ts';
 import {
+	distinctLabels,
+	isInternalKey,
 	bestRun,
 	changes,
 	classifyColumns,
@@ -342,6 +344,32 @@ describe('display', () => {
 		expect(rows.map((r) => [r.id, r.name, r.state, r.cells['config.lr']])).toEqual([
 			['r1', 'one', 'running', 0.1],
 			['r2', 'r2', 'finished', undefined]
+		]);
+	});
+});
+
+describe('isInternalKey', () => {
+	it('flags columns Flock and wandb keep for themselves', () => {
+		for (const k of ['summary._runtime', 'summary._step', 'summary._wandb.runtime', '_timestamp'])
+			expect(isInternalKey(k)).toBe(true);
+		for (const k of ['summary.eval/loss', 'summary.best/eval_loss', 'summary.train/loss_ema'])
+			expect(isInternalKey(k)).toBe(false);
+	});
+});
+
+describe('distinctLabels', () => {
+	it('cuts a long shared start at a word', () => {
+		expect(
+			distinctLabels([
+				'batch_size × dropout + 17 more (sweep-3evqlkwy)',
+				'batch_size × dropout + 17 more (sweep-s2g2q1q2)'
+			])
+		).toEqual(['…(sweep-3evqlkwy)', '…(sweep-s2g2q1q2)']);
+	});
+	it('keeps names that differ early, and a lone name', () => {
+		expect(distinctLabels(['lr: 0.1, 0.2', 'wd: 0, 0.1'])).toEqual(['lr: 0.1, 0.2', 'wd: 0, 0.1']);
+		expect(distinctLabels(['batch_size × dropout + 17 more'])).toEqual([
+			'batch_size × dropout + 17 more'
 		]);
 	});
 });

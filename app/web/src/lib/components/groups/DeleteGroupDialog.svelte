@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { goto, invalidate } from '$app/navigation';
+	import { page } from '$app/state';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { GROUPS, GroupsError, groupsApi, groupsCall, groupsHref } from '#lib/groups.ts';
 
 	/**
-	 * Deleting a group, confirmed: the group goes, its runs stay. Then off to the Groups page
-	 * (the group's own page, read again, would find it gone), and the groups are read again.
+	 * Deleting a group, confirmed: the group goes, its runs stay. From the group's own pages,
+	 * off to the Groups page (the group's page, read again, would find it gone); from
+	 * anywhere else (the sidebar), the page stays. Then the groups are read again.
 	 */
 
 	interface Props {
@@ -29,7 +31,8 @@
 			await groupsCall(groupsApi(entity, project, String(group.id)), { method: 'DELETE' });
 			toast.success(`Deleted ${group.name}`);
 			ondeleted?.();
-			await goto(groupsHref(entity, project), { replaceState: true });
+			if (page.params.group === String(group.id))
+				await goto(groupsHref(entity, project), { replaceState: true });
 			await invalidate(GROUPS);
 		} catch (err) {
 			toast.error(err instanceof GroupsError ? err.message : 'Couldn’t delete the group');

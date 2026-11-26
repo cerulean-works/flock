@@ -16,6 +16,7 @@ from app.api.src.core.group_analysis import (
     default_best_key,
     differing_keys,
     group_name,
+    is_opaque,
     is_repeat_name,
     signature,
     suggest,
@@ -240,6 +241,7 @@ def test_best_with_repeats_uses_configuration_means() -> None:
     result = best(runs, KEY, "asc", kinds)
     assert result.run_id == "b1"
     assert result.value == pytest.approx(1.1)
+    assert result.run_value == pytest.approx(1.0)  # b1's own, not its configuration's mean
     assert result.std == pytest.approx(0.1)  # population std
     assert result.n == 2
     top, second = result.configurations
@@ -248,6 +250,7 @@ def test_best_with_repeats_uses_configuration_means() -> None:
     assert (second.value, second.std, second.n) == (pytest.approx(1.5), pytest.approx(1.0), 2)
     high = best(runs, KEY, "desc", kinds)
     assert (high.run_id, high.value) == ("a2", pytest.approx(1.5))
+    assert high.run_value == pytest.approx(2.5)
 
 
 def test_best_repeat_single_run_configuration_has_no_std() -> None:
@@ -389,6 +392,35 @@ def test_name_wandb_group_first() -> None:
         named({"x": 1}, {"x": 1}, wandb="pretrain-1b", filter={"state": "finished"})
         == "pretrain-1b, finished"
     )
+
+
+@pytest.mark.parametrize(
+    ("name", "opaque"),
+    [
+        ("sweep-x8k2ab3c", True),
+        ("sweep-3evqlkwy", True),
+        ("sweep-ksw0fsl0", True),
+        ("3f9a1c7e", True),
+        ("run_20a7fe91d", True),
+        ("pretrain-1b", False),
+        ("ablation-qk-norm", False),
+        ("lr-sweep-v2", False),
+        ("2024-11-05", False),
+        ("warmup2000", False),
+        ("llama3b-ft", False),
+        ("strength-ablation", False),
+        ("bf16-throughput", False),
+    ],
+)
+def test_is_opaque(name: str, opaque: bool) -> None:
+    assert is_opaque(name) is opaque
+
+
+def test_name_opaque_wandb_group_last() -> None:
+    # Sweep ids look alike side by side: the varying keys lead, the id follows.
+    configs = ({"lr": 0.1}, {"lr": 0.2})
+    assert named(*configs, wandb="sweep-x8k2ab3c") == "lr: 0.1, 0.2 (sweep-x8k2ab3c)"
+    assert named({"x": 1}, {"x": 1}, wandb="sweep-x8k2ab3c") == "sweep-x8k2ab3c"
 
 
 # ---------------------------------------------------------------------- suggest

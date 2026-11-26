@@ -20,6 +20,7 @@
 	import LogoMark from '#lib/components/LogoMark.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
+	import GroupMenu from '#lib/components/groups/GroupMenu.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
 	import {
@@ -460,7 +461,8 @@
 							</a>
 							<ul class="ml-[17px] grid grid-cols-1 gap-px border-l border-divider pl-[9px]">
 								{#each groupList.groups as g (g.id)}
-									<li>
+									<!-- The group's menu shows over the count while hovered, focused or open. -->
+									<li class="group/grp relative">
 										<a
 											class={SUB}
 											href={groupHref(org, shownProject, g.id)}
@@ -482,10 +484,26 @@
 												></span>
 												<span class="sr-only">, {g.new_count} new</span>
 											{/if}
-											<span class="text-xs font-normal text-muted-foreground tabular-nums">
+											<span
+												class={[
+													'text-xs font-normal text-muted-foreground tabular-nums',
+													!outside &&
+														'group-focus-within/grp:invisible group-hover/grp:invisible group-has-aria-expanded/grp:invisible'
+												]}
+											>
 												{g.run_count}
 											</span>
 										</a>
+										{#if !outside}
+											<div class="absolute inset-y-0 right-0.5 flex items-center">
+												<GroupMenu
+													entity={org}
+													project={shownProject}
+													group={g}
+													class="text-muted-foreground opacity-0 group-focus-within/grp:opacity-100 group-hover/grp:opacity-100 aria-expanded:opacity-100"
+												/>
+											</div>
+										{/if}
 									</li>
 								{/each}
 								<!-- Only while some runs are in no group: none left, nothing to show. -->

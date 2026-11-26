@@ -3,7 +3,7 @@
 	import TrophyIcon from '@lucide/svelte/icons/trophy';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import { bestLabel, bestWords, metricLabel, type BestOrder } from '#lib/groups.ts';
+	import { bestLabel, bestWords, isInternalKey, metricLabel, type BestOrder } from '#lib/groups.ts';
 
 	/** **Best by**: a summary column and lowest or highest (D184). */
 
@@ -37,8 +37,12 @@
 	}: Props = $props();
 
 	let query = $state('');
+	// Columns Flock keeps for itself (`_runtime`, `_step`, …) aren't metrics to rank by.
+	const metrics = $derived(keys.filter((k) => !isInternalKey(k)));
 	const matches = $derived(
-		query.trim() ? keys.filter((k) => k.toLowerCase().includes(query.trim().toLowerCase())) : keys
+		query.trim()
+			? metrics.filter((k) => k.toLowerCase().includes(query.trim().toLowerCase()))
+			: metrics
 	);
 	const SHOWN = 200;
 </script>

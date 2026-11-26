@@ -17,6 +17,7 @@
 
 <script lang="ts">
 	import { niceDomain, niceTicks } from '#lib/chart/scale.ts';
+	import { distinctLabels } from '#lib/groups.ts';
 	import { count, formatNumber, formatTick } from '#lib/utils.ts';
 
 	interface Props {
@@ -65,6 +66,8 @@
 	const jitter = (i: number) => (((i * 0.6180339887) % 1) - 0.5) * 56;
 	/** Names fit under the columns only when there are few of them. */
 	const named = $derived(dots.length <= 10);
+	/** Legend labels that keep each group's difference in view (`distinctLabels`). */
+	const short = $derived(distinctLabels(dots.map((d) => d.label)));
 </script>
 
 <!-- One column per group on the best-by metric's own axis: every run faint, the best (with its
@@ -123,7 +126,7 @@
 		</div>
 	</div>
 	<div class="mt-2.5 flex h-9 pr-1.5 pl-14 text-xs">
-		{#each dots as d (d.key)}
+		{#each dots as d, i (d.key)}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class={[
@@ -137,7 +140,7 @@
 				{#if named}
 					<span class="flex max-w-full min-w-0 items-center gap-1.5 text-foreground">
 						<span class="size-2 flex-none rounded-[2px]" style:background={d.color}></span>
-						<span class="truncate">{d.label}</span>
+						<span class="truncate">{short[i]}</span>
 					</span>
 					<span class="max-w-full truncate">{formatNumber(d.value)}</span>
 				{:else}

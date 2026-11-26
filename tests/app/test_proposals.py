@@ -348,7 +348,8 @@ def test_axes_values_best_and_seeds_are_computed_from_the_runs() -> None:
     assert sweep["values"] == {"config.bs": [32, 64], "config.lr": [0.01, 0.1]}
     assert sweep["repeat_key"] == "config.seed"  # a1 and a2 repeat lr 0.1, bs 32
     # Best is the best configuration: a3 (0.3), not the mean of a1 and a2 (0.6).
-    assert sweep["best"] == {"run": "a3", "name": "a3", "value": 0.3}
+    assert sweep["best"] == {"run": "a3", "name": "a3", "value": 0.3, "mean": 0.3, "std": None,
+                             "n": 1}  # fmt: skip
     assert (sweep["best_key"], sweep["best_order"]) == ("summary.loss", "asc")
     # The model may rank by another direction or metric when it exists in the runs.
     assert toggle["repeat_key"] is None

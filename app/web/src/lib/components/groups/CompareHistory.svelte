@@ -5,11 +5,15 @@
 		/** What the legend names it: the group. */
 		label: string;
 		color: string;
+		/** The run's own final value of the metric (its summary), shown at the line's end. */
+		value: number | null;
 	}
 </script>
 
 <script lang="ts">
 	import LinePlot from '#lib/components/LinePlot.svelte';
+	import { distinctLabels } from '#lib/groups.ts';
+	import { formatNumber } from '#lib/utils.ts';
 	import type { WorkspaceData } from '#lib/types.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
 
@@ -65,11 +69,29 @@
 	});
 
 	let root = $state<HTMLElement | null>(null);
+
+	/** Each line's last step (`summary._step`): runs trained for different lengths end apart. */
+	const stepOf = $derived.by(() => {
+		const col = data.meta.columns.findIndex((c) => c.key === 'summary._step');
+		const nums = col === -1 ? null : data.page.num[col];
+		return new Map(
+			data.page.runs.map((r, row) => {
+				const step = nums?.[row];
+				return [r.id, step != null && Number.isFinite(step) ? step : null];
+			})
+		);
+	});
+	/** Legend labels that keep each group's difference in view (`distinctLabels`). */
+	const shortLabels = $derived(distinctLabels(lines.map((l) => l.label)));
+	const steps = $derived(lines.map((l) => stepOf.get(l.run) ?? null));
+	const uneven = $derived(new Set(steps.filter((s) => s != null)).size > 1);
+	const fmtStep = (step: number) =>
+		step >= 1000 ? `${formatNumber(step / 1000)}k` : String(Math.round(step));
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-3" bind:this={root}>
 	<ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-		{#each lines as l (l.run)}
+		{#each lines as l, i (l.run)}
 			<li
 				class={[
 					'flex min-w-0 items-center gap-2 transition-opacity',
@@ -79,10 +101,22 @@
 				onpointerleave={() => onhover(null)}
 			>
 				<span class="h-0.5 w-3.5 flex-none rounded-full" style:background={l.color}></span>
-				<span class="max-w-56 truncate" title={l.label}>{l.label}</span>
+				<span class="max-w-56 truncate" title={l.label}>{shortLabels[i]}</span>
+				{#if l.value != null}
+					<span class="text-foreground tabular-nums">{formatNumber(l.value)}</span>
+				{/if}
+				{#if uneven && stepOf.get(l.run) != null}
+					<span class="text-faint tabular-nums">@ step {fmtStep(stepOf.get(l.run)!)}</span>
+				{/if}
 			</li>
 		{/each}
 	</ul>
+	{#if uneven}
+		<p class="-mt-1 text-xs text-muted-foreground">
+			These runs trained for different numbers of steps, so a curve that sits lower can still end
+			worse. The values above are where each run ended, which is what the table ranks.
+		</p>
+	{/if}
 	<div class="min-h-0 flex-1">
 		{#if panel === -1}
 			<div class="grid h-full place-items-center text-[13px] text-faint">

@@ -38,6 +38,8 @@ export interface GroupBest {
 	name: string;
 	/** The mean over the configuration's runs when the group has repeats. */
 	value: number | null;
+	/** The best run's own value; differs from `value` when the group has repeats. */
+	run_value?: number | null;
 	std: number | null;
 	n: number;
 }
@@ -120,7 +122,10 @@ export interface CompareRow {
 	/** Null for a group with no best (no run has a finite value). */
 	run: string | null;
 	run_name: string | null;
+	/** The best configuration's value: the mean over its repeats when it has some. */
 	value: number | null;
+	/** The best run's own value. */
+	run_value?: number | null;
 	std: number | null;
 	n: number;
 	runs: number;
@@ -205,7 +210,18 @@ export interface Proposal {
 	grid: ProposalGrid | null;
 	best_key: string | null;
 	best_order: BestOrder | null;
-	best: { run: string; name: string; value: number } | null;
+	/**
+	 * The best run, with its own `value`. With repeats, `mean` ± `std` over `n` runs is its
+	 * configuration's, which ranks it.
+	 */
+	best: {
+		run: string;
+		name: string;
+		value: number;
+		mean?: number | null;
+		std?: number | null;
+		n?: number;
+	} | null;
 	repeat_key: string | null;
 	/** The body `POST .../groups` takes to create it, its name unique among saved groups. */
 	create?: {
@@ -914,6 +930,34 @@ export function viewOf(
 	const rest = varies.filter((k) => k !== few);
 	const most = [...rest].sort((a, b) => count(b) - count(a))[0];
 	return { split: few, color: count(most) ? most : rest[0], seeds, show };
+}
+
+/**
+ * Labels for names read side by side (a chart's legend) that keep what tells them apart:
+ * with a long shared start (`batch_size × dropout + 17 more (sweep-3evqlkwy)` and
+ * `… (sweep-s2g2q1q2)`), the start is cut to `…` at a word boundary, so a truncated label
+ * still shows its difference. Other names are kept whole.
+ */
+export function distinctLabels(names: readonly string[], min = 12): string[] {
+	const unique = [...new Set(names)];
+	if (unique.length < 2) return [...names];
+	let n = 0;
+	const first = unique[0];
+	while (n < first.length && unique.every((s) => s[n] === first[n])) n++;
+	// Back to the start of the word the names part in, so `sweep-…` stays whole.
+	while (n > 0 && !/[\s(,×·]/.test(first[n - 1])) n--;
+	if (first[n - 1] === '(') n--; // keep a parenthesis paired
+	if (n < min) return [...names];
+	return names.map((s) => `…${s.slice(n)}`);
+}
+
+/**
+ * Whether a summary column is one Flock or wandb keeps for itself (`_step`, `_runtime`,
+ * `_wandb.*`, …) rather than a metric a run logged; those are never offered to rank by.
+ */
+export function isInternalKey(key: string): boolean {
+	const bare = key.startsWith('summary.') ? key.slice('summary.'.length) : key;
+	return bare.split(/[./]/).some((part) => part.startsWith('_'));
 }
 
 /** The history keys a group's charts plot: the best-by metric first, then its other metrics. */

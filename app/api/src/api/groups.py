@@ -185,6 +185,7 @@ def best_json(found: analysis.Best, rows: dict[str, RunRow]) -> dict[str, Any] |
         "run": found.run_id,
         "name": rows[found.run_id].name,
         "value": found.value,
+        "run_value": found.run_value,
         "std": found.std,
         "n": found.n,
     }
@@ -305,6 +306,7 @@ def compare_row(
             "run": run.id,
             "run_name": run.name,
             "value": value,
+            "run_value": value,
             "std": None,
             "n": int(value is not None),
             "runs": 1,
@@ -321,6 +323,7 @@ def compare_row(
         "run": run.id if run else None,
         "run_name": run.name if run else None,
         "value": found.value if found else None,
+        "run_value": found.run_value if found else None,
         "std": found.std if found else None,
         "n": found.n if found else 0,
         "runs": len(rows),

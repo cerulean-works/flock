@@ -90,8 +90,11 @@ gets exactly the runs it matches, so check that it matches what you mean.
 - name: short, in Flock's style, keys without "config.": "lr × batch_size" for two axes, \
 "qk_norm on / off" for a toggle, "data_mix: web-v2, web-v3" for one key with up to 3 \
 values, "lr: 6 values" for more. Start with the W&B group's name when the group is one \
-("pretrain-1b, lr"). Add ", finished" when the filter fixes the state. At most 60 \
-characters, unique among the proposals and the saved groups.
+and the name is words ("pretrain-1b, lr"). When it is an opaque id such as a hash or \
+sweep id ("sweep-x8k2ab3c"), lead with what the group varies and put the id last in \
+parentheses ("lr × wd (sweep-x8k2ab3c)"): names are read side by side in chart legends, \
+so they must differ in their first words. Add ", finished" when the filter fixes the \
+state. At most 60 characters, unique among the proposals and the saved groups.
 - why: one plain sentence saying what the group compares and what it holds fixed.
 - id: a short lowercase slug. When revising, keep the id of every proposal on screen that \
 you keep or change; new proposals get new ids.
@@ -708,7 +711,8 @@ async def finish(
             found = analysis.best(members, key, order, found_kinds)
             if found.run_id is not None:
                 best = {"run": found.run_id, "name": rows[found.run_id].name,
-                        "value": found.value}  # fmt: skip
+                        "value": found.run_value, "mean": found.value, "std": found.std,
+                        "n": found.n}  # fmt: skip
 
         name = _name(item.get("name")) or analysis.group_name(members, found_kinds, filter)
         name = _unique(name, taken_names)

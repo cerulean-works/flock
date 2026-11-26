@@ -384,15 +384,16 @@
 		<BestByPicker
 			key={bestKey}
 			order={bestOrder}
-			keys={ws.meta.columns.filter((c) => c.key.startsWith('summary.')).map((c) => c.key)}
+			keys={ws.meta.columns
+				.filter((c) => c.key.startsWith('summary.') && c.kind === 'num')
+				.map((c) => c.key)}
 			disabled={readonly}
 			title={group.best_key ? 'This group’s own setting' : 'The project’s setting'}
 			onchange={(key, o) => save({ best_key: key, best_order: o }, 'Best by')}
 			trophy
 			align="end"
 		/>
-	{/snippet}
-	{#snippet chartTools()}
+		<!-- In every view: Group by and Color by color the table's runs as well as the charts. -->
 		<DisplayMenu settings={display} />
 	{/snippet}
 	{#snippet empty()}
