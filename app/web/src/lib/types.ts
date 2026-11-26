@@ -57,7 +57,19 @@ export interface OrgInfo {
 	s3_key_max_ttl: number | null;
 	/** Keep the newest N untagged versions of each model (D109); null keeps every version. */
 	model_retention?: number | null;
+	/** The run groups assistant is on for the org (D224); it also needs the server's key. */
+	assistant_enabled?: boolean;
+	/** The model proposing groups (D230); null: the server's, `assistant_default_model`. */
+	assistant_model?: string | null;
+	/** Its OpenAI service tier (D230). */
+	assistant_tier?: AssistantTier;
+	assistant_default_model?: string;
+	/** Whether the server has an OpenAI API key, without which the assistant stays off. */
+	assistant_available?: boolean;
 }
+
+/** OpenAI's service tier for the assistant's proposals (D230). */
+export type AssistantTier = 'standard' | 'fast' | 'ultrafast';
 
 /**
  * One of the user's wandb keys, for the wandb SDK. Older keys (`flock-…`) are listed with the

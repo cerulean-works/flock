@@ -20,6 +20,7 @@
 	import DeletedDatasets from '#lib/components/datasets/DeletedDatasets.svelte';
 	import DeletedModels from '#lib/components/models/DeletedModels.svelte';
 	import ModelRetention from '#lib/components/models/ModelRetention.svelte';
+	import AssistantSettings from '#lib/components/groups/AssistantSettings.svelte';
 	import DeletedProjectsSpend from '#lib/components/DeletedProjectsSpend.svelte';
 	import FormError from '#lib/components/FormError.svelte';
 	import MemberMenu from '#lib/components/MemberMenu.svelte';
@@ -306,6 +307,13 @@
 			<section class="mt-10 scroll-mt-6" id="model-retention">
 				<h2 class="text-2xl tracking-[-0.01em]">Model retention</h2>
 				<ModelRetention org={data.org} />
+			</section>
+		{/if}
+
+		{#if admin}
+			<section class="mt-10 scroll-mt-6" id="assistant">
+				<h2 class="text-2xl tracking-[-0.01em]">Run groups assistant</h2>
+				<AssistantSettings org={data.org} />
 			</section>
 		{/if}
 
