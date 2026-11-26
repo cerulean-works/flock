@@ -234,6 +234,12 @@
 	/** Columns run on past the table's right edge: a fade there says so. */
 	const cutRight = $derived(wide && mode === 'table' && scrollX + viewW < nameW + totalW - 1);
 
+	/** A time cell's date and time, for its hover. */
+	function timeAt(c: number, r: number) {
+		const v = ws.page.num[shown[c]]?.[r];
+		return typeof v === 'number' ? dateTime(v) : undefined;
+	}
+
 	function onscroll() {
 		if (!scroller) return;
 		scrollX = scroller.scrollLeft;
@@ -299,7 +305,8 @@
 		const v = nums ? nums[r] : ws.page.text[i]?.[r];
 		if (typeof v === 'number') {
 			if (col.kind === 'time')
-				return col.key === 'created_at' ? relativeTime(v, ws.meta.now) : dateTime(v);
+				// Relative in lists (Nov 24); the date itself on hover.
+				return relativeTime(v, ws.meta.now);
 			if (col.kind === 'duration') return duration(v);
 			return formatIn(i)(v);
 		}
@@ -722,7 +729,7 @@
 			{@const focused = (charting && ws.focus === r) || cursor === r}
 			<div
 				class={[
-					'row group/row absolute inset-x-0 flex h-(--row-h) items-stretch border-b border-divider tabular-nums',
+					'row group/row absolute inset-x-0 flex h-(--row-h) items-stretch border-b border-divider text-[13px] tabular-nums',
 					focused ? 'bg-muted' : selected ? 'bg-selection/45' : 'hover:bg-muted',
 					cursor === r && 'shadow-[inset_2px_0_0_var(--ring)]'
 				]}
@@ -798,7 +805,9 @@
 							{@const text = cellText(c, r)}
 							<span
 								class={['truncate', text === '–' && 'text-faint']}
-								{@attach hint(col.kind === 'str' ? text : undefined)}>{text}</span
+								{@attach hint(
+									col.kind === 'str' ? text : col.kind === 'time' ? timeAt(c, r) : undefined
+								)}>{text}</span
 							>
 						{/if}
 					</div>

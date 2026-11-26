@@ -16,15 +16,17 @@
 		query: Record<string, string>;
 		now: number;
 		empty: string;
+		/** Only the viewer's runs: the Owner column would repeat their name. */
+		mine?: boolean;
 	}
 
-	let { first, query, now, empty }: Props = $props();
+	let { first, query, now, empty, mine = false }: Props = $props();
 
 	// svelte-ignore state_referenced_locally
 	const pager = new FeedPager(first, query);
 
 	// Narrower windows drop owner, GPUs and runtime, then state.
-	const COLUMNS: Column[] = [
+	const ALL_COLUMNS: Column[] = [
 		{ id: 'run', label: 'Run' },
 		{ id: 'project', label: 'Project' },
 		{ id: 'state', label: 'State', size: 'fit', from: 'md' },
@@ -33,6 +35,7 @@
 		{ id: 'runtime', label: 'Runtime', from: 'lg', align: 'end' },
 		{ id: 'started', label: 'Updated', align: 'end' }
 	];
+	const COLUMNS = $derived(mine ? ALL_COLUMNS.filter((c) => c.id !== 'owner') : ALL_COLUMNS);
 	// One row per run, its latest state, 50 to a page.
 	const pages = new FeedPages(pager, 50, (item) => !!item.run);
 	// A page short of rows (merged events) loads more before it shows.
@@ -57,16 +60,11 @@
 				<a
 					class={['truncate hover:text-link', ROW_LINK]}
 					href={runHref(item.org, item.project, run.id)}
-					{@attach hint(
-						[run.job_type, run.group, run.tags.join(', ')].filter(Boolean).join(' · ') || undefined
-					)}
 				>
 					{run.display_name ?? run.id}
 				</a>
-				{#if run.state === 'running' || run.state === 'preempting'}
-					<!-- The state column is hidden on phones: a still dot stands in for it. -->
-					<span class="size-1.5 flex-none rounded-full bg-state-running md:hidden"></span>
-				{/if}
+				<!-- The state column is hidden on phones: its dot stands in for it. -->
+				<span class="flex-none md:hidden"><StateBadge state={run.state} dotOnPhone /></span>
 			</div>
 		{:else if column === 'project'}
 			<span class="block truncate text-muted-foreground">{item.project}</span>

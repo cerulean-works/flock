@@ -153,7 +153,9 @@
 					ROW,
 					'group/row relative border-b border-divider',
 					dense ? 'min-h-9 py-1' : 'min-h-9 py-1.5',
-					on ? 'bg-selection/45' : 'hover:bg-muted data-cursor:bg-muted'
+					on
+						? 'bg-selection/45'
+						: 'hover:bg-muted data-cursor:bg-muted data-cursor:shadow-[inset_2px_0_0_var(--ring)]'
 				]}
 				data-keyrow
 				role="row"

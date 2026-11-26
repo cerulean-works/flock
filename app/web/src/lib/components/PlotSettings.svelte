@@ -43,7 +43,8 @@
 	<!-- Focus starts on the popover, not in the x-axis picker, whose list would cover the rest. -->
 	<Popover.Content
 		bind:ref={content}
-		align="start"
+		align="end"
+		collisionPadding={16}
 		class="w-80 gap-4"
 		onOpenAutoFocus={(e) => {
 			e.preventDefault();

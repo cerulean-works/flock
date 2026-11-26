@@ -141,14 +141,11 @@
 						aria-hidden="true"
 					/>
 				{/if}
-				{#each steps as step (step.href)}
-					<a href={step.href} class={['max-sm:hidden', CRUMB]} {@attach hint(step.label)}
-						>{step.label}</a
-					>
-					<ChevronRightIcon
-						class="size-3.5 flex-none text-faint max-sm:hidden"
-						aria-hidden="true"
-					/>
+				{#each steps as step, i (step.href)}
+					<!-- On a phone only the step before the title stays: where this page is. -->
+					{@const far = i < steps.length - 1 && 'max-sm:hidden'}
+					<a href={step.href} class={[far, CRUMB]} {@attach hint(step.label)}>{step.label}</a>
+					<ChevronRightIcon class={['size-3.5 flex-none text-faint', far]} aria-hidden="true" />
 				{/each}
 				{#if leading}
 					<div class="flex flex-none items-center">{@render leading()}</div>
@@ -186,7 +183,7 @@
 			</div>
 		</div>
 		{#if toolbar}
-			<div class="flex h-9 items-center gap-1 border-b border-divider pr-4 pl-3">
+			<div class="relative flex h-9 items-center gap-1 border-b border-divider pr-4 pl-3">
 				{@render toolbar()}
 			</div>
 		{/if}

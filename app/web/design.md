@@ -17,14 +17,14 @@ Every value lives once, in `src/routes/layout.css`, mapped onto shadcn's semanti
 | Name           | Light     | Dark      | Token                          | Role                                                                       |
 | -------------- | --------- | --------- | ------------------------------ | -------------------------------------------------------------------------- |
 | Base           | `#f7f7f8` | `#0e0f11` | `sidebar`                      | The sidebar: the plane behind the content                                  |
-| Canvas         | `#ffffff` | `#141518` | `background`, `popover`        | The content plane, menus and dialogs. Pure white in light; never tinted    |
-| Panel          | `#f6f7f8` | `#1b1c20` | `card`                         | Chart panels, the log panel, inline notes. Ink at 4% over white            |
-| Panel hover    | `#eeeff1` | `#25272b` | `muted`, `secondary`, `accent` | Hover and current-item fills, quiet controls, meter tracks. Ink at 7%      |
+| Canvas         | `#ffffff` | `#17181b` | `background`, `popover`        | The content plane, menus and dialogs. Pure white in light; never tinted    |
+| Panel          | `#f6f7f8` | `#1e1f23` | `card`                         | Chart panels, the log panel, inline notes. Ink at 4% over white            |
+| Panel hover    | `#eeeff1` | `#27292d` | `muted`, `secondary`, `accent` | Hover and current-item fills, quiet controls, meter tracks. Ink at 7%      |
 | Ink            | `#13233f` | `#eceef1` | `foreground`                   | Titles, body text, essential labels                                        |
 | Slate          | `#4b5d79` | `#a3a8b0` | `muted-foreground`             | Captions, dates, supporting text; still comfortably legible                |
 | Faint          | `#7d8696` | `#6e747e` | `faint`                        | Tertiary text: counts, empty cells, placeholders                           |
 | Quiet rule     | `#d3d6db` | `#33363c` | `border`, `input`              | Control outlines and necessary structural rules                            |
-| Divider        | `#e8e9ec` | `#26282c` | `divider`                      | Row and section dividers, lighter than a rule                              |
+| Divider        | `#e8e9ec` | `#2a2c30` | `divider`                      | Row and section dividers, lighter than a rule                              |
 | Reading blue   | `#145a9a` | `#7ab4f5` | `primary`, `link`              | Links, the one filled action per form, switches, checks, budget meter      |
 | Focus blue     | `#1768af` | `#7ab4f5` | `ring`                         | Visible focus                                                              |
 | Selection wash | `#cce7fb` | `#1e3a5f` | `selection`                    | Selected text, the selected log line                                       |
@@ -36,7 +36,7 @@ Every value lives once, in `src/routes/layout.css`, mapped onto shadcn's semanti
 
 Text on a filled blue or deep surface is plain white (near-black on dark mode's lighter reading blue). Chart series keep their own categorical palette (`workspace.svelte.ts`), with a lifted variant for dark pages; the brand blue is not forced into every series. Terminal output uses the `ansi-*` tokens.
 
-Dark is a neutral near-black in the manner of Linear, not a navy: graphite surfaces with no blue cast, each layer a step lighter (sidebar, content, panel, hover, then menus and dialogs at `#202125`), and the reading blue lightened so links and focus stay the only saturated thing on the page.
+Dark is a neutral near-black in the manner of Linear, not a navy: graphite surfaces with no blue cast, each layer a step lighter (sidebar, content, panel, hover, then menus and dialogs at `#232428`), and the reading blue lightened so links and focus stay the only saturated thing on the page.
 
 ## Tokens — Typography
 

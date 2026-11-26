@@ -626,7 +626,8 @@
 		</Popover.Trigger>
 		<Popover.Content
 			bind:ref={content}
-			align="start"
+			align="end"
+			collisionPadding={16}
 			class={mode === 'pick' ? 'w-72 gap-0 p-0' : 'w-[min(38rem,calc(100vw-2rem))] p-3'}
 			onOpenAutoFocus={(e) => {
 				e.preventDefault();

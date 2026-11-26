@@ -18,10 +18,18 @@
 	}
 
 	let { from, to, total, label, onprev, onnext, pending = false, failed = false }: Props = $props();
+
+	let nav = $state<HTMLElement>();
+
+	/** Turns the page, then shows its top: the list scrolls in the page's main area. */
+	async function turn(go?: () => void | Promise<void>) {
+		await go?.();
+		nav?.closest('main')?.scrollTo({ top: 0 });
+	}
 </script>
 
 <!-- The pager's inline form (Nov 24): under a list that's part of a page, not floating. -->
-<nav class="flex items-center gap-1 text-[13px] tabular-nums" aria-label={label}>
+<nav bind:this={nav} class="flex items-center gap-1 text-[13px] tabular-nums" aria-label={label}>
 	<span>{from}–{to}</span>
 	<!-- A total only once it's known: the feed loads as it pages. -->
 	{#if total !== 'many'}<span class="mr-1 text-muted-foreground">of {total}</span>{:else}<span
@@ -33,7 +41,7 @@
 		disabled={!onprev}
 		aria-label="Newer"
 		{@attach hint('Newer')}
-		onclick={onprev}
+		onclick={() => turn(onprev)}
 	>
 		<ChevronLeftIcon />
 	</Button>
@@ -44,7 +52,7 @@
 		{pending}
 		aria-label="Older"
 		{@attach hint('Older')}
-		onclick={onnext}
+		onclick={() => turn(onnext)}
 	>
 		<ChevronRightIcon />
 	</Button>

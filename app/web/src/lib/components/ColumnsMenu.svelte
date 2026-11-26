@@ -15,6 +15,7 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { toggle } from '#lib/utils.ts';
 	import {
+		columnLabel,
 		type ColumnGroup,
 		type ColumnNode,
 		LOCKED_COLUMNS,
@@ -41,6 +42,12 @@
 
 	const ws = getWorkspace();
 	let search = $state<HTMLInputElement | null>(null);
+
+	/** The run's own columns by the names the table shows (State, Job type). */
+	function leafName(key: string, name: string) {
+		const col = ws.meta.columns.find((c) => c.key === key);
+		return col ? columnLabel(col) : name;
+	}
 
 	let open = $state(false);
 	let query = $state('');
@@ -370,7 +377,7 @@
 						{@attach hint(`Jump to ${n.key}`)}
 						onclick={() => jump(n.key)}
 					>
-						{n.name}
+						{leafName(n.key, n.name)}
 					</button>
 				</div>
 			{/if}

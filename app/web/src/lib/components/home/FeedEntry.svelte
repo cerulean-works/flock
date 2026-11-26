@@ -28,7 +28,7 @@
 
 <!-- One 36px line per run, showing its latest state; a new project is a line of its own. -->
 <li
-	class="relative -mx-2 flex h-9 items-center gap-3 border-b border-divider px-2 text-[13px] hover:bg-muted data-cursor:bg-muted"
+	class="relative -mx-2 flex h-9 items-center gap-3 border-b border-divider px-2 text-[13px] hover:bg-muted data-cursor:bg-muted data-cursor:shadow-[inset_2px_0_0_var(--ring)]"
 	data-keyrow
 >
 	{#if item.kind === 'project_created'}

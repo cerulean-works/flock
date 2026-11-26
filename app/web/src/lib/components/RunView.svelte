@@ -443,7 +443,11 @@
 		{actions}
 	>
 		{#snippet toolbar()}
-			<Tabs.Root value={view} onValueChange={(v) => setView(v as ProjectView)}>
+			<Tabs.Root
+				value={view}
+				onValueChange={(v) => setView(v as ProjectView)}
+				class={selecting ? 'max-sm:hidden' : undefined}
+			>
 				<!-- No counts, so the toggle keeps its width from page to page. -->
 				<Tabs.List aria-label="View">
 					<Tabs.Trigger value="table" {@attach hint('Table  T')}>Table</Tabs.Trigger>
@@ -476,7 +480,10 @@
 			<span class="flex-1"></span>
 
 			{#if selecting}
-				<span class="selection-count mr-1 text-[13px] font-medium tabular-nums" role="status">
+				<span
+					class="selection-count mr-1 text-[13px] font-medium whitespace-nowrap tabular-nums"
+					role="status"
+				>
 					{ws.selectedRows.length} selected
 				</span>
 				<!-- Two eval runs, doc by doc (025 D185): not offered for a run known not to be one. A
@@ -494,22 +501,22 @@
 							`${ws.meta.entity}/${ws.meta.project}/${b}`
 						)}
 					>
-						<GitCompareArrowsIcon /> Compare items
+						<GitCompareArrowsIcon /> <span class="max-sm:sr-only">Compare items</span>
 					</Button>
 				{/if}
 				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('tag')}
-					><TagIcon /> Tags</Button
+					><TagIcon /> <span class="max-sm:sr-only">Tags</span></Button
 				>
 				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('move')}>
-					<FolderInputIcon /> Move
+					<FolderInputIcon /> <span class="max-sm:sr-only">Move</span>
 				</Button>
 				<Button
 					variant="quiet"
 					size="bar"
-					class="text-destructive hover:text-destructive"
+					class="hover:text-destructive"
 					onclick={() => ws.openDialog('delete')}
 				>
-					<Trash2Icon /> Delete
+					<Trash2Icon /> <span class="max-sm:sr-only">Delete</span>
 				</Button>
 				<Button
 					variant="quiet"

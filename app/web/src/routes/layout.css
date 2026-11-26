@@ -89,19 +89,19 @@
 	 */
 	color-scheme: dark;
 
-	--background: #141518; /* Content plane, a step above the sidebar */
+	--background: #17181b; /* Content plane, a step above the sidebar */
 	--foreground: #eceef1;
-	--card: #1b1c20; /* Panel */
+	--card: #1e1f23; /* Panel */
 	--card-foreground: #eceef1;
-	--popover: #202125; /* Menus and dialogs sit a step above the page */
+	--popover: #232428; /* Menus and dialogs sit a step above the page */
 	--popover-foreground: #eceef1;
 	--primary: #7ab4f5;
 	--primary-foreground: #0f1012;
-	--secondary: #25272b; /* Panel hover */
+	--secondary: #27292d; /* Panel hover */
 	--secondary-foreground: #eceef1;
-	--muted: #25272b;
+	--muted: #27292d;
 	--muted-foreground: #a3a8b0;
-	--accent: #25272b;
+	--accent: #27292d;
 	--accent-foreground: #eceef1;
 	--destructive: #f07167;
 	--border: #33363c;
@@ -116,7 +116,7 @@
 	--sidebar-border: #33363c;
 	--sidebar-ring: #7ab4f5;
 	--faint: #6e747e;
-	--divider: #26282c;
+	--divider: #2a2c30;
 	--selection: #1e3a5f;
 	--link: #85bcf7;
 	--deep: #24406f;

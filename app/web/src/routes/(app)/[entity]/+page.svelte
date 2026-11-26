@@ -121,6 +121,7 @@
 				first={() => feed}
 				query={data.query}
 				now={data.now}
+				mine={data.mine}
 				empty={data.project
 					? `No runs in ${data.project}${data.mine ? ' by you' : ''} yet.`
 					: data.mine
