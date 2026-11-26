@@ -390,8 +390,8 @@
 			{#if compact}
 				<Button
 					{...props}
-					variant={hiddenCount ? 'secondary' : 'outline'}
-					size="icon"
+					variant={hiddenCount ? 'quiet-on' : 'quiet'}
+					size="icon-bar"
 					aria-label={hiddenCount ? `Columns, ${hiddenCount} hidden` : 'Columns'}
 					{@attach hint(
 						hiddenCount
@@ -404,7 +404,8 @@
 			{:else}
 				<Button
 					{...props}
-					variant={hiddenCount ? 'secondary' : 'outline'}
+					variant={hiddenCount ? 'quiet-on' : 'quiet'}
+					size="bar"
 					{@attach hint(
 						hiddenCount
 							? `${hiddenCount} of ${total} columns hidden`

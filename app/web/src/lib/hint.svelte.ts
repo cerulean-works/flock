@@ -23,7 +23,8 @@ export const tip = $state<{ text: string; x: number; y: number; owner: Element |
 const CONTROL_DELAY = 600;
 const INFO_DELAY = 250;
 const WARM = 400;
-const CONTROL = 'a, button, input, select, textarea, label, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], [role="checkbox"]';
+const CONTROL =
+	'a, button, input, select, textarea, label, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], [role="checkbox"]';
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 let cooled: ReturnType<typeof setTimeout> | undefined;

@@ -351,7 +351,8 @@
 
 {#if me != null && !noMine}
 	<Button
-		variant={mine ? 'secondary' : 'outline'}
+		variant={mine ? 'quiet-on' : 'quiet'}
+		size="bar"
 		aria-pressed={mine}
 		{@attach hint(mine ? 'Show everyone’s runs' : 'Show only the runs you logged')}
 		onclick={() => show(setOwner(applied, me, !mine))}
@@ -367,8 +368,8 @@
 				{#if compact}
 					<Button
 						{...props}
-						variant={count ? 'secondary' : 'outline'}
-						size="icon"
+						variant={count ? 'quiet-on' : 'quiet'}
+						size="icon-bar"
 						class="relative"
 						aria-label={count ? `Filter runs, ${count} applied` : 'Filter runs'}
 						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
@@ -386,7 +387,8 @@
 				{:else}
 					<Button
 						{...props}
-						variant={count ? 'secondary' : 'outline'}
+						variant={count ? 'quiet-on' : 'quiet'}
+						size="bar"
 						class={count ? 'rounded-r-none' : ''}
 						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
 					>
@@ -448,8 +450,8 @@
 	<!-- Compact, the filters are cleared from their popover (Clear all). -->
 	{#if count && !compact}
 		<Button
-			variant="secondary"
-			size="icon"
+			variant="quiet-on"
+			size="icon-bar"
 			class="rounded-l-none border-l border-background"
 			aria-label="Clear filters"
 			{@attach hint('Clear filters')}

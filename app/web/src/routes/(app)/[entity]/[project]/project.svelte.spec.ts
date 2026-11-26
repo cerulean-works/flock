@@ -110,7 +110,7 @@ describe('a project’s header', () => {
 		for (const access of ['public', 'member'] as const) {
 			open('public', access);
 			const header = screen.getByRole('banner');
-			await expect.element(header.getByRole('heading', { name: 'bert', level: 1 })).toBeVisible();
+			await expect.element(header.getByRole('heading', { name: 'Runs', level: 1 })).toBeVisible();
 			await expect.element(header.getByText('Public', { exact: true })).toBeVisible();
 			document.body.innerHTML = '';
 		}
@@ -118,7 +118,7 @@ describe('a project’s header', () => {
 
 	it('has no badge on a private project', async () => {
 		open('private', 'member');
-		await expect.element(screen.getByRole('heading', { name: 'bert', level: 1 })).toBeVisible();
+		await expect.element(screen.getByRole('heading', { name: 'Runs', level: 1 })).toBeVisible();
 		await expect.element(screen.getByText('Public', { exact: true })).not.toBeInTheDocument();
 	});
 });
@@ -126,7 +126,7 @@ describe('a project’s header', () => {
 describe('a public project made private', () => {
 	it('is read again, which sends an outsider to sign in or to the 404 page', async () => {
 		open('public', 'public');
-		await expect.element(screen.getByRole('heading', { name: 'bert', level: 1 })).toBeVisible();
+		await expect.element(screen.getByRole('heading', { name: 'Runs', level: 1 })).toBeVisible();
 		await vi.waitFor(() => expect(FakeSource.last).not.toBeNull());
 		FakeSource.last!.send('project', { visibility: 'private' });
 		await vi.waitFor(() => expect(refreshAll).toHaveBeenCalled());

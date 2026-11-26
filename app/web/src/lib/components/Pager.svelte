@@ -34,63 +34,63 @@
 	}
 </script>
 
-<!-- Links preload on hover (SvelteKit) on top of the idle prefetch of both neighbours. -->
-<nav
-	class="pager absolute bottom-[var(--pager-bottom,0.875rem)] left-4 z-5 flex h-10 items-center gap-1 rounded-xl bg-popover py-1 pr-1 pl-3.5 text-[13px] tabular-nums shadow-md ring-1 ring-foreground/10"
-	aria-label="Run pages"
->
-	<span>{first + 1}–{first + ws.page.runs.length}</span>
-	<span class="of mr-1 text-muted-foreground">of {ws.page.total}</span>
-	<Button
-		variant="ghost"
-		size="icon-sm"
-		href={href({ page: q.page - 1 })}
-		disabled={q.page <= 1}
-		class="aria-disabled:pointer-events-none aria-disabled:opacity-40"
-		aria-label="Previous page"
-		data-sveltekit-preload-data="hover"
+<!-- Only when there's more than one page. Links preload on hover (SvelteKit) on top of the idle prefetch of both neighbours. -->
+{#if pages > 1}<nav
+		class="pager absolute bottom-[var(--pager-bottom,0.875rem)] left-4 z-5 flex h-10 items-center gap-1 rounded-xl bg-popover py-1 pr-1 pl-3.5 text-[13px] tabular-nums shadow-md ring-1 ring-foreground/10"
+		aria-label="Run pages"
 	>
-		<ChevronLeftIcon />
-	</Button>
-	<Button
-		variant="ghost"
-		size="icon-sm"
-		href={href({ page: q.page + 1 })}
-		disabled={q.page >= pages}
-		class="aria-disabled:pointer-events-none aria-disabled:opacity-40"
-		aria-label="Next page"
-		data-sveltekit-preload-data="hover"
-	>
-		<ChevronRightIcon />
-	</Button>
-	<span class="mx-0.5 h-5 w-px bg-border" aria-hidden="true"></span>
-	<!-- A menu rather than a select: its items act on click, so the click doesn't land on the
+		<span>{first + 1}–{first + ws.page.runs.length}</span>
+		<span class="of mr-1 text-muted-foreground">of {ws.page.total}</span>
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			href={href({ page: q.page - 1 })}
+			disabled={q.page <= 1}
+			class="aria-disabled:pointer-events-none aria-disabled:opacity-40"
+			aria-label="Previous page"
+			data-sveltekit-preload-data="hover"
+		>
+			<ChevronLeftIcon />
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			href={href({ page: q.page + 1 })}
+			disabled={q.page >= pages}
+			class="aria-disabled:pointer-events-none aria-disabled:opacity-40"
+			aria-label="Next page"
+			data-sveltekit-preload-data="hover"
+		>
+			<ChevronRightIcon />
+		</Button>
+		<span class="mx-0.5 h-5 w-px bg-border" aria-hidden="true"></span>
+		<!-- A menu rather than a select: its items act on click, so the click doesn't land on the
 	     run row under the menu once it closes. -->
-	<DropdownMenu.Root bind:open={choosing}>
-		<DropdownMenu.Trigger>
-			{#snippet child({ props })}
-				<Button
-					{...props}
-					variant="ghost"
-					size="sm"
-					class="gap-1 px-2 font-normal"
-					aria-label="Runs per page"
-					{@attach hint('Runs per page')}
-				>
-					{q.size} per page
-					<ChevronDownIcon class="text-muted-foreground" />
-				</Button>
-			{/snippet}
-		</DropdownMenu.Trigger>
-		<DropdownMenu.Content side="top" align="end" class="w-40">
-			<DropdownMenu.Group>
-				<DropdownMenu.Label>Runs per page</DropdownMenu.Label>
-				<DropdownMenu.RadioGroup value={String(q.size)} onValueChange={resize}>
-					{#each PAGE_SIZES as n (n)}
-						<DropdownMenu.RadioItem value={String(n)}>{n}</DropdownMenu.RadioItem>
-					{/each}
-				</DropdownMenu.RadioGroup>
-			</DropdownMenu.Group>
-		</DropdownMenu.Content>
-	</DropdownMenu.Root>
-</nav>
+		<DropdownMenu.Root bind:open={choosing}>
+			<DropdownMenu.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="ghost"
+						size="sm"
+						class="gap-1 px-2 font-normal"
+						aria-label="Runs per page"
+						{@attach hint('Runs per page')}
+					>
+						{q.size} per page
+						<ChevronDownIcon class="text-muted-foreground" />
+					</Button>
+				{/snippet}
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content side="top" align="end" class="w-40">
+				<DropdownMenu.Group>
+					<DropdownMenu.Label>Runs per page</DropdownMenu.Label>
+					<DropdownMenu.RadioGroup value={String(q.size)} onValueChange={resize}>
+						{#each PAGE_SIZES as n (n)}
+							<DropdownMenu.RadioItem value={String(n)}>{n}</DropdownMenu.RadioItem>
+						{/each}
+					</DropdownMenu.RadioGroup>
+				</DropdownMenu.Group>
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
+	</nav>{/if}

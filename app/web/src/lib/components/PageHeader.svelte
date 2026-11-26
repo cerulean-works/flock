@@ -124,7 +124,7 @@
 			]}
 		>
 			<nav aria-label="Breadcrumbs" class="flex min-w-0 items-center gap-1.5">
-				{#if org && orgName}
+				{#if org && orgName && title !== orgName}
 					<a
 						href={entityHref(org)}
 						class={['flex flex-none items-center gap-2 max-sm:hidden', CRUMB]}

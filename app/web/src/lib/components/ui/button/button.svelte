@@ -17,7 +17,13 @@
 					'hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground',
 				destructive:
 					'bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30',
-				link: 'text-primary underline-offset-4 hover:underline'
+				link: 'text-primary underline-offset-4 hover:underline',
+				// The view bar's controls (Linear's): borderless, muted text and icon, a filled chip
+				// only while on.
+				quiet:
+					'font-normal text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground',
+				'quiet-on':
+					'bg-muted font-normal text-foreground hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_6%)] aria-expanded:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_6%)]'
 			},
 			size: {
 				default:
@@ -30,7 +36,10 @@
 					"size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
 				'icon-sm':
 					'size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg',
-				'icon-lg': 'size-9'
+				'icon-lg': 'size-9',
+				// A 28px control in the 36px view bar, 13px text, 16px icons.
+				bar: 'h-7 gap-1.5 rounded-md px-2 text-[13px]',
+				'icon-bar': 'size-7 rounded-md'
 			}
 		},
 		defaultVariants: {

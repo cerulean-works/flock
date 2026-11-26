@@ -27,7 +27,6 @@
 	import type { ResolvedPathname } from '$app/types';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
@@ -431,7 +430,7 @@
 					<Tabs.Trigger value="charts" {@attach hint('Charts (C)')}>Charts</Tabs.Trigger>
 				</Tabs.List>
 			</Tabs.Root>
-			<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
+			<span class="flex-1"></span>
 
 			{#if selecting}
 				<span class="selection-count mr-1 text-[13px] font-medium tabular-nums" role="status">
@@ -442,7 +441,8 @@
 				{#if ws.selectedRows.length === 2 && ws.selectedRows.every( (r) => [undefined, 'eval'].includes(ws.cell(r, 'job_type') as string | undefined) )}
 					{@const [a, b] = ws.selectedRows.map((r) => ws.page.runs[r].id)}
 					<Button
-						variant="outline"
+						variant="quiet"
+						size="bar"
 						data-sveltekit-preload-data="tap"
 						href={compareHref(
 							ws.meta.entity,
@@ -454,17 +454,24 @@
 						<GitCompareArrowsIcon /> Compare items
 					</Button>
 				{/if}
-				<Button variant="outline" onclick={() => ws.openDialog('tag')}><TagIcon /> Tags</Button>
-				<Button variant="outline" onclick={() => ws.openDialog('move')}>
+				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('tag')}
+					><TagIcon /> Tags</Button
+				>
+				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('move')}>
 					<FolderInputIcon /> Move
 				</Button>
-				<Button variant="outline" class="text-destructive" onclick={() => ws.openDialog('delete')}>
+				<Button
+					variant="quiet"
+					size="bar"
+					class="text-destructive hover:text-destructive"
+					onclick={() => ws.openDialog('delete')}
+				>
 					<Trash2Icon /> Delete
 				</Button>
 				<Button
-					variant="ghost"
-					size="icon"
-					{@attach hint('Clear selection (Esc)')}
+					variant="quiet"
+					size="icon-bar"
+					{@attach hint('Clear selection  Esc')}
 					aria-label="Clear selection"
 					onclick={() => ws.selected.clear()}
 				>
@@ -477,7 +484,8 @@
 				{#if tableShown}
 					{#if hasEvals && view === 'table'}
 						<Button
-							variant={evals ? 'secondary' : 'outline'}
+							variant={evals ? 'quiet-on' : 'quiet'}
+							size="bar"
 							aria-pressed={evals}
 							href={hrefWith(
 								evals
@@ -499,11 +507,13 @@
 				{#if chartsShown}
 					<PlotSettings compact={compactTools} />
 					{#if view === 'charts'}
-						<Button variant="outline" onclick={() => ws.newPanel()}><PlusIcon /> Add panel</Button>
+						<Button variant="quiet" size="bar" onclick={() => ws.newPanel()}
+							><PlusIcon /> Add panel</Button
+						>
 					{:else}
 						<Button
-							variant="outline"
-							size="icon"
+							variant="quiet"
+							size="icon-bar"
 							{@attach hint('Add panel')}
 							aria-label="Add panel"
 							onclick={() => ws.newPanel()}
@@ -515,13 +525,15 @@
 			{/if}
 			<!-- Outside the selection's actions too: the second run to compare may be one of these. -->
 			{#if evalsShown && evalsView.others}
-				<Button variant="outline" onclick={() => (evalsView.showOther = !evalsView.showOther)}>
+				<Button
+					variant="quiet"
+					size="bar"
+					onclick={() => (evalsView.showOther = !evalsView.showOther)}
+				>
 					{evalsView.showOther ? 'Hide' : 'Show'}
 					{evalsView.others} on other settings
 				</Button>
 			{/if}
-
-			<span class="flex-1"></span>
 			{#if view === 'charts' && focusLabel}
 				<Badge
 					variant="secondary"

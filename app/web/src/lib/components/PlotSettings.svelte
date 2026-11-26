@@ -26,15 +26,15 @@
 			{#if compact}
 				<Button
 					{...props}
-					variant="outline"
-					size="icon"
+					variant="quiet"
+					size="icon-bar"
 					aria-label="Line plot settings"
 					{@attach hint('Line plot settings')}
 				>
 					<SlidersHorizontalIcon />
 				</Button>
 			{:else}
-				<Button {...props} variant="outline" {@attach hint('Line plot settings')}>
+				<Button {...props} variant="quiet" size="bar" {@attach hint('Line plot settings')}>
 					<SlidersHorizontalIcon /> Settings
 				</Button>
 			{/if}

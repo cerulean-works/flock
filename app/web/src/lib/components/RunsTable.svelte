@@ -1,7 +1,8 @@
 <script lang="ts" module>
-	export const ROW_H = 40;
-	export const HEAD_H = 40;
-	export const BAND_H = 26;
+	export const ROW_H = 36;
+	export const HEAD_H = 36;
+	/** No band over the header: a group shows as a divider, and its name on hover. */
+	export const BAND_H = 0;
 
 	/** What the table shows: every column, the names beside the charts, or both side by side. */
 	export type TableMode = 'table' | 'visualize' | 'charts';
@@ -130,9 +131,23 @@
 			col.group === 'summary' &&
 			columns.slice(0, primaryCount).some((o) => o !== col && o.label === col.label)
 				? col.key
-				: col.label
+				: col.group === 'info'
+					? sentence(col.label)
+					: col.label
 		)
 	);
+	/** The run's own columns read as words (State, ID, Job type); logged keys keep their names. */
+	function sentence(label: string) {
+		const words = label.replace(/_/g, ' ');
+		return words === 'id' ? 'ID' : words.charAt(0).toUpperCase() + words.slice(1);
+	}
+	/** Which group (Suggested, Run, Config, Summary) each shown column is in, for its header. */
+	const groupOf = $derived.by(() => {
+		const out: { label: string; first: boolean }[] = [];
+		for (const g of groups)
+			for (let c = g.start; c < g.end; c++) out[c] = { label: g.label, first: c === g.start };
+		return out;
+	});
 	const groups = $derived.by((): (Omit<ColumnGroupSpan, 'key'> & { key: string })[] => {
 		if (!primaryCount) return columnGroups(columns);
 		const rest = columnGroups(columns.slice(primaryCount)).map((g) => ({
@@ -500,7 +515,6 @@
 	const allSelected = $derived(runs.length > 0 && ws.selectedRows.length === runs.length);
 	const allShown = $derived(ws.visible.length === runs.length);
 	const someShown = $derived(ws.visible.length > 0);
-	const first = $derived((query.page - 1) * ws.meta.pageSize);
 </script>
 
 <!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across;
@@ -523,29 +537,6 @@
 	style:--row-h="{ROW_H}px"
 >
 	<div class="sticky top-0 z-3 bg-background" style:width="{nameW + totalW}px">
-		<div class="relative flex" style:height="{BAND_H}px">
-			<!-- The name column's divider runs up through the band, drawn the same way (its last
-			     pixel); later groups' dividers sit on the same pixel as the header's. -->
-			<div
-				class="sticky left-0 z-2 w-(--name-w) flex-none bg-background shadow-[inset_-1px_0_0_var(--divider)]"
-			></div>
-			{#if wide}
-				{#each groups as g (g.key)}
-					<div
-						class={[
-							'absolute inset-y-0 text-xs text-muted-foreground',
-							g.start > 0 && 'border-l border-divider'
-						]}
-						style:left="{nameW + offsets[g.start] - (g.start > 0 ? 1 : 0)}px"
-						style:width="{offsets[g.end] - offsets[g.start]}px"
-					>
-						<span class="sticky left-[calc(var(--name-w)+12px)] inline-block px-3 pt-1.5">
-							{g.label} <span class="ml-0.5 text-faint">{g.end - g.start}</span>
-						</span>
-					</div>
-				{/each}
-			{/if}
-		</div>
 		<div
 			class="header flex items-stretch border-b text-xs font-medium text-muted-foreground"
 			style:height="{HEAD_H}px"
@@ -580,13 +571,12 @@
 					{#if query.sort === 'name'}<span class="arrow">{query.order === 'asc' ? '↑' : '↓'}</span
 						>{/if}
 				</a>
-				<span class="ml-auto font-normal whitespace-nowrap text-faint">
-					{#if !wide}
+				<!-- How many runs the charts show; the pager alone counts the table's rows. -->
+				{#if !wide}
+					<span class="ml-auto font-normal whitespace-nowrap text-faint">
 						{ws.visible.length} of {runs.length} plotted
-					{:else}
-						{first + 1}–{first + runs.length} of {ws.page.total}
-					{/if}
-				</span>
+					</span>
+				{/if}
 			</div>
 			<div class="flex-none" style:width="{offsets[colStart]}px"></div>
 			{#each visibleCols as c (c)}
@@ -597,6 +587,7 @@
 				<div
 					class={[
 						'hcell group/h relative flex flex-none items-center px-3 transition-colors duration-500 select-none',
+						wide && c > 0 && groupOf[c]?.first && 'shadow-[inset_1px_0_0_var(--divider)]',
 						drag?.c === c ? 'opacity-40' : !drag && 'hover:bg-muted',
 						jumped === col.key && 'bg-selection/60'
 					]}
@@ -614,7 +605,9 @@
 					<a
 						class={['flex size-full min-w-0 items-center gap-1', isNumeric(col) && 'justify-end']}
 						href={sortHref(col.key)}
-						{@attach hint(grabbable ? `${col.key} (click to sort, drag to move)` : col.key)}
+						{@attach hint(
+							`${groupOf[c] ? `${groupOf[c].label} · ` : ''}${col.key}${grabbable ? ' (click to sort, drag to move)' : ''}`
+						)}
 						draggable="false"
 						data-sveltekit-preload-data="tap"
 						onpointerenter={() => hoverSort(col.key)}
@@ -650,7 +643,7 @@
 			<!-- The header, following the pointer. -->
 			<div
 				class={[
-					'pointer-events-none absolute z-1 flex items-center gap-1 rounded-md bg-popover px-3 text-xs font-medium text-foreground shadow-lg ring-1 ring-foreground/15',
+					'pointer-events-none absolute z-4 flex items-center gap-1 rounded-md bg-popover px-3 text-xs font-medium text-foreground shadow-lg ring-1 ring-foreground/15',
 					isNumeric(col) && 'justify-end'
 				]}
 				style:top="{BAND_H + 4}px"
@@ -735,17 +728,6 @@
 						{ws.nameOf(r)}
 					</a>
 					{#if pinned}<Badge variant="secondary" class="text-muted-foreground">Pinned</Badge>{/if}
-					{#if ws.isLive(r)}
-						<Badge
-							variant="secondary"
-							class="live bg-state-running/10 text-state-running"
-							{@attach hint('Running')}
-						>
-							<span class="size-1.5 animate-live rounded-full bg-current motion-reduce:animate-none"
-							></span>
-							Live
-						</Badge>
-					{/if}
 					{#if !readonly}<RunMenu row={r} />{/if}
 				</div>
 				<div class="flex-none" style:width="{offsets[colStart]}px"></div>
@@ -765,7 +747,7 @@
 							{@const id = userAt(c, r)}
 							{@const person = id == null ? undefined : ws.people.get(id)}
 							{#if person}
-								<Avatar name={person.name} src={person.avatar_url} class="mr-2 size-5 text-[9px]" />
+								<Avatar name={person.name} src={person.avatar_url} class="mr-2 size-4 text-[8px]" />
 								<span class="truncate" {@attach hint(person.email)}>{person.name}</span>
 							{:else if id == null}
 								<span class="text-faint">–</span>

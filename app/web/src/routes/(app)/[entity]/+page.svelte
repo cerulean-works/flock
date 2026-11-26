@@ -60,7 +60,7 @@
 {/snippet}
 
 <ListPage
-	title="Runs"
+	title={data.outside ? data.org.display_name : 'Runs'}
 	live={running}
 	heading={fresh || data.outside ? undefined : 'Latest runs'}
 	controls={fresh || data.outside ? undefined : feedControls}

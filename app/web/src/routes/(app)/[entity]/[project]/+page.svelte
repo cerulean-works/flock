@@ -88,7 +88,7 @@
 
 <RunView
 	title="Runs"
-	live={data.shell.projects.find((p) => p.name === ws.meta.project)?.active_run_count ?? 0}
+	live={data.shell.projects?.find((p) => p.name === ws.meta.project)?.active_run_count ?? 0}
 	subtitleTitle={description ?? undefined}
 	badges={visibility === 'public' ? publicBadge : undefined}
 	initialView={lastView(data.shell.projectView)}
