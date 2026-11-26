@@ -12,10 +12,12 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from tests.training._reference import (
     check_gqa_parity,
     check_swiglu_parity,
+    llama32_training_parity,
     olmo2_training_parity,
 )
 
 if TYPE_CHECKING:
+    from flock.training.core.models.llama32 import Llama32Config
     from flock.training.core.models.olmo2 import Olmo2Config
 
 
@@ -47,6 +49,22 @@ def test_cuda_padded_olmo2_default_sdpa_training_parity(
     olmo2_training_parity(
         replace(config, num_key_value_heads=kv_heads), padding, cuda_device, dtype
     )
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
+@pytest.mark.parametrize("padding", ["none", "left", "right"])
+def test_cuda_llama32_huggingface_training_parity(
+    llama32_config: Llama32Config,
+    cuda_device: torch.device,
+    dtype: torch.dtype,
+    kv_heads: int,
+    padding: str,
+) -> None:
+    with sdpa_kernel(SDPBackend.MATH):
+        llama32_training_parity(
+            replace(llama32_config, num_key_value_heads=kv_heads), padding, cuda_device, dtype
+        )
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])

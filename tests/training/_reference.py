@@ -3,12 +3,15 @@
 import copy
 
 import torch
+from transformers import LlamaConfig as HFLlamaConfig
+from transformers import LlamaForCausalLM, Olmo2ForCausalLM, PretrainedConfig, PreTrainedModel
 from transformers import Olmo2Config as HFConfig
-from transformers import Olmo2ForCausalLM
 from transformers.models.olmo2.modeling_olmo2 import Olmo2MLP
 
 from flock.training.core.attention import GroupedAttentionWithRoPE
 from flock.training.core.distributed import DistributedRuntime
+from flock.training.core.models import BaseModel
+from flock.training.core.models.llama32 import Llama32, Llama32Config
 from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
 from flock.training.core.nn import SwiGLU
 from flock.training.core.trainer import Trainer
@@ -32,6 +35,41 @@ def hf_config(config: Olmo2Config) -> HFConfig:
         attention_dropout=0.0,
         tie_word_embeddings=False,
         pad_token_id=None,
+        eos_token_id=None,
+        use_cache=False,
+    )
+
+
+def llama32_hf_config(config: Llama32Config) -> HFLlamaConfig:
+    # Map architecture fields explicitly: init_seed/hf_repo belong only to Flock.
+    rope = {"rope_type": "default", "rope_theta": config.rope_theta}
+    if config.rope_scaling_factor is not None:
+        rope = {
+            **rope,
+            "rope_type": "llama3",
+            "factor": config.rope_scaling_factor,
+            "low_freq_factor": config.rope_low_freq_factor,
+            "high_freq_factor": config.rope_high_freq_factor,
+            "original_max_position_embeddings": config.rope_original_max_position_embeddings,
+        }
+    return HFLlamaConfig(
+        vocab_size=config.vocab_size,
+        hidden_size=config.hidden_size,
+        intermediate_size=config.intermediate_size,
+        num_hidden_layers=config.num_hidden_layers,
+        num_attention_heads=config.num_attention_heads,
+        num_key_value_heads=config.num_key_value_heads,
+        max_position_embeddings=config.max_position_embeddings,
+        rope_parameters=rope,
+        rms_norm_eps=config.rms_norm_eps,
+        initializer_range=config.initializer_range,
+        hidden_act="silu",
+        attention_bias=False,
+        mlp_bias=False,
+        attention_dropout=0.0,
+        tie_word_embeddings=config.tie_word_embeddings,
+        pad_token_id=None,
+        bos_token_id=None,
         eos_token_id=None,
         use_cache=False,
     )
@@ -99,15 +137,34 @@ def assert_parity(
 def olmo2_training_parity(
     config: Olmo2Config, padding: str, device: torch.device, dtype: torch.dtype
 ) -> None:
-    model = Olmo2(config).to(device=device, dtype=dtype)
-    reference_config = hf_config(config)
+    training_parity(Olmo2(config), Olmo2ForCausalLM, hf_config(config), padding, device, dtype)
+
+
+def llama32_training_parity(
+    config: Llama32Config, padding: str, device: torch.device, dtype: torch.dtype
+) -> None:
+    training_parity(
+        Llama32(config), LlamaForCausalLM, llama32_hf_config(config), padding, device, dtype
+    )
+
+
+def training_parity(
+    model: BaseModel,
+    reference_class: type[PreTrainedModel],
+    reference_config: PretrainedConfig,
+    padding: str,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    """Train one step of `model` and the Hugging Face reference on the same weights and batch."""
+    model.to(device=device, dtype=dtype)
     reference_config._attn_implementation = "eager"
-    reference = Olmo2ForCausalLM(reference_config)
+    reference = reference_class(reference_config)
     # Transformers' functools.wraps decoration exposes an extra self to ty.
     reference.to(device=device, dtype=dtype)  # ty: ignore[missing-argument]
     reference.load_state_dict(model.state_dict(), strict=True)
     # FP32 run on the same rounded weights, for FP16 and BF16 comparisons.
-    fp32_reference = Olmo2ForCausalLM(reference_config)
+    fp32_reference = reference_class(reference_config)
     fp32_reference.to(device=device)  # ty: ignore[missing-argument]
     fp32_reference.load_state_dict(model.state_dict(), strict=True)
     model.train()

@@ -2,6 +2,7 @@
 
 uv run modal run tests/modal_gpu.py
 uv run modal run tests/modal_gpu.py --pytest-args "-q tests/training -m gpu -k swiglu" --workers 4
+HF_TOKEN=... uv run modal run tests/modal_gpu.py --pytest-args "-q tests/training -m e2e" --gpu H200
 """
 
 from __future__ import annotations
@@ -124,7 +125,12 @@ def run_pytest(pytest_args: str, workers: int) -> int:
 
 
 @app.local_entrypoint()
-def main(pytest_args: str = "-q tests/training -m gpu", workers: int = 8) -> None:
-    returncode = run_pytest.remote(pytest_args, workers)
+def main(
+    pytest_args: str = "-q tests/training -m gpu", workers: int = 8, gpu: str = "H100"
+) -> None:
+    # Tests that download gated checkpoints need the local Hugging Face token.
+    token = os.environ.get("HF_TOKEN")
+    secrets = [modal.Secret.from_dict({"HF_TOKEN": token})] if token else []
+    returncode = run_pytest.with_options(gpu=gpu, secrets=secrets).remote(pytest_args, workers)
     if returncode:
         raise SystemExit(returncode)

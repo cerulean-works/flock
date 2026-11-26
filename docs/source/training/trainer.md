@@ -221,8 +221,8 @@ Each chunk in a row is its own document:
 - **Padding** fills the end of a row after its last document and has no targets. The
   collator pads each batch to its longest row.
 
-Packed batches need a model that keeps attention inside documents. `Olmo2` supports
-them with `sdpa`, `flash_attention_3` and `flash_attention_4`. FlashAttention passes the
+Packed batches need a model that keeps attention inside documents. `Olmo2` and `Llama32`
+support them with `sdpa`, `flash_attention_3` and `flash_attention_4`. FlashAttention passes the
 boundaries to its variable-length kernel and skips attention across documents. SDPA
 builds a dense mask with one block per document. `HFCompatibleModel` refuses packed
 batches, because `transformers` would see only the padding mask and attend across
