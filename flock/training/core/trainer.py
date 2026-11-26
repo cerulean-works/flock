@@ -54,7 +54,8 @@ class TrainerConfig(PydanticBaseModel):
             capped run; a schedule whose update counts exceed it is rejected when the
             trainer is built.
         optimizer_config (`OptimizerConfig`):
-            Optimizer settings. Only `AdamWConfig` is currently implemented.
+            Optimizer settings: `AdamWConfig`, or `MuonConfig` for Muon with a companion.
+            The optimizer factory receives the model, so embeddings can be grouped apart.
         lr_scheduler_config (`LRSchedulerConfig`): Learning-rate timeframes and interpolation.
         dataloader_prefetch_factor (`int`, *optional*, defaults to `4`):
             Positive batches prefetched per worker. Must be `None` with zero workers.
@@ -540,7 +541,6 @@ class Trainer:
             before constructing the trainer.
 
     Raises:
-        `NotImplementedError`: If the optimizer configuration selects Muon.
         `ValueError`: If the learning-rate schedule does not fit the planned updates.
 
     There is no gradient accumulation or automatic dtype
@@ -613,9 +613,8 @@ class Trainer:
             # The schedule and the checkpoint check plan over the capped run.
             self.total_steps = min(self.total_steps, config.max_steps)
         optimizer_factory = OptimizerInterface.get_interface(type(config.optimizer_config))
-        self.optimizer: Optimizer = optimizer_factory(
-            config.optimizer_config, self.model.parameters()
-        )
+        # The factory receives the model, so it can group parameters by role.
+        self.optimizer: Optimizer = optimizer_factory(config.optimizer_config, self.model)
         self.lr_scheduler = StepLRScheduler(
             self.optimizer, config.lr_scheduler_config, self.total_steps
         )

@@ -117,11 +117,14 @@ optimizer_config = MuonConfig(
 )
 ```
 
-Muon updates every trainable 2D parameter, including embedding and output
-matrices. The companion updates the trainable parameters of all other
-dimensions, such as biases and normalization weights. The model must have
-at least one trainable parameter in each category. Each optimizer has its
-own base learning rate, and the same schedule multiplier applies to both.
+Muon updates every trainable 2D parameter except the embeddings, including an
+untied output matrix. The companion updates the embeddings, in a group without
+weight decay, and the trainable parameters of all other dimensions, such as
+biases and normalization weights, with its own weight decay. A weight tied
+between the embedding and the output projection is an embedding weight. The
+model must have at least one trainable parameter in each category. Each
+optimizer has its own base learning rate, and the same schedule multiplier
+applies to both.
 
 With the recipe's `model`, `tokenizer` and `dataset` already constructed, run:
 

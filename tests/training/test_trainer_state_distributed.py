@@ -203,7 +203,9 @@ def _check_distributed_step_budget(
                         input_column="text",
                         batch_size=2,
                         max_steps=max_steps,
-                        optimizer_config=AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
+                        optimizer_config=AdamWConfig(
+                            lr=0.01, betas=(0.8, 0.9), weight_decay=0.01, no_decay_embeddings=False
+                        ),
                         lr_scheduler_config=LRSchedulerConfig(
                             schedule=[
                                 LRScheduleSegment(
@@ -331,7 +333,9 @@ def _check_distributed_resume(
                         run_name="rank-resume",
                         input_column="text",
                         batch_size=2,
-                        optimizer_config=AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
+                        optimizer_config=AdamWConfig(
+                            lr=0.01, betas=(0.8, 0.9), weight_decay=0.01, no_decay_embeddings=False
+                        ),
                         lr_scheduler_config=LRSchedulerConfig(
                             schedule=[
                                 LRScheduleSegment(start=0, end=1.0, start_ratio=1.0, end_ratio=0.1)

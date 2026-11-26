@@ -108,8 +108,8 @@ def build_trainer(
         input_column="text",
         batch_size=batch_size,
         max_steps=max_steps,
-        # OLMo 2 states no betas; these are the scaffold's. Weight decay stays PyTorch's 0.01 on
-        # every parameter, since AdamWConfig has no field for OLMo 2's 0.1 without embeddings.
+        # OLMo 2 states no betas; these are the scaffold's. AdamWConfig's defaults give OLMo 2's
+        # weight decay: 0.1 on every parameter except the embeddings (arXiv 2501.00656, sec. 3.2).
         optimizer_config=AdamWConfig(lr=proxy.peak_lr, betas=(0.95, 0.99)),
         # OLMo 2 decays "to reach 10% of the peak learning rate after a specified max tokens"
         # (p.6), and the ladder fits that horizon to each run's data (arXiv 2412.04403, sec. 2.1).

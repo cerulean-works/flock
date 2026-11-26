@@ -72,19 +72,37 @@ Optimizer configs and factories live in `training.core.optimizers.adamw` and
 `training.core.optimizers.registry`, `OptimizerInterface` maps config types to
 optimizer factories. `register(config_type, factory)` registers or replaces a
 factory. `get_interface(config_type)` returns it. Each factory accepts the config
-and model parameters and returns an instance of a `torch.optim.Optimizer` subclass.
-After moving the model to its device, the trainer calls
+and either the model or its parameters (or parameter groups) and returns an
+instance of a `torch.optim.Optimizer` subclass. After moving the model to its
+device, the trainer calls
 `OptimizerInterface.get_interface(type(config.optimizer_config))` and constructs
-the optimizer with the returned factory. Registration affects future optimizer construction.
+the optimizer with the returned factory, passing the model so the factory can
+group parameters by role. Registration affects future optimizer construction.
 `OptimizerConfig` is the type alias `AdamWConfig | MuonConfig`.
 The trainer runs backpropagation and gradient clipping before `optimizer.step()`.
 
-`MuonConfig` routes trainable 2D parameters to Muon and the other trainable
-parameters to the companion. The model needs parameters in both categories.
-`companion_optimizer_config` takes an `AdamWConfig`, whose registered factory
-returns AdamW by default. A replacement companion must support `step()` using
+`AdamWConfig` follows OLMo 2 and OLMo-core: decoupled weight decay `0.1` on every
+parameter, normalization weights included, except the embedding weights, which
+form a separate `adamw_embeddings` group without weight decay. Embedding weights
+are the parameters of `nn.Embedding` modules; an output projection tied to them is
+the same parameter and appears once. Set `no_decay_embeddings=False` to decay
+them too. Given bare parameters instead of the model, the factory makes one group.
+
+`MuonConfig` routes trainable 2D parameters other than embedding weights to Muon,
+and the rest, including the embeddings, to the companion. The model needs
+parameters in both categories. `companion_optimizer_config` takes an
+`AdamWConfig`, whose registered factory returns AdamW by default; its
+`no_decay_embeddings` also applies to the companion's embedding group.
+`adjust_lr_fn` selects PyTorch Muon's per-shape rate adjustment, such as
+`"match_rms_adamw"`. A replacement companion must support `step()` using
 the gradients the trainer has already computed. See the [run configuration
 example](trainer#configure-a-run).
+
+The learning-rate schedule scales every parameter group of both optimizers, and
+logs each group's rate as `train/lr_<group>`, such as `train/lr_muon`,
+`train/lr_adamw` and `train/lr_adamw_embeddings`. Checkpoints hold both
+optimizers' state. With `torch_compile`, Muon reads its rate on the host once per
+update, which costs a device synchronization.
 
 [[autodoc]] training.AdamWConfig
 

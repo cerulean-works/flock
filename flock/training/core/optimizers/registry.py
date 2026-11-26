@@ -1,9 +1,9 @@
-from collections.abc import Iterable
 from functools import partial
 from typing import Any, ClassVar, Protocol
 
-from torch import Tensor
+from torch import nn
 from torch.optim import Optimizer
+from torch.optim.optimizer import ParamsT
 
 from .adamw import AdamWConfig, adamw
 from .muon import MuonConfig, muon
@@ -12,9 +12,14 @@ type OptimizerConfig = AdamWConfig | MuonConfig
 
 
 class OptimizerFactory[ConfigT: OptimizerConfig](Protocol):
-    """Construct an optimizer from its config and parameters on their final device."""
+    """Construct an optimizer from its config and a model or parameters on their final device.
 
-    def __call__(self, config: ConfigT, params: Iterable[Tensor]) -> Optimizer: ...
+    The trainer passes the model, so a factory can group parameters by role, such as
+    excluding embeddings from weight decay. Factories also accept parameters or
+    parameter groups, as `torch.optim.Optimizer` does.
+    """
+
+    def __call__(self, config: ConfigT, params: nn.Module | ParamsT) -> Optimizer: ...
 
 
 class OptimizerInterface:

@@ -34,7 +34,7 @@ from flock.training.core.distributed import DistributedRuntime
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment, StepLRScheduler
 from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
-from flock.training.core.optimizers import AdamWConfig, OptimizerInterface
+from flock.training.core.optimizers import AdamWConfig, MuonConfig, OptimizerInterface
 from flock.training.core.trainer import Trainer, TrainerCheckpoint, TrainerConfig, TrainerState
 
 if TYPE_CHECKING:
@@ -53,6 +53,11 @@ if TYPE_CHECKING:
     from flock.hub.models.upload import PendingUpload
     from flock.training.core.data_utils import Batch
     from flock.training.core.models.olmo2 import Olmo2Config
+
+
+# These tests check trainer mechanics against `torch.optim.AdamW(lr, betas)`: one group with
+# PyTorch's default weight decay. test_optimizers covers the embedding group.
+ONE_GROUP = {"weight_decay": 0.01, "no_decay_embeddings": False}
 
 
 @dataclass
@@ -114,7 +119,7 @@ def trainer_factory(
                     "run_name": "test-run",
                     "input_column": "text",
                     "batch_size": 2,
-                    "optimizer_config": AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
+                    "optimizer_config": AdamWConfig(lr=0.01, betas=(0.8, 0.9), **ONE_GROUP),
                     "lr_scheduler_config": LRSchedulerConfig(
                         schedule=[
                             LRScheduleSegment(
@@ -743,9 +748,15 @@ def test_compiled_training_matches_eager_and_shares_checkpoints(
     # The loss and the clipped update compile on first call, then every step reuses them.
     assert compile_calls == [{"mode": "default"}] * 3
     torch.testing.assert_close(compiled.model.state_dict(), eager.model.state_dict())
-    torch.testing.assert_close(
-        compiled.state_dict()["optimizer_state_dict"], eager.state_dict()["optimizer_state_dict"]
-    )
+    compiled_optimizer = compiled.state_dict()["optimizer_state_dict"]
+    eager_optimizer = eager.state_dict()["optimizer_state_dict"]
+    torch.testing.assert_close(compiled_optimizer["state"], eager_optimizer["state"])
+    for compiled_group, eager_group in zip(
+        compiled_optimizer["param_groups"], eager_optimizer["param_groups"], strict=True
+    ):
+        # Compiled runs hold the rate in an FP32 tensor.
+        assert compiled_group.pop("lr") == pytest.approx(eager_group.pop("lr"))
+        assert compiled_group == eager_group
     assert compiled.state.step.item() == compiled.lr_scheduler.completed_steps == 3
     assert any(key.startswith("eval/") for metrics in run.metrics for key in metrics)
     assert compiled.model.training
@@ -758,9 +769,16 @@ def test_compiled_training_matches_eager_and_shares_checkpoints(
     assert_nested_equal(restored.model.state_dict(), compiled.model.state_dict())
     saved, resumed = compiled.state_dict(), restored.state_dict()
     # Compiled runs hold learning rates in FP32 tensors; resuming recomputes them exactly.
-    torch.testing.assert_close(
-        resumed.pop("optimizer_state_dict"), saved.pop("optimizer_state_dict")
+    resumed_optimizer, saved_optimizer = (
+        resumed.pop("optimizer_state_dict"),
+        saved.pop("optimizer_state_dict"),
     )
+    torch.testing.assert_close(resumed_optimizer["state"], saved_optimizer["state"])
+    for resumed_group, saved_group in zip(
+        resumed_optimizer["param_groups"], saved_optimizer["param_groups"], strict=True
+    ):
+        assert resumed_group.pop("lr") == pytest.approx(saved_group.pop("lr"))
+        assert resumed_group == saved_group
     assert_nested_equal(resumed, saved)
     assert isinstance(restored.optimizer.param_groups[0]["lr"], float)
 
@@ -779,6 +797,80 @@ def test_compiled_update_does_not_recompile_as_the_learning_rate_changes(
             trainer.lr_scheduler.step()
             learning_rates.append(float(trainer.optimizer.param_groups[0]["lr"]))
     assert len(set(learning_rates)) == 3
+
+
+MUON = MuonConfig(
+    lr=0.02,
+    momentum=0.95,
+    adjust_lr_fn="match_rms_adamw",
+    companion_optimizer_config=AdamWConfig(lr=0.01, betas=(0.9, 0.99)),
+)
+
+
+def test_compiled_muon_update_does_not_recompile_as_the_learning_rate_changes(
+    trainer_factory: TrainerFactory, compile_calls: list[dict[str, Any]]
+) -> None:
+    trainer, _, _ = trainer_factory(
+        # Ten updates, so the cosine schedule changes the rate at every update tested.
+        dataset=[{"text": "a b"}] * 10,
+        batch_size=1,
+        num_workers=0,
+        prefetch_factor=None,
+        torch_compile=True,
+        optimizer_config=MUON,
+    )
+    rates = []
+
+    def update() -> None:
+        for parameter in trainer.model.parameters():
+            parameter.grad = torch.ones_like(parameter)
+        trainer._clip_and_step()
+        trainer.lr_scheduler.step()
+        rates.append(tuple(trainer._learning_rates().values()))
+
+    # Muon reads its rate as a float, a graph break, so the first update compiles one frame
+    # per optimizer: the combined one, Muon and the companion. The second update sees the
+    # optimizer state the first created. Later rates reuse those graphs.
+    update()
+    update()
+    with torch._dynamo.config.patch(error_on_recompile=True):
+        for _ in range(3):
+            update()
+    assert list(trainer._learning_rates()) == [
+        "train/lr_muon",
+        "train/lr_adamw",
+        "train/lr_adamw_embeddings",
+    ]
+    assert len(set(rates)) == 5
+
+
+def test_muon_training_resumes_like_uninterrupted_training(
+    trainer_factory: TrainerFactory, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    options: dict[str, Any] = {
+        "num_workers": 0,
+        "prefetch_factor": None,
+        "optimizer_config": MUON,
+        "save_steps": 1,
+    }
+    reference, reference_run, _ = trainer_factory(output_dir=str(tmp_path / "reference"), **options)
+    reference.train()
+    assert {"train/lr_muon", "train/lr_adamw_embeddings"} <= set(reference_run.metrics[0])
+
+    interrupted, _, _ = trainer_factory(output_dir=str(tmp_path / "resumed"), **options)
+    save = interrupted.checkpoint_manager.save_model
+
+    def save_and_interrupt(*args: Any, **kwargs: Any) -> None:
+        save(*args, **kwargs)
+        raise KeyboardInterrupt("after the first checkpoint")
+
+    monkeypatch.setattr(interrupted.checkpoint_manager, "save_model", save_and_interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        interrupted.train()
+    resumed, _, _ = trainer_factory(output_dir=str(tmp_path / "resumed"), **options)
+    resumed.train(resume_from_checkpoint=True)
+    assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
+    assert_nested_equal(resumed.state_dict(), reference.state_dict())
 
 
 def test_compiled_backward_runs_outside_autocast_like_eager(
@@ -1217,7 +1309,7 @@ def test_checkpoint_preserves_tied_parameters_and_optimizer_references(
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, save_steps=3)
     cast(Olmo2, trainer.model).lm_head.weight = cast(Olmo2, trainer.model).model.embed_tokens.weight
     trainer.optimizer = OptimizerInterface.get_interface(AdamWConfig)(
-        AdamWConfig(lr=0.01, betas=(0.8, 0.9)), trainer.model.parameters()
+        AdamWConfig(lr=0.01, betas=(0.8, 0.9), **ONE_GROUP), trainer.model.parameters()
     )
     trainer.lr_scheduler = StepLRScheduler(
         trainer.optimizer,
@@ -1425,8 +1517,8 @@ def test_loading_restores_progress_with_matching_settings_and_different_current_
             },
             "Scheduler config",
         ),
-        ({"optimizer_config": AdamWConfig(lr=0.3, betas=(0.8, 0.9))}, "base_lrs"),
-        ({"optimizer_config": AdamWConfig(lr=0.01, betas=(0.7, 0.99))}, "optimizer"),
+        ({"optimizer_config": AdamWConfig(lr=0.3, betas=(0.8, 0.9), **ONE_GROUP)}, "base_lrs"),
+        ({"optimizer_config": AdamWConfig(lr=0.01, betas=(0.7, 0.99), **ONE_GROUP)}, "optimizer"),
     ],
     ids=["schedule-type", "warmup", "minimum-lr", "base-lr", "betas"],
 )
