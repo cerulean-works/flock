@@ -189,13 +189,27 @@
 		const age = layout.stacked ? 31536000 : 0;
 		document.cookie = `${STACKED_COOKIE}=1; path=/; max-age=${age}; samesite=lax`;
 	}
-	/** Whether Visualize was already on when its tab was pressed: only then does a click flip. */
+	/**
+	 * Whether Visualize was already on when its tab was pressed, so a click flips only then; and
+	 * whether a key flipped it, so the click a key may also send doesn't flip it back.
+	 */
 	let visualizeOn = false;
+	let flippedByKey = false;
+	function onvisualizeclick(e: MouseEvent) {
+		// A click with no press before it (`detail` 0: a key or assistive technology).
+		const on = e.detail === 0 ? !flippedByKey && view === 'visualize' : visualizeOn;
+		if (on) flipStacked();
+		visualizeOn = flippedByKey = false;
+	}
 	/** The workspace's height; stacked, the table leaves the charts at least `CHARTS_MIN`. */
 	let mainH = $state(0);
 	const CHARTS_MIN = 200;
-	const tableHMax = $derived(Math.max(TABLE_H.min, mainH - CHARTS_MIN));
-	const tableH = $derived(Math.min(layout.tableH ?? savedTableH, mainH ? tableHMax : Infinity));
+	const tableHMax = $derived(
+		Math.min(TABLE_H.max, Math.max(TABLE_H.min, mainH ? mainH - CHARTS_MIN : TABLE_H.max))
+	);
+	const tableH = $derived(layout.tableH ?? savedTableH);
+	/** The same limit in CSS, so the first paint, before the height is known, keeps it too. */
+	const tableHCss = $derived(`min(${tableH}px, max(${TABLE_H.min}px, 100% - ${CHARTS_MIN}px))`);
 
 	// URL is the source of truth for view and full-screen panel, so both survive reloads and
 	// are server-rendered. Neither is read by a load function, so changing them never fetches.
@@ -367,7 +381,7 @@
 <Page
 	width="full"
 	data-sveltekit-reset={false}
-	style="--name-w: {nameW}px; --table-w: {shownTableW}px; --table-h: {tableH}px; --pane-left: {paneLeft}px"
+	style="--name-w: {nameW}px; --table-w: {shownTableW}px; --table-h: {tableHCss}; --pane-left: {paneLeft}px"
 >
 	<PageHeader {title} {subtitleTitle} {leading} {badges} {subtitle} {actions}>
 		{#snippet toolbar()}
@@ -380,12 +394,13 @@
 					<Tabs.Trigger
 						value="visualize"
 						onpointerdown={() => (visualizeOn = view === 'visualize')}
-						onclick={() => {
-							if (visualizeOn) flipStacked();
-							visualizeOn = false;
+						onclick={onvisualizeclick}
+						onkeydown={(e) => {
+							if ((e.key === 'Enter' || e.key === ' ') && view === 'visualize') {
+								flipStacked();
+								flippedByKey = true;
+							}
 						}}
-						onkeydown={(e) =>
-							(e.key === 'Enter' || e.key === ' ') && view === 'visualize' && flipStacked()}
 						{@attach hint(
 							stacked
 								? 'Table above the charts (V). Click again for side by side'
@@ -509,7 +524,7 @@
 	<main
 		class="relative min-h-0 flex-1"
 		bind:clientHeight={mainH}
-		style:--pager-bottom={below ? `calc(100% - ${tableH}px + 0.875rem)` : null}
+		style:--pager-bottom={below ? 'calc(100% - var(--table-h) + 0.875rem)' : null}
 	>
 		{#if evalsShown}
 			<EvalsTable bind:this={evalsTable} view={evalsView} />
@@ -546,7 +561,7 @@
 				<div
 					class={['pointer-events-none absolute top-0 left-0 z-5', !below && 'bottom-0']}
 					style:width="{nameW}px"
-					style:height={below ? `${tableH}px` : null}
+					style:height={below ? 'var(--table-h)' : null}
 				>
 					<ResizeHandle
 						class="pointer-events-auto"
@@ -560,11 +575,11 @@
 			{/if}
 			{#if below}
 				<!-- Between the table and the charts below it. -->
-				<div class="pointer-events-none absolute inset-x-0 top-0 z-5" style:height="{tableH}px">
+				<div class="pointer-events-none absolute inset-x-0 top-0 z-5 h-(--table-h)">
 					<ResizeHandle
 						class="pointer-events-auto"
 						axis="y"
-						value={tableH}
+						value={Math.min(tableH, tableHMax)}
 						bounds={{ ...TABLE_H, max: tableHMax }}
 						label="Resize the table above the charts"
 						onresize={(px) => (layout.tableH = px)}
