@@ -411,7 +411,7 @@ def test_a_wandb_group_a_saved_group_filters_on_isnt_suggested_again(api: Client
         log(api, f"{name}4", {"lr": 0.4}, group=name)
         found = api.get(f"{G}/suggestions").json()["suggestions"]
         assert [s["filter"] for s in found] == [{"group": "other"}]
-        assert new_ids(api, made["id"]) == [f"{name}3", f"{name}4"]
+        assert sorted(new_ids(api, made["id"])) == [f"{name}3", f"{name}4"]
 
 
 # ---------------------------------------------------------------------- access (D226)

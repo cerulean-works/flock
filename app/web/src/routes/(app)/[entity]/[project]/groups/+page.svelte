@@ -262,14 +262,6 @@
 	);
 	const spread = $derived(dots.some((d) => d.std != null && d.std > 0));
 
-	/**
-	 * The best-by metric was logged as a summary only (an eval run's suite score): no history
-	 * panel, and the best values take the width.
-	 */
-	const summaryOnly = $derived(
-		!!history && !history.meta.metrics.some((m) => m.key === chartKey(cmp.best_key ?? ''))
-	);
-
 	/** The run hovered in the table or a chart: its row and lines come forward. */
 	let hovered = $state<string | null>(null);
 
@@ -279,6 +271,13 @@
 	 */
 	let history = $state.raw<WorkspaceData | null>(null);
 	let historyFailed = $state(false);
+	/**
+	 * The best-by metric was logged as a summary only (an eval run's suite score): no history
+	 * panel, and the best values take the width.
+	 */
+	const summaryOnly = $derived(
+		!!history && !history.meta.metrics.some((m) => m.key === chartKey(cmp.best_key ?? ''))
+	);
 	const historyRuns = $derived([...new Set(lines.map((l) => l.run))].sort());
 	const historyKey = $derived(
 		`${historyRuns.join(',')}|${everyRow.map((r) => r.value ?? '').join(',')}`
