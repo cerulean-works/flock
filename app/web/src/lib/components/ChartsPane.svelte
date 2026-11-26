@@ -30,9 +30,19 @@
 		beside?: boolean;
 		/** Below the runs table (Visualize stacked), from `--table-h` down, across the page. */
 		below?: boolean;
+		/** Whether small sections may share a row; not beside the table, which reads by rows. */
+		pack?: boolean;
 	}
 
-	let { shown, active, panelHref, onfullscreen, beside = true, below = false }: Props = $props();
+	let {
+		shown,
+		active,
+		panelHref,
+		onfullscreen,
+		beside = true,
+		below = false,
+		pack = true
+	}: Props = $props();
 
 	const ws = getWorkspace();
 	let root = $state<HTMLDivElement | null>(null);
@@ -76,7 +86,7 @@
 	/** The panel being dragged, and how far it is from its place in the grid. */
 	let drag = $state<{ panel: number; x: number; y: number } | null>(null);
 	/** The section being dragged, and how far it is from its place in the list. */
-	let sectionDrag = $state<{ key: string; y: number } | null>(null);
+	let sectionDrag = $state<{ key: string; x: number; y: number } | null>(null);
 	/** The section whose rows are being resized. */
 	let rowsDrag = $state<string | null>(null);
 	let list = $state<HTMLDivElement | null>(null);
@@ -276,6 +286,7 @@
 		e.preventDefault();
 		const el = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-section]')!;
 		const box = el.getBoundingClientRect();
+		const offsetX = e.clientX - box.left;
 		const offsetY = e.clientY - box.top;
 		const sections = list;
 		const from = ws.sections.findIndex((s) => s.key === key);
@@ -283,15 +294,24 @@
 		/**
 		 * Follow the pointer, and move the section past every other whose middle the pointer is
 		 * below: straight to its slot, however far the pointer went. Sections differ in height,
-		 * so slots are halves, not the boxes themselves.
+		 * so slots are halves, not the boxes themselves. Sections sharing a row (packed) are
+		 * passed by the pointer's x within their row: below a row, past all of it.
 		 */
 		function follow() {
 			if (!sectionDrag) return;
-			const top = sections.getBoundingClientRect().top;
+			const { top, left } = sections.getBoundingClientRect();
+			sectionDrag.x = pointer.x - offsetX - (left + el.offsetLeft);
 			sectionDrag.y = pointer.y - offsetY - (top + el.offsetTop);
 			let to = 0;
 			for (const other of sections.children as HTMLCollectionOf<HTMLElement>) {
-				if (other !== el && pointer.y > top + other.offsetTop + other.offsetHeight / 2) to++;
+				if (other === el) continue;
+				const y = top + other.offsetTop;
+				const full = other.offsetWidth >= sections.clientWidth - 1;
+				const past = full
+					? pointer.y > y + other.offsetHeight / 2
+					: pointer.y > y + other.offsetHeight ||
+						(pointer.y > y && pointer.x > left + other.offsetLeft + other.offsetWidth / 2);
+				if (past) to++;
 			}
 			if (ws.sections.findIndex((s) => s.key === key) === to) return;
 			rearrange();
@@ -300,7 +320,7 @@
 		}
 
 		const pointer = track(e, {
-			begin: () => (sectionDrag = { key, y: 0 }),
+			begin: () => (sectionDrag = { key, x: 0, y: 0 }),
 			follow,
 			end: () => (sectionDrag = null),
 			cancel: () => (rearrange(), ws.moveSection(key, from))
@@ -439,13 +459,13 @@
 			{@const rows = rowsShown(sec.key, count)}
 			{@const resizing = rowsDrag === sec.key}
 			{@const span = open ? count : 1}
-			{@const packed = span < columns}
+			{@const packed = pack && span < columns}
 			<!-- A section being dragged folds to its header (its panels stay mounted), so the others
 			     are within reach. -->
 			<section
 				class={['relative min-w-0', moving ? 'z-3' : 'transition-transform']}
 				style:grid-column={packed ? `span ${span}` : '1 / -1'}
-				style:transform={moving ? `translateY(${sectionDrag!.y}px)` : null}
+				style:transform={moving ? `translate(${sectionDrag!.x}px, ${sectionDrag!.y}px)` : null}
 				style:transition-duration={moving ? null : `${settle}ms`}
 				data-section={sec.key}
 				animate:flip={{ duration: moving || !rearranging ? 0 : settle }}
@@ -456,7 +476,7 @@
 				<header
 					class={[
 						'group/section relative flex h-(--section-h) items-center gap-1 border-b bg-background',
-						packed ? 'px-0' : '-mx-5 px-5',
+						packed ? 'pl-5' : '-mx-5 px-5',
 						moving ? 'cursor-grabbing shadow-xl ring-1 ring-foreground/20' : 'cursor-grab'
 					]}
 					onpointerdown={(e) => grabSection(e, sec.key)}
@@ -475,14 +495,16 @@
 					</button>
 					<Button
 						variant="ghost"
-						class="mr-auto -ml-2.5 h-8 gap-2 px-2.5 aria-expanded:bg-transparent hover:aria-expanded:bg-muted"
+						class="mr-auto -ml-2.5 h-8 min-w-0 shrink gap-2 px-2.5 aria-expanded:bg-transparent hover:aria-expanded:bg-muted"
 						onclick={() => ws.toggleSection(sec.key)}
 						aria-expanded={open}
 					>
 						<ChevronDownIcon
 							class={['text-muted-foreground transition-transform', !open && '-rotate-90']}
 						/>
-						<h2 class="text-[22px] font-normal tracking-[-0.01em]">{sec.key}</h2>
+						<h2 class="truncate text-[22px] font-normal tracking-[-0.01em]" title={sec.key}>
+							{sec.key}
+						</h2>
 						<Badge variant="secondary" class="text-muted-foreground">{count}</Badge>
 					</Button>
 					{#if open && count > per}

@@ -90,7 +90,7 @@ Switch views with the selector at the top left, or with the keyboard:
 | **Visualize** | `V` | The table and the charts side by side (the default for a group) |
 | **Charts** | `C` | The charts, with run names beside them |
 
-In **Visualize**, drag the line between the table and the charts to resize them. Select **Visualize** again to stack the table above the charts, and again to put them back side by side; its icon shows which. Flock remembers the choice in your browser, for the **Runs** page too. Sections with only a few charts share a row when the charts have room, so `lr`, `train/loss` and `val/loss` sit side by side.
+In **Visualize**, drag the line between the table and the charts to resize them. Select **Visualize** again to stack the table above the charts, and again to put them back side by side; its icon shows which. Flock remembers the choice in your browser, for the **Runs** page too. Stacked, and in **Charts**, sections with only a few charts share a row when the charts have room, so `lr`, `train/loss` and `val/loss` sit side by side. Beside the table, each section keeps its own row.
 
 A group of eval runs, whose runs have suite scores from `flock eval log`, opens on **Table** with **Evals** on: its runs by suites, ranked, as on the project's **Runs** page. Select **Evals** to switch back to the plain table.
 

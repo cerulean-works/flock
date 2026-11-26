@@ -398,7 +398,9 @@
 						onkeydown={(e) => {
 							if ((e.key === 'Enter' || e.key === ' ') && view === 'visualize') {
 								flipStacked();
+								// Only for this activation: the click a key may send comes at once.
 								flippedByKey = true;
+								setTimeout(() => (flippedByKey = false));
 							}
 						}}
 						{@attach hint(
@@ -537,6 +539,7 @@
 			{panelHref}
 			onfullscreen={openPanel}
 			{below}
+			pack={view !== 'visualize' || below}
 		/>
 		{#if ws.page.total === 0 && narrowed}
 			<EmptyState

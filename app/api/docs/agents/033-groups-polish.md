@@ -40,7 +40,7 @@ Side by side suits many runs and few charts; a group's few runs read better in a
 
 ### D236. Small sections share a row
 
-A section with fewer panels than a row fits takes only their columns, so small sections sit side by side: a group logging `lr`, `train/loss` and `val/loss` shows `charts | train | val` in one row of three instead of three rows of one. A section with a row or more of panels spans the row as before, and a folded one takes one column. The sections flow on the panels' own column grid (up to four, none under 340 px), so a packed section's panels line up with a full one's, and a narrow pane (beside the table) still shows one section per row. Headers stay with their sections; a packed header has no edge-to-edge bleed.
+A section with fewer panels than a row fits takes only their columns, so small sections sit side by side: a group logging `lr`, `train/loss` and `val/loss` shows `charts | train | val` in one row of three instead of three rows of one. A section with a row or more of panels spans the row as before, and a folded one takes one column. The sections flow on the panels' own column grid (up to four, none under 340 px), so a packed section's panels line up with a full one's. This holds stacked and in Charts; beside the table, sections keep a row each, however wide the pane is dragged, since that pane is read top to bottom next to the runs. Headers stay with their sections; a packed header keeps the grip's gutter but no edge-to-edge bleed, and a long title truncates in its column. A dragged section passes the sections in its row by the pointer's x, and a full-width one by its height as before.
 
 ### D237. Smaller fixes
 
@@ -72,7 +72,6 @@ A section with fewer panels than a row fits takes only their columns, so small s
 
 ## 5. Known gaps
 
-- Sections in one row reorder by keyboard (a section's grip and the arrow keys), not by dragging sideways: a drag still moves a section by height, past the whole row.
 
 - A suite's scale on Compare comes from the best runs' snapshot, read once the page has loaded; until then, and for a suite whose scale is unknown, scores show in the plain number format.
 - A group with both eval and training runs opens on the preset, which lists only its eval runs; **Evals** shows the rest. Whether a group is one of eval runs is read from the page of runs on screen, so in such a mixed group a search or a page without eval runs opens **Visualize** instead.
