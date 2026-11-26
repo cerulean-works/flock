@@ -259,6 +259,14 @@
 	);
 	const spread = $derived(dots.some((d) => d.std != null && d.std > 0));
 
+	/**
+	 * The best-by metric was logged as a summary only (an eval run's suite score): no history
+	 * panel, and the best values take the width.
+	 */
+	const summaryOnly = $derived(
+		!!history && !history.meta.metrics.some((m) => m.key === chartKey(cmp.best_key ?? ''))
+	);
+
 	/** The run hovered in the table or a chart: its row and lines come forward. */
 	let hovered = $state<string | null>(null);
 
@@ -745,37 +753,44 @@
 					class="flex min-h-[340px] flex-1 gap-4 px-5 pt-5 pb-6 max-lg:min-h-[640px] max-lg:flex-col"
 					aria-label="Charts"
 				>
-					<Card.Root class="min-h-[300px] min-w-0 flex-[3] rounded-lg px-1">
-						<Card.Header class="gap-0.5">
-							<Card.Title class="text-[13px]">
-								{metricLabel(cmp.best_key)}
-								<span class="font-normal text-muted-foreground">· each group’s best run</span>
-							</Card.Title>
-							<Card.Description class="text-xs">
-								{order === 'asc' ? 'Lower' : 'Higher'} is better
-							</Card.Description>
-						</Card.Header>
-						<Card.Content class="flex min-h-0 flex-1 flex-col">
-							{#if !lines.length}
-								<div class="grid flex-1 place-items-center text-[13px] text-faint">
-									No group has a best run by {metricLabel(cmp.best_key)} yet
-								</div>
-							{:else if history}
-								<CompareHistory
-									data={history}
-									{lines}
-									metric={chartKey(cmp.best_key)}
-									{hovered}
-									onhover={(run) => (hovered = run)}
-								/>
-							{:else}
-								<div class="grid flex-1 place-items-center text-[13px] text-faint">
-									{historyFailed ? 'Couldn’t read the runs’ histories' : 'Reading histories…'}
-								</div>
-							{/if}
-						</Card.Content>
-					</Card.Root>
-					<Card.Root class="min-h-[300px] min-w-0 flex-[2] rounded-lg px-1 lg:max-w-[46%]">
+					{#if !summaryOnly}
+						<Card.Root class="min-h-[300px] min-w-0 flex-[3] rounded-lg px-1">
+							<Card.Header class="gap-0.5">
+								<Card.Title class="text-[13px]">
+									{metricLabel(cmp.best_key)}
+									<span class="font-normal text-muted-foreground">· each group’s best run</span>
+								</Card.Title>
+								<Card.Description class="text-xs">
+									{order === 'asc' ? 'Lower' : 'Higher'} is better
+								</Card.Description>
+							</Card.Header>
+							<Card.Content class="flex min-h-0 flex-1 flex-col">
+								{#if !lines.length}
+									<div class="grid flex-1 place-items-center text-[13px] text-faint">
+										No group has a best run by {metricLabel(cmp.best_key)} yet
+									</div>
+								{:else if history}
+									<CompareHistory
+										data={history}
+										{lines}
+										metric={chartKey(cmp.best_key)}
+										{hovered}
+										onhover={(run) => (hovered = run)}
+									/>
+								{:else}
+									<div class="grid flex-1 place-items-center text-[13px] text-faint">
+										{historyFailed ? 'Couldn’t read the runs’ histories' : 'Reading histories…'}
+									</div>
+								{/if}
+							</Card.Content>
+						</Card.Root>
+					{/if}
+					<Card.Root
+						class={[
+							'min-h-[300px] min-w-0 flex-[2] rounded-lg px-1',
+							!summaryOnly && 'lg:max-w-[46%]'
+						]}
+					>
 						<Card.Header class="gap-0.5">
 							<Card.Title class="text-[13px]">
 								{metricLabel(cmp.best_key)}
