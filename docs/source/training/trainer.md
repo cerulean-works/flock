@@ -787,6 +787,17 @@ finally:
         trainer.run.finish()
 ```
 
+Resuming also continues the W&B run. Unless `wandb_mode` is `"disabled"`, the
+trainer keeps the run's ID in `output_dir/wandb_run_id.json`, and each checkpoint's
+`flock.json` records the run. When a trainer is constructed on a directory that
+holds a checkpoint, it continues the run named there with `resume="allow"`, if it
+is in the same project (and entity, when set). Metrics log against `global_step`,
+so curves go on from the checkpoint's step; steps logged after the checkpoint and
+before an interruption appear twice. If the run cannot continue, a new run with
+the same `wandb_run_name` starts instead. Fresh training that overwrites the
+directory starts a new run too. The ID file alone does not make the directory
+nonempty for fresh training.
+
 You can also pass a specific local folder:
 
 ```python

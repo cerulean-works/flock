@@ -68,6 +68,17 @@ class RecordingRun:
     definitions: list = field(default_factory=list)
     metrics: list = field(default_factory=list)
     perf: list = field(default_factory=list)
+    inits: list = field(default_factory=list)
+    finished: bool = False
+
+    def start(self, **kwargs: Any) -> RecordingRun:
+        self.inits.append(kwargs)
+        if "id" in kwargs:
+            self.id = kwargs["id"]
+        return self
+
+    def finish(self) -> None:
+        self.finished = True
 
     def define_metric(self, *args: Any, **kwargs: Any) -> None:
         self.definitions.append((args, kwargs))
@@ -101,7 +112,7 @@ def trainer_factory(
     ) -> TrainerBundle:
         run = RecordingRun()
         module_logs = []
-        monkeypatch.setattr("flock.training.core.trainer.wandb.init", lambda **kwargs: run)
+        monkeypatch.setattr("flock.training.core.trainer.wandb.init", run.start)
         # Keep this separate from run.log: routing the tail window through the global
         # W&B run is a regression, rather than something the fake should conceal.
         monkeypatch.setattr("flock.training.core.trainer.wandb.log", module_logs.append)
@@ -2727,3 +2738,121 @@ def test_packed_chunk_training_trains_every_target_once_and_resumes(
     )
     with pytest.raises(ValueError, match="data"):
         unpacked.validate_state_dict(resumed.state_dict())
+
+
+def test_wandb_run_continues_from_a_checkpointed_directory(
+    trainer_factory: TrainerFactory, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    options: dict[str, Any] = {
+        "num_workers": 0,
+        "prefetch_factor": None,
+        "save_steps": 1,
+        "wandb_mode": "offline",
+        "wandb_project": "pretrain",
+        "wandb_run_name": "canary-test",
+        "wandb_entity": "flock",
+        "output_dir": str(tmp_path / "run"),
+    }
+    first, first_run, _ = trainer_factory(**options)
+    assert first_run.inits[0]["name"] == "canary-test"
+    assert first_run.inits[0]["entity"] == "flock"
+    # Without a checkpoint the run starts fresh, and its ID is kept for later.
+    assert "id" not in first_run.inits[0]
+    record = json.loads((tmp_path / "run" / "wandb_run_id.json").read_text())
+    assert record == {"id": "run123", "project": "pretrain", "entity": "flock"}
+
+    save = first.checkpoint_manager.save_model
+
+    def save_and_interrupt(*args: Any, **kwargs: Any) -> None:
+        save(*args, **kwargs)
+        if int(first.state.step) == 2:
+            raise KeyboardInterrupt("after the second checkpoint")
+
+    monkeypatch.setattr(first.checkpoint_manager, "save_model", save_and_interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        first.train()
+
+    resumed, resumed_run, _ = trainer_factory(**options)
+    assert resumed_run.inits == [
+        {**first_run.inits[0], "id": "run123", "resume": "allow"},
+    ]
+    resumed.train(resume_from_checkpoint=True)
+    # Logging goes on from the checkpoint's step, after the steps the first process logged.
+    first_steps = [metrics["global_step"] for metrics in first_run.metrics]
+    resumed_steps = [metrics["global_step"] for metrics in resumed_run.metrics]
+    assert first_steps == [1, 2] and resumed_steps == [3]
+    metadata = json.loads((tmp_path / "run" / "checkpoint-3" / "flock.json").read_text())
+    assert metadata["run"] == "flock/pretrain/run123"
+
+
+def test_wandb_resume_falls_back_to_checkpoint_metadata_then_a_new_run(
+    trainer_factory: TrainerFactory, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    options: dict[str, Any] = {
+        "num_workers": 0,
+        "prefetch_factor": None,
+        "wandb_mode": "offline",
+        "wandb_project": "pretrain",
+        "wandb_run_name": "canary-test",
+        "output_dir": str(tmp_path / "run"),
+    }
+    first, _, _ = trainer_factory(**options)
+    first.train()
+    save_checkpoint(first)
+    (tmp_path / "run" / "wandb_run_id.json").unlink()
+
+    # The checkpoint's flock.json still names the run.
+    _, run, _ = trainer_factory(**options)
+    assert run.inits[0]["id"] == "run123" and run.inits[0]["resume"] == "allow"
+
+    # A run that cannot continue gives way to a new run with the same name.
+    attempts: list[dict[str, Any]] = []
+    fresh = RecordingRun(id="fresh456")
+
+    def init(**kwargs: Any) -> RecordingRun:
+        attempts.append(kwargs)
+        if "id" in kwargs:
+            raise RuntimeError("run not found")
+        return fresh
+
+    trainer, _, _ = trainer_factory(**options)
+    monkeypatch.setattr("flock.training.core.trainer.wandb.init", init)
+    trainer._init_wandb_tracker(trainer.config)
+    assert [attempt.get("id") for attempt in attempts] == ["run123", None]
+    assert attempts[1]["name"] == "canary-test"
+    assert trainer.run is fresh
+    record = json.loads((tmp_path / "run" / "wandb_run_id.json").read_text())
+    assert record["id"] == "fresh456"
+
+
+def test_overwriting_a_checkpointed_directory_starts_a_new_wandb_run(
+    trainer_factory: TrainerFactory, tmp_path: Path
+) -> None:
+    options: dict[str, Any] = {
+        "num_workers": 0,
+        "prefetch_factor": None,
+        "wandb_mode": "offline",
+        "wandb_project": "pretrain",
+        "output_dir": str(tmp_path / "run"),
+    }
+    first, _, _ = trainer_factory(**options)
+    first.train()
+    save_checkpoint(first)
+    again, run, _ = trainer_factory(overwrite_output_dir=True, **options)
+    assert run.inits[0].get("resume") == "allow"
+    again.train()
+    assert run.finished
+    assert "id" not in run.inits[1]
+    assert next(metrics["global_step"] for metrics in run.metrics) == 1
+
+
+def test_disabled_tracking_keeps_no_run_id_and_an_empty_directory_trains(
+    trainer_factory: TrainerFactory, tmp_path: Path
+) -> None:
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    assert not (trainer.output_dir / "wandb_run_id.json").exists()
+    offline, _, _ = trainer_factory(
+        num_workers=0, prefetch_factor=None, wandb_mode="offline", output_dir=str(tmp_path / "o")
+    )
+    # The kept run ID alone does not make the directory a previous run.
+    offline.train()

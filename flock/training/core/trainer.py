@@ -1,4 +1,5 @@
 import functools
+import json
 import logging
 import math
 import random
@@ -41,6 +42,9 @@ from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState
 from flock.training.core.models import BaseModel
 from flock.training.core.optimizers import OptimizerConfig, OptimizerInterface, prepare_for_compile
 
+WANDB_RUN_ID_FILE = "wandb_run_id.json"
+"""File in the output directory that keeps the tracking run's ID for resumption."""
+
 
 class TrainerConfig(PydanticBaseModel):
     """Configure one shuffled pass, or its first `max_steps` updates, with tracking and saves.
@@ -51,7 +55,7 @@ class TrainerConfig(PydanticBaseModel):
     Args:
         run_name (`str`):
             Name used for the default checkpoint directory and evaluation labels.
-            This is not passed to `wandb.init` as the tracking run's name.
+            This is not passed to `wandb.init`; see `wandb_run_name`.
         input_column (`str`): Text column read from each Lance row.
         batch_size (`int`): Positive number of dataset items per rank per optimizer update; chunks when using a token cache, or rows when it packs them. Must be `1` with `max_tokens_per_device`: one packed row.
         max_steps (`int`, *optional*):
@@ -83,6 +87,10 @@ class TrainerConfig(PydanticBaseModel):
         validation_batch_tokens (`int`, *optional*, defaults to `32768`):
             Positive padded-token budget per scoring batch. One request can exceed it.
         wandb_project (`str`): Project passed to `wandb.init` during construction on rank zero.
+        wandb_run_name (`str`, *optional*): Tracking run's display name. W&B picks one
+            when omitted.
+        wandb_entity (`str`, *optional*): Tracking entity (organization). Defaults to the
+            SDK's configured entity.
         wandb_mode (`str`, *optional*, defaults to `"online"`):
             Tracking mode: `"online"`, `"offline"`, `"disabled"` or `"shared"`.
         output_dir (`str`, *optional*):
@@ -145,6 +153,8 @@ class TrainerConfig(PydanticBaseModel):
 
     wandb_project: str
     wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
+    wandb_run_name: str | None = None
+    wandb_entity: str | None = None
 
     output_dir: str | None = None
     save_steps: int | None = Field(default=None, gt=0)
@@ -625,7 +635,15 @@ class Trainer:
             datefmt="%m-%d %H:%M:%S",
         )
         self.logger = logging.getLogger(__name__)
+        self.output_dir: Path = (
+            Path(config.output_dir)
+            if config.output_dir is not None
+            else Path.cwd().joinpath(".training-checkpoints").joinpath(config.run_name)
+        )
+        self.config = config
         self.run: Run | None = None
+        # Rank zero: whether `run` continues the run of this directory's checkpoints.
+        self._wandb_continued = False
         self._init_wandb_tracker(config)
 
         self.model = model.to(self.device)
@@ -690,11 +708,6 @@ class Trainer:
         self.validation_batch_tokens = config.validation_batch_tokens
         self._prepared_validation_tasks: dict[str, PreparedTask] = {}
 
-        self.output_dir: Path = (
-            Path(config.output_dir)
-            if config.output_dir is not None
-            else Path.cwd().joinpath(".training-checkpoints").joinpath(self.run_name)
-        )
         self.save_steps = config.save_steps
         self.save_total_limit = config.save_total_limit
         self.save_to_hub_repo = config.save_to_hub_repo
@@ -716,14 +729,91 @@ class Trainer:
             self.logger.info("Trainer initialized on %s", self.device)
 
     @master_broadcast
-    def _init_wandb_tracker(self, config: TrainerConfig) -> None:
-        self.run = wandb.init(
-            project=config.wandb_project, mode=config.wandb_mode, config=config.model_dump()
-        )
-        self.run.define_metric("global_step")
-        self.run.define_metric("train/*", step_metric="global_step")
-        self.run.define_metric("perf/*", step_metric="global_step")
-        self.run.define_metric("eval/*", step_metric="global_step")
+    def _init_wandb_tracker(self, config: TrainerConfig, *, continue_saved: bool = True) -> None:
+        """Start the tracking run, continuing this directory's run when it has checkpoints.
+
+        The run's ID is kept in `wandb_run_id.json` in the output directory, and each
+        checkpoint's `flock.json` records the run as well. When the directory holds a
+        checkpoint and one of them names a run in this project, that run continues with
+        `resume="allow"`, so its curves go on from the checkpoint's `global_step`.
+        If it cannot continue, a new run starts with the same name.
+        """
+        settings: dict[str, Any] = {
+            "project": config.wandb_project,
+            "entity": config.wandb_entity,
+            "name": config.wandb_run_name,
+            "mode": config.wandb_mode,
+            "config": config.model_dump(),
+        }
+        saved = self._saved_wandb_run_id(config) if continue_saved else None
+        run = None
+        self._wandb_continued = False
+        if saved is not None:
+            try:
+                run = wandb.init(id=saved, resume="allow", **settings)
+                self._wandb_continued = True
+                self.logger.info("Continuing W&B run %s", saved)
+            except Exception:
+                self.logger.warning(
+                    "Could not continue W&B run %s; starting a new run", saved, exc_info=True
+                )
+        if run is None:
+            run = wandb.init(**settings)
+        self.run = run
+        if config.wandb_mode != "disabled":
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            record = {"id": run.id, "project": run.project, "entity": run.entity}
+            (self.output_dir / WANDB_RUN_ID_FILE).write_text(json.dumps(record) + "\n")
+        run.define_metric("global_step")
+        run.define_metric("train/*", step_metric="global_step")
+        run.define_metric("perf/*", step_metric="global_step")
+        run.define_metric("eval/*", step_metric="global_step")
+
+    def _saved_wandb_run_id(self, config: TrainerConfig) -> str | None:
+        """Return the ID of the run this directory's checkpoints belong to, if any.
+
+        Read `wandb_run_id.json`, then the newest checkpoint's `flock.json`. A run in
+        another project or entity does not count. Without a checkpoint, training starts
+        over, and so does tracking.
+        """
+        checkpoints = CheckpointManager.list_checkpoints(self.output_dir)
+        if not checkpoints:
+            return None
+        candidates: list[tuple[str | None, str | None, Any]] = []
+        try:
+            record = json.loads((self.output_dir / WANDB_RUN_ID_FILE).read_text())
+            candidates.append((record.get("entity"), record.get("project"), record.get("id")))
+        except OSError, ValueError, AttributeError:
+            pass
+        try:
+            metadata = json.loads((checkpoints[-1] / "flock.json").read_text())
+            entity, project, run_id = str(metadata.get("run") or "").split("/")
+            candidates.append((entity, project, run_id))
+        except OSError, ValueError, AttributeError:
+            pass
+        for entity, project, run_id in candidates:
+            if (
+                isinstance(run_id, str)
+                and run_id
+                and project == config.wandb_project
+                and (config.wandb_entity is None or entity == config.wandb_entity)
+            ):
+                return run_id
+        return None
+
+    @master_broadcast
+    def _restart_continued_wandb_tracker(self) -> None:
+        """Start a new tracking run if the current one continues a saved run.
+
+        Fresh training that overwrites a run's checkpoints starts its curves over too.
+        Call on every rank.
+        """
+        if not self._wandb_continued:
+            return
+        if self.run is not None:
+            self.run.finish()
+        self._init_wandb_tracker(self.config, continue_saved=False)
+        self.checkpoint_manager.run = self.run
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
         """Build a seeded, resumable loader with spawned workers and CUDA pinning.
@@ -964,13 +1054,14 @@ class Trainer:
         if not resume_from_checkpoint:
             if (
                 self.runtime.is_master
-                and any(self.output_dir.iterdir())
+                and any(path.name != WANDB_RUN_ID_FILE for path in self.output_dir.iterdir())
                 and not self.overwrite_output_dir
             ):
                 raise RuntimeError(
                     f"Save directory {self.output_dir} is not empty. "
                     "Resume from a checkpoint or specify an empty directory."
                 )
+            self._restart_continued_wandb_tracker()
             self.state.reset_global()
             self._document_cursor = 0
             start_step = 0

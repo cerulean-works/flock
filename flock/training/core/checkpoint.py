@@ -225,10 +225,18 @@ class CheckpointManager:
 
     def checkpoints(self) -> list[Path]:
         """List published checkpoints in numeric step order, ignoring staging paths."""
+        return self.list_checkpoints(self.output_dir)
+
+    @staticmethod
+    def list_checkpoints(output_dir: str | Path) -> list[Path]:
+        """List published checkpoints under `output_dir` in numeric step order.
+
+        Staging paths are ignored, and a missing directory has none.
+        """
         return sorted(
             (
                 path
-                for path in self.output_dir.glob("checkpoint-*")
+                for path in Path(output_dir).glob("checkpoint-*")
                 if path.is_dir() and path.name.removeprefix("checkpoint-").isdigit()
             ),
             key=lambda path: int(path.name.removeprefix("checkpoint-")),

@@ -34,7 +34,7 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 
 | Field | Default | Meaning |
 |---|---|---|
-| `run_name` | Required | Default checkpoint folder name and evaluation label. Does not set the W&B run name. |
+| `run_name` | Required | Default checkpoint folder name and evaluation label. Does not set the W&B run name; see `wandb_run_name`. |
 | `input_column` | Required | Text column in each dataset row. |
 | `batch_size` | Required | Positive rows or cached chunks per rank per optimizer update. |
 | `max_steps` | `None` | Positive cap on optimizer updates; schedules plan over the capped run. `None` trains the full pass. Required with `max_tokens_per_device`, where it is the run length. |
@@ -43,6 +43,8 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 | `lr_scheduler_config` | Required | `LRSchedulerConfig` containing learning-rate segments. |
 | `wandb_project` | Required | Tracking project started during construction on rank zero. |
 | `wandb_mode` | `"online"` | `"online"`, `"offline"`, `"disabled"` or `"shared"`. |
+| `wandb_run_name` | `None` | Tracking run's display name. `None` lets W&B choose one. |
+| `wandb_entity` | `None` | Tracking entity (organization). `None` uses the SDK's configured entity. |
 | `dataloader_num_workers` | `4` | Nonnegative number of spawned workers per rank. |
 | `dataloader_prefetch_factor` | `4` | Positive batches per worker, or `None` for PyTorch's default with workers. Must be `None` with zero workers. |
 | `validation_tasks` | `[]` | Registered task keys. Empty skips evaluation. |
