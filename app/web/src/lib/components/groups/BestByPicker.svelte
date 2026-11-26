@@ -5,7 +5,7 @@
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { bestLabel, bestWords, isInternalKey, metricLabel, type BestOrder } from '#lib/groups.ts';
 
-	/** **Best by**: a summary column and lowest or highest (D217). */
+	/** **Best by**: a summary column and lowest or highest (D217), shown as a trophy and the column. */
 
 	interface Props {
 		key: string | null;
@@ -18,8 +18,6 @@
 		title?: string;
 		/** Without an outline, among a page header's quieter controls. */
 		quiet?: boolean;
-		/** A trophy in place of the words "Best by", for a toolbar with more in it (a group's). */
-		trophy?: boolean;
 		/** Which edge of the button the menu lines up with. */
 		align?: 'start' | 'end';
 	}
@@ -32,7 +30,6 @@
 		disabled = false,
 		title,
 		quiet = false,
-		trophy = false,
 		align = 'start'
 	}: Props = $props();
 
@@ -56,12 +53,8 @@
 				class="gap-1.5 pr-2 font-normal text-muted-foreground"
 				title={`Best by ${bestWords(key, order)}${title ? ` (${title})` : ''}`}
 			>
-				{#if trophy}
-					<TrophyIcon />
-					<span class="sr-only">Best by</span>
-				{:else}
-					Best by
-				{/if}
+				<TrophyIcon />
+				<span class="sr-only">Best by</span>
 				<span class="max-w-48 truncate font-medium text-foreground">{bestLabel(key, order)}</span>
 				<ChevronDownIcon class="text-muted-foreground" />
 			</Button>

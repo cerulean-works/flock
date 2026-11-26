@@ -390,7 +390,6 @@
 			disabled={readonly}
 			title={group.best_key ? 'This group’s own setting' : 'The project’s setting'}
 			onchange={(key, o) => save({ best_key: key, best_order: o }, 'Best by')}
-			trophy
 			align="end"
 		/>
 		<!-- In every view: Group by and Color by color the table's runs as well as the charts. -->
