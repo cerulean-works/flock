@@ -12,6 +12,7 @@
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import KeyboardLayer from '#lib/components/keys/KeyboardLayer.svelte';
 	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
 	import OrgMark from '#lib/components/shell/OrgMark.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
@@ -257,6 +258,10 @@
 		{@render children()}
 	</div>
 </div>
+
+{#if signedIn}
+	<KeyboardLayer ontogglesidebar={() => setCollapsed(!collapsed)} />
+{/if}
 
 <Sheet.Root bind:open={drawer}>
 	<Sheet.Content side="left" class="w-72 gap-0 p-0" showCloseButton={false}>

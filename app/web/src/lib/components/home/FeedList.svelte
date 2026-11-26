@@ -1,5 +1,6 @@
 <script lang="ts">
 	import InlinePager from '#lib/components/InlinePager.svelte';
+	import { listKeys } from '#lib/keys.svelte.ts';
 	import { FeedPages } from '#lib/data/feed-pages.svelte.ts';
 	import { FeedPager } from '#lib/data/feed.svelte.ts';
 	import type { FeedPage } from '#lib/types.ts';
@@ -21,7 +22,7 @@
 	const pages = new FeedPages(pager, 25);
 </script>
 
-<ul class="border-t border-divider">
+<ul class="border-t border-divider" {@attach listKeys()}>
 	{#each pages.shown as item (item.id)}
 		<FeedEntry {item} {now} />
 	{:else}

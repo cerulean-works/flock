@@ -293,6 +293,15 @@
 		show([...applied, condition]);
 	}
 
+	/** F, or the palette: the field list, to add a condition. */
+	export function pick() {
+		mode = 'pick';
+		field = null;
+		find = '';
+		open = true;
+		onOpenChange(true);
+	}
+
 	/** A chip under the view bar opens the filters as built, to change or regroup them. */
 	export function edit() {
 		mode = 'build';
@@ -584,7 +593,9 @@
 						size="icon-bar"
 						class="relative"
 						aria-label={count ? `Filter runs, ${count} applied` : 'Filter runs'}
-						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
+						{@attach hint(
+							count ? describeFilters(applied, kindOf, true, people) : 'Filter runs  F'
+						)}
 					>
 						<ListFilterIcon />
 						{#if count}
@@ -601,7 +612,9 @@
 						{...props}
 						variant={count ? 'quiet-on' : 'quiet'}
 						size="bar"
-						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
+						{@attach hint(
+							count ? describeFilters(applied, kindOf, true, people) : 'Filter runs  F'
+						)}
 					>
 						<ListFilterIcon /> Filter
 						{#if count}

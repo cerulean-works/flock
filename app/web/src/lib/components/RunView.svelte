@@ -36,7 +36,8 @@
 	import type { Crumb } from '#lib/storage.ts';
 	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
 	import { describeFilters } from '#lib/workspace/filters.ts';
-	import { applyRunQuery } from '#lib/workspace/url.ts';
+	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
+	import { keyboard } from '#lib/keys.svelte.ts';
 	import {
 		isProjectView,
 		rememberView,
@@ -339,8 +340,33 @@
 			openPanel(neighbours.next);
 		} else if (fullscreen == null && KEYS[e.key]) {
 			setView(KEYS[e.key]);
+		} else if (fullscreen == null && e.key === 'f' && filterControl) {
+			e.preventDefault();
+			filterControl.pick();
 		}
 	}
+
+	// What this page offers the palette (Cmd+K): its views, its filter and its runs.
+	$effect(() => {
+		keyboard.views = [
+			{ label: 'Table', key: 't', set: () => setView('table') },
+			{ label: 'Visualize', key: 'v', set: () => setView('visualize') },
+			{ label: 'Charts', key: 'c', set: () => setView('charts') }
+		];
+		keyboard.filter = () => filterControl?.pick();
+		return () => {
+			keyboard.views = [];
+			keyboard.filter = null;
+		};
+	});
+	$effect(() => {
+		const { entity, project } = ws.meta;
+		keyboard.runs = ws.page.runs.map((r, i) => ({
+			label: ws.nameOf(i),
+			href: runHref(entity, project, r.id)
+		}));
+		return () => (keyboard.runs = []);
+	});
 
 	// Keep the neighbouring pages warm so paging is instant. Runs in idle time after hydration
 	// and after every page change; the cache dedupes and keeps a handful of pages.
@@ -363,7 +389,7 @@
 	const focusPinned = $derived(ws.focus != null && ws.pinned === ws.focus && ws.hover == null);
 
 	/** The runs shown are a search's or a filter's, not all of the page's. */
-	let filterControl = $state<{ edit: () => void } | null>(null);
+	let filterControl = $state<{ edit: () => void; pick: () => void } | null>(null);
 	const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
 
 	/** The filters without the one at `i`, from the first page. */
@@ -418,7 +444,7 @@
 			<Tabs.Root value={view} onValueChange={(v) => setView(v as ProjectView)}>
 				<!-- No counts, so the toggle keeps its width from page to page. -->
 				<Tabs.List aria-label="View">
-					<Tabs.Trigger value="table" {@attach hint('Table (T)')}>Table</Tabs.Trigger>
+					<Tabs.Trigger value="table" {@attach hint('Table  T')}>Table</Tabs.Trigger>
 					<!-- Clicked again while on, it flips the table and charts between side by side and
 					     stacked; its icon shows which. -->
 					<Tabs.Trigger
@@ -435,14 +461,14 @@
 						}}
 						{@attach hint(
 							stacked
-								? 'Table above the charts (V). Click again for side by side'
-								: 'Table and charts side by side (V). Click again to stack them'
+								? 'Table above the charts  V. Click again for side by side'
+								: 'Table and charts side by side  V. Click again to stack them'
 						)}
 					>
 						{#if stacked}<Rows2Icon />{:else}<Columns2Icon />{/if}
 						Visualize
 					</Tabs.Trigger>
-					<Tabs.Trigger value="charts" {@attach hint('Charts (C)')}>Charts</Tabs.Trigger>
+					<Tabs.Trigger value="charts" {@attach hint('Charts  C')}>Charts</Tabs.Trigger>
 				</Tabs.List>
 			</Tabs.Root>
 			<span class="flex-1"></span>

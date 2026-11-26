@@ -58,6 +58,8 @@
 	import { writeFilters } from '#lib/workspace/filters.ts';
 	import { moveKey } from '#lib/workspace/layout.ts';
 	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
+	import { layerOpen, typing } from '#lib/keys.svelte.ts';
+	import { goto } from '$app/navigation';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
@@ -509,7 +511,45 @@
 	const allSelected = $derived(runs.length > 0 && ws.selectedRows.length === runs.length);
 	const allShown = $derived(ws.visible.length === runs.length);
 	const someShown = $derived(ws.visible.length > 0);
+
+	/**
+	 * The keyboard's row (j and k, or the arrows once there is one): Enter opens it, x selects it,
+	 * Esc lets go. The pointer takes over as soon as it moves over the table.
+	 */
+	let cursor = $state<number | null>(null);
+
+	function reveal(r: number) {
+		if (!scroller) return;
+		const top = r * ROW_H;
+		const bottom = top + ROW_H + HEAD_H + BAND_H;
+		// The floating pager covers the table's foot: keep the row above it.
+		const foot = 72;
+		if (top < scroller.scrollTop) scroller.scrollTop = top;
+		else if (bottom > scroller.scrollTop + scroller.clientHeight - foot)
+			scroller.scrollTop = bottom - scroller.clientHeight + foot;
+	}
+
+	function onkeydown(e: KeyboardEvent) {
+		if (e.defaultPrevented || typing(e) || layerOpen() || !runs.length) return;
+		const down = e.key === 'j' || (cursor != null && e.key === 'ArrowDown');
+		const up = e.key === 'k' || (cursor != null && e.key === 'ArrowUp');
+		if (down || up) {
+			e.preventDefault();
+			const at = cursor == null ? 0 : cursor + (down ? 1 : -1);
+			cursor = Math.max(0, Math.min(runs.length - 1, at));
+			reveal(cursor);
+		} else if (cursor != null && e.key === 'Enter') {
+			e.preventDefault();
+			void goto(runHref(ws.meta.entity, ws.meta.project, runs[cursor].id));
+		} else if (cursor != null && e.key === 'x' && selectable) {
+			ws.toggleSelected(cursor);
+		} else if (cursor != null && e.key === 'Escape' && !ws.selected.size) {
+			cursor = null;
+		}
+	}
 </script>
+
+<svelte:window {onkeydown} />
 
 <!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across;
      above them (stacked), it spans the page and is as tall as `--table-h`. -->
@@ -526,6 +566,7 @@
 	]}
 	bind:this={scroller}
 	{onscroll}
+	onpointermove={() => (cursor = null)}
 	{@attach measure}
 	style:--name-w="{nameW}px"
 	style:--row-h="{ROW_H}px"
@@ -675,11 +716,12 @@
 			{@const shown = !ws.hidden.has(run.id)}
 			{@const pinned = ws.pinned === r}
 			{@const selected = selectable && ws.selected.has(run.id)}
-			{@const focused = charting && ws.focus === r}
+			{@const focused = (charting && ws.focus === r) || cursor === r}
 			<div
 				class={[
 					'row group/row absolute inset-x-0 flex h-(--row-h) items-stretch border-b border-divider tabular-nums',
-					focused ? 'bg-muted' : selected ? 'bg-selection/45' : 'hover:bg-muted'
+					focused ? 'bg-muted' : selected ? 'bg-selection/45' : 'hover:bg-muted',
+					cursor === r && 'shadow-[inset_2px_0_0_var(--ring)]'
 				]}
 				data-row={r}
 				style:top="{r * ROW_H}px"

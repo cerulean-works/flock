@@ -29,6 +29,7 @@
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
 	import RowCheckbox from '#lib/components/RowCheckbox.svelte';
+	import { listKeys } from '#lib/keys.svelte.ts';
 	import type { Selection } from '#lib/selection.svelte.ts';
 
 	interface Props {
@@ -144,7 +145,7 @@
 			</span>
 		{/each}
 	</div>
-	<div class="col-span-full grid grid-cols-subgrid" role="rowgroup">
+	<div class="col-span-full grid grid-cols-subgrid" role="rowgroup" {@attach listKeys()}>
 		{#each rows as row (key(row))}
 			{@const on = !!selection?.has(key(row))}
 			<div
@@ -152,8 +153,9 @@
 					ROW,
 					'group/row relative border-b border-divider',
 					dense ? 'min-h-9 py-1' : 'min-h-9 py-1.5',
-					on ? 'bg-selection/45' : 'hover:bg-muted'
+					on ? 'bg-selection/45' : 'hover:bg-muted data-cursor:bg-muted'
 				]}
+				data-keyrow
 				role="row"
 				aria-label={name(row)}
 				aria-selected={selection ? on : undefined}

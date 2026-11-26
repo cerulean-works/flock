@@ -27,7 +27,10 @@
 </script>
 
 <!-- One 36px line per run, showing its latest state; a new project is a line of its own. -->
-<li class="flex h-9 items-center gap-3 border-b border-divider text-[13px]">
+<li
+	class="-mx-2 flex h-9 items-center gap-3 border-b border-divider px-2 text-[13px] data-cursor:bg-muted"
+	data-keyrow
+>
 	{#if item.kind === 'project_created'}
 		<span class="grid size-5 flex-none place-items-center text-muted-foreground">
 			<FolderPlusIcon class="size-4" />
