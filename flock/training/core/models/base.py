@@ -36,6 +36,7 @@ class BaseModel(nn.Module, ABC):
     Subclasses set `config` to a frozen dataclass and accept it as their only
     constructor argument, so Hub loading can rebuild them from `config.json`.
     Build subclass modules inside `_initialize_weights()` and implement `_forward`.
+    Override `num_flops_per_token` if its default estimate doesn't fit the architecture.
 
     Args:
         max_position_embeddings (`int`): Positive maximum input sequence length.
@@ -195,6 +196,34 @@ class BaseModel(nn.Module, ABC):
         """
         input_ids, attention_mask, position_ids, cu_seq_lens = self._check_batch(batch)
         return self._forward(input_ids, attention_mask, position_ids, cu_seq_lens=cu_seq_lens)
+
+    def num_flops_per_token(self, seq_len: int) -> int:
+        """Estimate the training FLOPs of one token, for logging throughput and MFU.
+
+        Follows torchtitan's method: 6 FLOPs per matmul parameter plus full, unmasked
+        attention over the sequence, with the shape read from `config`. Override this for architectures
+        the estimate doesn't fit, such as mixture-of-experts or sliding-window attention.
+
+        Args:
+            seq_len (`int`): Positions in each row of the batch, padding included.
+
+        Returns:
+            `int`: Training FLOPs per token.
+        """
+        config = self.config
+        linear_weights = {id(m.weight) for m in self.modules() if isinstance(m, nn.Linear)}
+        # Embedding lookups aren't matmuls, unless the output projection shares the weight.
+        lookups = {
+            id(m.weight): m.weight.numel()
+            for m in self.modules()
+            if isinstance(m, nn.Embedding) and id(m.weight) not in linear_weights
+        }
+        parameters = sum(p.numel() for p in self.parameters()) - sum(lookups.values())
+        head_dim = getattr(config, "head_dim", None) or (
+            config.hidden_size // config.num_attention_heads
+        )
+        width = config.num_attention_heads * head_dim
+        return 6 * parameters + 12 * config.num_hidden_layers * width * seq_len
 
     @abstractmethod
     def _forward(

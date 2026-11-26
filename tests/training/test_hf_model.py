@@ -157,6 +157,28 @@ def test_tied_embeddings_stay_tied(tmp_path: Path) -> None:
         assert model.model.lm_head.weight is model.model.get_input_embeddings().weight
 
 
+def test_flops_per_token_match_olmo2_and_count_a_tied_head() -> None:
+    olmo2_1b = Olmo2Config(
+        vocab_size=100352,
+        hidden_size=2048,
+        intermediate_size=8192,
+        num_hidden_layers=16,
+        num_attention_heads=16,
+        num_key_value_heads=16,
+        max_position_embeddings=4096,
+    )
+    tied = Qwen3Config(**SIZES, head_dim=4, tie_word_embeddings=True)
+    with torch.device("meta"):
+        olmo2 = HFCompatibleModel(HFCompatibleConfig(hf_config=olmo2_1b.to_dict()))
+        qwen3 = HFCompatibleModel(HFCompatibleConfig(hf_config=tied.to_dict()))
+    # Flock's own OLMO2_1B_CONFIG counts the same (test_olmo2.py).
+    assert olmo2.num_flops_per_token(4096) == 9_286_987_776
+    # The tied head multiplies by the embedding, so every parameter counts, and attention is
+    # 2 heads × 4 wide, not the hidden size of 16.
+    parameters = sum(p.numel() for p in qwen3.parameters())
+    assert qwen3.num_flops_per_token(16) == 6 * parameters + 12 * 2 * (2 * 4) * 16
+
+
 def test_write_model_then_build_round_trips(
     repo: tuple[Path, PreTrainedModel], tmp_path: Path
 ) -> None:

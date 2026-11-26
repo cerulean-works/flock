@@ -73,6 +73,11 @@ class MuonWithCompanion(Optimizer):
         )
         self.companion = make_companion(others)
 
+        # Name each group after the optimizer that steps it, as one class name can't.
+        for group in self.muon.param_groups:
+            group["name"] = "muon"
+        for group in self.companion.param_groups:
+            group.setdefault("name", type(self.companion).__name__.lower())
         groups = self.muon.param_groups + self.companion.param_groups
 
         super().__init__(groups, defaults={})

@@ -408,6 +408,15 @@ def _check_distributed_resume(
         resumed.load_state_dict(saved)
         from tests.training.test_trainer import assert_nested_equal
 
+        if rank:
+            # The checkpoint keeps rank zero's window timings, which only rank zero logs.
+            for name in (
+                "window_seconds",
+                "window_data_wait",
+                "window_padded_tokens",
+                "window_flops",
+            ):
+                local_state["trainer_state_dict"][name] = getattr(saved.trainer_state_dict, name)
         assert_nested_equal(resumed.state_dict(), local_state)
 
         # Both world sizes have two updates here: the partition itself must be checked.

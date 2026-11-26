@@ -637,6 +637,9 @@ the number of valid target tokens; gradient norms are measured before clipping.
 `train/tokens` counts the valid target tokens since the previous log, and
 `train/total_tokens` counts them over the whole run, continuing across a resume.
 A valid target is a label that is not `-100`, so padding never counts.
+`train/lr_<optimizer>` is the learning rate that the logged step's update used,
+named after the optimizer in lowercase, such as `train/lr_adamw`. With Muon,
+`train/lr_muon` is Muon's rate and its companion logs under its own name.
 With the recipe's `wandb_mode="offline"`, check the local run directory or
 [sync the run later](../app/log-runs#resume-or-sync-a-run). For live logging, set
 `wandb_mode="online"`, accept SDK setup during `flock login`, and check the
@@ -646,6 +649,32 @@ Loss and token counts include all ranks. `train/loss_window_max` is the largest
 per-rank batch mean loss in the window. Rank zero logs the metrics. When the
 application has yet to configure root logging, the trainer sets up INFO logging
 with the format `MM-DD HH:MM:SS INFO <logger> rank:<rank> <message>`.
+
+### Read throughput
+
+Each log also reports how fast its window trained, under `perf/`. A window runs
+from the previous log to this one, including any evaluation or checkpoint save in
+between, so such a window reads slower than training alone. Rates are per
+device: valid tokens are the window's `train/tokens` divided by the number of
+ranks, and the other counts are rank zero's.
+
+| Metric | Meaning |
+|---|---|
+| `perf/step_seconds` | Mean seconds per update, including the wait for data. |
+| `perf/data_wait_percent` | Share of the training time rank zero spent waiting for the next batch. |
+| `perf/tokens_per_second` | Valid target tokens per second per device. |
+| `perf/padded_tokens_per_second` | Input positions per second on rank zero, padding included. |
+| `perf/tflops` | Model TFLOPs per second on rank zero. |
+| `perf/mfu_percent` | `perf/tflops` as a percentage of the GPU's dense 16-bit peak. Logged only with BF16 or FP16 autocast on an A100, H100, H200, B200, B300, GB200 or GB300. |
+
+FLOPs follow torchtitan's convention, as
+[`~training.core.models.BaseModel.num_flops_per_token`] describes: attention is
+counted over the full padded width, so padding counts as work. Compare
+`perf/tokens_per_second` with `perf/padded_tokens_per_second` to see how much of
+that work trained on real tokens. With `torch_compile`, the first window also
+includes compilation, so compare the windows after it. Timing starts when training
+starts, so setup is left out. A checkpoint saved between logs keeps the window's
+timings with its updates, so the first window after a resume reports the whole window.
 
 The trained weights remain in `trainer.model`. Each batch produces one optimizer
 update, with no gradient accumulation.

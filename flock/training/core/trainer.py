@@ -1,8 +1,10 @@
+import functools
 import logging
 import math
 import random
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Literal, Self
 
 import torch
@@ -28,6 +30,7 @@ from flock.training.core.chunks import TokenChunkDataset
 from flock.training.core.compilation import compile_if_enabled
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
 from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
+from flock.training.core.hardware import get_device_peak_flops
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
 from flock.training.core.optimizers import OptimizerConfig, OptimizerInterface, prepare_for_compile
@@ -176,6 +179,10 @@ class CheckpointTrainerState(PydanticBaseModel):
         total_tokens (`torch.Tensor`): Valid targets processed over the full run.
         window_tokens (`torch.Tensor`): Valid targets processed in the window.
         window_steps (`torch.Tensor`): Updates accumulated in the window.
+        window_seconds (`torch.Tensor`): Wall time of the window's updates on this rank.
+        window_data_wait (`torch.Tensor`): Seconds of the window spent waiting for batches.
+        window_padded_tokens (`torch.Tensor`): Tokens on this rank in the window, padding included.
+        window_flops (`torch.Tensor`): Model FLOPs of the window's batches on this rank.
     """
 
     model_config = ConfigDict(
@@ -190,8 +197,20 @@ class CheckpointTrainerState(PydanticBaseModel):
     total_tokens: torch.Tensor
     window_tokens: torch.Tensor
     window_steps: torch.Tensor
+    window_seconds: torch.Tensor
+    window_data_wait: torch.Tensor
+    window_padded_tokens: torch.Tensor
+    window_flops: torch.Tensor
 
-    @field_validator("loss_sum", "loss_max", "grad_norm_sum", "grad_norm_max")
+    @field_validator(
+        "loss_sum",
+        "loss_max",
+        "grad_norm_sum",
+        "grad_norm_max",
+        "window_seconds",
+        "window_data_wait",
+        "window_flops",
+    )
     @classmethod
     def validate_metric(cls, value: torch.Tensor) -> torch.Tensor:
         """Require scalar floating-point metric buffers before copying any state."""
@@ -199,7 +218,9 @@ class CheckpointTrainerState(PydanticBaseModel):
             raise ValueError("Training metrics must be scalar floating-point tensors")
         return value
 
-    @field_validator("step", "total_tokens", "window_tokens", "window_steps")
+    @field_validator(
+        "step", "total_tokens", "window_tokens", "window_steps", "window_padded_tokens"
+    )
     @classmethod
     def validate_counter(cls, value: torch.Tensor) -> torch.Tensor:
         """Require a nonnegative scalar int64 tensor for each progress counter."""
@@ -319,10 +340,16 @@ class TrainerCheckpoint(PydanticBaseModel):
 class TrainerState(nn.Module):
     """Accumulate device-resident counters and metrics as checkpointable buffers.
 
-    Loss means are weighted by valid target tokens. Gradient norm means are
-    weighted by updates. Window resets preserve global step and token counts.
-    The trainer supplies synchronized losses and token counts, and the norm of
-    DDP-synchronized gradients. State updates perform no communication.
+    A window runs from one log to the next. Loss means are weighted by valid target
+    tokens. Gradient norm means are weighted by updates. Window resets preserve
+    global step and token counts. The trainer supplies synchronized losses and token
+    counts, and this rank's timings. State updates perform no communication.
+
+    Args:
+        world_size (`int`, *optional*, defaults to `1`): Ranks whose valid targets the
+            token counts sum.
+        peak_flops (`float`, *optional*): Peak FLOPs per second of one device, or `None`
+            to log no MFU.
     """
 
     loss_sum: torch.Tensor
@@ -335,7 +362,12 @@ class TrainerState(nn.Module):
     window_tokens: torch.Tensor
     window_steps: torch.Tensor
 
-    def __init__(self) -> None:
+    window_seconds: torch.Tensor
+    window_data_wait: torch.Tensor
+    window_padded_tokens: torch.Tensor
+    window_flops: torch.Tensor
+
+    def __init__(self, *, world_size: int = 1, peak_flops: float | None = None) -> None:
         """Initialize scalar FP32 metric buffers and int64 counters to zero."""
         super().__init__()
         self.register_buffer("loss_sum", torch.zeros((), dtype=torch.float))
@@ -347,6 +379,14 @@ class TrainerState(nn.Module):
         self.register_buffer("total_tokens", torch.zeros((), dtype=torch.int64))
         self.register_buffer("window_tokens", torch.zeros((), dtype=torch.int64))
         self.register_buffer("window_steps", torch.zeros((), dtype=torch.int64))
+
+        self.register_buffer("window_seconds", torch.zeros((), dtype=torch.float))
+        self.register_buffer("window_data_wait", torch.zeros((), dtype=torch.float))
+        self.register_buffer("window_padded_tokens", torch.zeros((), dtype=torch.int64))
+        self.register_buffer("window_flops", torch.zeros((), dtype=torch.float))
+
+        self.world_size = world_size
+        self.peak_flops = peak_flops
 
     def validate_state_dict(self, state_dict: Mapping[str, Any]) -> None:
         """Reject malformed counters and metric buffers without changing live state."""
@@ -366,6 +406,11 @@ class TrainerState(nn.Module):
         loss: torch.Tensor,
         grad_norm: torch.Tensor,
         tokens: torch.Tensor,
+        *,
+        seconds: float = 0.0,
+        data_wait: float = 0.0,
+        padded_tokens: int = 0,
+        flops: float = 0.0,
     ) -> None:
         """Record one batch's detached metrics and increment progress.
 
@@ -374,6 +419,11 @@ class TrainerState(nn.Module):
             loss (`torch.Tensor`): Detached mean loss per rank, or a scalar locally.
             grad_norm (`torch.Tensor`): Scalar gradient norm before clipping.
             tokens (`torch.Tensor`): Valid target counts matching the loss shape.
+            seconds (`float`, *optional*, defaults to `0.0`): Wall time of the update.
+            data_wait (`float`, *optional*, defaults to `0.0`): Part of it spent waiting
+                for the batch.
+            padded_tokens (`int`, *optional*, defaults to `0`): Tokens in the batch, padding included.
+            flops (`float`, *optional*, defaults to `0.0`): Model FLOPs of the batch.
         """
         loss, grad_norm = loss.detach(), grad_norm.detach()
         self.loss_sum.add_((loss * tokens).sum())
@@ -388,25 +438,36 @@ class TrainerState(nn.Module):
         self.window_tokens.add_(world_tokens)
         self.window_steps.add_(1)
 
-    def get_logging_metrics(self) -> dict[str, int | float]:
-        """Return global step, window means/maxima and valid-target counts as host values.
+        self.window_seconds.add_(seconds)
+        self.window_data_wait.add_(data_wait)
+        self.window_padded_tokens.add_(padded_tokens)
+        self.window_flops.add_(flops)
 
-        Call after at least one update: the gradient mean divides by window steps.
-        Converting the stacked tensors to a list synchronizes accelerator work.
+    def get_logging_metrics(self) -> dict[str, int | float]:
+        """Return the window's metrics as host values.
+
+        These are progress, loss and gradient-norm summaries, token counts, and
+        throughput when the window was timed. Call after at least one update.
+        Reading the values synchronizes the device.
         """
-        step, mean_loss, max_loss, mean_grad, max_grad = torch.stack(
+        step, mean_loss, max_loss, mean_grad, max_grad, seconds, data_wait, flops = torch.stack(
             (
                 self.step,
                 self.loss_sum / self.window_tokens.clamp_min(1),
                 self.loss_max,
                 self.grad_norm_sum / self.window_steps,
                 self.grad_norm_max,
+                self.window_seconds,
+                self.window_data_wait,
+                self.window_flops,
             )
         ).tolist()
         # Stacking with the FP32 means would make counts above 2**24 inexact; keep them int64.
-        window_tokens, total_tokens = torch.stack((self.window_tokens, self.total_tokens)).tolist()
+        window_tokens, total_tokens, window_steps, padded_tokens = torch.stack(
+            (self.window_tokens, self.total_tokens, self.window_steps, self.window_padded_tokens)
+        ).tolist()
 
-        return {
+        metrics: dict[str, int | float] = {
             "global_step": step,
             "train/loss_mean": mean_loss,
             "train/loss_window_max": max_loss,
@@ -415,6 +476,20 @@ class TrainerState(nn.Module):
             "train/tokens": window_tokens,
             "train/total_tokens": total_tokens,
         }
+        # Updates recorded without timings have no rates to report.
+        if seconds <= 0:
+            return metrics
+        flops_per_second = flops / seconds
+        metrics |= {
+            "perf/step_seconds": seconds / window_steps,
+            "perf/data_wait_percent": 100 * data_wait / seconds,
+            "perf/tokens_per_second": window_tokens / self.world_size / seconds,
+            "perf/padded_tokens_per_second": padded_tokens / seconds,
+            "perf/tflops": flops_per_second / 1e12,
+        }
+        if self.peak_flops is not None:
+            metrics["perf/mfu_percent"] = 100 * flops_per_second / self.peak_flops
+        return metrics
 
     @torch.no_grad()
     def reset_window(self) -> None:
@@ -426,6 +501,10 @@ class TrainerState(nn.Module):
             "grad_norm_max",
             "window_tokens",
             "window_steps",
+            "window_seconds",
+            "window_data_wait",
+            "window_padded_tokens",
+            "window_flops",
         ):
             getattr(self, name).zero_()
 
@@ -493,7 +572,6 @@ class Trainer:
         self.device = self.runtime.device
         if self.device.type == "cuda":
             torch.cuda.set_device(self.device)
-        self.state = TrainerState().to(self.device)
 
         if self.runtime.enabled and not dist.is_initialized():
             raise RuntimeError(
@@ -541,6 +619,12 @@ class Trainer:
         self.lr_scheduler = StepLRScheduler(
             self.optimizer, config.lr_scheduler_config, self.total_steps
         )
+        self.state = TrainerState(
+            world_size=self.runtime.world_size,
+            peak_flops=get_device_peak_flops(self.device, self.model_dtype),
+        ).to(self.device)
+        # Widths repeat and are bounded by the model's length limit.
+        self.flops_per_token = functools.cache(self.model.num_flops_per_token)
 
         # torch compile method
         self.torch_compile: bool = config.torch_compile
@@ -590,6 +674,7 @@ class Trainer:
         )
         self.run.define_metric("global_step")
         self.run.define_metric("train/*", step_metric="global_step")
+        self.run.define_metric("perf/*", step_metric="global_step")
         self.run.define_metric("eval/*", step_metric="global_step")
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
@@ -691,8 +776,15 @@ class Trainer:
         return grad_norm
 
     def _inner_training_loop(self, dataloader: Iterable[Batch], start_step: int) -> None:
-        """Update once per batch, then log, save and evaluate at configured intervals."""
+        """Update once per batch, then log, save and evaluate at configured intervals.
+
+        Throughput timing includes evaluation and saving, but not setup.
+        """
+        update_start = fetch_start = perf_counter()
         for step, batch in enumerate(dataloader, start=start_step + 1):
+            data_wait = perf_counter() - fetch_start
+            padded_tokens = batch["input_ids"].numel()
+            flops = self.flops_per_token(batch["input_ids"].shape[1]) * padded_tokens
             # Mark the step begin for CUDA Graphs if torch.compile is enabled.
             if self.torch_compile:
                 torch.compiler.cudagraph_mark_step_begin()
@@ -711,15 +803,33 @@ class Trainer:
             # TODO: try compiled autograd to capture the whole backward once the forward has no graph breaks (right now it still does), but the total effect is uncertainty.
             loss.backward()
             grad_norm = self._clip_and_step()
-            self.lr_scheduler.step()
 
-            self.state.update(add_step=1, loss=losses, grad_norm=grad_norm, tokens=num_tokens)
+            log = step % self.logging_steps == 0 or step == self.total_steps
+            if log and self.device.type == "cuda":
+                # Logging synchronizes anyway; doing it before reading the clock makes the
+                # window's time cover all of its updates.
+                torch.cuda.synchronize(self.device)
+            update_end = perf_counter()
+            self.state.update(
+                add_step=1,
+                loss=losses,
+                grad_norm=grad_norm,
+                tokens=num_tokens,
+                seconds=update_end - update_start,
+                data_wait=data_wait,
+                padded_tokens=padded_tokens,
+                flops=flops,
+            )
+            update_start = update_end
 
-            if step % self.logging_steps == 0 or step == self.total_steps:
+            if log:
                 if self.runtime.is_master:
-                    metrics_dict = self.state.get_logging_metrics()
+                    metrics_dict = self.state.get_logging_metrics() | self._learning_rates()
                     self._log_metrics(metrics_dict)
                 self.state.reset_window()
+
+            # Step after logging, so the logged rate is the one this update used.
+            self.lr_scheduler.step()
 
             # Cleanup handles the final model save, so we only save at intervals here.
             if self.save_steps is not None and (step % self.save_steps == 0):
@@ -729,6 +839,19 @@ class Trainer:
                 step % self.validation_steps == 0 or step == self.total_steps
             ):
                 self.evaluate()
+
+            fetch_start = perf_counter()
+
+    def _learning_rates(self) -> dict[str, float]:
+        """Return each parameter group's current learning rate, named by optimizer.
+
+        A group may carry its own name, as when one optimizer combines several.
+        """
+        default = type(self.optimizer).__name__.lower()
+        return {
+            f"train/lr_{group.get('name', default)}": float(group["lr"])
+            for group in self.optimizer.param_groups
+        }
 
     def train(self, resume_from_checkpoint: bool | str | Path = False) -> None:
         """Train one pass or `max_steps` updates, optionally restoring a checkpoint first.
