@@ -4,7 +4,7 @@
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
-	import TrophyIcon from '@lucide/svelte/icons/trophy';
+	import ClipboardCheckIcon from '@lucide/svelte/icons/clipboard-check';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { Snippet } from 'svelte';
@@ -402,7 +402,7 @@
 							data-sveltekit-replacestate
 							{@attach hint('Eval runs by suites, ranked')}
 						>
-							<TrophyIcon /> Evals
+							<ClipboardCheckIcon /> Evals
 						</Button>
 					{/if}
 					{#if evalsShown}

@@ -36,7 +36,7 @@ D219 suggested W&B groups from the runs in no saved group. Runs logged later int
 
 ### D235. Smaller fixes
 
-- **Best by** is a trophy and the metric on every page (Compare, a group, the editor), as on a group's toolbar before; "Best by" is its tooltip and screen-reader text.
+- **Best by** is a trophy and the metric on every page (Compare, a group, the editor), as on a group's toolbar before; "Best by" is its tooltip and screen-reader text. The Evals preset's button (D210) takes a clipboard with a check instead of its trophy, so the trophy means only the best.
 - Among Suggested columns, which have no group band, a metric with a setting's name is headed by its key (`summary.lr` beside `lr`), on Compare and in a group's table.
 - The editor lists a saved group's runs and its new matches before the other runs (new matches first when opened to review them), by what was saved, so a row doesn't move when ticked.
 - With no OpenAI key on the server, the assistant's settings are disabled under the note that says so.
@@ -65,4 +65,3 @@ D219 suggested W&B groups from the runs in no saved group. Runs logged later int
 - A suite's scale on Compare comes from the best runs' snapshot, read once the page has loaded; until then, and for a suite whose scale is unknown, scores show in the plain number format.
 - A group with both eval and training runs opens on the preset, which lists only its eval runs; **Evals** shows the rest. Whether a group is one of eval runs is read from the page of runs on screen, so in such a mixed group a search or a page without eval runs opens **Visualize** instead.
 - A group's plain table (with **Evals** off) still heads a suite's column `suites/zh_tw:bpb`, as the Runs page does.
-- On a group of eval runs the toolbar has two trophies, **Evals** and **Best by**.
