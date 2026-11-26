@@ -23,6 +23,9 @@ RUN set -eux; \
 
 # The app tests need PostgreSQL. Elsewhere they start it in a container, but jobs here get no
 # Docker daemon, so the workflow starts a private server from these binaries as `runner` instead.
+#
+# zstd lets setup-uv compress its cache with multi-threaded zstd. Without it, the cache action falls
+# back to single-threaded gzip, which takes minutes on the uv cache.
 ARG POSTGRES_MAJOR=18
 RUN set -eux; \
     install -d /etc/apt/keyrings; \
@@ -35,7 +38,7 @@ RUN set -eux; \
     install -d /etc/postgresql-common; \
     echo "create_main_cluster = false" > /etc/postgresql-common/createcluster.conf; \
     apt-get update; \
-    apt-get install -y --no-install-recommends "postgresql-$POSTGRES_MAJOR"; \
+    apt-get install -y --no-install-recommends "postgresql-$POSTGRES_MAJOR" zstd; \
     rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
