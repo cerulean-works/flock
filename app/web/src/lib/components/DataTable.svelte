@@ -115,7 +115,7 @@
 	runs, datasets, models and storage. Pages lay it in a `ListPage`; only the cells are theirs.
 -->
 <div
-	class="group/table grid grid-cols-(--cols-base) gap-x-5 text-[13.5px] sm:grid-cols-(--cols-sm) md:grid-cols-(--cols-md) lg:grid-cols-(--cols-lg)"
+	class="group/table grid grid-cols-(--cols-base) gap-x-5 text-[13px] sm:grid-cols-(--cols-sm) md:grid-cols-(--cols-md) lg:grid-cols-(--cols-lg)"
 	role="table"
 	aria-label={label}
 	style:--cols-base={tracks.base}
@@ -126,7 +126,7 @@
 	<div
 		class={[
 			ROW,
-			'sticky top-0 z-2 h-10 border-b bg-background text-xs font-medium text-muted-foreground'
+			'sticky top-0 z-2 h-9 border-b border-divider bg-background text-xs font-medium text-muted-foreground'
 		]}
 		role="row"
 	>
@@ -151,7 +151,7 @@
 				class={[
 					ROW,
 					'group/row relative border-b border-divider',
-					dense ? 'min-h-11 py-1.5' : 'min-h-14 py-2.5',
+					dense ? 'min-h-9 py-1' : 'min-h-9 py-1.5',
 					on ? 'bg-selection/45' : 'hover:bg-muted'
 				]}
 				role="row"

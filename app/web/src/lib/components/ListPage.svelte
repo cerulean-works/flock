@@ -64,7 +64,7 @@
 		{/if}
 	</div>
 	{#if controls}
-		<div class="ml-auto flex flex-none items-center gap-2">{@render controls()}</div>
+		<div class="ml-auto flex flex-none items-center gap-1">{@render controls()}</div>
 	{/if}
 {/snippet}
 

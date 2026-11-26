@@ -1,18 +1,14 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
-	import BriefcaseIcon from '@lucide/svelte/icons/briefcase';
-	import LayersIcon from '@lucide/svelte/icons/layers';
-	import TagIcon from '@lucide/svelte/icons/tag';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import DataTable, { type Column, ROW_LINK } from '#lib/components/DataTable.svelte';
-	import MetaItem from '#lib/components/MetaItem.svelte';
-	import MetaRow from '#lib/components/MetaRow.svelte';
+	import InlinePager from '#lib/components/InlinePager.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
-	import { Button } from '#lib/components/ui/button/index.js';
+	import { FeedPages } from '#lib/data/feed-pages.svelte.ts';
 	import { FeedPager } from '#lib/data/feed.svelte.ts';
 	import type { FeedPage } from '#lib/types.ts';
 	import { dateTime, duration, gpus, relativeTime } from '#lib/utils.ts';
-	import { projectHref } from '#lib/workspace/url.ts';
+	import { runHref } from '#lib/workspace/url.ts';
 
 	interface Props {
 		/** The newest runs, from the page load (polling refreshes it). */
@@ -35,47 +31,39 @@
 		{ id: 'owner', label: 'Owner', from: 'lg' },
 		{ id: 'gpus', label: 'GPUs', size: 'fit', from: 'lg' },
 		{ id: 'runtime', label: 'Runtime', from: 'lg', align: 'end' },
-		{ id: 'started', label: 'Started', align: 'end' }
+		{ id: 'started', label: 'Updated', align: 'end' }
 	];
-	const runs = $derived(pager.items.filter((item) => item.run));
+	// One row per run, its latest state, 50 to a page.
+	const pages = new FeedPages(pager, 50, (item) => !!item.run);
 </script>
 
 <DataTable
 	columns={COLUMNS}
-	rows={runs}
+	rows={pages.shown}
 	key={(item) => item.id}
 	name={(item) => item.run?.display_name ?? item.run?.id ?? item.id}
 	label="Latest runs"
 	empty={none}
-	footer={pager.next ? more : undefined}
+	footer={pages.hasPrev || pages.hasNext ? more : undefined}
 >
 	{#snippet cell(item, column)}
 		{@const run = item.run!}
 		{#if column === 'run'}
-			<div class="flex items-center gap-2">
+			<div class="flex min-w-0 items-center gap-2">
 				<a
-					class={['truncate font-medium hover:text-link', ROW_LINK]}
-					href={projectHref(item.org, item.project)}
+					class={['truncate hover:text-link', ROW_LINK]}
+					href={runHref(item.org, item.project, run.id)}
+					{@attach hint(
+						[run.job_type, run.group, run.tags.join(', ')].filter(Boolean).join(' · ') || undefined
+					)}
 				>
 					{run.display_name ?? run.id}
 				</a>
 				{#if run.state === 'running' || run.state === 'preempting'}
-					<!-- The state column is hidden on phones. -->
-					<span
-						class="size-1.5 flex-none animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none md:hidden"
-						{@attach hint('Running')}
-					></span>
+					<!-- The state column is hidden on phones: a still dot stands in for it. -->
+					<span class="size-1.5 flex-none rounded-full bg-state-running md:hidden"></span>
 				{/if}
 			</div>
-			{#if run.tags.length || run.job_type || run.group}
-				<MetaRow class="mt-0.5 flex-nowrap gap-x-3 overflow-hidden">
-					{#if run.job_type}<MetaItem icon={BriefcaseIcon} title="Job type">{run.job_type}</MetaItem
-						>{/if}
-					{#if run.group}<MetaItem icon={LayersIcon} title="Group">{run.group}</MetaItem>{/if}
-					{#if run.tags.length}<MetaItem icon={TagIcon} title="Tags">{run.tags.join(', ')}</MetaItem
-						>{/if}
-				</MetaRow>
-			{/if}
 		{:else if column === 'project'}
 			<span class="block truncate text-muted-foreground">{item.project}</span>
 		{:else if column === 'state'}
@@ -83,7 +71,7 @@
 		{:else if column === 'owner'}
 			{#if item.actor}
 				<span class="flex min-w-0 items-center gap-2">
-					<Avatar name={item.actor.name} src={item.actor.avatar_url} class="size-6 text-[10px]" />
+					<Avatar name={item.actor.name} src={item.actor.avatar_url} class="size-4 text-[8px]" />
 					<span class="truncate">{item.actor.name}</span>
 				</span>
 			{:else}
@@ -103,6 +91,14 @@
 
 {#snippet none()}{empty}{/snippet}
 {#snippet more()}
-	<Button variant="outline" onclick={() => pager.more()} pending={pager.loading}>Show more</Button>
-	{#if pager.failed}<span class="text-[13px] text-destructive">Couldn’t load more</span>{/if}
+	<InlinePager
+		label="Run pages"
+		from={pages.from}
+		to={pages.from + pages.shown.length - 1}
+		total={pages.total}
+		onprev={pages.hasPrev ? pages.prev : undefined}
+		onnext={pages.hasNext ? pages.next : undefined}
+		pending={pager.loading}
+		failed={pager.failed}
+	/>
 {/snippet}

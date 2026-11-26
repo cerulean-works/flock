@@ -15,6 +15,10 @@
 
 	let { projects, project, kinds }: Props = $props();
 
+	// Quiet view-bar controls: borderless until hovered, muted until set.
+	const QUIET =
+		'h-7! gap-1 border-0 bg-transparent px-2 text-[13px] text-muted-foreground shadow-none hover:bg-muted hover:text-foreground data-[state=open]:bg-muted dark:bg-transparent dark:hover:bg-muted';
+
 	/** Select values can't be empty: this one stands for "no filter". */
 	const ALL = '*';
 
@@ -26,10 +30,10 @@
 	}
 </script>
 
-<div class="flex flex-wrap items-center gap-2">
+<div class="flex items-center gap-1">
 	{#if kinds !== undefined}
 		<Select.Root type="single" value={kinds ?? ALL} onValueChange={(v) => set('kinds', v)}>
-			<Select.Trigger class="min-w-36" aria-label="Kind of activity">
+			<Select.Trigger class={QUIET} aria-label="Kind of activity">
 				{FEED_KINDS.find(([k]) => k === kinds)?.[1] ?? 'All activity'}
 			</Select.Trigger>
 			<Select.Content>
@@ -42,7 +46,7 @@
 	{/if}
 	{#if projects.length > 1 || project}
 		<Select.Root type="single" value={project ?? ALL} onValueChange={(v) => set('project', v)}>
-			<Select.Trigger class="max-w-56 min-w-36" aria-label="Project">
+			<Select.Trigger class={[QUIET, 'max-w-56']} aria-label="Project">
 				<span class="truncate">{project ?? 'All projects'}</span>
 			</Select.Trigger>
 			<Select.Content>

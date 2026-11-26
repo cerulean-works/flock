@@ -1,6 +1,8 @@
 <script lang="ts">
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import UserIcon from '@lucide/svelte/icons/user';
+	import { hint } from '#lib/hint.svelte.ts';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
@@ -8,7 +10,6 @@
 	import PublicOrg from '#lib/components/home/PublicOrg.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
-	import SegmentedNav from '#lib/components/SegmentedNav.svelte';
 	import WandbKeyCreator from '#lib/components/WandbKeyCreator.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { page } from '$app/state';
@@ -25,11 +26,6 @@
 	// Nothing logged yet: how to log the first run, instead of an empty table.
 	const fresh = $derived(!data.mine && !data.project && !data.feed?.items.length);
 
-	const TABS = [
-		['', 'Everyone'],
-		['mine', 'Mine']
-	] as const;
-
 	let creating = $state(false);
 </script>
 
@@ -38,31 +34,44 @@
 </svelte:head>
 
 {#snippet actions()}
-	<Button variant="ghost" href={orgHref(params.entity)}>
-		<SettingsIcon /> <span class="max-sm:sr-only">Settings</span>
+	<Button
+		variant="quiet"
+		size="icon-bar"
+		href={orgHref(params.entity)}
+		aria-label="Settings"
+		{@attach hint('Settings and members')}
+	>
+		<SettingsIcon />
 	</Button>
-	<Button variant="outline" onclick={() => (creating = true)}>
-		<PlusIcon /> <span class="max-sm:sr-only">New project</span>
+	<Button
+		variant="quiet"
+		size="icon-bar"
+		onclick={() => (creating = true)}
+		aria-label="New project"
+		{@attach hint('New project')}
+	>
+		<PlusIcon />
 	</Button>
 {/snippet}
 
 <!-- The feed's own controls, under the title once there are runs to show. -->
 {#snippet feedControls()}
 	<FeedFilters projects={data.shell.projects.map((p) => p.name)} project={data.project} />
-	<SegmentedNav
-		label="Show"
-		items={TABS.map(([key, label]) => ({
-			href: withParam(page.url, 'runs', key || null),
-			label,
-			current: (key === 'mine') === data.mine
-		}))}
-	/>
+	<Button
+		variant={data.mine ? 'quiet-on' : 'quiet'}
+		size="bar"
+		href={withParam(page.url, 'runs', data.mine ? null : 'mine')}
+		aria-pressed={data.mine}
+		data-sveltekit-replacestate
+		{@attach hint(data.mine ? 'Show everyone’s runs' : 'Show only the runs you logged')}
+	>
+		<UserIcon /> My runs
+	</Button>
 {/snippet}
 
 <ListPage
 	title={data.outside ? data.org.display_name : 'Runs'}
 	live={running}
-	heading={fresh || data.outside ? undefined : 'Latest runs'}
 	controls={fresh || data.outside ? undefined : feedControls}
 	actions={data.outside ? undefined : actions}
 >
