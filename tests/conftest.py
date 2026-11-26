@@ -81,10 +81,19 @@ def notification() -> Callable[..., AbstractContextManager[None]]:
     def watch(
         bus: Bus, loop: asyncio.AbstractEventLoop, channel: str, payload: str
     ) -> Generator[None]:
+        import asyncpg
+
+        # A notification sent before the block (by a fixture, say) may still be on its way and
+        # would pass for the one the block causes. PostgreSQL delivers in commit order, so once
+        # our own marker arrives, every earlier notification has been handled.
+        marker = f"marker-{secrets.token_hex(8)}"
+        caught_up = threading.Event()
         received = threading.Event()
 
         def notified(value: str) -> None:
-            if value == payload:
+            if value == marker:
+                caught_up.set()
+            elif value == payload and caught_up.is_set():
                 received.set()
 
         def on_loop(coro: Coroutine[Any, Any, None]) -> None:
@@ -92,12 +101,18 @@ def notification() -> Callable[..., AbstractContextManager[None]]:
 
         async def listen() -> None:
             bus.listen(channel, notified)
+            conn = await asyncpg.connect(bus.dsn)
+            try:
+                await conn.execute("SELECT pg_notify($1, $2)", channel, marker)
+            finally:
+                await conn.close()
 
         async def unlisten() -> None:
             bus._channels[channel].remove(notified)
 
         on_loop(listen())
         try:
+            assert caught_up.wait(10), f"received no {channel} notification for {marker}"
             yield
             assert received.wait(10), f"received no {channel} notification for {payload}"
         finally:
