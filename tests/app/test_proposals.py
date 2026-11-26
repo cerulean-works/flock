@@ -179,14 +179,17 @@ def test_the_input_is_the_project_then_the_conversation_with_the_proposals_on_sc
 class FakeResponses:
     """The Responses API: records each request body and answers with ``reply``."""
 
-    def __init__(self, reply: dict[str, Any] | httpx.Response) -> None:
+    def __init__(self, reply: dict[str, Any] | httpx.Response, tier: str = "standard") -> None:
         self.reply = reply
+        self.tier = tier
         self.requests: list[dict] = []
+        self.tiers: list[str | None] = []  # each request's OpenAI-Service-Tier header
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         assert request.url == "https://api.openai.com/v1/responses"
         assert request.headers["authorization"] == "Bearer sk-test"
         self.requests.append(json.loads(request.content))
+        self.tiers.append(request.headers.get("openai-service-tier"))
         if isinstance(self.reply, httpx.Response):
             return self.reply
         return httpx.Response(200, json=self.reply)
@@ -194,7 +197,7 @@ class FakeResponses:
     def turn(self, messages: Sequence[Message] = (), match: Callable | None = None) -> Turn:
         async def main() -> Turn:
             async with httpx.AsyncClient(transport=httpx.MockTransport(self.handler)) as http:
-                client = ResponsesClient("sk-test", model="gpt-test", http=http)
+                client = ResponsesClient("sk-test", model="gpt-test", tier=self.tier, http=http)
                 return await propose(ctx(), list(messages), None, match or matcher({}), client)
 
         return asyncio.run(main())
@@ -222,6 +225,7 @@ def test_the_request_is_a_strict_json_schema_response() -> None:
     (body,) = fake.requests
     assert body["model"] == "gpt-test"
     assert body["store"] is False
+    assert "service_tier" not in body and fake.tiers == [None]  # standard: OpenAI's default
     assert body["instructions"] == proposals.INSTRUCTIONS
     assert body["input"][-1] == {"role": "user", "content": "group the sweep"}
     fmt = body["text"]["format"]
@@ -229,6 +233,15 @@ def test_the_request_is_a_strict_json_schema_response() -> None:
     assert fmt["name"] == "group_proposals" and fmt["schema"] == proposals.SCHEMA
     assert turn.message == "One sweep."
     assert [p["runs"] for p in turn.proposals] == [["a1", "a3", "a4"]]
+
+
+@pytest.mark.parametrize("tier", ["fast", "ultrafast"])
+def test_a_faster_tier_is_named_in_the_body_and_the_header(tier: str) -> None:
+    reply = {"message": "One sweep.", "proposals": [proposal(runs=["a1", "a3", "a4"])]}
+    fake = FakeResponses(text(reply), tier=tier)
+    fake.turn([Message("user", "group the sweep")])
+    (body,) = fake.requests
+    assert body["service_tier"] == tier and fake.tiers == [tier]
 
 
 def test_the_strict_schema_requires_every_field_and_forbids_others() -> None:

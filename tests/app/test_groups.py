@@ -468,6 +468,25 @@ def test_the_assistant_is_off_until_an_org_admin_turns_it_on(flock: FlockServer)
     assert api.post(f"{G}/assist", {"request": "adam runs"}).status == 404
 
 
+def test_org_admins_pick_the_proposal_model_and_tier(flock: FlockServer) -> None:
+    api = flock.client()
+    member = flock.add_user("m@x.io").api
+    org = "/api/v1/orgs/flock"
+    assert member.patch(org, {"assistant_model": "gpt-x"}).status == 403
+    set_ = api.patch(org, {"assistant_model": "gpt-6.2-astra", "assistant_tier": "ultrafast"})
+    assert set_.status == 200
+    got = api.get(org).json()
+    assert (got["assistant_model"], got["assistant_tier"]) == ("gpt-6.2-astra", "ultrafast")
+    # Another change leaves them be; a null model goes back to the server's.
+    api.patch(org, {"display_name": "Flock"})
+    assert api.get(org).json()["assistant_model"] == "gpt-6.2-astra"
+    reset = api.patch(org, {"assistant_model": None, "assistant_tier": "standard"}).json()
+    assert (reset["assistant_model"], reset["assistant_tier"]) == (None, "standard")
+    for bad in ({"assistant_tier": "turbo"}, {"assistant_model": ""},
+                {"assistant_model": "gpt 6"}, {"assistant_tier": None}):  # fmt: skip
+        assert api.patch(org, bad).status == 422, bad
+
+
 # ---------------------------------------------------------------------- proposals (D229)
 
 

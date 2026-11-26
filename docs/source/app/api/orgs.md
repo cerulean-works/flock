@@ -7,7 +7,7 @@ Endpoints for organizations, their members and their invitations. Paths are rela
 An organization is returned as:
 
 ```json
-{"name": "flock", "display_name": "Flock Research", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin", "avatar_url": null, "s3_ephemeral_ttl": 28800, "s3_key_max_ttl": 2592000, "model_retention": null, "assistant_enabled": false}
+{"name": "flock", "display_name": "Flock Research", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin", "avatar_url": null, "s3_ephemeral_ttl": 28800, "s3_key_max_ttl": 2592000, "model_retention": null, "assistant_enabled": false, "assistant_model": null, "assistant_tier": "standard", "assistant_default_model": "gpt-6.2-sol", "assistant_available": true}
 ```
 
 | Field | Meaning |
@@ -19,13 +19,17 @@ An organization is returned as:
 | `s3_ephemeral_ttl`, `s3_key_max_ttl` | Its [S3 key lifetimes](../s3-behavior#key-lifetimes), in seconds. The maximum is `null` when keys may never expire. |
 | `model_retention` | How many untagged versions of each model it keeps (see [Retention](models#retention)), or `null` to keep every version. |
 | `assistant_enabled` | Whether the [run groups assistant](projects#group-assistant) is on for its members. It also needs the server's `FLOCK_OPENAI_API_KEY`. |
+| `assistant_model` | The OpenAI model that proposes groups on the **Auto** tab, such as `gpt-6.2-sol`, or `null` for the server's `FLOCK_OPENAI_PROPOSAL_MODEL`. |
+| `assistant_tier` | OpenAI's service tier for those proposals: `standard` (the default), `fast` or `ultrafast`. Faster tiers cost more per token, and `ultrafast` works only with the models that offer it. |
+| `assistant_default_model` | The server's `FLOCK_OPENAI_PROPOSAL_MODEL`, which a `null` `assistant_model` uses. |
+| `assistant_available` | Whether the server has an OpenAI API key. Without one the assistant stays off, whatever `assistant_enabled` says. |
 
 | Endpoint | Who | Meaning |
 |---|---|---|
 | `GET /orgs` | anyone | Your organizations as `{"orgs": [...]}`, sorted by display name, then by ID. Super admins get every organization. |
 | `POST /orgs` | super admins | Creates an organization from `{"name": "vision", "display_name": "Vision Lab"}`, with you as its admin. `display_name` defaults to `name`. Answers 201, or 409 if the ID is taken. Add `wandb` to [import a W&B entity](#imports) into it. |
 | `GET /orgs/{org}` | members, anyone if it has a public project | One organization. Outsiders get only `{"name", "display_name", "avatar_url", "role": null}`, and only while it has a [public project](../share-publicly). Otherwise they get 404. |
-| `PATCH /orgs/{org}` | org admins | Changes its display name, with `{"display_name": "..."}`, its S3 key lifetimes, with `s3_ephemeral_ttl` and `s3_key_max_ttl` (seconds, at least 600; `null` for no maximum), its model retention, with `model_retention` (1 to 1,000,000, or `null` for off), and the run groups assistant, with `assistant_enabled`. An ephemeral lifetime longer than the maximum answers 422; lowering only the maximum below it lowers it too. Returns the organization. |
+| `PATCH /orgs/{org}` | org admins | Changes its display name, with `{"display_name": "..."}`, its S3 key lifetimes, with `s3_ephemeral_ttl` and `s3_key_max_ttl` (seconds, at least 600; `null` for no maximum), its model retention, with `model_retention` (1 to 1,000,000, or `null` for off), and the run groups assistant, with `assistant_enabled`, `assistant_model` (an OpenAI model ID of 1 to 128 letters, digits and `. _ : / -`, or `null` for the server's default) and `assistant_tier` (`standard`, `fast` or `ultrafast`; `null` answers 422). An ephemeral lifetime longer than the maximum answers 422; lowering only the maximum below it lowers it too. Returns the organization. |
 | `DELETE /orgs/{org}` | org admins | Deletes it, with all its projects and runs. Its S3 buckets are deleted too, and emptied in the background. Answers 204. |
 | `PUT /orgs/{org}/avatar` | org admins | Sets its avatar. The body is the image, with the same rules as [`PUT /me/avatar`](auth#avatars). Returns the organization. |
 | `DELETE /orgs/{org}/avatar` | org admins | Removes its avatar. Returns the organization. |

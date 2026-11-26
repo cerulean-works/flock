@@ -120,8 +120,10 @@ The **…** menu beside the group's name holds the group's actions:
 
 **Auto**, the **Manual** assistant panel and the model's **Suggested** columns use OpenAI's models from the Flock server. They need two things:
 
-1. The server has an OpenAI API key, set in `FLOCK_OPENAI_API_KEY`. `FLOCK_OPENAI_PROPOSAL_MODEL` picks the model that proposes groups. Both are described in [Configuration](configuration).
-2. An organization admin turns the assistant on for the organization, with `assistant_enabled` in the [Orgs API](api/orgs).
+1. The server has an OpenAI API key, set in `FLOCK_OPENAI_API_KEY`. `FLOCK_OPENAI_PROPOSAL_MODEL` sets the default model that proposes groups. Both are described in [Configuration](configuration).
+2. An organization admin turns the assistant on in **Run groups assistant** on the organization's page, or with `assistant_enabled` in the [Orgs API](api/orgs).
+
+The same section picks the **Proposal model** for the organization, an OpenAI model ID such as `gpt-6.2-sol`. Leave it empty to use the server's default. **Speed** picks OpenAI's service tier for proposals: **Standard**, **Fast** (faster, at a premium per token) or **Ultrafast** (the fastest, on the models that offer it). A faster tier makes each **Auto** turn quicker. It doesn't change the **Manual** assistant or **Suggested** columns.
 
 Only the organization's members can use the assistant. People viewing a public project see groups and their charts, but can't create or change them.
 

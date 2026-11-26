@@ -168,11 +168,14 @@ class ResponsesClient:
         api_key: str,
         *,
         model: str = MODEL,
+        tier: str = "standard",
         base_url: str = "https://api.openai.com/v1",
         http: httpx.AsyncClient | None = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
+        # OpenAI's service tier (D230): "fast" or "ultrafast", or None for the standard one.
+        self.tier = tier if tier != "standard" else None
         self.url = base_url.rstrip("/") + "/responses"
         self.own_http = http is None
         self.http = http or httpx.AsyncClient(
@@ -198,14 +201,16 @@ class ResponsesClient:
             "max_output_tokens": MAX_OUTPUT_TOKENS,
             "store": False,
         }  # fmt: skip
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        if self.tier:
+            # The header and the body name the same tier, as OpenAI asks.
+            body["service_tier"] = self.tier
+            headers["OpenAI-Service-Tier"] = self.tier
         try:
             response = await self.http.post(
                 self.url,
                 content=orjson.dumps(body),
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
+                headers=headers,
             )
         except httpx.TimeoutException:
             raise AssistantError("the model took too long to answer") from None

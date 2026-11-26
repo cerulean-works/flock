@@ -726,8 +726,9 @@ async def propose_groups(
             for item in body.proposals
         ]
     settings = store.settings
+    model, tier = await Groups(store).assistant_model(project.org)
     client = proposals.ResponsesClient(
-        settings.openai_api_key or "", model=settings.openai_proposal_model
+        settings.openai_api_key or "", model=model or settings.openai_proposal_model, tier=tier
     )
     try:
         # An AssistantError is a BadGateway: 502.

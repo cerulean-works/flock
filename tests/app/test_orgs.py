@@ -51,6 +51,10 @@ def test_org_crud(flock: FlockServer) -> None:
         "s3_key_max_ttl": 30 * 86400,
         "model_retention": None,  # keep every model version (D109)
         "assistant_enabled": False,  # the group pages' assistant is off by default (D224)
+        "assistant_model": None,  # the server's proposal model (D230)
+        "assistant_tier": "standard",
+        "assistant_default_model": "gpt-6.2-sol",
+        "assistant_available": False,  # this server has no OpenAI API key
     }
     assert admin.post(ORGS, {"name": "lab"}).status == 409
     assert admin.post(ORGS, {"name": "a/b"}).status == 422

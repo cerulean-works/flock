@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from app.api.src.core.store import Org, Project, Store
 
 Order = Literal["asc", "desc"]
+# OpenAI's service tiers for the assistant's proposals (D230): standard sends none.
+Tier = Literal["standard", "fast", "ultrafast"]
 
 # New groups take the next of the run palette's colors (the web's workspace palette).
 COLORS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948")
@@ -187,6 +189,19 @@ class Groups:
         await self.pool.execute(
             "UPDATE orgs SET assistant_enabled = $2 WHERE pk = $1", org.pk, enabled
         )
+
+    async def assistant_model(self, org: Org) -> tuple[str | None, Tier]:
+        """The org's proposal model (None: the server's default) and service tier (D230)."""
+        row = await self.pool.fetchrow(
+            "SELECT assistant_model, assistant_tier FROM orgs WHERE pk = $1", org.pk
+        )
+        return (row["assistant_model"], row["assistant_tier"]) if row else (None, "standard")
+
+    async def set_assistant_model(self, org: Org, model: str | None) -> None:
+        await self.pool.execute("UPDATE orgs SET assistant_model = $2 WHERE pk = $1", org.pk, model)
+
+    async def set_assistant_tier(self, org: Org, tier: Tier) -> None:
+        await self.pool.execute("UPDATE orgs SET assistant_tier = $2 WHERE pk = $1", org.pk, tier)
 
     # ------------------------------------------------------------------ groups
 

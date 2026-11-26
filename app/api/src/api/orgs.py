@@ -20,7 +20,7 @@ from app.api.src.api.deps import (
     rest_user,
 )
 from app.api.src.core.accounts import Invite, User
-from app.api.src.core.groups import Groups
+from app.api.src.core.groups import Groups, Tier
 from app.api.src.core.store import Org, Store
 from app.api.src.core.wandb_source import WandbAuthError, WandbError, WandbNotFound, WandbSource
 
@@ -29,6 +29,10 @@ router = APIRouter(prefix="/api/v1", tags=["organizations"], dependencies=[Depen
 public = APIRouter(prefix="/api/v1", tags=["organizations"])
 
 Role = Literal["admin", "member"]
+# An OpenAI model ID, such as gpt-6.2-sol (D230): letters, digits and . _ : / -.
+AssistantModel = Annotated[
+    str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+]
 
 
 def check_base_url(value: str) -> str:
@@ -72,6 +76,10 @@ class OrgUpdate(BaseModel):
     model_retention: int | None = Field(None, ge=1, le=1_000_000)
     # The assistant on the group pages (D224); it also needs the server's OpenAI key.
     assistant_enabled: bool | None = None
+    # The model proposing groups and its OpenAI service tier (D230); a null model is the
+    # server's FLOCK_OPENAI_PROPOSAL_MODEL.
+    assistant_model: AssistantModel | None = None
+    assistant_tier: Tier | None = None
 
 
 class RoleBody(BaseModel):
@@ -88,6 +96,7 @@ class InviteCreate(BaseModel):
 
 
 async def org_info(store: Store, org: Org, user: User) -> dict:
+    model, tier = await Groups(store).assistant_model(org)
     return {
         "name": org.name,
         "display_name": org.display_name,
@@ -103,6 +112,11 @@ async def org_info(store: Store, org: Org, user: User) -> dict:
         "s3_key_max_ttl": org.s3_key_max_ttl,
         "model_retention": org.model_retention,
         "assistant_enabled": await Groups(store).assistant_enabled(org),
+        "assistant_model": model,
+        "assistant_tier": tier,
+        # What a null model means, and whether the assistant can answer at all.
+        "assistant_default_model": store.settings.openai_proposal_model,
+        "assistant_available": bool(store.settings.openai_api_key),
     }
 
 
@@ -215,6 +229,10 @@ async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: St
     ``assistant_enabled`` turns the group pages' assistant on or off for the org (D224). It
     sends requests, column names, observed values and run names to OpenAI, and answers only
     while the server has an OpenAI API key.
+
+    ``assistant_model`` is the OpenAI model that proposes groups on the Auto tab (null: the
+    server's ``FLOCK_OPENAI_PROPOSAL_MODEL``), and ``assistant_tier`` its OpenAI service tier:
+    ``standard``, ``fast`` or ``ultrafast`` (D230).
     """
     if body.name is not None and body.name != org.name:
         raise APIError(400, "an organization's ID (name) can't be changed")
@@ -227,6 +245,12 @@ async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: St
         await store.set_model_retention(org, body.model_retention)
     if body.assistant_enabled is not None:
         await Groups(store).set_assistant_enabled(org, body.assistant_enabled)
+    if "assistant_model" in body.model_fields_set:
+        await Groups(store).set_assistant_model(org, body.assistant_model)
+    if "assistant_tier" in body.model_fields_set and body.assistant_tier is None:
+        raise APIError(422, "assistant_tier can't be null")
+    if body.assistant_tier is not None:
+        await Groups(store).set_assistant_tier(org, body.assistant_tier)
     if body.display_name is not None:
         await store.set_org_display_name(org, body.display_name)
     return JSONResponse(await org_info(store, org, user))

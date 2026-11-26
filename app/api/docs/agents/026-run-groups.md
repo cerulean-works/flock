@@ -475,6 +475,21 @@ runs, and its filter, so runs logged later are offered as new matches ([D216](#d
 - **Off like the assistant:** it needs the key and the org's `assistant_enabled`, and answers
   403 otherwise.
 
+### D230. Each org picks its proposal model and tier
+
+An org admin sets, under **Run groups assistant** on the org's page, the switch of
+[D224](#d224), the model that proposes groups ([D229](#d229)) and OpenAI's service tier for
+it. `orgs.assistant_model` (migration `0027_assistant_settings.sql`) is an OpenAI model ID, or
+null for the server's `FLOCK_OPENAI_PROPOSAL_MODEL`. `orgs.assistant_tier` is `standard`,
+`fast` or `ultrafast`. Standard sends no tier. The other two go in the request body's
+`service_tier` and in the `OpenAI-Service-Tier` header, which must match it.
+
+Only proposals use the tier: they are the slow requests (4 to 16 s a turn), while the
+Decisions API's answers are already quick. Flock doesn't check that a model offers a tier;
+OpenAI refuses the request, and the Auto tab shows the error. `GET /orgs/{org}` also returns
+`assistant_default_model` and `assistant_available` (whether the server has a key), so the
+page can say what an empty model means and why the assistant stays off.
+
 ---
 
 ## 3. Plan

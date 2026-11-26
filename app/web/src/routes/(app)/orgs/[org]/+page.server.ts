@@ -295,6 +295,23 @@ export const actions: Actions = {
 		return { org: res.data };
 	},
 
+	assistant: async ({ params, request }) => {
+		const form = await request.formData();
+		const model = formText(form, 'model').trim();
+		const tier = formText(form, 'tier');
+		if (model && !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(model))
+			return fail(400, { error: 'Enter an OpenAI model ID, such as gpt-6.2-sol' });
+		if (!['standard', 'fast', 'ultrafast'].includes(tier))
+			return fail(400, { error: 'Pick Standard, Fast or Ultrafast' });
+		const res = await change<OrgInfo>('PATCH', orgPath(params.org), {
+			assistant_enabled: form.get('enabled') === 'on',
+			assistant_model: model || null,
+			assistant_tier: tier
+		});
+		if (refused(res)) return res;
+		return { org: res.data };
+	},
+
 	delete: async ({ locals, params, request }) => {
 		const force = (await request.formData()).get('force') === 'on' ? '?force=true' : '';
 		const res = await change('DELETE', `${orgPath(params.org)}${force}`);
