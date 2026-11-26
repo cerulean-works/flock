@@ -8,9 +8,6 @@ from flock.training.core.models import BaseModel
 class EchoModel(BaseModel):
     """Exercise shared input handling independently of any model architecture."""
 
-    def num_flops_per_token(self, seq_len: int) -> int:
-        return 0
-
     def _forward(
         self,
         input_ids: torch.Tensor,

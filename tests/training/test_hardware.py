@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from flock.training.core.hardware import peak_flops_per_second
+from flock.training.core.hardware import get_device_peak_flops
 
 
 @pytest.mark.parametrize(
@@ -18,10 +18,10 @@ from flock.training.core.hardware import peak_flops_per_second
 )
 def test_peak_flops_by_gpu(monkeypatch: pytest.MonkeyPatch, name: str, peak: float | None) -> None:
     monkeypatch.setattr(torch.cuda, "get_device_name", lambda device: name)
-    assert peak_flops_per_second(torch.device("cuda", 0), torch.bfloat16) == peak
+    assert get_device_peak_flops(torch.device("cuda", 0), torch.bfloat16) == peak
 
 
 def test_no_peak_for_cpu_or_fp32(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(torch.cuda, "get_device_name", lambda device: "NVIDIA H200")
-    assert peak_flops_per_second(torch.device("cpu"), torch.bfloat16) is None
-    assert peak_flops_per_second(torch.device("cuda", 0), torch.float32) is None
+    assert get_device_peak_flops(torch.device("cpu"), torch.bfloat16) is None
+    assert get_device_peak_flops(torch.device("cuda", 0), torch.float32) is None

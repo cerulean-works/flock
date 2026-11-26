@@ -2290,10 +2290,7 @@ def test_training_updates_and_token_weighted_logging(
 
 
 def test_token_counts_stay_exact_beyond_fp32_integers() -> None:
-    optimizer = torch.optim.SGD([torch.zeros(1, requires_grad=True)], lr=0.1)
-    state = TrainerState(
-        flops_per_token=lambda width: 0, peak_flops=None, world_size=1, optimizer=optimizer
-    )
+    state = TrainerState()
     one = torch.tensor(1.0)
     state.update(add_step=1, loss=one, grad_norm=one, tokens=torch.tensor(2**24 + 1))
     state.reset_window()

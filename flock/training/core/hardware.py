@@ -1,11 +1,11 @@
 import torch
 
 
-def peak_flops_per_second(device: torch.device, dtype: torch.dtype) -> float | None:
+def get_device_peak_flops(device: torch.device, dtype: torch.dtype) -> float | None:
     """Return a GPU's dense 16-bit tensor-core peak, or `None` when MFU has no peak to use.
 
-    Values are torchtitan's (`torchtitan/tools/utils.py`, v0.3.0), per GPU and without
-    sparsity. There is no peak for the CPU, for FP32 training or for an unlisted GPU.
+    Values follow torchtitan's, per GPU and without sparsity. There is no peak for the
+    CPU, for FP32 training or for an unlisted GPU.
 
     Args:
         device (`torch.device`): Training device.

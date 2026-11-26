@@ -104,6 +104,8 @@ def test_muon_companion_preserves_all_groups_on_resume(
     resumed_model = copy.deepcopy(model)
     resumed_optimizer = factory(config, resumed_model.parameters())
     resumed_optimizer.load_state_dict(checkpoint)
+    names = [group["name"] for group in resumed_optimizer.param_groups]
+    assert names == ["muon", "sgd", "sgd"]
     step(model, optimizer)
     step(resumed_model, resumed_optimizer)
     for actual, expected in zip(resumed_model.parameters(), model.parameters(), strict=True):
