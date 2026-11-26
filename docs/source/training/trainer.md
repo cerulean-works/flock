@@ -87,7 +87,7 @@ To decay immediately after warmup, remove the constant segment and change the
 decay segment's `start` to `0.1`.
 
 Each segment names its timeframe, starting and ending LR ratios, and
-`"linear"` or `"cosine"` interpolation. Integer times count completed optimizer
+`"linear"`, `"cosine"` or `"1-sqrt"` interpolation. Integer times count completed optimizer
 updates; floating-point times are fractions of the run, rounded down to whole
 updates. Use `100` for step 100 and `1.0` for the run endpoint.
 Adjacent segments must share a time boundary; gaps are rejected. Use equal

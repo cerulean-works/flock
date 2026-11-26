@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import io
+import math
 from typing import Any
 
 import pytest
@@ -560,3 +561,33 @@ def test_scheduler_owns_strict_state_validation(change: str) -> None:
             check(saved)
         assert scheduler.state_dict() == expected
         assert scheduler.optimizer.state_dict() == expected_optimizer
+
+
+@pytest.mark.parametrize(("start_ratio", "end_ratio"), [(1.0, 0.01), (0.2, 0.9)])
+def test_one_minus_sqrt_follows_its_formula_within_the_segment(
+    start_ratio: float, end_ratio: float
+) -> None:
+    config = LRSchedulerConfig(
+        schedule=[
+            LRScheduleSegment(start=0, end=2, start_ratio=0.0, end_ratio=1.0),
+            LRScheduleSegment(start=2, end=0.9, start_ratio=1.0, end_ratio=start_ratio),
+            LRScheduleSegment(
+                start=0.9,
+                end=1.0,
+                start_ratio=start_ratio,
+                end_ratio=end_ratio,
+                interpolation="1-sqrt",
+            ),
+        ]
+    )
+    total = 100
+    for step in range(90, 101):
+        progress = (step - 90) / 10
+        expected = end_ratio + (start_ratio - end_ratio) * (1 - math.sqrt(progress))
+        assert lr_multiplier(step, config, total) == pytest.approx(expected, abs=1e-12)
+    # The decay is fastest at its start, unlike linear or cosine.
+    assert lr_multiplier(91, config, total) == pytest.approx(
+        end_ratio + (start_ratio - end_ratio) * (1 - math.sqrt(0.1))
+    )
+    assert lr_multiplier(200, config, total) == end_ratio
+    assert LRSchedulerConfig.model_validate(config.model_dump(mode="json")) == config

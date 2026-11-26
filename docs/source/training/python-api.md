@@ -121,7 +121,7 @@ The optimizer config supplies each parameter group's base learning rate.
 | `LRScheduleSegment` | `end` | Required | Integer update count or float fraction in `[0, 1]`, after `start`. |
 | `LRScheduleSegment` | `start_ratio` | Required | Initial ratio of the optimizer group's base rate, in `[0, 1]`. |
 | `LRScheduleSegment` | `end_ratio` | Required | Final ratio of the optimizer group's base rate, in `[0, 1]`. |
-| `LRScheduleSegment` | `interpolation` | `"linear"` | `"linear"` or `"cosine"`, for increases or decreases. |
+| `LRScheduleSegment` | `interpolation` | `"linear"` | `"linear"`, `"cosine"` or `"1-sqrt"` (Hägele et al.: `end + (start - end) * (1 - sqrt(x))` at progress `x`), for increases or decreases. |
 
 `1` means update one; `1.0` means the run endpoint. Fractional times resolve to
 `floor(fraction * total_steps)`. Construction rejects nonpositive run lengths,

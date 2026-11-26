@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from math import cos, floor, pi
+from math import cos, floor, pi, sqrt
 from typing import Annotated, Any, Literal, Self
 
 import torch
@@ -22,7 +22,9 @@ class LRScheduleSegment(BaseModel):
         start_ratio (`float`): Initial ratio of each optimizer group's base rate.
         end_ratio (`float`): Final ratio of each optimizer group's base rate.
         interpolation (`str`, *optional*, defaults to `"linear"`):
-            `"linear"` or `"cosine"`, for either increasing or decreasing rates.
+            `"linear"`, `"cosine"` or `"1-sqrt"`, for either increasing or decreasing
+            rates. `"1-sqrt"` is the cooldown of Hägele et al. (arXiv 2405.18392):
+            at progress `x` the ratio is `end + (start - end) * (1 - sqrt(x))`.
 
     Fractions are rounded down to whole updates when the run length is known.
     Ratios must be finite and between zero and one. Fields are immutable.
@@ -34,7 +36,7 @@ class LRScheduleSegment(BaseModel):
     end: TrainingTime
     start_ratio: float = Field(ge=0, le=1, allow_inf_nan=False)
     end_ratio: float = Field(ge=0, le=1, allow_inf_nan=False)
-    interpolation: Literal["linear", "cosine"] = "linear"
+    interpolation: Literal["linear", "cosine", "1-sqrt"] = "linear"
 
     @model_validator(mode="after")
     def validate_timeframe(self) -> Self:
@@ -146,6 +148,9 @@ def lr_multiplier(step: int, config: LRSchedulerConfig, total_steps: int) -> flo
             progress = (step - start) / (end - start)
             if segment.interpolation == "cosine":
                 progress = 0.5 * (1.0 - cos(pi * progress))
+            elif segment.interpolation == "1-sqrt":
+                # start + (end - start) * sqrt(x) == end + (start - end) * (1 - sqrt(x)).
+                progress = sqrt(progress)
             return segment.start_ratio + (segment.end_ratio - segment.start_ratio) * progress
         ratio = segment.end_ratio
     return ratio
