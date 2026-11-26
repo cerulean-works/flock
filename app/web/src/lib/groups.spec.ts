@@ -4,6 +4,7 @@ import {
 	distinctLabels,
 	isInternalKey,
 	bestRun,
+	chartMetrics,
 	changes,
 	classifyColumns,
 	configurations,
@@ -15,6 +16,7 @@ import {
 	groupName,
 	groupsApi,
 	groupsHref,
+	chartKey,
 	inDraft,
 	isRepeatName,
 	lookOf,
@@ -291,6 +293,10 @@ describe('display', () => {
 		expect(metricLabel('summary.val/loss')).toBe('val/loss');
 		expect(metricLabel('summary.suites/zh_tw:bpb')).toBe('zh_tw:bpb');
 		expect(metricLabel('summary.arc_easy/acc')).toBe('arc_easy/acc');
+		expect(chartKey('summary.suites/zh_tw:bpb')).toBe('suites/zh_tw:bpb');
+		expect(
+			chartMetrics(['summary.loss', 'summary.suites/paloma'], 'summary.suites/paloma')
+		).toEqual(['suites/paloma', 'loss']);
 	});
 
 	it('defaults a group’s charts to its varying keys (D222)', () => {

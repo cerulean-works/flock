@@ -884,6 +884,9 @@ export function columnKind(key: string, values: readonly unknown[]): ColumnKind 
  */
 export const metricLabel = (key: string) => key.replace(/^summary\.(suites\/)?/, '');
 
+/** A summary column's key in the history, which charts plot: `val/loss`, `suites/zh_tw:bpb`. */
+export const chartKey = (key: string) => key.replace(/^summary\./, '');
+
 /** `val/loss ↓`: the metric and its direction, lowest (↓) or highest (↑) is best. */
 export const bestLabel = (key: string | null, order: BestOrder | null) =>
 	key ? `${metricLabel(key)} ${order === 'desc' ? '↑' : '↓'}` : 'Not set';
@@ -966,9 +969,9 @@ export function isInternalKey(key: string): boolean {
 /** The history keys a group's charts plot: the best-by metric first, then its other metrics. */
 export function chartMetrics(summaryKeys: readonly string[], bestKey: string | null, max = 12) {
 	const keys = summaryKeys
-		.map(metricLabel)
+		.map(chartKey)
 		.filter((k) => !k.startsWith('_') && !k.startsWith('system/'));
-	const best = bestKey ? metricLabel(bestKey) : null;
+	const best = bestKey ? chartKey(bestKey) : null;
 	const out = best ? [best, ...keys.filter((k) => k !== best)] : keys;
 	return out.slice(0, max);
 }

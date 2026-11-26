@@ -36,6 +36,7 @@
 		groupsApi,
 		groupsCall,
 		groupsHref,
+		chartKey,
 		metricLabel,
 		newGroupHref,
 		valueKey,
@@ -763,7 +764,7 @@
 								<CompareHistory
 									data={history}
 									{lines}
-									metric={metricLabel(cmp.best_key)}
+									metric={chartKey(cmp.best_key)}
 									{hovered}
 									onhover={(run) => (hovered = run)}
 								/>
