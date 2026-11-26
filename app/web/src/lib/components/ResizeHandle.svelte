@@ -60,9 +60,9 @@
 	}
 
 	function onkeydown(e: KeyboardEvent) {
-		const by = (
-			axis === 'x' ? { ArrowLeft: -16, ArrowRight: 16 } : { ArrowUp: -16, ArrowDown: 16 }
-		)[e.key];
+		const steps: Record<string, number> =
+			axis === 'x' ? { ArrowLeft: -16, ArrowRight: 16 } : { ArrowUp: -16, ArrowDown: 16 };
+		const by = steps[e.key];
 		if (!by) return;
 		e.preventDefault();
 		onresize(clampWidth(bounds, value + sign * by));
