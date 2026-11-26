@@ -8,6 +8,8 @@
 
 	interface Props extends HTMLAttributes<HTMLElement> {
 		title: string;
+		/** How many runs are live here, for the header's mark. */
+		live?: number;
 		/** Beside the title: a ⋯ menu, a badge. */
 		badges?: Snippet;
 		/** Muted text on the title's line: a count of running runs. */
@@ -29,6 +31,7 @@
 
 	let {
 		title,
+		live = 0,
 		badges,
 		subtitle,
 		actions,
@@ -66,7 +69,7 @@
 {/snippet}
 
 <Page width="full">
-	<PageHeader {title} {badges} {subtitle} {actions} {toolbar} />
+	<PageHeader {title} {live} {badges} {subtitle} {actions} {toolbar} />
 	<main {...main} class={['relative min-h-0 flex-1 overflow-y-auto pb-10', main.class]}>
 		{@render children()}
 	</main>

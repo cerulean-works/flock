@@ -87,7 +87,8 @@
 </svelte:head>
 
 <RunView
-	title={ws.meta.project}
+	title="Runs"
+	live={data.shell.projects.find((p) => p.name === ws.meta.project)?.active_run_count ?? 0}
 	subtitleTitle={description ?? undefined}
 	badges={visibility === 'public' ? publicBadge : undefined}
 	initialView={lastView(data.shell.projectView)}
@@ -100,11 +101,6 @@
 	stacked={data.shell.stacked}
 	tableH={data.shell.tableH}
 >
-	{#snippet subtitle()}
-		{#if description}
-			<span class="description">{description}</span>
-		{/if}
-	{/snippet}
 	{#snippet actions()}
 		<LiveStatus />
 	{/snippet}

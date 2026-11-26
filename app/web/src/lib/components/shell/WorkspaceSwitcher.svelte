@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
-	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
@@ -62,41 +62,39 @@
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger
 		class={[
-			'group flex items-center gap-3 rounded-lg text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-muted',
-			compact ? 'p-1.5' : 'w-full px-2 py-2.5'
+			'group flex items-center rounded-md text-left outline-none hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-sidebar-accent',
+			compact ? 'p-1.5' : 'h-7 max-w-full gap-2 px-1'
 		]}
 		aria-label="{label ?? 'No organization'}, signed in as {me.name}"
 		{@attach hint(compact ? `${label ?? 'No organization'}, signed in as ${me.name}` : undefined)}
 	>
-		<span class="relative flex-none">
-			{#if label}
-				<OrgMark name={label} src={current?.avatar_url} />
-				<!-- Who is signed in: a badge on the organization's corner, ringed in the
-				     background so it reads as separate from the mark. -->
-				<Avatar
-					name={me.name}
-					src={me.avatar_url}
-					class="absolute -right-1.5 -bottom-1.5 size-4 text-[7px] ring-2 ring-sidebar group-hover:ring-muted group-aria-expanded:ring-muted"
-				/>
-			{:else}
-				<Avatar name={me.name} src={me.avatar_url} />
-			{/if}
-		</span>
-		{#if !compact}
-			<span class="grid min-w-0 flex-1 leading-tight">
-				<span class="truncate font-medium">{label ?? me.name}</span>
-				<span class="truncate text-xs text-muted-foreground">
-					{label ? me.name : orgs.length ? me.email : 'No organization yet'}
-				</span>
+		{#if compact}
+			<span class="relative flex-none">
+				{#if label}
+					<OrgMark name={label} src={current?.avatar_url} />
+					<!-- Who is signed in: a badge on the organization's corner, ringed in the
+					     background so it reads as separate from the mark. -->
+					<Avatar
+						name={me.name}
+						src={me.avatar_url}
+						class="absolute -right-1.5 -bottom-1.5 size-4 text-[7px] ring-2 ring-sidebar group-hover:ring-sidebar-accent group-aria-expanded:ring-sidebar-accent"
+					/>
+				{:else}
+					<Avatar name={me.name} src={me.avatar_url} />
+				{/if}
 			</span>
-			<ChevronsUpDownIcon class="size-4 flex-none text-muted-foreground" />
+		{:else}
+			<!-- The workspace, Linear-style: its tile and name, the account inside the menu. -->
+			{#if label}
+				<OrgMark name={label} src={current?.avatar_url} class="size-5 rounded-[5px] text-[11px]" />
+			{:else}
+				<Avatar name={me.name} src={me.avatar_url} class="size-5 text-[9px]" />
+			{/if}
+			<span class="min-w-0 truncate text-[13px] font-medium">{label ?? me.name}</span>
+			<ChevronDownIcon class="size-3.5 flex-none text-muted-foreground" />
 		{/if}
 	</DropdownMenu.Trigger>
-	<DropdownMenu.Content
-		side={compact ? 'right' : 'top'}
-		align={compact ? 'end' : 'start'}
-		class={compact ? 'w-64' : 'w-(--bits-dropdown-menu-anchor-width) min-w-60'}
-	>
+	<DropdownMenu.Content side={compact ? 'right' : 'bottom'} align="start" class="w-64">
 		{#if orgs.length}
 			<DropdownMenu.Group>
 				<DropdownMenu.Label class="text-xs font-normal text-muted-foreground">

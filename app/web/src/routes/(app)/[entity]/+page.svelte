@@ -14,7 +14,6 @@
 	import { page } from '$app/state';
 	import { pollFeed } from '#lib/data/feed.svelte.ts';
 	import { wandbSnippet } from '#lib/snippets.ts';
-	import { count } from '#lib/utils.ts';
 	import { orgHref, withParam } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
@@ -61,23 +60,14 @@
 {/snippet}
 
 <ListPage
-	title={data.org.display_name}
+	title="Runs"
+	live={running}
 	heading={fresh || data.outside ? undefined : 'Latest runs'}
 	controls={fresh || data.outside ? undefined : feedControls}
 	actions={data.outside ? undefined : actions}
 >
 	{#snippet subtitle()}
-		{#if data.outside || running}
-			<span class="inline-flex items-center gap-x-4">
-				{#if data.outside}<span>Public projects</span>{/if}
-				{#if running}
-					<span class="inline-flex items-center gap-1.5 text-state-running">
-						<span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
-						{count(running, 'run')} running
-					</span>
-				{/if}
-			</span>
-		{/if}
+		{#if data.outside}<span>Public projects</span>{/if}
 	{/snippet}
 
 	{#if data.outside}

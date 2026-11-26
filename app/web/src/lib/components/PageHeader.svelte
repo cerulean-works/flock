@@ -1,6 +1,11 @@
 <script lang="ts">
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Snippet } from 'svelte';
+	import { page } from '$app/state';
+	import OrgMark from '#lib/components/shell/OrgMark.svelte';
+	import type { Crumb } from '#lib/storage.ts';
+	import { entityHref, projectHref } from '#lib/workspace/url.ts';
 
 	interface Props {
 		title: string;
@@ -25,6 +30,13 @@
 		crumbs?: Snippet;
 		/** `home` only: muted reading text under the title, which may wrap. */
 		description?: Snippet;
+		/**
+		 * `workspace` only: the steps between the org (and project) and the title, such as Groups.
+		 * The org, and the project on a project's pages, lead the trail by themselves.
+		 */
+		trail?: Crumb[];
+		/** `workspace` only: runs live here; the header's one moving mark says how many. */
+		live?: number;
 	}
 
 	let {
@@ -37,8 +49,21 @@
 		actions,
 		toolbar,
 		crumbs,
-		description
+		description,
+		trail = [],
+		live = 0
 	}: Props = $props();
+
+	// Where the page is, Linear-style: org / project / … / title, each step a link.
+	const org = $derived(page.params.entity ?? null);
+	const orgName = $derived(page.data.shell?.orgName ?? org);
+	const project = $derived(page.params.project ?? null);
+	const steps = $derived<Crumb[]>([
+		...(project && title !== project ? [{ label: project, href: projectHref(org!, project) }] : []),
+		...trail
+	]);
+	const CRUMB =
+		'min-w-0 truncate rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50';
 </script>
 
 <!--
@@ -90,36 +115,80 @@
 	</header>
 {:else}
 	<header class="flex-none">
-		<div class="box-content flex h-10 items-baseline gap-x-3 pt-5 pr-7 pb-3 pl-5">
-			<div class="flex min-w-0 items-baseline gap-1">
-				{#if leading}
-					<div class="mr-2 flex flex-none items-center self-center">{@render leading()}</div>
+		<!-- One 40px row, level with the sidebar's top: the trail, the title as its last step, the
+		     page's marks and actions. Nothing wraps, so moving between pages never shifts them. -->
+		<div
+			class={[
+				'flex h-10 items-center gap-x-2 pr-4 pl-5 text-[13px]',
+				!toolbar && 'border-b border-divider'
+			]}
+		>
+			<nav aria-label="Breadcrumbs" class="flex min-w-0 items-center gap-1.5">
+				{#if org && orgName}
+					<a
+						href={entityHref(org)}
+						class={['flex flex-none items-center gap-2 max-sm:hidden', CRUMB]}
+					>
+						<OrgMark
+							name={orgName}
+							src={page.data.shell?.orgAvatar}
+							class="size-4 rounded-[4px] text-[9px]"
+						/>
+						{orgName}
+					</a>
+					<ChevronRightIcon
+						class="size-3.5 flex-none text-faint max-sm:hidden"
+						aria-hidden="true"
+					/>
 				{/if}
-				<!-- Pulled left by the big F's side bearing, so its stem lines up with the text below. -->
+				{#each steps as step (step.href)}
+					<a href={step.href} class={['max-sm:hidden', CRUMB]} {@attach hint(step.label)}
+						>{step.label}</a
+					>
+					<ChevronRightIcon
+						class="size-3.5 flex-none text-faint max-sm:hidden"
+						aria-hidden="true"
+					/>
+				{/each}
+				{#if leading}
+					<div class="flex flex-none items-center">{@render leading()}</div>
+				{/if}
 				<h1
-					class="-ml-[0.045em] min-w-0 truncate text-[34px] leading-10 font-normal tracking-[-0.025em]"
-					{title}
+					class="min-w-0 truncate text-[14px] leading-5 font-medium text-foreground"
+					{@attach hint(subtitleTitle ?? title)}
 				>
 					{title}
 				</h1>
-				{#if badges}
-					<div class="flex flex-none items-center gap-2 self-center">{@render badges()}</div>
-				{/if}
-			</div>
+			</nav>
+			{#if badges}
+				<div class="flex flex-none items-center gap-2">{@render badges()}</div>
+			{/if}
 			{#if subtitle}
-				<div
-					class="min-w-0 flex-1 truncate text-[13px] text-muted-foreground max-sm:hidden"
-					{@attach hint(subtitleTitle)}
-				>
+				<div class="min-w-0 truncate text-[13px] text-muted-foreground max-sm:hidden">
 					{@render subtitle()}
 				</div>
 			{/if}
-			{#if actions}
-				<div class="ml-auto flex flex-none items-center gap-2 self-center">{@render actions()}</div>
-			{/if}
+			<div class="ml-auto flex flex-none items-center gap-2">
+				{#if live}
+					<!-- The page's one pulse: everything else that's live is a still dot. -->
+					<span
+						class="flex items-center gap-1.5 text-[13px] text-muted-foreground tabular-nums"
+						role="status"
+					>
+						<span
+							class="size-1.5 animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none"
+							aria-hidden="true"
+						></span>
+						{live} running
+					</span>
+				{/if}
+				{#if actions}{@render actions()}{/if}
+			</div>
 		</div>
 		{#if toolbar}
-			<div class="flex h-12 items-center gap-2 border-b pr-7 pl-5">{@render toolbar()}</div>
+			<div class="flex h-9 items-center gap-1 border-b border-divider pr-4 pl-3">
+				{@render toolbar()}
+			</div>
 		{/if}
 	</header>
 {/if}

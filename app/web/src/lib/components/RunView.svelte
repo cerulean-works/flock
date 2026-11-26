@@ -34,6 +34,7 @@
 	import { compareHref } from '#lib/evals.ts';
 	import { EvalsView } from '#lib/evals-view.svelte.ts';
 	import { hint } from '#lib/hint.svelte.ts';
+	import type { Crumb } from '#lib/storage.ts';
 	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
 	import { describeFilters } from '#lib/workspace/filters.ts';
 	import {
@@ -69,6 +70,10 @@
 	 */
 	interface Props {
 		title: string;
+		/** The header's steps between the project and the title (see PageHeader). */
+		trail?: Crumb[];
+		/** How many runs are live here, for the header's mark. */
+		live?: number;
 		subtitleTitle?: string;
 		leading?: Snippet;
 		badges?: Snippet;
@@ -112,6 +117,8 @@
 
 	let {
 		title,
+		trail,
+		live: liveCount,
 		subtitleTitle,
 		leading,
 		badges,
@@ -383,7 +390,16 @@
 	data-sveltekit-reset={false}
 	style="--name-w: {nameW}px; --table-w: {shownTableW}px; --table-h: {tableHCss}; --pane-left: {paneLeft}px"
 >
-	<PageHeader {title} {subtitleTitle} {leading} {badges} {subtitle} {actions}>
+	<PageHeader
+		{title}
+		{trail}
+		live={liveCount}
+		{subtitleTitle}
+		{leading}
+		{badges}
+		{subtitle}
+		{actions}
+	>
 		{#snippet toolbar()}
 			<Tabs.Root value={view} onValueChange={(v) => setView(v as ProjectView)}>
 				<!-- No counts, so the toggle keeps its width from page to page. -->

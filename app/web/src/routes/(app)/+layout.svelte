@@ -12,7 +12,6 @@
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import LogoMark from '#lib/components/LogoMark.svelte';
 	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
 	import OrgMark from '#lib/components/shell/OrgMark.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
@@ -80,7 +79,7 @@
 <div class="flex h-full">
 	{#if !collapsed}
 		<aside
-			class="relative hidden flex-none border-r border-divider md:block"
+			class="relative hidden flex-none border-r border-divider bg-sidebar md:block"
 			style:width="{sidebarW}px"
 		>
 			<Sidebar {...sidebar} oncollapse={() => setCollapsed(true)} />
@@ -97,25 +96,48 @@
 			class="hidden w-12 flex-none flex-col items-center border-r border-divider bg-sidebar md:flex"
 			aria-label="Sidebar"
 		>
-			<div class="flex h-12 flex-none items-center">
+			<div class="flex h-10 flex-none items-center">
 				<Button
 					variant="ghost"
 					size="icon-sm"
-					class="text-muted-foreground"
+					class="text-muted-foreground hover:bg-sidebar-accent"
 					aria-label="Show sidebar"
-					{@attach hint('Show sidebar')}
+					{@attach hint('Show sidebar  [')}
 					onclick={() => setCollapsed(false)}
 				>
 					<PanelLeftOpenIcon />
 				</Button>
+			</div>
+			<!-- The workspace first, as in the open sidebar. -->
+			<div class="pb-2">
+				{#if signedIn}
+					<WorkspaceSwitcher
+						org={outside ? null : data.shell.org}
+						orgs={data.shell.orgs}
+						{stay}
+						compact
+					/>
+				{:else}
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						class="text-muted-foreground"
+						href={loginHref(page.url)}
+						data-sveltekit-reload
+						aria-label="Sign in"
+						{@attach hint('Sign in')}
+					>
+						<LogInIcon />
+					</Button>
+				{/if}
 			</div>
 			{#if signedIn}
 				<Button
 					variant="ghost"
 					size="icon-sm"
 					class={[
-						'mt-3 text-muted-foreground',
-						page.route.id === '/(app)' && 'bg-muted text-foreground'
+						'mt-1 text-muted-foreground',
+						page.route.id === '/(app)' && 'bg-sidebar-accent text-foreground'
 					]}
 					href={resolve('/(app)')}
 					aria-label="Home"
@@ -139,7 +161,7 @@
 					size="icon-sm"
 					class={[
 						'mt-1 text-muted-foreground',
-						page.route.id === '/(app)/[entity]' && 'bg-muted text-foreground'
+						page.route.id === '/(app)/[entity]' && 'bg-sidebar-accent text-foreground'
 					]}
 					href={entityHref(data.shell.org)}
 					aria-label="Runs"
@@ -152,7 +174,7 @@
 				<Button
 					variant="ghost"
 					size="icon-sm"
-					class={['mt-1 text-muted-foreground', onGroups && 'bg-muted text-foreground']}
+					class={['mt-1 text-muted-foreground', onGroups && 'bg-sidebar-accent text-foreground']}
 					href={groupsHref(data.shell.org, groupsProject)}
 					aria-label="Groups in {groupsProject}"
 					aria-current={onGroups ? 'page' : undefined}
@@ -167,7 +189,7 @@
 					size="icon-sm"
 					class={[
 						'mt-1 text-muted-foreground',
-						page.route.id?.startsWith('/(app)/datasets/') && 'bg-muted text-foreground'
+						page.route.id?.startsWith('/(app)/datasets/') && 'bg-sidebar-accent text-foreground'
 					]}
 					href={datasetsHref(data.shell.org)}
 					aria-label="Datasets"
@@ -180,7 +202,7 @@
 					size="icon-sm"
 					class={[
 						'mt-1 text-muted-foreground',
-						page.route.id?.startsWith('/(app)/models/') && 'bg-muted text-foreground'
+						page.route.id?.startsWith('/(app)/models/') && 'bg-sidebar-accent text-foreground'
 					]}
 					href={modelsHref(data.shell.org)}
 					aria-label="Models"
@@ -193,7 +215,7 @@
 					size="icon-sm"
 					class={[
 						'mt-1 text-muted-foreground',
-						page.route.id?.startsWith('/(app)/storage/') && 'bg-muted text-foreground'
+						page.route.id?.startsWith('/(app)/storage/') && 'bg-sidebar-accent text-foreground'
 					]}
 					href={storageHref(data.shell.org)}
 					aria-label="Storage"
@@ -202,32 +224,12 @@
 					<HardDriveIcon />
 				</Button>
 			{/if}
-			<div class="mt-auto py-2">
-				{#if signedIn}
-					<WorkspaceSwitcher
-						org={outside ? null : data.shell.org}
-						orgs={data.shell.orgs}
-						{stay}
-						compact
-					/>
-				{:else}
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						class="text-muted-foreground"
-						href={loginHref(page.url)}
-						data-sveltekit-reload
-						aria-label="Sign in"
-						{@attach hint('Sign in')}
-					>
-						<LogInIcon />
-					</Button>
-				{/if}
-			</div>
 		</aside>
 	{/if}
 	<div class="flex min-w-0 flex-1 flex-col">
-		<header class="flex h-12 flex-none items-center gap-2 border-b border-divider px-3 md:hidden">
+		<header
+			class="flex h-11 flex-none items-center gap-2 border-b border-divider bg-sidebar px-3 md:hidden"
+		>
 			<Button
 				variant="ghost"
 				size="icon-sm"
@@ -238,13 +240,19 @@
 			>
 				<MenuIcon />
 			</Button>
-			<a
-				href={resolve('/(app)')}
-				class="flex items-center gap-2 rounded-md text-[19px] font-medium tracking-[-0.025em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-			>
-				<LogoMark class="size-6" />
-				<span>Flock</span>
-			</a>
+			{#if data.shell.org}
+				<a
+					href={entityHref(data.shell.org)}
+					class="flex min-w-0 items-center gap-2 rounded-md text-[13px] font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+				>
+					<OrgMark
+						name={data.shell.orgName ?? data.shell.org}
+						src={data.shell.orgAvatar}
+						class="size-5 rounded-[5px] text-[11px]"
+					/>
+					<span class="truncate">{data.shell.orgName ?? data.shell.org}</span>
+				</a>
+			{/if}
 		</header>
 		{@render children()}
 	</div>
