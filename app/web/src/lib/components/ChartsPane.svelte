@@ -290,7 +290,10 @@
 		const offsetY = e.clientY - box.top;
 		const sections = list;
 		const from = ws.sections.findIndex((s) => s.key === key);
-		/** Where the pointer was at the last move: the same position never moves it again. */
+		/**
+		 * Where the pointer was in the list at the last move: the same position never moves it
+		 * again, while scrolling the list under a still pointer does.
+		 */
 		let movedAt = { x: NaN, y: NaN };
 
 		/**
@@ -306,7 +309,8 @@
 			const { top, left } = sections.getBoundingClientRect();
 			sectionDrag.x = pointer.x - offsetX - (left + el.offsetLeft);
 			sectionDrag.y = pointer.y - offsetY - (top + el.offsetTop);
-			if (!reorder || (pointer.x === movedAt.x && pointer.y === movedAt.y)) return;
+			const at = { x: pointer.x - left, y: pointer.y - top };
+			if (!reorder || (at.x === movedAt.x && at.y === movedAt.y)) return;
 			let to = 0;
 			for (const other of sections.children as HTMLCollectionOf<HTMLElement>) {
 				if (other === el) continue;
@@ -320,7 +324,7 @@
 			}
 			if (ws.sections.findIndex((s) => s.key === key) === to) return;
 			rearrange();
-			movedAt = { x: pointer.x, y: pointer.y };
+			movedAt = at;
 			ws.moveSection(key, to);
 			void tick().then(() => follow(false));
 		}
