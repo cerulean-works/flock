@@ -28,7 +28,7 @@ When the snapshot of the rows' best runs has no history for the best-by metric (
 
 ### D233. Suites are named and written as on the eval pages
 
-A suite's summary column `summary.suites/zh_tw:bpb` is labelled `zh_tw:bpb` everywhere in groups. The history key keeps its `suites/` prefix (`chartKey`), so a run that logs a suite over steps still charts it. On Compare, a suite chosen as **Best by** takes the scale the Evals preset reads from the best runs (D211): an accuracy is written as `62.4%` and its change in points, any other scale to three decimals. Other metrics keep the runs table's format.
+A suite's summary column `summary.suites/zh_tw:bpb` is labelled `zh_tw:bpb` everywhere in groups. The history key keeps its `suites/` prefix (`chartKey`), so a run that logs a suite over steps still charts it. On Compare, a suite chosen as **Best by** takes the scale the Evals preset reads from the best runs (D211): an accuracy is written as `62.4%`, its change and its spread across repeats in points, any other scale to three decimals. Other metrics, and a row a group ranks by another metric, keep the runs table's format.
 
 ### D234. A W&B group a saved group filters on isn't suggested again
 
@@ -63,5 +63,6 @@ D219 suggested W&B groups from the runs in no saved group. Runs logged later int
 ## 5. Known gaps
 
 - A suite's scale on Compare comes from the best runs' snapshot, read once the page has loaded; until then, and for a suite whose scale is unknown, scores show in the plain number format.
-- A group with both eval and training runs opens on the preset, which lists only its eval runs; **Evals** shows the rest.
+- A group with both eval and training runs opens on the preset, which lists only its eval runs; **Evals** shows the rest. Whether a group is one of eval runs is read from the page of runs on screen, so in such a mixed group a search or a page without eval runs opens **Visualize** instead.
+- A group's plain table (with **Evals** off) still heads a suite's column `suites/zh_tw:bpb`, as the Runs page does.
 - On a group of eval runs the toolbar has two trophies, **Evals** and **Best by**.
