@@ -21,6 +21,8 @@
 		{ value: 'ultrafast', label: 'Ultrafast', hint: 'Fastest, for the models that offer it' }
 	];
 
+	/** Without an OpenAI key on the server, nothing here does anything: the form is disabled. */
+	const noKey = $derived(org.assistant_available === false);
 	const savedOn = $derived(org.assistant_enabled ?? false);
 	const savedModel = $derived(org.assistant_model ?? '');
 	const savedTier = $derived<AssistantTier>(org.assistant_tier ?? 'standard');
@@ -48,7 +50,7 @@
 	<input type="hidden" name="enabled" value={on ? 'on' : ''} />
 	<input type="hidden" name="tier" value={tier} />
 	<div class="flex items-center gap-3">
-		<Switch id="assistant-enabled" bind:checked={on} />
+		<Switch id="assistant-enabled" bind:checked={on} disabled={noKey} />
 		<label for="assistant-enabled" class="text-[14px]">Turn on the assistant</label>
 	</div>
 	<div class="flex flex-wrap items-end gap-2">
@@ -62,12 +64,13 @@
 				autocomplete="off"
 				spellcheck={false}
 				maxlength={128}
+				disabled={noKey}
 				bind:value={model}
 			/>
 		</div>
 		<div class="grid gap-2">
 			<Label for="assistant-tier">Speed</Label>
-			<Select.Root type="single" bind:value={tier}>
+			<Select.Root type="single" bind:value={tier} disabled={noKey}>
 				<Select.Trigger id="assistant-tier" class="w-36">{tierLabel}</Select.Trigger>
 				<Select.Content>
 					{#each TIERS as t (t.value)}
@@ -84,7 +87,7 @@
 		<Button
 			type="submit"
 			variant="outline"
-			disabled={!changed || mutation.pending}
+			disabled={noKey || !changed || mutation.pending}
 			pending={mutation.pending}
 		>
 			Save
