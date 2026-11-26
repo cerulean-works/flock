@@ -70,7 +70,7 @@
 			</div>
 			<FormError {error} />
 			<Dialog.Footer>
-				<Button type="submit" disabled={pending}>{pending ? 'Creating…' : 'Create folder'}</Button>
+				<Button type="submit" {pending}>Create folder</Button>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>

@@ -21,8 +21,8 @@
 </script>
 
 <p class="mt-2 text-muted-foreground">
-	When this is on, Flock deletes older versions that aren’t primary and have no tag other than a
-	checkpoint tag. They wait in Deleted models for {TRASH_DAYS} days.
+	When this is on, Flock deletes older versions that aren’t primary, have no tag other than a
+	checkpoint tag and have no eval runs. They wait in Deleted models for {TRASH_DAYS} days.
 </p>
 <form
 	method="POST"
@@ -50,8 +50,13 @@
 		<span class={['text-[14px]', !on && 'text-muted-foreground']}>
 			untagged versions of each model
 		</span>
-		<Button type="submit" variant="outline" disabled={!changed || mutation.pending}>
-			{mutation.pending ? 'Saving…' : 'Save'}
+		<Button
+			type="submit"
+			variant="outline"
+			disabled={!changed || mutation.pending}
+			pending={mutation.pending}
+		>
+			Save
 		</Button>
 	</div>
 	<FormError error={mutation.error} />

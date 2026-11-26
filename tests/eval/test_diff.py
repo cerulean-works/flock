@@ -3,6 +3,8 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import subprocess
+import sys
 from pathlib import PureWindowsPath
 from typing import TYPE_CHECKING
 
@@ -16,50 +18,21 @@ from flock.eval import run, tracking
 from flock.eval.cli import main
 from flock.eval.diff import diff
 from flock.eval.model import ScoringModel
-from flock.eval.results import Results, predictions_name, read_results, stays_inside
+from flock.eval.results import (
+    Results,
+    WrittenResults,
+    predictions_name,
+    read_results,
+    stays_inside,
+)
 from flock.eval.run import EvalConfig, evaluate
 
-from .toy import PROMPT_PATHS, PROVENANCE, task_result
+from .toy import PROMPT_PATHS, PROVENANCE, task_result, write_run
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import Any
 
     from transformers import PreTrainedTokenizerFast
-
-    from flock.eval.provenance import Provenance
-
-
-def write_run(
-    folder: Path,
-    tasks: dict[str, tuple[str, list[bool] | None]],
-    provenance: Provenance = PROVENANCE,
-    schema: int = 10,
-) -> str:
-    """Writes a run whose tasks are read by `acc_raw`, each as `name: (task_hash, outcomes)`, with docs `d-0`, `d-1`, ..., and returns its folder. Outcomes of `None` write no predictions file."""
-    results = []
-    for name, (task_hash, outcomes) in tasks.items():
-        right = sum(outcomes) / len(outcomes) if outcomes else 0.0
-        result = dataclasses.replace(task_result(name, {"acc_raw": right}), task_hash=task_hash)
-        results.append(dataclasses.replace(result, num_docs=len(outcomes or [])))
-    data = Results(provenance, results).to_dict()
-    data["schema_version"] = schema
-    folder.mkdir(parents=True)
-    (folder / "results.json").write_text(json.dumps(data))
-
-    (folder / "predictions").mkdir()
-    for name, (_, outcomes) in tasks.items():
-        if outcomes is None:
-            continue
-        rows = []
-        for i, right in enumerate(outcomes):
-            row: dict[str, Any] = {"id": f"d-{i}", "gold": 0}
-            if schema >= 9:
-                row["correct"] = right
-            rows.append(row)
-        text = "".join(json.dumps(row) + "\n" for row in rows)
-        (folder / "predictions" / f"{name}.jsonl").write_text(text)
-    return str(folder)
 
 
 def test_two_models_split_each_tasks_docs_into_four_cells(
@@ -162,7 +135,7 @@ def test_a_project_models_run_reads_back_with_its_scope(tmp_path: Path) -> None:
         model_path="sweeps/lr-3e-4",
     )
     written = read_results(write_run(tmp_path / "a", {"t": ("h", [True])}, provenance=scoped))
-    assert written.schema_version == 10
+    assert written.schema_version == 11
     assert written.provenance == scoped
 
 
@@ -292,7 +265,7 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
         read_results(str(tmp_path))
 
     a = write_run(tmp_path / "a", {"t": ("h", [True])}, schema=7)
-    with pytest.raises(ValueError, match="schema 7; only 8 to 10 are read"):
+    with pytest.raises(ValueError, match="schema 7; only 8 to 12 are read"):
         read_results(a)
 
     (tmp_path / "b").mkdir()
@@ -404,3 +377,40 @@ def test_an_unreachable_tracker_exits_2(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     assert refused.exit_code == 2
     assert "refused: Couldn't reach" in refused.output
+
+
+def test_the_reader_the_diff_and_the_items_import_no_torch() -> None:
+    # The Flock app runs the diff, and its image has no torch (the app's stage 025, D186).
+    code = (
+        "import sys, flock.eval.diff, flock.eval.items; "
+        "print(sorted(sys.modules.keys() & set(sys.argv[1:])))"
+    )
+    heavy = ["torch", "transformers", "datasets", "tokenizers", "wandb", "lance"]
+    found = subprocess.run(
+        [sys.executable, "-c", code, *heavy], capture_output=True, text=True, check=True
+    )
+    assert found.stdout.strip() == "[]"
+
+
+def test_a_run_read_from_any_store_of_its_files_is_the_same_run(tmp_path: Path) -> None:
+    folder = tmp_path / "a"
+    write_run(folder, {"t": ("h", [True, False, True]), "u": ("h", None)})
+    files = {
+        path.relative_to(folder).as_posix(): path.read_text()
+        for path in folder.rglob("*")
+        if path.is_file()
+    }
+
+    stored, read = WrittenResults.read("store", files.get), read_results(str(folder))
+
+    assert stored.source == "store"
+    assert (stored.schema_version, stored.provenance, stored.tasks, stored.suites) == (
+        read.schema_version,
+        read.provenance,
+        read.tasks,
+        read.suites,
+    )
+    assert stored.predictions("t") == read.predictions("t")
+    assert stored.predictions("u") is None
+    with pytest.raises(FileNotFoundError, match="store has no results.json"):
+        WrittenResults.read("store", {}.get)

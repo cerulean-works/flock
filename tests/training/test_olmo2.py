@@ -25,11 +25,129 @@ if TYPE_CHECKING:
 
 
 def make_batch(input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> Batch:
+    mask = torch.ones_like(input_ids) if attention_mask is None else attention_mask
     return {
         "input_ids": input_ids,
-        "attention_mask": torch.ones_like(input_ids) if attention_mask is None else attention_mask,
+        "attention_mask": mask,
         "labels": torch.full_like(input_ids, -100),
+        "position_ids": (mask.long().cumsum(-1) - 1).clamp_min(0),
     }
+
+
+# Rows of documents laid out like the packed collator does, each row ending in padding.
+PACKED_ROWS = [[[2, 3, 4, 5], [6, 7]], [[8, 9, 10, 11, 12, 13]], [[14], [15, 16], [17, 18, 19]]]
+PACKED_WIDTH = 7
+
+
+def packed_batch(rows: list[list[list[int]]], width: int) -> Batch:
+    """Build a packed batch independently of the collator: documents, then one padding run."""
+    input_ids = torch.zeros(len(rows), width, dtype=torch.long)
+    mask = torch.zeros(len(rows), width, dtype=torch.bool)
+    positions = torch.zeros(len(rows), width, dtype=torch.long)
+    lengths = []
+    for row, documents in enumerate(rows):
+        start = 0
+        for document in documents:
+            stop = start + len(document)
+            input_ids[row, start:stop] = torch.tensor(document)
+            mask[row, start:stop] = True
+            positions[row, start:stop] = torch.arange(len(document))
+            lengths.append(len(document))
+            start = stop
+        if start < width:
+            positions[row, start:] = torch.arange(width - start)
+            lengths.append(width - start)
+    return {
+        "input_ids": input_ids,
+        "attention_mask": mask,
+        "labels": torch.full_like(input_ids, -100),
+        "position_ids": positions,
+        "cu_seq_lens": F.pad(torch.tensor(lengths).cumsum(0), (1, 0)).to(torch.int32),
+    }
+
+
+def assert_packed_matches_documents_alone(model: Olmo2) -> None:
+    """Packed logits and gradients equal each document run alone in an unpadded row."""
+    batch = packed_batch(PACKED_ROWS, PACKED_WIDTH)
+    actual = model(batch)
+    upstream = torch.randn_like(actual).masked_fill(~batch["attention_mask"][:, :, None], 0)
+    actual.backward(upstream)
+    packed_grads = {
+        name: p.grad.clone() for name, p in model.named_parameters() if p.grad is not None
+    }
+    model.zero_grad()
+    for row, documents in enumerate(PACKED_ROWS):
+        start = 0
+        for document in documents:
+            stop = start + len(document)
+            alone = model(make_batch(torch.tensor([document])))
+            torch.testing.assert_close(actual[row, start:stop], alone[0])
+            alone.backward(upstream[row, start:stop][None])
+            start = stop
+    for name, parameter in model.named_parameters():
+        torch.testing.assert_close(packed_grads[name], parameter.grad, atol=2e-5, rtol=2e-4)
+
+
+def assert_reads_nothing_back(model: Olmo2, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A packed forward never waits on the device: boundaries arrive ready from the CPU.
+
+    The CPU has no device to wait on, so this records the Python-level tensor calls that
+    read values to the host, including the implicit ones in `if t`, `int(t)` and `range(t)`.
+    """
+    host_reads: list[str] = []
+    for name in (
+        "item",
+        "cpu",
+        "tolist",
+        "numpy",
+        "nonzero",
+        "__bool__",
+        "__int__",
+        "__float__",
+        "__index__",
+    ):
+        original = getattr(torch.Tensor, name)
+        monkeypatch.setattr(
+            torch.Tensor,
+            name,
+            lambda *args, _name=name, _original=original, **kwargs: (
+                host_reads.append(_name) or _original(*args, **kwargs)
+            ),
+        )
+    for name in ("equal", "nonzero"):
+        original = getattr(torch, name)
+        monkeypatch.setattr(
+            torch,
+            name,
+            lambda *args, _name=name, _original=original, **kwargs: (
+                host_reads.append(_name) or _original(*args, **kwargs)
+            ),
+        )
+    model(packed_batch(PACKED_ROWS, PACKED_WIDTH))
+    assert host_reads == []
+
+
+@pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
+def test_packed_sdpa_batch_matches_each_document_alone(config: Olmo2Config, kv_heads: int) -> None:
+    assert_packed_matches_documents_alone(Olmo2(replace(config, num_key_value_heads=kv_heads)))
+
+
+def test_packed_sdpa_batch_reads_nothing_back(
+    config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert_reads_nothing_back(Olmo2(config), monkeypatch)
+
+
+def test_packed_batches_need_a_backend_with_a_packed_preparer(
+    config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
+    )
+    AttentionInterface.register("dense-only", sdpa_attention, mask_preparer=prepare_sdpa_mask)
+    model = Olmo2(replace(config, attn_implementation="dense-only"))
+    with pytest.raises(ValueError, match="dense-only does not support packed batches"):
+        model(packed_batch(PACKED_ROWS, PACKED_WIDTH))
 
 
 @pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])

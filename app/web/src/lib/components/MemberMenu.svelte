@@ -99,7 +99,6 @@
 			? `You’ll lose access to its projects, but your runs stay. Rejoining takes a new invite.`
 			: `They’ll lose access to its projects, but their runs stay.`}
 		confirm={self ? 'Leave' : 'Remove'}
-		pending={self ? 'Leaving…' : 'Removing…'}
 		success={self ? `You left ${org}` : `Removed ${member.name}`}
 	/>
 {/if}

@@ -56,8 +56,8 @@
 			<form method="POST" action="?/join" class="mt-8 grid gap-4" use:enhance={submitting}>
 				<input type="hidden" name="org" value={invite.org} />
 				<FormError error={form?.error ?? null} />
-				<Button type="submit" class="h-10 w-full text-sm" disabled={pending}>
-					{pending ? 'Joining…' : `Join ${invite.org_display_name}`}
+				<Button type="submit" class="h-10 w-full text-sm" {pending}>
+					{`Join ${invite.org_display_name}`}
 				</Button>
 			</form>
 		{:else if data.user}
@@ -126,8 +126,8 @@
 					<p class="text-xs text-muted-foreground">At least 8 characters.</p>
 				</div>
 				<FormError error={form?.error ?? null} />
-				<Button type="submit" class="mt-2 h-10 w-full text-sm" disabled={pending}>
-					{pending ? 'Creating account…' : 'Create account and join'}
+				<Button type="submit" class="mt-2 h-10 w-full text-sm" {pending}>
+					Create account and join
 				</Button>
 			</form>
 			{#if data.google}

@@ -67,8 +67,13 @@
 			{/if}
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-				<Button type="submit" variant="destructive" disabled={!ready || mutation.pending}>
-					{mutation.pending ? 'Deleting…' : 'Delete organization'}
+				<Button
+					type="submit"
+					variant="destructive"
+					disabled={!ready || mutation.pending}
+					pending={mutation.pending}
+				>
+					Delete organization
 				</Button>
 			</AlertDialog.Footer>
 		</form>

@@ -86,12 +86,9 @@
 					type="submit"
 					variant="destructive"
 					disabled={(live > 0 && !force) || mutation.pending}
+					pending={mutation.pending}
 				>
-					{mutation.pending
-						? 'Deleting…'
-						: ids.length === 1
-							? 'Delete run'
-							: `Delete ${runs(ids.length)}`}
+					{ids.length === 1 ? 'Delete run' : `Delete ${runs(ids.length)}`}
 				</Button>
 			</AlertDialog.Footer>
 		</form>

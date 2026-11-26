@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { clampWidth, type Width } from '#lib/widths.ts';
 
 	interface Props {
@@ -78,7 +79,7 @@
 	aria-valuemin={bounds.min}
 	aria-valuemax={bounds.max}
 	tabindex="0"
-	title="Drag to resize, or double-click to reset"
+	{@attach hint('Drag to resize, or double-click to reset')}
 	class={[
 		'group/resize absolute inset-y-0 z-10 w-[7px] cursor-col-resize touch-none outline-none',
 		edge === 'left' ? '-left-[4px]' : '-right-[4px]',

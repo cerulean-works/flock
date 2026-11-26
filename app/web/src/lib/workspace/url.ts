@@ -82,9 +82,19 @@ export function withParam(
 	key: string,
 	value: string | null
 ): ResolvedPathname {
+	return withParams(url, { [key]: value });
+}
+
+/** The current page with several search params set, each removed when null or undefined. */
+export function withParams(
+	url: { pathname: string; search: string },
+	values: Record<string, string | null | undefined>
+): ResolvedPathname {
 	const search = new URLSearchParams(url.search);
-	if (value == null) search.delete(key);
-	else search.set(key, value);
+	for (const [key, value] of Object.entries(values)) {
+		if (value == null) search.delete(key);
+		else search.set(key, value);
+	}
 	const qs = search.toString();
 	return `${url.pathname}${qs ? `?${qs}` : ''}` as ResolvedPathname; // already base-relative
 }

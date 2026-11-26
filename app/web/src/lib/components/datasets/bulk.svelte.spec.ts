@@ -236,17 +236,18 @@ describe('MoveDatasetsDialog', () => {
 				.toHaveAttribute('aria-current', 'location');
 		await at('eval');
 		// The picker browses folders only, without the ones being moved.
-		const picker = screen.getByRole('group', { name: 'Folders' });
-		await expect.element(picker.getByRole('button', { name: 'old/' })).toBeVisible();
-		await expect.element(picker.getByRole('button', { name: 'deep/' })).not.toBeInTheDocument();
+		const dialog = screen.getByRole('dialog');
+		const picker = dialog.getByRole('listbox', { name: 'folders' });
+		await expect.element(picker.getByRole('option', { name: 'old/' })).toBeVisible();
+		await expect.element(picker.getByRole('option', { name: 'deep/' })).not.toBeInTheDocument();
 		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval');
-		await picker.getByRole('button', { name: 'old/' }).click();
+		await picker.getByRole('option', { name: 'old/' }).click();
 		await at('old');
-		await expect.element(picker.getByText('No folders here.')).toBeVisible();
+		await expect.element(dialog.getByText('No folders here.')).toBeVisible();
 		await to.getByRole('button', { name: 'eval', exact: true }).click();
 		await at('eval');
 		// A folder that isn't listed is named in place.
-		await picker.getByRole('button', { name: 'New folder' }).click();
+		await dialog.getByRole('button', { name: 'New folder' }).click();
 		await screen.getByRole('textbox', { name: 'New folder name' }).fill('deep');
 		await userEvent.keyboard('{Enter}');
 		await at('deep');
@@ -282,10 +283,7 @@ describe('MoveDatasetsDialog', () => {
 		await expect
 			.element(screen.getByRole('alert'))
 			.toHaveTextContent('It’s already in this folder');
-		await screen
-			.getByRole('group', { name: 'Folders' })
-			.getByRole('button', { name: 'archive/' })
-			.click();
+		await screen.getByRole('option', { name: 'archive/' }).click();
 		await screen.getByRole('button', { name: 'Move', exact: true }).click();
 		await expect
 			.element(screen.getByRole('alert'))

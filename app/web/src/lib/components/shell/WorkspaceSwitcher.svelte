@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
@@ -65,7 +66,7 @@
 			compact ? 'p-1.5' : 'w-full px-2 py-2.5'
 		]}
 		aria-label="{label ?? 'No organization'}, signed in as {me.name}"
-		title={compact ? `${label ?? 'No organization'}, signed in as ${me.name}` : undefined}
+		{@attach hint(compact ? `${label ?? 'No organization'}, signed in as ${me.name}` : undefined)}
 	>
 		<span class="relative flex-none">
 			{#if label}
@@ -102,7 +103,7 @@
 					Organizations
 				</DropdownMenu.Label>
 				{#each orgs as o (o.name)}
-					<DropdownMenu.Item class={ROW} onSelect={() => choose(o.name)} title={o.name}>
+					<DropdownMenu.Item class={ROW} onSelect={() => choose(o.name)} {@attach hint(o.name)}>
 						<span class={SLOT}>
 							<OrgMark name={o.display_name} src={o.avatar_url} class="size-5 text-[11px]" />
 						</span>

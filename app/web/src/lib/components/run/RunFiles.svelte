@@ -1,10 +1,12 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import { onMount } from 'svelte';
 	import type { ResolvedPathname } from '$app/types';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import type { RunFile } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		/** `/api/projects/…/runs/{run}/files` */
@@ -36,12 +38,12 @@
 	{#if failed}
 		<EmptyState tone="error">Couldn’t load the run’s files</EmptyState>
 	{:else if !files}
-		<EmptyState>Loading…</EmptyState>
+		<Skeleton count={8} />
 	{:else if !files.length}
 		<EmptyState>No files uploaded</EmptyState>
 	{:else}
-		<div class="px-5 pt-6 pb-16">
-			<div class="max-w-200 border-t border-divider">
+		<div class="px-5 pt-5 pb-16">
+			<div class="border-t border-divider">
 				<table class="w-full text-[13.5px]">
 					<thead class="border-b text-xs text-muted-foreground">
 						<tr>
@@ -71,7 +73,7 @@
 								>
 								<td
 									class="px-3 py-2 text-right text-muted-foreground"
-									title={dateTime(f.updated_at)}
+									{@attach hint(dateTime(f.updated_at))}
 								>
 									{relativeTime(f.updated_at, now)}
 								</td>

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Scope } from '#lib/scope.ts';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
@@ -257,8 +256,7 @@
 				<Button type="button" variant="outline" disabled={pending} onclick={() => (open = false)}>
 					Cancel
 				</Button>
-				<Button type="submit" disabled={pending || (!!preview && (tooLarge || empty))}>
-					{#if pending}<LoaderCircleIcon class="animate-spin" />{/if}
+				<Button type="submit" disabled={pending || (!!preview && (tooLarge || empty))} {pending}>
 					{preview ? 'Import' : 'Continue'}
 				</Button>
 			</Dialog.Footer>

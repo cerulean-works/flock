@@ -33,6 +33,7 @@
 <script lang="ts">
 	import GripHorizontalIcon from '@lucide/svelte/icons/grip-horizontal';
 	import { untrack } from 'svelte';
+	import { hint } from '#lib/hint.svelte.ts';
 	import { page as appPage } from '$app/state';
 	import { prefetchRunPage } from '#lib/data/cache.ts';
 	import { columnGroups } from '#lib/data/snapshot.ts';
@@ -59,6 +60,7 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import Avatar from './Avatar.svelte';
+	import ColumnResizer from './ColumnResizer.svelte';
 	import RunEye from './RunEye.svelte';
 	import RunMenu from './RunMenu.svelte';
 	import StateBadge from './StateBadge.svelte';
@@ -313,28 +315,6 @@
 		);
 	}
 	const leaveSort = () => clearTimeout(intent);
-
-	// ------------------------------------------------------------------------------------------
-	// Column resize
-
-	function startResize(e: PointerEvent, c: number) {
-		e.preventDefault();
-		e.stopPropagation();
-		const el = e.currentTarget as HTMLElement;
-		el.setPointerCapture(e.pointerId);
-		const x0 = e.clientX;
-		const w0 = widths[c];
-		const key = columns[c].key;
-		const move = (ev: PointerEvent) => {
-			widthOverrides = { ...widthOverrides, [key]: Math.max(56, Math.round(w0 + ev.clientX - x0)) };
-		};
-		const up = () => {
-			el.removeEventListener('pointermove', move);
-			el.removeEventListener('pointerup', up);
-		};
-		el.addEventListener('pointermove', move);
-		el.addEventListener('pointerup', up);
-	}
 
 	// ------------------------------------------------------------------------------------------
 	// Moving columns: a header dragged sideways lands in the gap nearest the pointer. Suggested
@@ -614,7 +594,7 @@
 					<a
 						class={['flex size-full min-w-0 items-center gap-1', isNumeric(col) && 'justify-end']}
 						href={sortHref(col.key)}
-						title={grabbable ? `${col.key} (click to sort, drag to move)` : col.key}
+						{@attach hint(grabbable ? `${col.key} (click to sort, drag to move)` : col.key)}
 						draggable="false"
 						data-sveltekit-preload-data="tap"
 						onpointerenter={() => hoverSort(col.key)}
@@ -625,11 +605,10 @@
 								>{query.order === 'asc' ? '↑' : '↓'}</span
 							>{/if}
 					</a>
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div
-						class="absolute top-2 -right-[3px] bottom-2 z-1 w-[7px] cursor-col-resize after:absolute after:inset-y-0 after:left-[3px] after:w-px after:bg-divider group-hover/h:after:bg-border"
-						onpointerdown={(e) => startResize(e, c)}
-					></div>
+					<ColumnResizer
+						width={widths[c]}
+						onresize={(w) => (widthOverrides = { ...widthOverrides, [col.key]: w })}
+					/>
 				</div>
 			{/each}
 		</div>
@@ -731,7 +710,7 @@
 						]}
 						href={runHref(ws.meta.entity, ws.meta.project, run.id)}
 						data-sveltekit-preload-data="tap"
-						title={ws.nameOf(r)}
+						{@attach hint(ws.nameOf(r))}
 					>
 						{ws.nameOf(r)}
 					</a>
@@ -740,7 +719,7 @@
 						<Badge
 							variant="secondary"
 							class="live bg-state-running/10 text-state-running"
-							title="Running"
+							{@attach hint('Running')}
 						>
 							<span class="size-1.5 animate-live rounded-full bg-current motion-reduce:animate-none"
 							></span>
@@ -767,7 +746,7 @@
 							{@const person = id == null ? undefined : ws.people.get(id)}
 							{#if person}
 								<Avatar name={person.name} src={person.avatar_url} class="mr-2 size-5 text-[9px]" />
-								<span class="truncate" title={person.email}>{person.name}</span>
+								<span class="truncate" {@attach hint(person.email)}>{person.name}</span>
 							{:else if id == null}
 								<span class="text-faint">–</span>
 							{:else}
@@ -778,7 +757,7 @@
 							{@const text = cellText(c, r)}
 							<span
 								class={['truncate', text === '–' && 'text-faint']}
-								title={col.kind === 'str' ? text : undefined}>{text}</span
+								{@attach hint(col.kind === 'str' ? text : undefined)}>{text}</span
 							>
 						{/if}
 					</div>

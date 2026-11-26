@@ -1,5 +1,4 @@
 <script lang="ts">
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { toast } from 'svelte-sonner';
 	import { invalidateAll } from '$app/navigation';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
@@ -91,8 +90,8 @@
 			{#if command}<CopyBlock code={command} lang="bash" />{/if}
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel disabled={pending}>Cancel</AlertDialog.Cancel>
-				<Button type="submit" disabled={typed !== path || pending}>
-					{#if pending}<LoaderCircleIcon class="animate-spin" /> Copying…{:else}Make independent{/if}
+				<Button type="submit" disabled={typed !== path || pending} {pending}>
+					Make independent
 				</Button>
 			</AlertDialog.Footer>
 		</form>

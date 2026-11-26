@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Settings2Icon from '@lucide/svelte/icons/settings-2';
@@ -28,7 +29,7 @@
 				variant="ghost"
 				size="icon-sm"
 				aria-label="Panel settings"
-				title="Panel settings"
+				{@attach hint('Panel settings')}
 			>
 				<Settings2Icon />
 			</Button>

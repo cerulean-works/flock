@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import LinkIcon from '@lucide/svelte/icons/link';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -64,7 +65,7 @@
 				variant="outline"
 				size="sm"
 				onclick={copyLink}
-				title="A presigned URL valid for 1 hour"
+				{@attach hint('A presigned URL valid for 1 hour')}
 			>
 				<LinkIcon /> Copy link
 			</Button>

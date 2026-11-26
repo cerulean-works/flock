@@ -92,6 +92,7 @@
 	badges={visibility === 'public' ? publicBadge : undefined}
 	initialView={lastView(data.shell.projectView)}
 	remember
+	evalPreset
 	{onproject}
 	{readonly}
 	nameW={data.shell.nameW}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import HistoryIcon from '@lucide/svelte/icons/history';
@@ -117,8 +118,9 @@
 							type="submit"
 							variant="outline"
 							disabled={displayName.trim() === data.org.display_name || naming.pending}
+							pending={naming.pending}
 						>
-							{naming.pending ? 'Saving…' : 'Save'}
+							Save
 						</Button>
 					</div>
 					<FormError error={naming.error} />
@@ -231,9 +233,9 @@
 									</Select.Content>
 								</Select.Root>
 							</div>
-							<Button type="submit" disabled={inviting.pending}>
+							<Button type="submit" pending={inviting.pending}>
 								<UserPlusIcon />
-								{inviting.pending ? 'Creating…' : 'Create invite link'}
+								Create invite link
 							</Button>
 						</div>
 						<FormError error={inviting.error} />
@@ -265,7 +267,7 @@
 										size="icon-sm"
 										class="text-muted-foreground hover:text-destructive"
 										aria-label="Withdraw invite for {invite.email}"
-										title="Withdraw invite"
+										{@attach hint('Withdraw invite')}
 									>
 										<Trash2Icon />
 									</Button>

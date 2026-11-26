@@ -14,7 +14,7 @@ Two backends, chosen by ``FLOCK_FILES_BACKEND``:
 import asyncio
 import logging
 import shutil
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncGenerator, Iterable
 from pathlib import Path
 
 from app.api.src.s3_proxy.upstream import Upstream, UpstreamError
@@ -23,7 +23,7 @@ from app.api.src.settings import Settings
 log = logging.getLogger(__name__)
 
 # A file found: a local path (served as is) or its bytes as chunks, with its size.
-Found = Path | tuple[AsyncIterator[bytes], int]
+Found = Path | tuple[AsyncGenerator[bytes], int]
 
 
 class FileStore:
@@ -126,7 +126,7 @@ class S3Files(FileStore):
             return await self.fallback.get(run_pk, name)
         size = int(response.headers.get("content-length", 0))
 
-        async def chunks() -> AsyncIterator[bytes]:
+        async def chunks() -> AsyncGenerator[bytes]:
             try:
                 async for chunk in response.aiter_bytes(self.CHUNK):
                     yield chunk

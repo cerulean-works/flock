@@ -1,8 +1,10 @@
 <script lang="ts">
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
+	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
+	import TrophyIcon from '@lucide/svelte/icons/trophy';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { Snippet } from 'svelte';
@@ -15,6 +17,9 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
+	import { compareHref } from '#lib/evals.ts';
+	import { EvalsView } from '#lib/evals-view.svelte.ts';
+	import { hint } from '#lib/hint.svelte.ts';
 	import { clampWidth, NAME_W, saveWidth, TABLE_W } from '#lib/widths.ts';
 	import { describeFilters } from '#lib/workspace/filters.ts';
 	import {
@@ -28,6 +33,7 @@
 	import DeleteRunsDialog from './DeleteRunsDialog.svelte';
 	import EditRunDialog from './EditRunDialog.svelte';
 	import EmptyState from './EmptyState.svelte';
+	import EvalsTable from './EvalsTable.svelte';
 	import FullscreenPanel from './FullscreenPanel.svelte';
 	import MoveRunsDialog from './MoveRunsDialog.svelte';
 	import Page from './Page.svelte';
@@ -80,6 +86,8 @@
 		readonly: boolean;
 		/** Whether the filters offer "My runs" (not among a group's few runs). */
 		mine?: boolean;
+		/** Whether the table offers its Evals preset (the Runs page). */
+		evalPreset?: boolean;
 	}
 
 	let {
@@ -101,7 +109,8 @@
 		nameW: savedNameW,
 		tableW: savedTableW,
 		readonly,
-		mine = true
+		mine = true,
+		evalPreset = false
 	}: Props = $props();
 
 	const ws = getWorkspace();
@@ -162,7 +171,9 @@
 
 	const urlView = $derived.by((): ProjectView => {
 		const v = page.url.searchParams.get('view');
-		return isProjectView(v) ? v : initialView;
+		if (isProjectView(v)) return v;
+		// A link to the Evals preset opens on the table it is a preset of.
+		return evalPreset && page.url.searchParams.get('preset') === 'evals' ? 'table' : initialView;
 	});
 	const urlPanel = $derived.by(() => {
 		const id = page.url.searchParams.get('panel');
@@ -171,6 +182,16 @@
 		return i === -1 ? null : i;
 	});
 	const view = $derived(viewOverride ?? urlView);
+	// The Evals preset of the table: its eval runs by suites, ranked. Offered once a run has a
+	// suite score (`flock eval log` writes `suites/<suite>`).
+	const hasEvals = $derived(
+		evalPreset && ws.meta.columns.some((c) => c.key.startsWith('summary.suites/'))
+	);
+	const evals = $derived(hasEvals && page.url.searchParams.get('preset') === 'evals');
+	/** The Evals table shows in place of the runs table (the table view only). */
+	const evalsShown = $derived(evals && view === 'table');
+	const evalsView = new EvalsView(ws);
+	let evalsTable = $state<EvalsTable>();
 	const fullscreen = $derived(panelOverride !== undefined ? panelOverride : urlPanel);
 
 	function hrefWith(changes: Record<string, string | null>): ResolvedPathname {
@@ -314,11 +335,11 @@
 			<Tabs.Root value={view} onValueChange={(v) => setView(v as ProjectView)}>
 				<!-- No counts, so the toggle keeps its width from page to page. -->
 				<Tabs.List aria-label="View">
-					<Tabs.Trigger value="table" title="Table (T)">Table</Tabs.Trigger>
-					<Tabs.Trigger value="visualize" title="Table and charts side by side (V)">
+					<Tabs.Trigger value="table" {@attach hint('Table (T)')}>Table</Tabs.Trigger>
+					<Tabs.Trigger value="visualize" {@attach hint('Table and charts side by side (V)')}>
 						Visualize
 					</Tabs.Trigger>
-					<Tabs.Trigger value="charts" title="Charts (C)">Charts</Tabs.Trigger>
+					<Tabs.Trigger value="charts" {@attach hint('Charts (C)')}>Charts</Tabs.Trigger>
 				</Tabs.List>
 			</Tabs.Root>
 			<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
@@ -327,6 +348,23 @@
 				<span class="selection-count mr-1 text-[13px] font-medium tabular-nums" role="status">
 					{ws.selectedRows.length} selected
 				</span>
+				<!-- Two eval runs, doc by doc (025 D185): not offered for a run known not to be one. A
+				pair without results files reaches the page, which says why. -->
+				{#if ws.selectedRows.length === 2 && ws.selectedRows.every( (r) => [undefined, 'eval'].includes(ws.cell(r, 'job_type') as string | undefined) )}
+					{@const [a, b] = ws.selectedRows.map((r) => ws.page.runs[r].id)}
+					<Button
+						variant="outline"
+						data-sveltekit-preload-data="tap"
+						href={compareHref(
+							ws.meta.entity,
+							ws.meta.project,
+							a,
+							`${ws.meta.entity}/${ws.meta.project}/${b}`
+						)}
+					>
+						<GitCompareArrowsIcon /> Compare items
+					</Button>
+				{/if}
 				<Button variant="outline" onclick={() => ws.openDialog('tag')}><TagIcon /> Tags</Button>
 				<Button variant="outline" onclick={() => ws.openDialog('move')}>
 					<FolderInputIcon /> Move
@@ -337,7 +375,7 @@
 				<Button
 					variant="ghost"
 					size="icon"
-					title="Clear selection (Esc)"
+					{@attach hint('Clear selection (Esc)')}
 					aria-label="Clear selection"
 					onclick={() => ws.selected.clear()}
 				>
@@ -348,7 +386,22 @@
 				<RunFilters noMine={!mine} compact={compactTools} />
 
 				{#if tableShown}
-					<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} compact={compactTools} />
+					{#if hasEvals && view === 'table'}
+						<Button
+							variant={evals ? 'secondary' : 'outline'}
+							aria-pressed={evals}
+							href={hrefWith(evals ? { preset: null, view: 'table' } : { preset: 'evals' })}
+							data-sveltekit-replacestate
+							{@attach hint('Eval runs by suites, ranked')}
+						>
+							<TrophyIcon /> Evals
+						</Button>
+					{/if}
+					{#if evalsShown}
+						<ColumnsMenu keys={evalsView.keys} onjump={(key) => evalsTable?.scrollToColumn(key)} />
+					{:else}
+						<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} compact={compactTools} />
+					{/if}
 				{/if}
 				{#if chartsShown}
 					<PlotSettings compact={compactTools} />
@@ -358,7 +411,7 @@
 						<Button
 							variant="outline"
 							size="icon"
-							title="Add panel"
+							{@attach hint('Add panel')}
 							aria-label="Add panel"
 							onclick={() => ws.newPanel()}
 						>
@@ -367,13 +420,20 @@
 					{/if}
 				{/if}
 			{/if}
+			<!-- Outside the selection's actions too: the second run to compare may be one of these. -->
+			{#if evalsShown && evalsView.others}
+				<Button variant="outline" onclick={() => (evalsView.showOther = !evalsView.showOther)}>
+					{evalsView.showOther ? 'Hide' : 'Show'}
+					{evalsView.others} on other settings
+				</Button>
+			{/if}
 
 			<span class="flex-1"></span>
 			{#if view === 'charts' && focusLabel}
 				<Badge
 					variant="secondary"
 					class="focus-label max-w-[46%] text-muted-foreground"
-					title={focusPinned ? `${focusLabel} (pinned)` : focusLabel}
+					{@attach hint(focusPinned ? `${focusLabel} (pinned)` : focusLabel)}
 				>
 					{#if focusPinned}<PinIcon aria-label="Pinned" />{/if}
 					<span class="truncate">{focusLabel}</span>
@@ -387,7 +447,11 @@
 	</PageHeader>
 
 	<main class="relative min-h-0 flex-1">
-		<RunsTable bind:this={table} mode={view} {nameW} {primary} {onprimaryorder} />
+		{#if evalsShown}
+			<EvalsTable bind:this={evalsTable} view={evalsView} />
+		{:else}
+			<RunsTable bind:this={table} mode={view} {nameW} {primary} {onprimaryorder} />
+		{/if}
 		<ChartsPane
 			shown={chartsShown}
 			active={chartsShown && fullscreen == null}
@@ -411,17 +475,20 @@
 			{@render empty()}
 		{:else}
 			<Pager />
-			<!-- On the name column's edge, above the table and the charts beside it. -->
-			<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
-				<ResizeHandle
-					class="pointer-events-auto"
-					value={nameW}
-					bounds={NAME_W}
-					label="Resize the runs column"
-					onresize={(px) => (nameW = px)}
-					oncommit={(px) => saveWidth(NAME_W, px)}
-				/>
-			</div>
+			<!-- On the name column's edge, above the table and the charts beside it. The Evals table
+			     sizes its own run column. -->
+			{#if !evalsShown}
+				<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
+					<ResizeHandle
+						class="pointer-events-auto"
+						value={nameW}
+						bounds={NAME_W}
+						label="Resize the runs column"
+						onresize={(px) => (nameW = px)}
+						oncommit={(px) => saveWidth(NAME_W, px)}
+					/>
+				</div>
+			{/if}
 			{#if view === 'visualize'}
 				<!-- Between the table and the charts. -->
 				<div

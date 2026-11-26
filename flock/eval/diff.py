@@ -5,8 +5,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
-from flock.eval.metrics import scale
-from flock.eval.results import WrittenResults
+from flock.eval.results import TaskResult, WrittenResults, scale
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,12 +65,12 @@ class ItemDiff:
         return dataclasses.asdict(self)
 
 
-def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
+def check_instrument(a: WrittenResults, b: WrittenResults) -> None:
     """
-    Compares two runs doc by doc on every task both scored under the same `task_hash` with an accuracy as its primary metric, from each doc's `correct` in the predictions. The runs may score different models; that is the point.
+    Refuses two runs scored as different instruments: another `dtype`, `batch_tokens`, `attention` or `sdpa_backend`. The model, `max_length` and `add_bos` may differ.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another `dtype`, `batch_tokens` or `attention`, or another `sdpa_backend`), or a compared task's predictions don't match its results: another row count than its `num_docs`, a row without a string `id` or a boolean `correct`, another sequence of doc ids, a repeated id, or a count of right docs that isn't its finite accuracy over its docs.
+        `ValueError`: naming the first setting that differs.
     """
     # Settings of the instrument, not of the model: two models scored under different ones
     # aren't compared (principle 3, as `compare` refuses them). `max_length` and `add_bos` belong
@@ -83,6 +82,55 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
                 f"different instrument: provenance.{key} is {settings[0]!r} in {a.source}, "
                 f"{settings[1]!r} in {b.source}"
             )
+
+
+def outcomes(run: WrittenResults, result: TaskResult, rows: list[Any]) -> dict[str, bool]:
+    """
+    Returns each doc's `correct` by its id, in row order, after checking that `rows` are `result`'s predictions.
+
+    Raises:
+        `ValueError`: if the rows aren't one per doc, a row has no string `id` or boolean `correct`, an id repeats, or the count of right docs isn't the task's finite accuracy over its docs.
+    """
+    if not rows or len(rows) != result.num_docs:
+        raise ValueError(
+            f"{run.source}: {result.task} has {len(rows)} prediction rows for "
+            f"{result.num_docs} docs"
+        )
+    by_id = {}
+    for row in rows:
+        if not (
+            isinstance(row, dict)
+            and isinstance(row.get("id"), str)
+            and isinstance(row.get("correct"), bool)
+        ):
+            # A damaged file, refused as every other mismatch is.
+            raise ValueError(  # noqa: TRY004
+                f"{run.source}: {result.task} has a malformed row: {row!r}"
+            )
+        by_id[row["id"]] = row["correct"]
+    if len(by_id) != len(rows):
+        raise ValueError(f"{run.source}: {result.task}'s predictions repeat a doc id")
+    right = sum(by_id.values())
+    accuracy = result.metrics.get(result.primary_metric, math.nan)
+    # The accuracy is an FP32 mean of 0s and 1s: the sum is exact below 2**24 docs, and the
+    # division rounds once, so it lies within about 1e-7 of the rows' share. A missing or
+    # non-finite accuracy can't vouch for the rows.
+    if not math.isfinite(accuracy) or abs(right / len(rows) - accuracy) > 1e-6:
+        raise ValueError(
+            f"{run.source}: {result.task}'s predictions have {right} of {len(rows)} right, "
+            f"but its {result.primary_metric} is {accuracy} over {result.num_docs} docs"
+        )
+    return by_id
+
+
+def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
+    """
+    Compares two runs doc by doc on every task both scored under the same `task_hash` with an accuracy as its primary metric, from each doc's `correct` in the predictions. The runs may score different models; that is the point.
+
+    Raises:
+        `ValueError`: if the runs are different instruments (another `dtype`, `batch_tokens` or `attention`, or another `sdpa_backend`), or a compared task's predictions don't match its results: another row count than its `num_docs`, a row without a string `id` or a boolean `correct`, another sequence of doc ids, a repeated id, or a count of right docs that isn't its finite accuracy over its docs.
+    """
+    check_instrument(a, b)
 
     b_tasks = {task.task: task for task in b.tasks}
     a_names = {task.task for task in a.tasks}
@@ -114,42 +162,10 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
 
         # Each run's outcome by doc id. Equal hashes mean the same docs, so other ids, or rows that
         # disagree with the task's own accuracy, mean a damaged or mixed-up file.
-        outcomes = []
-        for run, result, rows in ((a, task, rows_a), (b, other, rows_b)):
-            if not rows or len(rows) != result.num_docs:
-                raise ValueError(
-                    f"{run.source}: {task.task} has {len(rows)} prediction rows for "
-                    f"{result.num_docs} docs"
-                )
-            by_id = {}
-            for row in rows:
-                if not (
-                    isinstance(row, dict)
-                    and isinstance(row.get("id"), str)
-                    and isinstance(row.get("correct"), bool)
-                ):
-                    # A damaged file, refused as every other mismatch is.
-                    raise ValueError(  # noqa: TRY004
-                        f"{run.source}: {task.task} has a malformed row: {row!r}"
-                    )
-                by_id[row["id"]] = row["correct"]
-            if len(by_id) != len(rows):
-                raise ValueError(f"{run.source}: {task.task}'s predictions repeat a doc id")
-            right = sum(by_id.values())
-            accuracy = result.metrics.get(task.primary_metric, math.nan)
-            # The accuracy is an FP32 mean of 0s and 1s: the sum is exact below 2**24 docs, and the
-            # division rounds once, so it lies within about 1e-7 of the rows' share. A missing or
-            # non-finite accuracy can't vouch for the rows.
-            if not math.isfinite(accuracy) or abs(right / len(rows) - accuracy) > 1e-6:
-                raise ValueError(
-                    f"{run.source}: {task.task}'s predictions have {right} of {len(rows)} right, "
-                    f"but its {task.primary_metric} is {accuracy} "
-                    f"over {result.num_docs} docs"
-                )
-            outcomes.append(by_id)
+        found = [outcomes(a, task, rows_a), outcomes(b, other, rows_b)]
         # In order: rows follow the scored requests, which the hash covers, so the same ids in
         # another order would join different questions.
-        if list(outcomes[0]) != list(outcomes[1]):
+        if list(found[0]) != list(found[1]):
             raise ValueError(
                 f"{task.task} has the same hash in {a.source} and {b.source} but other doc ids, "
                 "or another order"
@@ -157,8 +173,8 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
 
         both_right = both_wrong = 0
         only_a, only_b = [], []
-        for doc, right_a in outcomes[0].items():
-            right_b = outcomes[1][doc]
+        for doc, right_a in found[0].items():
+            right_b = found[1][doc]
             if right_a and right_b:
                 both_right += 1
             elif not (right_a or right_b):
@@ -172,7 +188,7 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
                 task=task.task,
                 task_hash=task.task_hash,
                 metric=task.primary_metric,
-                num_docs=len(outcomes[0]),
+                num_docs=len(found[0]),
                 both_right=both_right,
                 both_wrong=both_wrong,
                 only_a=only_a,

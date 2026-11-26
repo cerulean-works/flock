@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
@@ -50,7 +51,7 @@
 								<DatabaseIcon class="size-4 flex-none text-muted-foreground" aria-label="Dataset" />
 							{/if}
 							<div class="min-w-0 flex-1">
-								<p class="truncate font-mono text-[13px]" title={entry.path}>
+								<p class="truncate font-mono text-[13px]" {@attach hint(entry.path)}>
 									{entry.path}{entry.kind === 'folder' ? '/' : ''}
 								</p>
 								<MetaRow class="mt-0.5 flex-nowrap">
@@ -66,7 +67,7 @@
 					</td>
 					<td
 						class="hidden truncate px-2 text-muted-foreground sm:table-cell"
-						title={entry.project ?? undefined}
+						{@attach hint(entry.project ?? undefined)}
 					>
 						{entry.project ?? ''}
 					</td>

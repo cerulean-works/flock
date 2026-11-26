@@ -4,6 +4,7 @@
 	import { bucketApi } from '#lib/storage.ts';
 	import type { BucketDetail } from '#lib/types.ts';
 	import { dateTime } from '#lib/utils.ts';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		open: boolean;
@@ -47,7 +48,7 @@
 			{#if error}
 				<p class="text-destructive">{error}</p>
 			{:else if !detail}
-				<p class="text-muted-foreground">Loading…</p>
+				<Skeleton shape="lines" />
 			{:else}
 				<p class="text-muted-foreground">
 					On the S3 server: <span class="font-mono text-[12.5px]">{detail.upstream_name}</span>

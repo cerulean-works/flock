@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
@@ -74,7 +75,7 @@
 					size="sm"
 					class="gap-1 px-2 font-normal"
 					aria-label="Runs per page"
-					title="Runs per page"
+					{@attach hint('Runs per page')}
 				>
 					{q.size} per page
 					<ChevronDownIcon class="text-muted-foreground" />

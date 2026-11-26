@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
+	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
 	import PanelRightIcon from '@lucide/svelte/icons/panel-right';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import TagIcon from '@lucide/svelte/icons/tag';
@@ -8,7 +10,7 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { onMount, untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import ChartsPane from '#lib/components/ChartsPane.svelte';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
@@ -16,13 +18,13 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
 	import PanelEditor from '#lib/components/PanelEditor.svelte';
-	import LiveStatus from '#lib/components/LiveStatus.svelte';
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import PlotSettings from '#lib/components/PlotSettings.svelte';
 	import RunFiles from '#lib/components/run/RunFiles.svelte';
 	import RunLogs from '#lib/components/run/RunLogs.svelte';
 	import RunOverview from '#lib/components/run/RunOverview.svelte';
+	import RunResults from '#lib/components/run/RunResults.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
 	import TagRunsDialog from '#lib/components/TagRunsDialog.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -32,6 +34,7 @@
 	import { projectUrl } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
 	import { runWorkspace } from '#lib/data/run.ts';
+	import { compareHref, itemsViewOf, withItemsView } from '#lib/evals.ts';
 	import { LIVE_STATES } from '#lib/types.ts';
 	import { entityHref, projectHref, runHref, withParam } from '#lib/workspace/url.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
@@ -73,16 +76,21 @@
 	const runState = $derived(ws.stateOf(0));
 	const name = $derived(ws.nameOf(0));
 
-	type Tab = 'charts' | 'logs' | 'files';
-	const TABS: { value: Tab; label: string }[] = [
+	type Tab = 'charts' | 'results' | 'logs' | 'files';
+	// Results for every eval run, so eval runs all have the same tabs, and for any other run
+	// with a results file (025 D184). A run with Results opens on it; any other on its charts.
+	const hasResults = $derived(data.run.job_type === 'eval' || data.results != null);
+	const TABS: { value: Tab; label: string }[] = $derived([
+		...(hasResults ? [{ value: 'results' as const, label: 'Results' }] : []),
 		{ value: 'charts', label: 'Charts' },
 		{ value: 'logs', label: 'Logs' },
 		{ value: 'files', label: 'Files' }
-	];
+	]);
+	const defaultTab = $derived<Tab>(hasResults ? 'results' : 'charts');
 	// In the URL, so a tab can be linked to; switching never re-runs the load.
 	let tabOverride = $state<Tab | null>(null);
 	const urlTab = $derived<Tab>(
-		TABS.find((t) => t.value === page.url.searchParams.get('tab'))?.value ?? 'charts'
+		TABS.find((t) => t.value === page.url.searchParams.get('tab'))?.value ?? defaultTab
 	);
 	const tab = $derived(tabOverride ?? urlTab);
 
@@ -90,7 +98,7 @@
 		if (t === tab) return;
 		tabOverride = t;
 		ws.cursor = null;
-		void goto(withParam(page.url, 'tab', t === 'charts' ? null : t), {
+		void goto(withParam(page.url, 'tab', t === defaultTab ? null : t), {
 			replace: true,
 			reset: false
 		}).finally(() => (tabOverride = null));
@@ -131,7 +139,7 @@
 		}
 	}
 
-	// The overview used to be a tab: its links land on the charts, with the sidebar open.
+	// The overview used to be a tab: its links land on the first tab, with the sidebar open.
 	$effect(() => {
 		if (page.url.searchParams.get('tab') !== 'overview') return;
 		untrack(() => {
@@ -139,6 +147,12 @@
 			void goto(withParam(page.url, 'tab', null), { replace: true, reset: false });
 		});
 	});
+
+	// Doc by doc against another eval run (025 D185): the compare page, asking for the other run.
+	function compare() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- compareHref resolves it
+		void goto(compareHref(data.run.entity, data.run.project, data.run.id));
+	}
 
 	// Full-screen panels, as on the project's page: `?panel=<panel id>`.
 	const fullscreen = $derived.by(() => {
@@ -197,6 +211,11 @@
 			<DropdownMenu.Item onSelect={() => ws.openDialog('move', 0)}>
 				<FolderInputIcon /> Move to project…
 			</DropdownMenu.Item>
+			{#if hasResults}
+				<DropdownMenu.Item onSelect={() => compare()}>
+					<GitCompareArrowsIcon /> Compare with…
+				</DropdownMenu.Item>
+			{/if}
 			<DropdownMenu.Separator />
 			<DropdownMenu.Item variant="destructive" onSelect={() => ws.openDialog('delete', 0)}>
 				<Trash2Icon /> Delete run…
@@ -211,21 +230,6 @@
 			{#if !readonly}{@render runMenu()}{/if}
 			<StateBadge state={runState} />
 		{/snippet}
-		{#snippet actions()}
-			<LiveStatus />
-			<Button
-				variant="ghost"
-				size="sm"
-				class="aria-pressed:bg-muted aria-pressed:text-foreground"
-				aria-pressed={sidebar}
-				aria-controls="run-overview"
-				title={sidebar ? 'Hide the overview' : 'Show the overview'}
-				onclick={() => setSidebar(!sidebar)}
-			>
-				<PanelRightIcon />
-				<span class="max-sm:sr-only">Overview</span>
-			</Button>
-		{/snippet}
 		{#snippet toolbar()}
 			<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
 				<Tabs.List aria-label="Run">
@@ -237,7 +241,29 @@
 			{#if tab === 'charts'}
 				<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
 				<PlotSettings />
+			{:else if tab === 'results' && !readonly}
+				<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
+				<Button
+					variant="outline"
+					data-sveltekit-preload-data="tap"
+					href={compareHref(data.run.entity, data.run.project, data.run.id)}
+				>
+					<GitCompareArrowsIcon /> Compare with…
+				</Button>
 			{/if}
+			<!-- On the tabs' row, at the end above the sidebar it opens. -->
+			<Button
+				variant="ghost"
+				size="sm"
+				class="ml-auto aria-pressed:bg-muted aria-pressed:text-foreground"
+				aria-pressed={sidebar}
+				aria-controls="run-overview"
+				{@attach hint(sidebar ? 'Hide the overview' : 'Show the overview')}
+				onclick={() => setSidebar(!sidebar)}
+			>
+				<PanelRightIcon />
+				<span class="max-sm:sr-only">Overview</span>
+			</Button>
 		{/snippet}
 	</PageHeader>
 
@@ -254,6 +280,24 @@
 					/>
 				{:else}
 					<EmptyState>This run hasn’t logged any metrics.</EmptyState>
+				{/if}
+			{:else if tab === 'results'}
+				{#if data.results}
+					{#key data.run.id}
+						<RunResults
+							run={data.run}
+							results={data.results}
+							models={data.models}
+							view={itemsViewOf(page.url.searchParams)}
+							onview={(view) => replaceState(withItemsView(page.url, view), page.state)}
+						/>
+					{/key}
+				{:else}
+					<EmptyState>
+						This eval run has no results file. Runs logged with
+						<code class="font-mono text-[0.95em]">flock eval run --wandb-project</code> upload their
+						<code class="font-mono text-[0.95em]">results.json</code> and predictions.
+					</EmptyState>
 				{/if}
 			{:else if tab === 'logs'}
 				{#key data.run.id}
@@ -290,7 +334,7 @@
 						variant="ghost"
 						size="icon-xs"
 						aria-label="Hide the overview"
-						title="Hide the overview"
+						{@attach hint('Hide the overview')}
 						onclick={() => setSidebar(false)}
 					>
 						<XIcon />

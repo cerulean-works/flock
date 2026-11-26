@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import dataclasses
 import json
 import os
 import socket
@@ -13,8 +14,10 @@ import pytest
 
 from tests.app.conftest import Flocks, S3Flock
 from tests.app.test_datasets import Writer, table
+from tests.app.test_evals import log_run
 from tests.app.test_models import Pusher
 from tests.conftest import S3Server
+from tests.eval.toy import PROVENANCE, write_run
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -23,6 +26,16 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.skipif(
     not os.environ.get("FLOCK_WEB_BUILD"), reason="needs the built web app"
 )
+
+
+def session(user: Any) -> dict[str, str]:
+    """The dashboard's cookies for a user signed in through it."""
+    return {
+        "flock_access": user.signup["access_token"],
+        "flock_user": base64.urlsafe_b64encode(json.dumps(user.signup["user"]).encode())
+        .decode()
+        .rstrip("="),
+    }
 
 
 @pytest.fixture
@@ -84,15 +97,7 @@ def test_built_web_enforces_caller_identity_across_pages_data_and_relays(
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     member = flock.add_user("member@web.test")
     outsider = flock.add_user("outsider@web.test", org="lab")
-    sessions = [
-        {
-            "flock_access": user.signup["access_token"],
-            "flock_user": base64.urlsafe_b64encode(json.dumps(user.signup["user"]).encode())
-            .decode()
-            .rstrip("="),
-        }
-        for user in (member, outsider)
-    ]
+    sessions = [session(user) for user in (member, outsider)]
     with (
         httpx.Client(base_url=web) as anon,
         httpx.Client(base_url=web, cookies=sessions[0]) as inside,
@@ -138,7 +143,7 @@ def test_built_web_enforces_caller_identity_across_pages_data_and_relays(
                 assert "private-run-146" not in response.text
                 assert "row 1946" not in response.text
         for path in (
-            "/api/models/flock/private-model/versions",
+            "/api/models/flock/private-model/-/versions",
             "/api/imports/flock/hf",
             "/api/storage/flock/flock-datasets",
         ):
@@ -174,3 +179,86 @@ def test_built_web_enforces_caller_identity_across_pages_data_and_relays(
             assert response.status_code == 200
             assert response.json()["type"] == "data"
             assert response.headers["cache-control"] == "private, no-store"
+
+
+def test_eval_results_comparisons_and_model_evals_follow_the_projects_access(
+    flock: S3Flock, web: str, tmp_path: Path
+) -> None:
+    """025: a private project's results file, item comparison and eval scores reach members only."""
+    api = flock.client()
+    version = Pusher(flock).push("m")
+    scored = {"model": "flock:flock/m@1", "model_digest": version["digest"]}
+    scorer = dataclasses.replace(
+        PROVENANCE,
+        model=scored["model"],
+        model_digest=version["digest"],
+        model_org="flock",
+        model_path="m",
+    )
+    a = write_run(tmp_path / "a", {"secret_task": ("h", [True, False])}, scorer)
+    b = write_run(tmp_path / "b", {"secret_task": ("h", [False, True])}, scorer)
+    log_run(api, "p", "a", a)
+    log_run(api, "p", "b", b)
+    for run in ("a", "b"):
+        api.create_run("p", run, config=scored)  # links each to the version it scored
+    assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
+    member = flock.add_user("member@web.test")
+    outsider = flock.add_user("outsider@web.test", org="lab")
+    with (
+        httpx.Client(base_url=web) as anon,
+        httpx.Client(base_url=web, cookies=session(member)) as inside,
+        httpx.Client(base_url=web, cookies=session(outsider)) as outside,
+    ):
+        for path in ("/flock/p/runs/a", "/flock/p/runs/a/compare?with=flock%2Fp%2Fb"):
+            page = inside.get(path)
+            assert page.status_code == 200, (path, page.text)
+            assert "secret_task" in page.text
+            redirect = anon.get(path)
+            assert redirect.status_code in (303, 307), (path, redirect.text)
+            assert redirect.headers["location"].startswith("/login")
+            refused = outside.get(path)
+            assert refused.status_code == 404, path
+            assert "secret_task" not in refused.text
+        evals = "/api/models/flock/m/-/versions/1/evals"
+        found = inside.get(evals)
+        assert found.status_code == 200, found.text
+        assert [run["id"] for run in found.json()["runs"]] == ["a", "b"]
+        assert found.json()["runs"][0]["scores"]["values"]["secret_task/acc_raw@h"] == 0.5
+        assert anon.get(evals).status_code == 401
+        assert outside.get(evals).status_code == 404
+
+
+def test_a_private_projects_evals_preset_reaches_members_only(flock: S3Flock, web: str) -> None:
+    """The Evals preset of a private project scored on a private task: its suite scores, written by the server into the page, reach members only."""
+    api = flock.client()
+    for run, score in (("a", 0.4), ("b", 0.5)):
+        config = {
+            "dtype": "bfloat16",
+            "suite_members": {"secret_suite": ["secret_task"]},
+            "suite_hashes": {"secret_suite": "h"},
+        }
+        api.create_run("p", run, config=config)
+        assert api.patch(f"/api/v1/projects/flock/p/runs/{run}", {"job_type": "eval"}).status == 200
+        summary = {"suites/secret_suite": score, "secret_task/acc_raw": score}
+        api.stream("p", run, history=[{"_step": 0}], summary=summary, complete=0)
+    assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
+    member = flock.add_user("member@web.test")
+    outsider = flock.add_user("outsider@web.test", org="lab")
+    with (
+        httpx.Client(base_url=web) as anon,
+        httpx.Client(base_url=web, cookies=session(member)) as inside,
+        httpx.Client(base_url=web, cookies=session(outsider)) as outside,
+    ):
+        path = "/flock/p?preset=evals"
+        page = inside.get(path)
+        assert page.status_code == 200, page.text
+        assert (
+            "Mean rank" in page.text and "1 suite" in page.text
+        )  # the table, rendered on the server
+        assert "secret_suite" in page.text
+        redirect = anon.get(path)
+        assert redirect.status_code in (303, 307), redirect.text
+        assert redirect.headers["location"].startswith("/login")
+        refused = outside.get(path)
+        assert refused.status_code == 404
+        assert "secret_suite" not in refused.text

@@ -85,8 +85,6 @@
 				{form.error.charAt(0).toUpperCase() + form.error.slice(1)}.
 			</p>
 		{/if}
-		<Button type="submit" class="mt-2 h-10 w-full text-sm" disabled={pending}>
-			{pending ? 'Signing in…' : 'Sign in'}
-		</Button>
+		<Button type="submit" class="mt-2 h-10 w-full text-sm" {pending}>Sign in</Button>
 	</form>
 </AuthShell>

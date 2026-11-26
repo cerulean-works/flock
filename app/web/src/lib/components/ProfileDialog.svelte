@@ -46,9 +46,7 @@
 						<Button {...props} variant="outline">Cancel</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={saving.pending}>
-					{saving.pending ? 'Saving…' : 'Save'}
-				</Button>
+				<Button type="submit" pending={saving.pending}>Save</Button>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>

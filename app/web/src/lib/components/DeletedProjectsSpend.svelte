@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import ClockIcon from '@lucide/svelte/icons/clock';
@@ -59,7 +60,7 @@
 					<Badge
 						variant="secondary"
 						class="text-muted-foreground"
-						title={p.excluded_by ? `Left out by ${p.excluded_by.name}` : undefined}
+						{@attach hint(p.excluded_by ? `Left out by ${p.excluded_by.name}` : undefined)}
 					>
 						Left out
 					</Badge>

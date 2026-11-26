@@ -1,7 +1,9 @@
 <script lang="ts">
-	import * as Select from '#lib/components/ui/select/index.js';
+	import PickerField from '#lib/components/PickerField.svelte';
+	import PickerList from '#lib/components/PickerList.svelte';
 	import { scopeLabel } from '#lib/scope.ts';
 
+	/** Where a move goes (D166): "Workspace", the org's own, or one of its projects. */
 	interface Props {
 		/** The project chosen; null for global. */
 		value: string | null;
@@ -13,30 +15,52 @@
 
 	let { value = $bindable(), projects, id, disabled = false }: Props = $props();
 
-	/**
-	 * The Select value that stands for the workspace's own scope. Not empty, which the Select takes
-	 * for no choice and shows as a placeholder; project names never hold a NUL.
-	 */
-	const WORKSPACE = '\u0000workspace';
-	// The scope shown is always offered, even if the list doesn't have it.
-	const choices = $derived(
-		value === null || projects.includes(value) ? projects : [value, ...projects]
-	);
+	let open = $state(false);
+	let query = $state('');
+	let active = $state(0);
+
+	// The workspace, then the projects, narrowed by the search.
+	const choices = $derived.by(() => {
+		const all: (string | null)[] = [null, ...projects];
+		// The scope shown is always offered, even if the list doesn't have it.
+		if (value !== null && !projects.includes(value)) all.splice(1, 0, value);
+		const q = query.trim().toLowerCase();
+		const shown: (string | null)[] = [];
+		for (const c of all) {
+			if (scopeLabel(c).toLowerCase().includes(q)) shown.push(c);
+		}
+		return shown;
+	});
+
+	function onOpenChange(next: boolean) {
+		if (!next) return;
+		query = '';
+		active = Math.max(0, choices.indexOf(value));
+	}
+
+	function onpick(choice: string | null) {
+		value = choice;
+		open = false;
+	}
 </script>
 
-<!-- Where a move goes (D166): "Workspace", the org's own, or one of its projects. -->
-<Select.Root
-	type="single"
-	value={value ?? WORKSPACE}
-	onValueChange={(v) => (value = v === WORKSPACE ? null : v)}
-	{disabled}
->
-	<Select.Trigger {id} class="w-full">{scopeLabel(value)}</Select.Trigger>
-	<Select.Content>
-		<Select.Item value={WORKSPACE} label="Workspace">Workspace</Select.Item>
-		{#if choices.length}<Select.Separator />{/if}
-		{#each choices as name (name)}
-			<Select.Item value={name} label={name}>{name}</Select.Item>
-		{/each}
-	</Select.Content>
-</Select.Root>
+<PickerField bind:open {onOpenChange} {id} {disabled}>
+	<span class="min-w-0 flex-1 truncate">{scopeLabel(value)}</span>
+	{#snippet list()}
+		<PickerList
+			options={choices}
+			key={(c) => c ?? ''}
+			current={(c) => c === value}
+			noun="projects"
+			label="Search projects"
+			placeholder="Search projects…"
+			bind:query
+			bind:active
+			{onpick}
+		>
+			{#snippet row(c: string | null)}
+				<span class="min-w-0 flex-1 truncate">{scopeLabel(c)}</span>
+			{/snippet}
+		</PickerList>
+	{/snippet}
+</PickerField>

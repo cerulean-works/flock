@@ -1,7 +1,8 @@
 /**
- * Widths the viewer can drag: the app's sidebar, the runs table's name column and the group
- * editor's assistant. Kept in
- * cookies, like the sidebar's open state, so the server renders them and nothing jumps.
+ * Widths the viewer can drag: the app's sidebar, the runs table's name column, the group
+ * editor's assistant and the eval items' columns. Kept in cookies, like the sidebar's open
+ * state. The server renders the first three, so nothing jumps; the items are fetched in the
+ * browser, which reads their widths there.
  */
 export interface Width {
 	cookie: string;
@@ -34,3 +35,14 @@ export function readWidth(w: Width, value: string | undefined): number {
 export function saveWidth(w: Width, px: number) {
 	document.cookie = `${w.cookie}=${clampWidth(w, px)}; path=/; max-age=31536000; samesite=lax`;
 }
+
+/**
+ * The eval items table's columns (027), one width for every run's so the runs stay side by side.
+ * The initial widths fit two runs in Home's text column (70rem).
+ */
+export const ITEM_W = {
+	doc: { cookie: 'flock_item_doc_w', min: 96, max: 360, initial: 128 },
+	question: { cookie: 'flock_item_question_w', min: 200, max: 1400, initial: 360 },
+	gold: { cookie: 'flock_item_gold_w', min: 120, max: 720, initial: 160 },
+	run: { cookie: 'flock_item_run_w', min: 140, max: 720, initial: 200 }
+} satisfies Record<string, Width>;

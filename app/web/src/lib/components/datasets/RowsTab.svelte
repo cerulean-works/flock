@@ -1,17 +1,17 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
-	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
-	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { Button } from '#lib/components/ui/button/index.js';
+	import PageNumbers from '#lib/components/PageNumbers.svelte';
 	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
-	import { cellCut, cellText, datasetCall, datasetsApi, pageNumbers } from '#lib/datasets.ts';
+	import { cellCut, cellText, datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { Cell, DatasetInfo, FullCell, RowsPage } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 	import CellView from './CellView.svelte';
 	import ImageDialog from './ImageDialog.svelte';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -197,7 +197,7 @@
 	{:else if failed}
 		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
 	{:else if !rows}
-		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+		<Skeleton count={10} />
 	{:else if !rows.rows.length}
 		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">
 			{rows.total ? 'No rows on this page.' : 'This version has no rows.'}
@@ -222,7 +222,7 @@
 								style:min-width={cap === null ? undefined : `${cap + PAD}px`}
 								style:max-width={cap === null ? undefined : `${cap + PAD}px`}
 							>
-								<div class="truncate" title="{column.name} {column.type}">
+								<div class="truncate" {@attach hint(`${column.name} ${column.type}`)}>
 									<span class="text-foreground">{column.name}</span>
 									<span
 										class="ml-1 inline-block truncate align-bottom font-mono text-[11px] font-normal"
@@ -290,51 +290,16 @@
 				</tbody>
 			</table>
 		</div>
-		<nav
-			class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] tabular-nums"
-			aria-label="Row pages"
-		>
-			<p>
-				{(offset + 1).toLocaleString('en-US')}–{last.toLocaleString('en-US')}
-				<span class="text-muted-foreground">of {total.toLocaleString('en-US')}</span>
-			</p>
-			<div class="ml-auto flex items-center gap-1">
-				<Button
-					variant="ghost"
-					size="sm"
-					aria-label="Previous page"
-					disabled={current <= 1}
-					onclick={() => go(Math.max(0, offset - size))}
-				>
-					<ChevronLeftIcon /> Previous
-				</Button>
-				{#each pageNumbers(current, pages) as p, i (p ?? `gap${i}`)}
-					{#if p === null}
-						<span class="w-7 text-center text-muted-foreground" aria-hidden="true">…</span>
-					{:else}
-						<Button
-							variant={p === current ? 'secondary' : 'ghost'}
-							size="sm"
-							class="min-w-7 px-1.5"
-							aria-label="Page {p}"
-							aria-current={p === current ? 'page' : undefined}
-							onclick={() => go((p - 1) * size)}
-						>
-							{p.toLocaleString('en-US')}
-						</Button>
-					{/if}
-				{/each}
-				<Button
-					variant="ghost"
-					size="sm"
-					aria-label="Next page"
-					disabled={current >= pages}
-					onclick={() => go(offset + size)}
-				>
-					Next <ChevronRightIcon />
-				</Button>
-			</div>
-		</nav>
+		<PageNumbers
+			{current}
+			{pages}
+			first={offset + 1}
+			{last}
+			{total}
+			label="Row pages"
+			ongo={(p) => go((p - 1) * size)}
+			onstep={(step) => go(Math.max(0, offset + step * size))}
+		/>
 	{/if}
 </div>
 

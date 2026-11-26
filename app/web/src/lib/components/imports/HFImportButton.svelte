@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -29,7 +30,7 @@
 </script>
 
 <!-- The page's one filled action. "HF" keeps it short; the hover text spells it out. -->
-<Button title="Import from Hugging Face" onclick={() => (open = true)}>
+<Button {@attach hint('Import from Hugging Face')} onclick={() => (open = true)}>
 	<DownloadIcon /><span class="max-sm:sr-only">Import from HF</span>
 </Button>
 {#if kind === 'dataset'}

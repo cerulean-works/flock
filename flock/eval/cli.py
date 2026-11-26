@@ -3,6 +3,7 @@
 import json
 import shlex
 import sys
+import unicodedata
 from pathlib import Path
 from typing import get_args
 
@@ -11,6 +12,7 @@ import click
 from flock.eval import hub
 from flock.eval.compare import Comparison, compare
 from flock.eval.diff import ItemDiff, diff
+from flock.eval.items import CELLS, ONE_RUN, Item, items
 from flock.eval.model import DEFAULT_BATCH_TOKENS, folder_digest
 from flock.eval.results import Results, read_results
 from flock.eval.run import Dtype, EvalConfig, evaluate
@@ -75,6 +77,11 @@ def main() -> None:
     is_flag=True,
     help="Start every non-empty context with the tokenizer's BOS token, as OLMES does for Gemma.",
 )
+@click.option(
+    "--no-tokens",
+    is_flag=True,
+    help="Don't write each task's per-token values beside its predictions.",
+)
 @click.option("--device", help="Torch device (default: cuda if available).")
 @click.option(
     "--wandb-project",
@@ -94,6 +101,7 @@ def run(
     batch_tokens: int,
     dtype: Dtype,
     add_bos: bool,
+    no_tokens: bool,
     device: str | None,
     wandb_project: str | None,
     verbose: bool,
@@ -109,6 +117,7 @@ def run(
             batch_tokens=batch_tokens,
             dtype=dtype,
             add_bos=add_bos,
+            tokens=not no_tokens,
             device=device,
             wandb_project=wandb_project,
             # The program's name as invoked (`flock` for the script) and its arguments.
@@ -162,6 +171,55 @@ def diff_command(a: str, b: str, as_json: bool) -> None:
         sys.exit(2)
 
     click.echo(json.dumps(found.to_dict(), indent=2) if as_json else format_diff(found))
+
+
+@main.command(name="items")
+@click.argument("runs", nargs=-1, required=True)
+@click.option("--task", required=True, help="The task whose docs to print.")
+@click.option(
+    "--only",
+    type=click.Choice(ONE_RUN),
+    help="One run: print its wrong (the default), right or all docs.",
+)
+@click.option("--cell", type=click.Choice(CELLS), help="Two runs: print this cell of their diff.")
+@click.option("--limit", type=click.IntRange(min=1), help="Print at most this many docs.")
+@click.option("--seed", type=int, help="Sample --limit docs with this seed, not the first ones.")
+@click.option("--json", "as_json", is_flag=True, help="Print one JSON object per doc.")
+def items_command(
+    runs: tuple[str, ...],
+    task: str,
+    only: str | None,
+    cell: str | None,
+    limit: int | None,
+    seed: int | None,
+    as_json: bool,
+) -> None:
+    """Print a task's docs with their question, choices and each run's pick and probabilities, from one run or two, each a folder holding results.json or a tracker run as run:ENTITY/PROJECT/ID. Two runs are compared as diff compares them. Exits 2 if the runs can't be read this way."""
+    if len(runs) > 2:
+        raise click.UsageError("give one run or two")
+    if len(runs) == 1 and cell is not None:
+        raise click.UsageError("--cell compares two runs; one run takes --only")
+    if len(runs) == 2 and only is not None:
+        raise click.UsageError("--only reads one run; two runs take --cell")
+    if len(runs) == 2 and cell is None:
+        raise click.UsageError(f"two runs need --cell, one of {', '.join(CELLS)}")
+
+    try:
+        found = items(
+            [read_results(run) for run in runs], task, cell or only or "wrong", limit, seed
+        )
+    # A missing or damaged file, another instrument, no text, or a refused or unreachable run.
+    except (OSError, ValueError, click.ClickException) as error:
+        message = error.format_message() if isinstance(error, click.ClickException) else error
+        # The message may quote a run's files.
+        click.echo(f"refused: {_escaped(str(message))}", err=True)
+        sys.exit(2)
+
+    if as_json:
+        for item in found:
+            click.echo(json.dumps(item.to_dict(), ensure_ascii=False))
+    else:
+        click.echo("\n\n".join(format_item(item) for item in found))
 
 
 @main.command(name="log")
@@ -256,6 +314,45 @@ def format_diff(found: ItemDiff) -> str:
         names = ", ".join(f"{name} ({reason})" for name, reason in found.not_compared)
         lines.append(f"not compared: {names}")
     return "\n".join(lines)
+
+
+def format_item(item: Item) -> str:
+    """Formats a doc: its task, id and metric, where it comes from when the run says, each run's model and verdict, its question, then one line per choice with each run's probability and share, `*` on gold and `<` on each run's pick."""
+    letters = "ab"[: len(item.runs)]
+    lines = [f"{_escaped(item.task)}  {_escaped(item.id)}  {_escaped(item.metric)}"]
+    # The hashes and `meta` are for joining and filtering, and print with `--json`.
+    shown = [key for key in ("split", "source_index", "native_id", "subject") if key in item.source]
+    if shown:
+        lines.append("  ".join(f"{key} {_escaped(str(item.source[key]))}" for key in shown))
+    for letter, answer in zip(letters, item.runs, strict=True):
+        verdict = "right" if answer.correct else "wrong"
+        lines.append(f"{letter}  {_escaped(answer.model)}  {verdict}, picks {answer.pick}")
+    # Each choice's own context stands in for a shared question.
+    if item.question is not None:
+        lines.append(_escaped(item.question, keep="\n"))
+
+    # Per run, the probability then the share; a share is `-` where the metric ranks no choices.
+    header = "".join(f"  p {letter}    s {letter}  " for letter in letters)
+    lines.append(f"     {header}")
+    for i, choice in enumerate(item.choices):
+        cells = ""
+        for answer in item.runs:
+            share = "    -" if answer.share is None else f"{answer.share[i]:.3f}"
+            mark = "<" if answer.pick == i else " "
+            cells += f"  {answer.prob[i]:.3f}  {share} {mark}"
+        text = choice if item.contexts is None else item.contexts[i] + choice
+        gold = "*" if i == item.gold else " "
+        # One line per choice, so its own line breaks are escaped too.
+        lines.append(f"{gold}{i:>3} {cells}  {_escaped(text.strip())}")
+    return "\n".join(lines)
+
+
+def _escaped(text: str, keep: str = "") -> str:
+    """`text` with each control, format or line-separator character (`Cc`, `Cf`, `Zl`, `Zp`) but those in `keep` written as its escape, so text from a run's files can't move the cursor or reorder a line. Chinese text, its ideographic space included, stays as it is."""
+    hidden = ("Cc", "Cf", "Zl", "Zp")
+    return "".join(
+        repr(c)[1:-1] if c not in keep and unicodedata.category(c) in hidden else c for c in text
+    )
 
 
 def format_results(results: Results, verbose: bool = False) -> str:

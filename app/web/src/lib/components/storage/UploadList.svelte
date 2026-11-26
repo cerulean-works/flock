@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { nameOf } from '#lib/storage.ts';
@@ -41,7 +42,7 @@
 				<li class="grid grid-cols-[1fr_auto] items-center gap-x-3 text-[13px]">
 					<div class="min-w-0">
 						<div class="flex items-baseline gap-2">
-							<span class="truncate font-mono text-[12.5px]" title={upload.key}
+							<span class="truncate font-mono text-[12.5px]" {@attach hint(upload.key)}
 								>{nameOf(upload.key)}</span
 							>
 							<span
@@ -84,7 +85,7 @@
 							size="icon-xs"
 							class="text-muted-foreground"
 							aria-label="Cancel uploading {nameOf(upload.key)}"
-							title="Cancel"
+							{@attach hint('Cancel')}
 							onclick={() => upload.cancel()}
 						>
 							<XIcon />

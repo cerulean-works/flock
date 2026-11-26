@@ -80,8 +80,13 @@
 			<FormError {error} />
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel disabled={pending}>Cancel</AlertDialog.Cancel>
-				<Button type="submit" variant="destructive" disabled={typed !== info.model || pending}>
-					{pending ? 'Deleting…' : 'Delete model'}
+				<Button
+					type="submit"
+					variant="destructive"
+					disabled={typed !== info.model || pending}
+					{pending}
+				>
+					Delete model
 				</Button>
 			</AlertDialog.Footer>
 		</form>

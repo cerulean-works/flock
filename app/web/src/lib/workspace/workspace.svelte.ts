@@ -1135,11 +1135,19 @@ export class Workspace {
 
 	/**
 	 * Move the child at `from` of a column folder (a group's id, or a folder's) to `to`, among
-	 * the arranged columns. A folder moves with its columns; nothing leaves its folder.
+	 * the arranged columns, or among the columns `keys` lists in their order (a view showing only
+	 * some, as the Evals preset does; the others keep their places). A folder moves with its
+	 * columns; nothing leaves its folder.
 	 */
-	moveColumn(parent: string, from: number, to: number) {
-		const arranged = this.arrangedColumns.map((i) => this.meta.columns[i]);
-		const order = moveColumn(arranged, this.columnPrefs.order, parent, from, to);
+	moveColumn(parent: string, from: number, to: number, keys?: readonly string[]) {
+		const arranged = keys
+			? keys.flatMap((k) => this.meta.columns.find((c) => c.key === k) ?? [])
+			: this.arrangedColumns.map((i) => this.meta.columns[i]);
+		// A subset's moves fill its slots in the whole table's order, so no other column shifts.
+		const saved = keys
+			? this.arrangedColumns.map((i) => this.meta.columns[i].key)
+			: this.columnPrefs.order;
+		const order = moveColumn(arranged, saved, parent, from, to);
 		if (order) this.#saveColumns({ ...this.columnPrefs, order });
 	}
 
@@ -1150,9 +1158,13 @@ export class Workspace {
 		if (groups) this.#saveColumns({ ...this.columnPrefs, groups });
 	}
 
-	/** Put the columns back in their default order (hidden ones stay hidden). */
-	resetColumnOrder() {
-		this.#saveColumns({ ...this.columnPrefs, order: [], groups: [] });
+	/**
+	 * Put the columns back in their default order (hidden ones stay hidden), or only those `keys`
+	 * lists, leaving the others as they were moved.
+	 */
+	resetColumnOrder(keys?: readonly string[]) {
+		const order = keys ? this.columnPrefs.order.filter((k) => !keys.includes(k)) : [];
+		this.#saveColumns({ ...this.columnPrefs, order, groups: keys ? this.columnPrefs.groups : [] });
 	}
 
 	#saveColumns(prefs: ColumnPrefs) {

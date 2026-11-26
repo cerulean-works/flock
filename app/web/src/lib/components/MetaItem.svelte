@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Component, Snippet } from 'svelte';
+	import { hint } from '#lib/hint.svelte.ts';
 	import { cn } from '#lib/utils.js';
 
 	interface Props {
@@ -24,7 +25,7 @@
 <svelte:element
 	this={href ? 'a' : 'span'}
 	{href}
-	{title}
+	{@attach hint(title)}
 	class={cn(
 		'inline-flex max-w-full min-w-0 items-center gap-1.5 tabular-nums',
 		mono && 'font-mono text-[12px] text-foreground/80',

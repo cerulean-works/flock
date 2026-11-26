@@ -17,6 +17,13 @@
 !flock/cli/
 !flock/cli/__init__.py
 !flock/cli/credentials.py
+!flock/eval/
+!flock/eval/__init__.py
+!flock/eval/dataset.py
+!flock/eval/diff.py
+!flock/eval/items.py
+!flock/eval/provenance.py
+!flock/eval/results.py
 
 **/__pycache__
 **/*.pyc

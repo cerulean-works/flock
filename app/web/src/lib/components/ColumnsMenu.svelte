@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import Columns3Icon from '@lucide/svelte/icons/columns-3';
 	import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
@@ -16,6 +17,7 @@
 	import {
 		type ColumnGroup,
 		type ColumnNode,
+		LOCKED_COLUMNS,
 		columnTree,
 		filterTree,
 		findFolder,
@@ -26,11 +28,16 @@
 	interface Props {
 		/** Scroll the table to a column (shown by then). */
 		onjump: (key: string) => void;
+		/**
+		 * Only these columns, in this order (the Evals preset's suites); the project's others keep
+		 * their settings. Every column when not set.
+		 */
+		keys?: readonly string[];
 		/** An icon button, hidden columns marked with a dot (a group's crowded toolbar). */
 		compact?: boolean;
 	}
 
-	let { onjump, compact = false }: Props = $props();
+	let { onjump, keys, compact = false }: Props = $props();
 
 	const ws = getWorkspace();
 
@@ -39,12 +46,22 @@
 	/** Folders the viewer opened; the groups (Run, Config, Summary) start open. */
 	const expanded = new SvelteSet<string>(['info', 'config', 'summary']);
 
-	const tree = $derived(columnTree(ws.arrangedColumns.map((i) => ws.meta.columns[i])));
+	const listed = $derived.by(() => {
+		if (!keys) return ws.arrangedColumns.map((i) => ws.meta.columns[i]);
+		const byKey = new Map(ws.meta.columns.map((c) => [c.key, c]));
+		return keys.flatMap((k) => byKey.get(k) ?? []);
+	});
+	const tree = $derived(columnTree(listed));
 	const searching = $derived(query.trim() !== '');
 	const nodes = $derived(filterTree(tree, query));
 	const hidden = $derived(ws.hiddenColumns);
-	const total = $derived(ws.meta.columns.length);
-	const hiddenCount = $derived(total - ws.shownColumns.length);
+	const total = $derived(listed.length);
+	const hiddenCount = $derived(
+		listed.filter((c) => hidden.has(c.key) && !LOCKED_COLUMNS.has(c.key)).length
+	);
+	const moved = $derived(
+		keys ? ws.columnPrefs.order.some((k) => keys.includes(k)) : ws.columnsMoved
+	);
 
 	/** The first column a search matches, for Enter. */
 	function firstLeaf(list: readonly ColumnNode[]): string | null {
@@ -86,7 +103,7 @@
 	const indexIn = (parent: string, id: string) => siblings(parent).findIndex((n) => idOf(n) === id);
 
 	function move(parent: string, from: number, to: number) {
-		if (parent) ws.moveColumn(parent, from, to);
+		if (parent) ws.moveColumn(parent, from, to, keys);
 		else ws.moveColumnGroup(tree[from].id as ColumnGroup, to);
 	}
 
@@ -240,7 +257,7 @@
 	{#if n.kind === 'leaf' && n.locked}
 		<span
 			class="grid size-5 flex-none place-items-center text-faint"
-			title="Always shown, always first"
+			{@attach hint('Always shown, always first')}
 		>
 			<LockIcon class="size-3" />
 		</span>
@@ -251,7 +268,7 @@
 			class="grid size-5 flex-none cursor-[inherit] touch-none place-items-center rounded text-faint outline-none hover:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
 			data-grip
 			aria-label="Move {label} (arrow keys)"
-			title="Drag to move"
+			{@attach hint('Drag to move')}
 			onkeydown={(e) => nudge(e, parent, n)}
 		>
 			<GripVerticalIcon class="size-3.5" />
@@ -342,14 +359,14 @@
 						disabled={n.locked}
 						onCheckedChange={(v) => ws.setColumnsHidden([n.key], !v)}
 						aria-label={n.locked ? `${n.key} is always shown` : `Show ${n.key}`}
-						title={n.locked ? 'Always shown' : undefined}
+						{@attach hint(n.locked ? 'Always shown' : undefined)}
 					/>
 					<button
 						class={[
 							'min-w-0 flex-1 truncate rounded text-left outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50',
 							!shown && 'text-muted-foreground'
 						]}
-						title="Jump to {n.key}"
+						{@attach hint(`Jump to ${n.key}`)}
 						onclick={() => jump(n.key)}
 					>
 						{n.name}
@@ -376,9 +393,11 @@
 					variant={hiddenCount ? 'secondary' : 'outline'}
 					size="icon"
 					aria-label={hiddenCount ? `Columns, ${hiddenCount} hidden` : 'Columns'}
-					title={hiddenCount
-						? `Columns: ${hiddenCount} of ${total} hidden`
-						: 'Columns: show, hide, reorder or jump to them'}
+					{@attach hint(
+						hiddenCount
+							? `Columns: ${hiddenCount} of ${total} hidden`
+							: 'Columns: show, hide, reorder or jump to them'
+					)}
 				>
 					<Columns3Icon />
 				</Button>
@@ -386,9 +405,11 @@
 				<Button
 					{...props}
 					variant={hiddenCount ? 'secondary' : 'outline'}
-					title={hiddenCount
-						? `${hiddenCount} of ${total} columns hidden`
-						: 'Show, hide, reorder or jump to columns'}
+					{@attach hint(
+						hiddenCount
+							? `${hiddenCount} of ${total} columns hidden`
+							: 'Show, hide, reorder or jump to columns'
+					)}
 				>
 					<Columns3Icon /> Columns
 					{#if hiddenCount}
@@ -432,20 +453,25 @@
 		<p class="sr-only" aria-live="polite">{status}</p>
 		<div class="flex flex-wrap items-center gap-1 border-t py-2.5 pr-3 pl-4">
 			<span class="mr-auto text-xs text-muted-foreground tabular-nums">
-				{ws.shownColumns.length} of {total} shown
+				{total - hiddenCount} of {total} shown
 			</span>
 			<Button
 				variant="ghost"
 				size="sm"
-				disabled={!ws.columnsMoved}
+				disabled={!moved}
 				onclick={() => {
-					ws.resetColumnOrder();
+					ws.resetColumnOrder(keys);
 					status = 'Columns back in their default order';
 				}}
 			>
 				Reset order
 			</Button>
-			<Button variant="ghost" size="sm" disabled={!hiddenCount} onclick={() => ws.showAllColumns()}>
+			<Button
+				variant="ghost"
+				size="sm"
+				disabled={!hiddenCount}
+				onclick={() => (keys ? ws.setColumnsHidden(keys, false) : ws.showAllColumns())}
+			>
 				Show all
 			</Button>
 			<Dialog.Close>

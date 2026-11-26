@@ -596,6 +596,8 @@ export interface ModelVersion {
 	run: string | null;
 	created_by: Person | null;
 	created_at: number;
+	/** Eval runs that scored it, deleted runs left out. */
+	eval_runs: number;
 	bucket: string;
 	/** Its folder in flock-models, ending in `/`. */
 	prefix: string;
@@ -607,14 +609,271 @@ export interface ModelFile {
 	sha256: string;
 }
 
-/** A version with its files (`GET …/versions/{number}`, `…/resolve`). */
+/** A version with its files and eval runs (`GET …/versions/{number}`, `…/resolve`). */
 export interface ModelVersionDetail extends ModelVersion {
 	files: ModelFile[];
+	/** The eval runs that scored it, as `entity/project/id`. */
+	evals: string[];
 }
 
 export interface ModelVersionsPage {
 	versions: ModelVersion[];
 	cursor: number | null;
+}
+
+/** An eval run of a version, with its scores (the dashboard's `…/evals`, 025 D183). */
+export interface ModelEvalRun {
+	/** `entity/project/id`. */
+	path: string;
+	entity: string;
+	project: string;
+	id: string;
+	display_name: string | null;
+	state: string;
+	created_at: number;
+	/** Its scores by row (`evalScores`), or null when it has no results file to read them from. */
+	scores: EvalScores | null;
+}
+
+/** One task of an eval run's `results.json` (eval's results file, schemas 8 to 10). */
+export interface EvalTask {
+	task: string;
+	task_hash: string;
+	dataset: {
+		repo: string;
+		revision: string;
+		subset: string | null;
+		split: string;
+		/** Schema 9 only. */
+		private?: boolean;
+	};
+	primary_metric: string;
+	/** A non-finite score is written as null. */
+	metrics: Record<string, number | null>;
+	num_docs: number;
+	limit: number | null;
+	truncation: { requests: number; docs: number; max_tokens_cut: number };
+}
+
+/** One suite of an eval run's `results.json`. */
+export interface EvalSuite {
+	suite: string;
+	suite_hash: string;
+	members: string[];
+	/** The metric read from each member, or null for each task's primary metric. */
+	metric: string | null;
+	/** Null for a suite that only groups others. */
+	score: number | null;
+}
+
+/** What produced an eval run (`results.json`'s `provenance`). */
+export interface EvalProvenance {
+	model: string;
+	model_digest?: string | null;
+	/** Schema 10 on: a Flock model's org, project (null when global) and path. */
+	model_org?: string | null;
+	model_project?: string | null;
+	model_path?: string | null;
+	flock_commit: string;
+	command: string | null;
+	device: string;
+	dtype: string;
+	batch_tokens: number;
+	max_length: number;
+	add_bos?: boolean;
+	attention: string;
+	sdpa_backend?: string | null;
+	torch: string;
+	transformers: string;
+	tokenizers: string;
+	datasets: string;
+	python: string;
+	created_at: string;
+}
+
+/** An eval run's `results.json`, as the Results tab reads it (025 D184). */
+export interface EvalResults {
+	schema_version: number;
+	provenance: EvalProvenance;
+	tasks: EvalTask[];
+	suites: EvalSuite[];
+}
+
+/** A row of the Evals tab: a suite's score, or a task's primary metric. */
+export interface EvalRow {
+	/** `suites/{suite}@{suite_hash}` or `{task}/{metric}@{task_hash}`. */
+	key: string;
+	kind: 'suite' | 'task';
+	name: string;
+	metric: string | null;
+	/** The suite or task hash its scores were made under. */
+	hash: string;
+}
+
+/** An eval run's scores, rows in its results file's order. */
+export interface EvalScores {
+	rows: EvalRow[];
+	values: Record<string, number | null>;
+}
+
+/** One task two eval runs both scored the same way (eval's `TaskDiff`). */
+export interface TaskDiff {
+	task: string;
+	task_hash: string;
+	metric: string;
+	num_docs: number;
+	both_right: number;
+	both_wrong: number;
+	/** Ids of the docs only run A got right, in A's order. */
+	only_a: string[];
+	only_b: string[];
+}
+
+/** Two eval runs compared doc by doc (`GET …/runs/{run}/diff`, eval's `ItemDiff` schema 1). */
+export interface ItemDiff {
+	/** Each run's model. */
+	a: string;
+	b: string;
+	tasks: TaskDiff[];
+	/** Every other task, with why: `only_a`, `only_b`, `task_hash`, `not_accuracy`, `no_predictions` or `no_outcome`. */
+	not_compared: [string, string][];
+	schema_version: number;
+}
+
+/** One run's answer to a doc (eval's `Answer`, in `GET …/runs/{run}/items`). */
+export interface ItemAnswer {
+	/** The run's `provenance.model`. */
+	model: string;
+	/** The choice the primary metric picks; null for `acc_greedy`, which ranks none. */
+	pick: number | null;
+	correct: boolean;
+	/** Each choice's summed log-probability after its context. */
+	logprob: number[];
+	/** Each choice's probability renormalized over the choices. */
+	prob: number[];
+	/**
+	 * The softmax of the scores the primary metric ranks by: a share, not a probability, under a
+	 * length-normalized metric; null for `acc_greedy`.
+	 */
+	share: number[] | null;
+}
+
+/** A doc with its text and each run's answer (eval's `Item`, `flock eval items --json`). */
+export interface EvalItem {
+	task: string;
+	/** The primary metric, which `pick`, `correct` and `share` follow. */
+	metric: string;
+	id: string;
+	/** The context the choices share, or null when each has its own (`contexts`). */
+	question: string | null;
+	contexts: string[] | null;
+	/** Each choice's continuation as scored, leading space included. */
+	choices: string[];
+	gold: number;
+	/** One answer per run, in the order the runs were asked for. */
+	runs: ItemAnswer[];
+}
+
+/** One run's answer in a row of the items list (`GET …/runs/{run}/items`). */
+export interface ItemRunSummary {
+	correct: boolean;
+	/** The choice the primary metric picks; null for `acc_greedy`, which ranks none. */
+	pick: number | null;
+	/** The picked choice as a reader names it, clipped. */
+	pick_text: string | null;
+	/**
+	 * The gold choice's score minus the best wrong choice's, in the primary metric's units; null
+	 * for `acc_greedy` or a doc with one choice.
+	 */
+	margin: number | null;
+	/** The gold choice's probability renormalized over the choices. */
+	gold_prob: number;
+}
+
+/** A doc as a row of the items list: enough to skim, the whole `EvalItem` comes when it opens. */
+export interface ItemSummary {
+	id: string;
+	/** The part of the question that varies (the lines every question shares left out), clipped. */
+	text: string;
+	gold: number;
+	/** The gold choice as a reader names it, clipped. */
+	gold_text: string;
+	/** One answer per run, in the order the runs were asked for. */
+	runs: ItemRunSummary[];
+}
+
+/** A page of a task's items (`GET …/runs/{run}/items`). */
+export interface ItemsPage {
+	/** How many items the filter keeps in all. */
+	total: number;
+	offset: number;
+	items: ItemSummary[];
+}
+
+/** The compare page's row of suite squares for two runs (`GET …/runs/{run}/items/suites`). */
+export interface ItemSuites {
+	suites: {
+		suite: string;
+		/** Every accuracy task under it both runs scored under one hash. */
+		tasks: string[];
+		/** How many of its docs are in each cell of the runs' diff. */
+		counts: Partial<Record<ItemKeep, number>>;
+		/**
+		 * Up to 800 docs, taken evenly through each cell: A's margin, B's, the cell's index in eval's
+		 * `CELLS`, the task's index in `tasks`, the doc's place in that task's cell in the list's
+		 * default order, and its id.
+		 */
+		dots: [number, number, number, number, number, string][];
+	}[];
+}
+
+/** One run's values per token over a choice's continuation, from its sidecar. */
+export interface ChoiceTokens {
+	/** Each token's text from the run's tokenizer, or null when it couldn't be named. */
+	text: string[] | null;
+	logprob: number[];
+	/** 1 for the token the run found likeliest. */
+	rank: number[];
+	/** The entropy of the run's next-token distribution, in nats. */
+	entropy: number[];
+}
+
+/**
+ * What an opened item's tokens are tinted by: how unlikely the run found each one (minus its
+ * log-probability), its rank, the run's entropy there, or the two runs' log-probabilities against
+ * each other where they cut the choice into the same tokens.
+ */
+export type TokenHeat = 'surprisal' | 'rank' | 'entropy' | 'versus';
+
+/** Each run's per-token values over one doc's choices (`GET …/runs/{run}/item/tokens`). */
+export interface ItemTokens {
+	/** One per run, in order: `choices` null when the run has none, and `note` says why. */
+	runs: { choices: ChoiceTokens[] | null; note: string | null }[];
+}
+
+/** Where a link leaves the items list (028): each part only when it isn't the default. */
+export interface ItemsView {
+	task?: string;
+	keep?: ItemKeep;
+	sort?: 'doc';
+	/** From 1. */
+	page?: number;
+	/** The open item's id. */
+	item?: string;
+}
+
+/** What an items page keeps: one run's docs by outcome, or a cell of two runs' diff. */
+export type ItemKeep =
+	'wrong' | 'right' | 'all' | 'only_a' | 'only_b' | 'both_wrong' | 'both_right';
+
+/** An eval run the compare page's picker offers (`GET /api/projects/…/eval-runs`). */
+export interface EvalRunChoice {
+	id: string;
+	display_name: string | null;
+	created_at: number;
+	state: string;
+	/** The model its config names, `flock:org/path@N`, if any. */
+	model: string | null;
 }
 
 /** A deleted model or version in the trash (`GET …/models/-/trash`), for org admins. */
@@ -643,13 +902,15 @@ export interface ModelTrashVersion extends ModelTrashBase {
 	number: number;
 	/** The checkpoint tags that went with it. */
 	tags: string[];
+	eval_runs: number;
 }
 
 export type ModelTrashEntry = ModelTrashModel | ModelTrashVersion;
 
-/** The versions a run made (`GET …/runs/{run}/models`). */
+/** The versions a run made and those it scored (`GET …/runs/{run}/models`). */
 export interface RunModels {
-	made: ModelVersion[];
+	made: (ModelVersion & { evals: string[] })[];
+	scored: (ModelVersion & { evals: string[] })[];
 }
 
 /** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */

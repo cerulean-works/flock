@@ -153,6 +153,7 @@ def test_0002_upgrades_existing_data(postgres: Any, make_flock: Flocks, tmp_path
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
 
@@ -246,6 +247,7 @@ def test_0003_creates_projects_from_runs(postgres: Any, make_flock: Flocks, tmp_
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
 
@@ -305,6 +307,7 @@ def test_0004_creates_orgs_from_entities(postgres: Any, make_flock: Flocks, tmp_
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
 
@@ -392,6 +395,7 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
     # Flock's first files directory (see ``Flocks``) already holds the upload.
@@ -450,6 +454,7 @@ def test_0008_shows_existing_orgs_by_their_name(
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
 
@@ -522,6 +527,7 @@ def test_0009_keeps_the_spend_of_projects_deleted_before_it(
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
     api = make_flock(database_url=url).client()
@@ -573,6 +579,7 @@ def test_0012_refuses_an_org_named_storage(postgres: Any, tmp_path: Path) -> Non
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
 
@@ -650,6 +657,7 @@ def test_0013_moves_runs_into_the_run_table_and_series_chunks(
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
 
@@ -769,6 +777,7 @@ def test_0014_refuses_an_org_named_datasets(postgres: Any, tmp_path: Path) -> No
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
 
@@ -808,6 +817,7 @@ def test_0015_refuses_an_org_named_models(postgres: Any, tmp_path: Path) -> None
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
 
@@ -844,6 +854,7 @@ def test_0016_leaves_existing_projects_and_datasets_private(postgres: Any, tmp_p
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
     rows = asyncio.run(run("SELECT name, visibility FROM projects ORDER BY name"))
@@ -909,6 +920,7 @@ def test_0017_credits_each_project_to_its_earliest_runs_owner(
         "0021_dataset_grants",
         "0022_dataset_forks",
         "0023_project_scopes",
+        "0025_eval_links",
         "0026_run_groups",
     ]
     rows = asyncio.run(
@@ -951,6 +963,7 @@ def test_dataset_grants_close_all_orgs_and_keep_old_workers_compatible(
                 "0021_dataset_grants",
                 "0022_dataset_forks",
                 "0023_project_scopes",
+                "0025_eval_links",
                 "0026_run_groups",
             ]
             assert await Migrations().apply(url) == []
@@ -983,3 +996,35 @@ def test_dataset_grants_close_all_orgs_and_keep_old_workers_compatible(
                 await instance.close()
 
     asyncio.run(scenario())
+
+
+def test_0025_keeps_the_eval_links_table_an_early_0015_made(postgres: Any, tmp_path: Path) -> None:
+    """0015 made `model_version_runs` until 014's review took it out (7.5), and a database
+    keeps whatever it applied, so 0025 must work with and without the table."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files():
+        if int(path.name[:4]) < 25:  # every migration before 0025
+            shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def scenario() -> list[str]:
+        conn = await asyncpg.connect(url)
+        try:
+            # The table as the early 0015 made it, with its index.
+            await conn.execute(
+                "CREATE TABLE model_version_runs ("
+                "version_pk bigint NOT NULL REFERENCES model_versions ON DELETE CASCADE, "
+                "run_pk bigint NOT NULL REFERENCES runs ON DELETE CASCADE, "
+                "kind text NOT NULL CHECK (kind IN ('eval')), PRIMARY KEY (version_pk, run_pk))"
+            )
+            await conn.execute("CREATE INDEX model_version_runs_run ON model_version_runs (run_pk)")
+            applied = await Migrations().apply(url)
+            assert await conn.fetchval("SELECT to_regclass('model_version_runs_run')::text")
+            return applied
+        finally:
+            await conn.close()
+
+    # 0025 applies first; later migrations (0026_run_groups, ...) follow it.
+    assert asyncio.run(scenario())[0] == "0025_eval_links"

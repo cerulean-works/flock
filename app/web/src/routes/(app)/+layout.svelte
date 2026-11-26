@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
@@ -102,7 +103,7 @@
 					size="icon-sm"
 					class="text-muted-foreground"
 					aria-label="Show sidebar"
-					title="Show sidebar"
+					{@attach hint('Show sidebar')}
 					onclick={() => setCollapsed(false)}
 				>
 					<PanelLeftOpenIcon />
@@ -118,7 +119,7 @@
 					]}
 					href={resolve('/(app)')}
 					aria-label="Home"
-					title="Home"
+					{@attach hint('Home')}
 				>
 					<HouseIcon />
 				</Button>
@@ -128,7 +129,7 @@
 					class="mt-3 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
 					href={entityHref(data.shell.org)}
 					aria-label={data.shell.orgName ?? data.shell.org}
-					title={data.shell.orgName ?? data.shell.org}
+					{@attach hint(data.shell.orgName ?? data.shell.org)}
 				>
 					<OrgMark name={data.shell.orgName ?? data.shell.org} src={data.shell.orgAvatar} />
 				</a>
@@ -142,7 +143,7 @@
 					]}
 					href={entityHref(data.shell.org)}
 					aria-label="Runs"
-					title="Runs"
+					{@attach hint('Runs')}
 				>
 					<ActivityIcon />
 				</Button>
@@ -170,7 +171,7 @@
 					]}
 					href={datasetsHref(data.shell.org)}
 					aria-label="Datasets"
-					title="Datasets"
+					{@attach hint('Datasets')}
 				>
 					<DatabaseIcon />
 				</Button>
@@ -183,7 +184,7 @@
 					]}
 					href={modelsHref(data.shell.org)}
 					aria-label="Models"
-					title="Models"
+					{@attach hint('Models')}
 				>
 					<BoxIcon />
 				</Button>
@@ -196,7 +197,7 @@
 					]}
 					href={storageHref(data.shell.org)}
 					aria-label="Storage"
-					title="Storage"
+					{@attach hint('Storage')}
 				>
 					<HardDriveIcon />
 				</Button>
@@ -217,7 +218,7 @@
 						href={loginHref(page.url)}
 						data-sveltekit-reload
 						aria-label="Sign in"
-						title="Sign in"
+						{@attach hint('Sign in')}
 					>
 						<LogInIcon />
 					</Button>
@@ -232,7 +233,7 @@
 				size="icon-sm"
 				class="text-muted-foreground"
 				aria-label="Show sidebar"
-				title="Show sidebar"
+				{@attach hint('Show sidebar')}
 				onclick={() => (drawer = true)}
 			>
 				<MenuIcon />

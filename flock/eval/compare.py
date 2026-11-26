@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from flock.eval.metrics import scale
+from flock.eval.results import scale
 
 # Another GPU type, kernel or library version reorders FP32 sums, so a rerun on another
 # stack moves scores slightly (013.D1). An accuracy may move by this many docs flipping, any

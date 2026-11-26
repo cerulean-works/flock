@@ -6,11 +6,12 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import datasets
-import tokenizers
-import torch
-import transformers
+# Only `collect` needs torch and the libraries it records, so reading a results file doesn't. Its
+# torch annotations are strings: the docs read its signature, where torch isn't imported.
+if TYPE_CHECKING:
+    import torch
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +42,10 @@ class Provenance:
             The forward-pass budget in padded tokens.
         max_length (`int`):
             The model's input limit in tokens. Longer inputs lost tokens from the left.
+        tokenizer (`str`, *optional*):
+            Where the tokenizer was loaded from: a Hugging Face repo or folder, or a SentencePiece model file. `None` in results files written before it was added.
+        tokenizer_hash (`str`, *optional*):
+            The sha256 of the tokenizer's whole definition (see [`~eval.model.ScoringModel.tokenizer_hash`]), which token ids in a run's files are meaningless without. `None` for a tokenizer written in Python, and in results files written before it was added.
         add_bos (`bool`):
             Whether every non-empty context started with the tokenizer's BOS token. Results files written before it was added have no `add_bos`: none added one.
         attention (`str`):
@@ -66,6 +71,8 @@ class Provenance:
     dtype: str
     batch_tokens: int
     max_length: int
+    tokenizer: str | None = field(default=None, kw_only=True)
+    tokenizer_hash: str | None = field(default=None, kw_only=True)
     add_bos: bool
     attention: str
     sdpa_backend: str | None
@@ -82,8 +89,8 @@ class Provenance:
         *,
         model: str,
         command: str | None,
-        device: torch.device,
-        dtype: torch.dtype,
+        device: "torch.device",  # noqa: UP037
+        dtype: "torch.dtype",  # noqa: UP037
         batch_tokens: int,
         max_length: int,
         add_bos: bool,
@@ -93,8 +100,15 @@ class Provenance:
         model_org: str | None = None,
         model_project: str | None = None,
         model_path: str | None = None,
+        tokenizer: str | None = None,
+        tokenizer_hash: str | None = None,
     ) -> Provenance:
         """Collects provenance for a run on this machine, now."""
+        import datasets
+        import tokenizers
+        import torch
+        import transformers
+
         return cls(
             model=model,
             model_digest=model_digest,
@@ -107,6 +121,8 @@ class Provenance:
             dtype=str(dtype).removeprefix("torch."),
             batch_tokens=batch_tokens,
             max_length=max_length,
+            tokenizer=tokenizer,
+            tokenizer_hash=tokenizer_hash,
             add_bos=add_bos,
             attention=attention,
             sdpa_backend=sdpa_backend,

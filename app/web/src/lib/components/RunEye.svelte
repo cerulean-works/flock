@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	interface Props {
 		/** Run color; omitted for the "all runs" toggle. */
 		color?: string;
@@ -19,7 +20,7 @@
 	style:--run={color ?? 'var(--foreground)'}
 	{onclick}
 	aria-label={label}
-	title={label}
+	{@attach hint(label)}
 	aria-pressed={shown}
 >
 	<span

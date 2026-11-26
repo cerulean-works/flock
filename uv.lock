@@ -5,22 +5,22 @@ resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform == 'emscripten' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
-    "python_full_version < '3.15' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
-    "python_full_version < '3.15' and sys_platform == 'emscripten' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
-    "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
-    "python_full_version < '3.15' and sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform == 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform == 'emscripten' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
-    "python_full_version < '3.15' and sys_platform == 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
-    "python_full_version < '3.15' and sys_platform == 'emscripten' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
-    "python_full_version < '3.15' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
-    "python_full_version < '3.15' and sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform == 'emscripten' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'emscripten' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'emscripten' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version < '3.15' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version < '3.15' and sys_platform == 'emscripten' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
     "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
@@ -48,9 +48,8 @@ dependencies = [
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "safetensors" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
-    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f5/b5/1d3ed029ac71d3f2961346829a268da923698e9fd63f218f78841f216bfd/accelerate-1.15.0.tar.gz", hash = "sha256:5654f8c5eaa0d4fa68b33e287a97765da6849bf6d51dcac874e73fbbddfb6134", size = 422615, upload-time = "2026-09-09T13:04:49.078Z" }
 wheels = [
@@ -223,7 +222,7 @@ name = "apache-tvm-ffi"
 version = "0.1.16"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2f/73/a7b59c9a7a4cc4ff232dbdf1d0faf923196eb0ccaaf8bb03dbcd978b84bb/apache_tvm_ffi-0.1.16.tar.gz", hash = "sha256:2e8926324a69779d1447f1b04d5b0268caefe7353bfa67a9aa56989d45e5aab3", size = 2365511, upload-time = "2026-11-11T11:04:37.176Z" }
 wheels = [
@@ -712,7 +711,7 @@ name = "cuda-bindings"
 version = "13.4.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-pathfinder" },
+    { name = "cuda-pathfinder", marker = "(python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests') or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'group-5-flock-gpu') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/f0/d71d1dd45caa358a39c6898dcc9f1bd22a9f22b92376b967835c047b50bc/cuda_bindings-13.4.4-cp314-cp314-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4a429132f06d0c3a853aa419aabe4c0a7bfc3f3886fb4c336d81729f63754d31", size = 6407946, upload-time = "2026-10-14T12:35:39.826Z" },
@@ -751,43 +750,43 @@ wheels = [
 
 [package.optional-dependencies]
 cublas = [
-    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
-    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 cudart = [
-    { name = "nvidia-cuda-runtime", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cuda-runtime", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 cufft = [
-    { name = "nvidia-cufft", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cufft", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 cufile = [
     { name = "nvidia-cufile", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 cupti = [
-    { name = "nvidia-cuda-cupti", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cuda-cupti", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 curand = [
-    { name = "nvidia-curand", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-curand", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 cusolver = [
-    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
-    { name = "nvidia-cusolver", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
-    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cusolver", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 cusparse = [
-    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 nvjitlink = [
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 nvrtc = [
-    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 nvtx = [
-    { name = "nvidia-nvtx", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-nvtx", marker = "(platform_machine == 'aarch64' or platform_machine == 'x86_64') and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'" },
 ]
 
 [[package]]
@@ -925,10 +924,10 @@ name = "flash-attn-3"
 version = "3.0.1"
 source = { registry = "https://download.pytorch.org/whl/cu130" }
 dependencies = [
-    { name = "einops" },
-    { name = "ninja" },
-    { name = "packaging" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "einops", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "ninja", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "packaging", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/cu130/flash_attn_3-3.0.1-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:772e7a1802396bf48aba17fe6597776301a903414f828a03608d255cf21cdce4", upload-time = "2026-10-20T12:38:02Z" },
@@ -940,13 +939,13 @@ name = "flash-attn-4"
 version = "4.0.0b40"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "apache-tvm-ffi" },
-    { name = "einops" },
-    { name = "nvidia-cutlass-dsl" },
-    { name = "quack-kernels" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" } },
-    { name = "torch-c-dlpack-ext" },
-    { name = "typing-extensions" },
+    { name = "apache-tvm-ffi", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "einops", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nvidia-cutlass-dsl", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "quack-kernels", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "torch-c-dlpack-ext", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/68/5c/0ed943a28ad96d240621369cc6d64b0e08d7133c3ce83365cbd611e2ac40/flash_attn_4-4.0.0b40.tar.gz", hash = "sha256:1efb5efc7270865f1adef71c5ab56b91d5925ded1a896837515f837a08e6a6ee", size = 539890, upload-time = "2026-11-18T08:13:02.959Z" }
 wheels = [
@@ -955,7 +954,7 @@ wheels = [
 
 [package.optional-dependencies]
 cu13 = [
-    { name = "nvidia-cutlass-dsl", extra = ["cu13"], marker = "extra == 'group-5-flock-gpu'" },
+    { name = "nvidia-cutlass-dsl", extra = ["cu13"], marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'group-5-flock-gpu') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 
 [[package]]
@@ -1007,9 +1006,8 @@ dependencies = [
     { name = "safetensors" },
     { name = "sentencepiece" },
     { name = "tokenizers" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
-    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
     { name = "tqdm" },
     { name = "transformers" },
     { name = "typing-extensions" },
@@ -1018,8 +1016,8 @@ dependencies = [
 
 [package.dev-dependencies]
 cpu-tests = [
-    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 dev = [
     { name = "modal" },
@@ -1092,6 +1090,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pyjwt" },
     { name = "pylance" },
+    { name = "tokenizers" },
     { name = "uvicorn" },
     { name = "uvloop" },
 ]
@@ -1111,6 +1110,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=26.0.0" },
     { name = "pyjwt", specifier = ">=2.10.1" },
     { name = "pylance", specifier = ">=14.0.0" },
+    { name = "tokenizers", specifier = ">=0.23.3" },
     { name = "uvicorn", specifier = ">=0.54.0" },
     { name = "uvloop", specifier = ">=0.23.0" },
 ]
@@ -2006,7 +2006,7 @@ name = "nvidia-cublas"
 version = "13.1.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cuda-nvrtc" },
+    { name = "nvidia-cuda-nvrtc", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/a1/0bd24ee8c8d03adac032fd2909426a00c88f8c57961b1277ded97f91119f/nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:b7a210458267ac818974c53038fbec2e969d5c99f305ab15c72522fa9f001dd5", size = 542848918, upload-time = "2026-04-08T18:46:22.985Z" },
@@ -2049,7 +2049,7 @@ name = "nvidia-cudnn-cu13"
 version = "9.24.0.43"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas" },
+    { name = "nvidia-cublas", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ca/30/7c257e3d5cb4fecb147b93895c66e29c93f8e76d74b45bb418ff0587c4ec/nvidia_cudnn_cu13-9.24.0.43-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:a6812a554a1ff0413e9c52b84c26c050380649ab9615f9c16bded368ce9f421f", size = 650976863, upload-time = "2026-07-02T16:23:39.248Z" },
@@ -2062,7 +2062,7 @@ name = "nvidia-cufft"
 version = "12.0.0.61"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink" },
+    { name = "nvidia-nvjitlink", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/ae/f417a75c0259e85c1d2f83ca4e960289a5f814ed0cea74d18c353d3e989d/nvidia_cufft-12.0.0.61-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:2708c852ef8cd89d1d2068bdbece0aa188813a0c934db3779b9b1faa8442e5f5", size = 214053554, upload-time = "2025-09-04T08:31:38.196Z" },
@@ -2094,9 +2094,9 @@ name = "nvidia-cusolver"
 version = "12.0.4.66"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas" },
-    { name = "nvidia-cusparse" },
-    { name = "nvidia-nvjitlink" },
+    { name = "nvidia-cublas", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "nvidia-cusparse", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "nvidia-nvjitlink", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c8/c3/b30c9e935fc01e3da443ec0116ed1b2a009bb867f5324d3f2d7e533e776b/nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:02c2457eaa9e39de20f880f4bd8820e6a1cfb9f9a34f820eb12a155aa5bc92d2", size = 223467760, upload-time = "2025-09-04T08:33:04.222Z" },
@@ -2109,7 +2109,7 @@ name = "nvidia-cusparse"
 version = "12.6.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink" },
+    { name = "nvidia-nvjitlink", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f8/94/5c26f33738ae35276672f12615a64bd008ed5be6d1ebcb23579285d960a9/nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:80bcc4662f23f1054ee334a15c72b8940402975e0eab63178fc7e670aa59472c", size = 162155568, upload-time = "2025-09-04T08:33:42.864Z" },
@@ -2132,8 +2132,8 @@ name = "nvidia-cutlass-dsl"
 version = "4.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cutlass-dsl-libs-base" },
-    { name = "nvidia-cutlass-dsl-libs-cu12" },
+    { name = "nvidia-cutlass-dsl-libs-base", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nvidia-cutlass-dsl-libs-cu12", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bd/ce/a590b929285faf0aa285c5ccee2b88e0b5259fb39a6326206e0f140ea3fc/nvidia_cutlass_dsl-4.8.1-py3-none-any.whl", hash = "sha256:43ed46b21d151aa643c6765457c7310827b938c1cf45d5109a0152de4ef06227", size = 10510, upload-time = "2026-10-16T10:54:15.98Z" },
@@ -2141,7 +2141,7 @@ wheels = [
 
 [package.optional-dependencies]
 cu13 = [
-    { name = "nvidia-cutlass-dsl-libs-cu13" },
+    { name = "nvidia-cutlass-dsl-libs-cu13", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 
 [[package]]
@@ -2149,10 +2149,10 @@ name = "nvidia-cutlass-dsl-libs-base"
 version = "4.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-bindings" },
-    { name = "nvidia-cutlass-dsl-libs-core" },
-    { name = "protobuf" },
-    { name = "typing-extensions" },
+    { name = "cuda-bindings", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nvidia-cutlass-dsl-libs-core", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "protobuf", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/e2/f30ed70cdd5276871f390b5a9db6831ecec42d530013a3cafdb15bce0692/nvidia_cutlass_dsl_libs_base-4.8.1-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:e84b1ca6a138a4f462b40ba0554b017fbced3b6e825333512d9e1b01d6518f89", size = 3553888, upload-time = "2026-10-16T08:41:43.217Z" },
@@ -2168,9 +2168,9 @@ name = "nvidia-cutlass-dsl-libs-core"
 version = "4.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-bindings" },
-    { name = "protobuf" },
-    { name = "typing-extensions" },
+    { name = "cuda-bindings", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "protobuf", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6c/03/1c59e3caf7c8b5cae3ae4d1753201c7e64d36cdf182fb882e070b0f14a55/nvidia_cutlass_dsl_libs_core-4.8.1-py3-none-any.whl", hash = "sha256:bacc6760e3286db447d45720d32ae58ac2e6cecade1152345ef784b2d5e44431", size = 1635096, upload-time = "2026-10-16T08:35:00.801Z" },
@@ -2181,10 +2181,10 @@ name = "nvidia-cutlass-dsl-libs-cu12"
 version = "4.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-bindings" },
-    { name = "nvidia-cutlass-dsl-libs-base" },
-    { name = "protobuf" },
-    { name = "typing-extensions" },
+    { name = "cuda-bindings", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nvidia-cutlass-dsl-libs-base", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "protobuf", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2d/45/b79383560bb1f9eb08789a032d87ac71248e84268863c22a360a2029d424/nvidia_cutlass_dsl_libs_cu12-4.8.1-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:e4d3e7c07dfe9d57f85a623853bf8f0e453ce70613079bf1e9be68da0ef07aca", size = 90664088, upload-time = "2026-10-16T10:43:40.662Z" },
@@ -2200,10 +2200,10 @@ name = "nvidia-cutlass-dsl-libs-cu13"
 version = "4.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-bindings" },
-    { name = "nvidia-cutlass-dsl-libs-base" },
-    { name = "protobuf" },
-    { name = "typing-extensions" },
+    { name = "cuda-bindings", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nvidia-cutlass-dsl-libs-base", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "protobuf", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4e/52/a87b64750cf1cf5cbcfc521ebe8fda32602a2acfa8e123b27ddc8a8316f5/nvidia_cutlass_dsl_libs_cu13-4.8.1-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:0ff2a8943e1243b9335e6d185cec841de2733f0c07f8508a5418b3bfb98460f9", size = 90995896, upload-time = "2026-10-16T10:50:32.395Z" },
@@ -2917,11 +2917,11 @@ name = "quack-kernels"
 version = "0.6.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "apache-tvm-ffi" },
-    { name = "einops" },
-    { name = "nvidia-cutlass-dsl" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" } },
-    { name = "torch-c-dlpack-ext" },
+    { name = "apache-tvm-ffi", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "einops", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nvidia-cutlass-dsl", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "torch-c-dlpack-ext", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5f/18/6c2a20d00dff254f154fb3b951f4e5a0377a60122c17385e5f08d5f5b5e1/quack_kernels-0.6.5.tar.gz", hash = "sha256:dd9405a4a6fa35fc3a5a18fe35b46a14b0bf7e3ad9fe2451903e355047ac471d", size = 846876, upload-time = "2026-09-11T05:08:20.621Z" }
 wheels = [
@@ -3354,54 +3354,44 @@ wheels = [
 [[package]]
 name = "torch"
 version = "2.14.1"
-source = { registry = "https://download.pytorch.org/whl/cpu" }
-resolution-markers = [
-    "python_full_version >= '3.15' and sys_platform == 'darwin'",
-    "python_full_version < '3.15' and sys_platform == 'darwin'",
-]
-dependencies = [
-    { name = "filelock", marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "fsspec", marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "jinja2", marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "networkx", marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "setuptools", marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "sympy", marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "typing-extensions", marker = "(sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-]
-wheels = [
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.1-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:17b32fd68abe9429d936c643579e24465e7174a06c168bbfcc01395a881bc8af", upload-time = "2026-09-30T19:50:45Z" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.1-cp314-cp314t-macosx_14_0_arm64.whl", hash = "sha256:6fe25964e53113a8a1f5640be1103a982a426c07f8907fba48fcca1be1112202", upload-time = "2026-09-30T19:50:51Z" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.1-cp315-cp315-macosx_14_0_arm64.whl", hash = "sha256:729992e6b581de722989012547b7767ef8ac019bd060e34805f06a52ff9a120e", upload-time = "2026-09-30T19:50:56Z" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.1-cp315-cp315t-macosx_14_0_arm64.whl", hash = "sha256:3e4d7679866c4cd68258ccda7c51bcda150797eda095813f26fe63c07934cc21", upload-time = "2026-09-30T19:51:02Z" },
-]
-
-[[package]]
-name = "torch"
-version = "2.14.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version >= '3.15' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version < '3.15' and sys_platform == 'win32'",
-    "python_full_version < '3.15' and sys_platform == 'emscripten'",
-    "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version >= '3.15' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
+    "python_full_version >= '3.15' and sys_platform == 'emscripten' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
+    "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
+    "python_full_version >= '3.15' and sys_platform == 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version >= '3.15' and sys_platform == 'emscripten' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version >= '3.15' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version >= '3.15' and sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version >= '3.15' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version >= '3.15' and sys_platform == 'emscripten' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'emscripten' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'emscripten' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'darwin' and extra == 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'win32' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform == 'emscripten' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
+    "python_full_version < '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'group-5-flock-cpu-tests' and extra != 'group-5-flock-gpu'",
 ]
 dependencies = [
     { name = "cuda-bindings", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
     { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "filelock" },
-    { name = "fsspec" },
-    { name = "jinja2" },
-    { name = "networkx" },
+    { name = "filelock", marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
+    { name = "fsspec", marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
+    { name = "jinja2", marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
+    { name = "networkx", marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
     { name = "nvidia-cudnn-cu13", marker = "(sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
     { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
     { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
     { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "setuptools" },
-    { name = "sympy" },
+    { name = "setuptools", marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
+    { name = "sympy", marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
     { name = "triton", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra != 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/43/19/23a1aed488423a5055727256b25406e4b93bd2bcf1352bef582b9951c10c/torch-2.14.1-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:cee091caf2a6229e248daf41d18ceebf590ba02d9179205610062c64ee5fef03", size = 127325330, upload-time = "2026-09-30T17:52:54.752Z" },
@@ -3421,21 +3411,15 @@ source = { registry = "https://download.pytorch.org/whl/cpu" }
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'linux'",
     "python_full_version < '3.15' and sys_platform == 'linux'",
-    "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version >= '3.15' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.15' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32'",
-    "python_full_version < '3.15' and sys_platform == 'win32'",
-    "python_full_version < '3.15' and sys_platform == 'emscripten'",
-    "python_full_version < '3.15' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "setuptools", marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
-    { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "filelock", marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "fsspec", marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "jinja2", marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "networkx", marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "setuptools", marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "sympy", marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+    { name = "typing-extensions", marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.1%2Bcpu-cp314-cp314-linux_s390x.whl", hash = "sha256:a7a580e3d92467516c9247a22bc805ae4f79c7b1b9a2052f92849f34e89720f5", upload-time = "2026-09-30T19:48:32Z" },
@@ -3459,7 +3443,7 @@ name = "torch-c-dlpack-ext"
 version = "0.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/37/de/921b6491efce5c389a5ef9bbed3d2d6660005840dae488124173180859ab/torch_c_dlpack_ext-0.1.5.tar.gz", hash = "sha256:d06f0357d575d22a168cc77acb9020fc4bae30968ceb6718a055dcbe92bacabe", size = 12913, upload-time = "2026-01-12T11:25:08.484Z" }
 wheels = [

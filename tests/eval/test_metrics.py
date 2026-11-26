@@ -8,8 +8,10 @@ from flock.eval.metrics import (
     MULTIPLE_CHOICE_METRICS,
     ChoiceScores,
     accuracy,
+    best_choice,
     bits_per_byte,
     multiple_choice,
+    ranking_scores,
 )
 
 
@@ -38,6 +40,7 @@ def test_accuracy_ignores_padding_and_breaks_ties_to_first() -> None:
     valid = torch.tensor([[True, True, True], [True, True, False]])
     assert accuracy(score, valid, torch.tensor([1, 1])).tolist() == [0.0, 1.0]
     assert accuracy(score, valid, torch.tensor([0, 2])).tolist() == [1.0, 0.0]
+    assert best_choice(score, valid).tolist() == [0, 1]
 
 
 def scores(**overrides: Any) -> ChoiceScores:
@@ -100,3 +103,30 @@ def test_multiple_choice_metrics_lists_every_name_in_order() -> None:
     # results.json writes the metrics in this order.
     metrics = multiple_choice(scores(logprob_uncond=torch.tensor([[-5.0, -5.0]])))
     assert list(metrics) == list(MULTIPLE_CHOICE_METRICS)
+
+
+def test_each_ranking_score_gives_its_accuracy() -> None:
+    choices = scores(logprob_uncond=torch.tensor([[-9.0, -4.0]]))
+    ranked = ranking_scores(choices)
+    metrics = multiple_choice(choices)
+
+    # Every accuracy but `acc_greedy` ranks choices, and ranks them by its score here.
+    assert list(ranked) == [
+        "acc_raw",
+        "acc_per_token",
+        "acc_per_char",
+        "acc_per_byte",
+        "acc_uncond",
+    ]
+    for name, score in ranked.items():
+        assert accuracy(score, choices.valid, choices.gold).equal(metrics[name]), name
+    assert "acc_uncond" not in ranking_scores(scores())
+
+
+def test_multiple_choice_given_its_rankings_gives_the_same_metrics() -> None:
+    choices = scores(logprob_uncond=torch.tensor([[-9.0, -4.0]]))
+    given = multiple_choice(choices, ranking_scores(choices))
+
+    assert list(given) == list(multiple_choice(choices))
+    for name, values in multiple_choice(choices).items():
+        assert values.equal(given[name]), name

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import { untrack } from 'svelte';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { enhance } from '$app/forms';
@@ -89,7 +90,7 @@
 										: 'bg-muted text-foreground hover:bg-[color-mix(in_srgb,var(--muted),var(--foreground)_6%)]'
 								]}
 								aria-pressed={off}
-								title={off ? `Keep ${tag}` : `Remove ${tag}`}
+								{@attach hint(off ? `Keep ${tag}` : `Remove ${tag}`)}
 								onclick={() => toggleRemoved(tag)}
 							>
 								{tag}
@@ -112,9 +113,7 @@
 						<Button {...props} variant="outline">Cancel</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={mutation.pending}>
-					{mutation.pending ? 'Saving…' : 'Save tags'}
-				</Button>
+				<Button type="submit" pending={mutation.pending}>Save tags</Button>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>

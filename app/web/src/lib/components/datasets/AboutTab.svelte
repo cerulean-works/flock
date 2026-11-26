@@ -7,6 +7,7 @@
 	import MetaItem from '../MetaItem.svelte';
 	import MetaRow from '../MetaRow.svelte';
 	import TagChip from '../TagChip.svelte';
+	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -97,7 +98,7 @@
 				<p class="mt-4 text-[13px] text-muted-foreground">Showing the first 1 MB of README.md.</p>
 			{/if}
 		{:else}
-			<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
+			<Skeleton shape="lines" count={6} />
 		{/if}
 	</div>
 

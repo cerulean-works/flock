@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import GitCommitVerticalIcon from '@lucide/svelte/icons/git-commit-vertical';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
@@ -48,7 +49,9 @@
 			{#each entries as entry (`${entry.kind}:${entry.id}`)}
 				<tr class="h-14 border-b border-divider">
 					<td class="px-2 py-2">
-						<p class="truncate font-mono text-[13px]" title={label(entry)}>{label(entry)}</p>
+						<p class="truncate font-mono text-[13px]" {@attach hint(label(entry))}>
+							{label(entry)}
+						</p>
 						<MetaRow class="mt-0.5 flex-nowrap gap-x-3">
 							<MetaItem icon={entry.kind === 'model' ? BoxIcon : GitCommitVerticalIcon}>
 								{what(entry)}
@@ -61,7 +64,7 @@
 					</td>
 					<td
 						class="hidden truncate px-2 text-muted-foreground sm:table-cell"
-						title={entry.project ?? undefined}
+						{@attach hint(entry.project ?? undefined)}
 					>
 						{entry.project ?? ''}
 					</td>

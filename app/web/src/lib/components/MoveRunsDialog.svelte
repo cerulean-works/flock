@@ -164,12 +164,12 @@
 						<Button {...props} variant="outline">Cancel</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={!to || live > 0 || mutation.pending}>
-					{mutation.pending
-						? 'Moving…'
-						: ids.length === 1
-							? 'Move run'
-							: `Move ${runs(ids.length)}`}
+				<Button
+					type="submit"
+					disabled={!to || live > 0 || mutation.pending}
+					pending={mutation.pending}
+				>
+					{ids.length === 1 ? 'Move run' : `Move ${runs(ids.length)}`}
 				</Button>
 			</Dialog.Footer>
 		</form>

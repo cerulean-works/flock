@@ -163,17 +163,92 @@ The SDK uploads files such as `config.yaml`, `requirements.txt`, `wandb-metadata
 
 Files in a top-level `private/` folder, such as `private/predictions/exam.jsonl`, are for the organization's members only, whatever the project's visibility. On a public project, outsiders don't see them in the list, and reading one answers the same 404 as a missing file. A run that uploads such files keeps them members-only when its project is made public or the run is moved into a public project.
 
+## Comparing eval runs[[run-diff]]
+
+`GET .../runs/{run}/diff?with={entity}/{project}/{run}` compares two eval runs doc by doc, as [`flock eval diff --json`](../../evals/comparison#doc-by-doc-diff) does for the same runs. Flock runs that same diff on the two runs' `results.json` and `predictions/` files, so the dashboard and the CLI never disagree. The run in the path is A and `with` is B, which may be in another project.
+
+| Answer | When |
+|---|---|
+| 200 | eval's `ItemDiff` JSON: `a` and `b` (each run's model), `tasks` (per task both scored under the same task hash: `task`, `task_hash`, `metric`, `num_docs`, `both_right`, `both_wrong`, `only_a`, `only_b`), `not_compared` (`[task, reason]` pairs) and `schema_version`. |
+| 404 | Either run is unknown, or you can't read its project. Both cases give the same answer, so a private project's runs aren't revealed. Also when either run has no `results.json`. |
+| 409 | The diff refuses the pair: the runs used another instrument (`dtype`, `batch_tokens`, `attention` or `sdpa_backend`), a run's predictions don't match its results, or a file is over 64 MiB or the pair over 1 GiB. `error` says which. |
+
+Anyone may call it on two public projects. Item text isn't returned, only doc ids: [Eval items](#run-items) and [One eval item](#run-item) return it. A task on a private dataset is compared from the runs' `private/predictions/` files for the organization's members only: to anyone else reading a public project it's in `not_compared` as `no_predictions`, as [Run files](#run-files) keep those files from them.
+
+## Eval items[[run-items]]
+
+`GET .../runs/{run}/items?task={task}&keep={keep}` returns a page of one task's docs as short rows: enough to list and sort them, without their whole text. With `with={entity}/{project}/{run}`, each row has two runs' answers, the run in the path first. A doc's whole text comes from [one item](#run-item).
+
+| Parameter | Meaning |
+|---|---|
+| `task` | The task, whose primary metric must be an accuracy. |
+| `keep` | One run: `wrong`, `right` or `all`. Two runs: `only_a`, `only_b`, `both_wrong` or `both_right`. |
+| `with` | The other run, as `entity/project/id`. |
+| `sort` | `margin` (the default): with two runs, the biggest gap between their margins first, with one run the biggest margin either way. Items without a margin (`acc_greedy`) come last. `doc`: the dataset's order. |
+| `offset`, `limit` | The page: `limit` from 1 to 100, 20 by default. |
+
+```json
+{"total": 268, "offset": 0, "items": [{"id": "Mercury_7017010", "text": "Question: Which planet is closest to the Sun?", "gold": 1, "gold_text": "Mercury", "runs": [{"correct": true, "pick": 1, "pick_text": "Mercury", "margin": 0.29, "gold_prob": 0.665}, ...]}]}
+```
+
+| Field | Meaning |
+|---|---|
+| `total` | How many docs the filter keeps. |
+| `text` | The part of the question that varies: the whole lines every question of the filter starts and ends with, such as `Answer:`, are left out, unless nothing varies or a row would be left empty. For a doc whose choices each have their own context (Winogrande), the options, joined by ` / `. |
+| `gold`, `gold_text` | The gold choice's index and its text. |
+| `runs` | Per run: `correct`; `pick`, the choice its primary metric picks (null for `acc_greedy`), and `pick_text`; `margin`, its gold choice's score minus its best wrong choice's, in the primary metric's units (null for `acc_greedy` or a doc with one choice); `gold_prob`, the gold choice's probability renormalized over the choices. |
+
+Texts longer than 240 characters end with `…`. The answers are those of the [diff](#run-diff): 404 for a run that's unknown, you can't read, or has no `results.json`, and 409 with eval's reason when the items can't be read, such as runs scored with another instrument, a task one run didn't score, a `keep` that doesn't fit the number of runs, or a run whose results schema is older than 11, whose predictions hold no text. A task on a private dataset is read for the organization's members only: to anyone else its predictions don't exist, and the answer is a 409 with no text.
+
+## Eval item suites[[run-items-suites]]
+
+`GET .../runs/{run}/items/suites?with={entity}/{project}/{run}` returns, for two runs, each suite of accuracy tasks both scored alike, with what the compare page draws for it. A suite is listed when both runs recorded it under the same suite hash, it's scored by its tasks' own metrics (not a `:bpb` suite) and it holds a task of its own. Its `tasks` are every task under it, nested suites included, that both runs scored under the same task hash with an accuracy as the primary metric. `counts` gives how many of its docs are in each group, and `dots` up to 800 of its docs, taken evenly through each group: A's margin, B's margin, the group's index in `only_a`, `only_b`, `both_wrong`, `both_right`, the doc's task as an index into `tasks`, its place in that group in the [items list](#run-items)'s default order, and its id.
+
+```json
+{"suites": [{"suite": "mmlu", "tasks": ["mmlu_abstract_algebra", ...], "counts": {"only_a": ..., "only_b": ..., "both_wrong": ..., "both_right": ...}, "dots": [[0.112, -0.05, 0, 3, 17, "Mercury_7017010"], ...]}]}
+```
+
+A task whose predictions a run lacks, or that you can't read (a private dataset's, outside the organization), is left out. The first answer for a pair computes every suite and can take a minute on large runs; Flock keeps it for the last few pairs. It answers as [Eval items](#run-items) does.
+
+## One eval item[[run-item]]
+
+`GET .../runs/{run}/item?doc={doc}&task={task}&keep={keep}` returns one doc with its whole text and each run's answer, as [`flock eval items --json`](../../evals/commands#flock-eval-items) prints it. It takes `task`, `keep` and `with` as the [list](#run-items) does: `keep` is the list the doc is in, since two runs are read by a cell of their diff. The id is a query parameter, so any id, with slashes or dots, reaches it as written.
+
+```json
+{"task": "arc_easy", "metric": "acc_per_char", "id": "Mercury_7017010", "question": "...", "contexts": null, "choices": [" ...", " ..."], "gold": 1, "runs": [{"model": "...", "pick": 1, "correct": true, "logprob": [...], "prob": [...], "share": [...]}, ...]}
+```
+
+It answers as the list does, and 404 too when `keep` holds no doc of that id.
+
+## One eval item's tokens[[run-item-tokens]]
+
+`GET .../runs/{run}/item/tokens?doc={doc}&task={task}&keep={keep}` returns each run's per-token values over one doc's choices, read from the run's per-token file (results schema 12). It takes the query of [one item](#run-item). Each run has a value per token of each choice's continuation: its text, decoded with the tokenizer the run's results name, fetched from the Hugging Face Hub, its log-probability, its rank (1 for the token the run found likeliest) and the entropy of the run's guess there, in nats.
+
+```json
+{"runs": [{"note": null, "choices": [{"text": [" Mercury"], "logprob": [-1.02], "rank": [1], "entropy": [2.31]}, ...]}, {"choices": null, "note": "run:org/project/b has no per-token values for arc_easy"}]}
+```
+
+A run without per-token values for the task has `choices` set to `null`, and `note` says why. When the tokenizer can't be fetched, or doesn't decode the ids back to the choice's text, `text` is `null` and `note` says why. It answers as one item does.
+
 ## Run models[[run-models]]
 
-`GET .../runs/{run}/models` returns the model versions the run saved, in its own organization, as `save_to_hub` with `run` records them:
+`GET .../runs/{run}/models` returns the model versions the run is linked to, in its own organization:
 
 ```json
 {
-  "made": [{"model": "flock/olmo2-1b", "number": 2, "step": 12000, "tags": ["checkpoint-12000"], "run": "flock/llm-pretrain/3k9x2", ...}]
+  "made": [{"model": "flock/olmo2-1b", "number": 2, "step": 12000, "tags": ["checkpoint-12000"], "run": "flock/llm-pretrain/3k9x2", "evals": ["flock/evals/8f2kq1zr"], ...}],
+  "scored": []
 }
 ```
 
-`made` is sorted by model name, then number. A version has the fields of a version in the model routes (`model`, `number`, `digest`, `tags`, `primary`, `step`, `run`, `total_bytes`, `created_by`, `created_at` and the rest). Deleted versions and models aren't listed.
+| Field | Meaning |
+|---|---|
+| `made` | The versions the run saved, as `save_to_hub` with `run` records them. |
+| `scored` | The versions the run evaluated. A run is linked as an eval when its config's `model` is `flock:…@{number}` and its `model_digest` is that version's digest, as `flock eval run --wandb-project` logs them. A project's model is matched by the config's `model_org`, `model_project` and `model_path` too. |
+
+Each list is sorted by model name, then number. A version has the fields of a version in the model routes (`model`, `number`, `digest`, `tags`, `primary`, `step`, `run`, `total_bytes`, `created_by`, `created_at` and the rest), plus `evals`, the runs that evaluated it as `entity/project/id`. Deleted versions and models aren't listed, and deleted runs aren't in `evals`.
+
+The eval link is made when the SDK sends the run's config. A `model` that names a tag, `primary` or no version, another organization's model, a missing or different `model_digest`, or a model or version that doesn't exist or is deleted links nothing, and the run is stored as usual. A link stays if the config later names another version.
 
 ## Run groups[[groups]]
 
@@ -184,7 +259,7 @@ A group is a saved list of a project's runs, with the [filter](queries#filters) 
 A group is returned as:
 
 ```json
-{"id": 3, "name": "lr × batch_size", "color": "#2a78d6", "filter": {"group": "pretrain-1b"}, "run_count": 12, "new_count": 2, "best_key": null, "best_order": null, "best": {"run": "9fc2v9ee", "name": "pretrain-1b-lr3e-4", "value": 2.31, "std": 0.02, "n": 3}, "created_at": "2026-11-20T09:12:44.512+00:00", "loaded_at": "2026-11-22T16:03:10.008+00:00"}
+{"id": 3, "name": "lr × batch_size", "color": "#2a78d6", "filter": {"group": "pretrain-1b"}, "run_count": 12, "new_count": 2, "best_key": null, "best_order": null, "best": {"run": "9fc2v9ee", "name": "pretrain-1b-lr3e-4", "value": 2.31, "run_value": 2.29, "std": 0.02, "n": 3}, "created_at": "2026-11-20T09:12:44.512+00:00", "loaded_at": "2026-11-22T16:03:10.008+00:00"}
 ```
 
 | Field | Meaning |
@@ -193,7 +268,7 @@ A group is returned as:
 | `run_count` | How many runs it has. |
 | `new_count` | How many new matches it has: runs the filter matches that are neither in the group nor dropped from it. A group without a filter has none. |
 | `best_key`, `best_order` | The group's own "best by" column and direction (`asc`, lowest first, or `desc`), or `null` for the project's. |
-| `best` | Its best run by that column, or `null` when no run has a finite value. With a repeat key, such as a `seed`, runs that differ only in it form one configuration. `value` is then the best configuration's mean, `std` its standard deviation, `n` its runs with a value, and `run` the best run in it. NaN, infinities and missing values are never best. |
+| `best` | Its best run by that column, or `null` when no run has a finite value. With a repeat key, such as a `seed`, runs that differ only in it form one configuration. `value` is then the best configuration's mean, `std` its standard deviation, `n` its runs with a value, `run` the best run in it, and `run_value` that run's own value. Without repeats, `run_value` equals `value`. NaN, infinities and missing values are never best. |
 | `created_at`, `loaded_at` | When it was created, and when runs were last loaded into it, as ISO 8601 times. |
 
 | Endpoint | Who | Meaning |
@@ -230,7 +305,7 @@ Names are 1 to 128 characters after Flock trims the spaces around them, and colo
 | `ungrouped_count` | How many there are. |
 | `keys` | The `config.*` keys whose values differ between the groups' best runs. Repeat keys, and keys distinct in every run of the project, are left out. |
 
-A row is `{"group", "name", "color", "run", "run_name", "value", "std", "n", "runs", "values", "config", "summary", "best_key", "best_order"}`. For a run, `group` and `color` are `null`. `run` is the group's best run, `runs` its number of runs, `values` every member's value in the column, `config` the best run's config, and `summary` its finite `summary.*` numbers, W&B's own (`summary._step`...) left out.
+A row is `{"group", "name", "color", "run", "run_name", "value", "run_value", "std", "n", "runs", "values", "config", "summary", "best_key", "best_order"}`. For a run, `group` and `color` are `null`. `run` is the group's best run, `value` its configuration's value (the mean with repeats, as in a group's `best`), `run_value` the run's own, `runs` its number of runs, `values` every member's value in the column, `config` the best run's config, and `summary` its finite `summary.*` numbers, W&B's own (`summary._step`...) left out.
 
 ### Suggestions[[groups-suggestions]]
 
@@ -263,7 +338,7 @@ It uses OpenAI's Decisions API. The request, the project's column names, values 
 `messages` alternate `user` and `assistant` (the earlier replies' `message`), up to 100. With none, the model makes its first proposal. `proposals` are the ones on screen, as returned. Fields other than `id`, `name`, `why`, `runs`, `filter`, `axes`, `best_key` and `best_order` are ignored. It returns:
 
 ```json
-{"message": "I split the lr sweep by optimizer and left the 3 debug runs out.", "proposals": [{"id": "lr-adamw", "name": "pretrain-1b, lr, adamw", "why": "Compares four learning rates with AdamW, everything else fixed.", "runs": ["9fc2v9ee", "..."], "filter": {"group": "pretrain-1b", "config.optimizer": "adamw"}, "axes": ["config.lr"], "values": {"config.lr": [0.0001, 0.0003, 0.001, 0.003]}, "grid": {"x": "config.lr", "y": null, "xs": [0.0001, 0.0003, 0.001, 0.003], "ys": null, "cells": [{"x": 0.0001, "y": null, "runs": 3, "best": 2.41, "run": "9fc2v9ee"}, "..."]}, "best_key": "summary.eval/loss", "best_order": "asc", "best": {"run": "k2l0c0de", "name": "pretrain-1b-lr3e-4", "value": 2.31}, "repeat_key": "config.seed", "create": {"name": "pretrain-1b, lr, adamw", "runs": ["9fc2v9ee", "..."], "filter": {"group": "pretrain-1b", "config.optimizer": "adamw"}, "best_key": null, "best_order": null}}], "ungrouped": 3, "runs": 41}
+{"message": "I split the lr sweep by optimizer and left the 3 debug runs out.", "proposals": [{"id": "lr-adamw", "name": "pretrain-1b, lr, adamw", "why": "Compares four learning rates with AdamW, everything else fixed.", "runs": ["9fc2v9ee", "..."], "filter": {"group": "pretrain-1b", "config.optimizer": "adamw"}, "axes": ["config.lr"], "values": {"config.lr": [0.0001, 0.0003, 0.001, 0.003]}, "grid": {"x": "config.lr", "y": null, "xs": [0.0001, 0.0003, 0.001, 0.003], "ys": null, "cells": [{"x": 0.0001, "y": null, "runs": 3, "best": 2.41, "run": "9fc2v9ee"}, "..."]}, "best_key": "summary.eval/loss", "best_order": "asc", "best": {"run": "k2l0c0de", "name": "pretrain-1b-lr3e-4", "value": 2.29, "mean": 2.31, "std": 0.02, "n": 3}, "repeat_key": "config.seed", "create": {"name": "pretrain-1b, lr, adamw", "runs": ["9fc2v9ee", "..."], "filter": {"group": "pretrain-1b", "config.optimizer": "adamw"}, "best_key": null, "best_order": null}}], "ungrouped": 3, "runs": 41}
 ```
 
 | Field | Meaning |
@@ -278,7 +353,7 @@ A proposal's `id` is a slug that stays the same across turns while it's the same
 - `runs`: the runs `filter` matches, when it has one; else the model's picks that are live runs of the project. A proposal with fewer than 2 runs, or with the same runs as an earlier proposal or a saved group, is left out.
 - `axes`: the `config.*` keys of kind `varies` among its runs ([column kinds](#groups)), the model's order first. `values`: each one's distinct values, sorted, `null` last for runs without one.
 - `grid`: with 1 or 2 axes of at most 24 values each, a cell per value of `x` (and of `y`), with its number of runs and its best value and run. Cells with no runs show what the sweep didn't cover. Otherwise `null`.
-- `best_key`, `best_order`, `best`: the project's best by column, unless the model picked another summary metric its runs have. `repeat_key`: the seed key, when runs repeat a configuration.
+- `best_key`, `best_order`, `best`: the project's best by column, unless the model picked another summary metric its runs have. `best` is the best run with its own `value`; `mean`, `std` and `n` are its configuration's, which rank it when runs repeat. `repeat_key`: the seed key, when runs repeat a configuration.
 - `create`: the body of `POST .../groups` that saves it as shown: its runs, and its filter so later matches are offered as new matches. `best_key` is `null` unless it differs from the project's.
 
 The model reads the project's live runs: their id, name, state, W&B group, creation time, the `config.*` values that vary across the project, and one summary metric. It also reads the names of the summary metrics, the saved groups' names, filters and sizes, and the [suggestions](#groups-suggestions). Above about 40,000 characters, the runs are summarized and the model proposes filters. Run histories, files and logs are never sent. It uses OpenAI's Responses API with `FLOCK_OPENAI_PROPOSAL_MODEL` (`gpt-6.2-sol` by default). It answers 403 while the [assistant](#group-assistant) is off for the org or the server has no key, and 502 when OpenAI fails or takes more than 90 seconds.

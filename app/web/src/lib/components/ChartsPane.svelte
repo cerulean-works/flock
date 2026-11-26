@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
@@ -456,7 +457,7 @@
 						]}
 						data-grip
 						aria-label="Move section {sec.key} (arrow keys)"
-						title="Drag to move"
+						{@attach hint('Drag to move')}
 						onkeydown={(e) => nudgeSection(e, sec.key)}
 					>
 						<GripVerticalIcon class="size-3.5" />
@@ -549,7 +550,7 @@
 							aria-valuemin={ROWS_MIN}
 							aria-valuemax={rowsFor(count)}
 							tabindex="0"
-							title="Drag to show more or fewer rows, or double-click to reset"
+							{@attach hint('Drag to show more or fewer rows, or double-click to reset')}
 							onpointerdown={(e) => resizeRows(e, sec.key, count)}
 							ondblclick={() => ws.setSectionRows(sec.key, null)}
 							onkeydown={(e) => rowsKey(e, sec.key, count)}

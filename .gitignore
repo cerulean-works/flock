@@ -319,3 +319,6 @@ wandb/
 
 # Local pytest timing and reliability reports
 test-results/
+
+# Local scratch notes
+/tmp/

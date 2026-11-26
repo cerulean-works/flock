@@ -44,7 +44,7 @@ class TrainerConfig(PydanticBaseModel):
             Name used for the default checkpoint directory and evaluation labels.
             This is not passed to `wandb.init` as the tracking run's name.
         input_column (`str`): Text column read from each Lance row.
-        batch_size (`int`): Positive number of dataset items per rank per optimizer update; chunks when using a token cache.
+        batch_size (`int`): Positive number of dataset items per rank per optimizer update; chunks when using a token cache, or rows when it packs them.
         max_steps (`int`, *optional*):
             Positive cap on optimizer updates. The run ends at the cap, or at the end of
             the pass if that comes first. Fractional schedule times are fractions of the
@@ -454,7 +454,7 @@ class Trainer:
         tokenizer (`TokenizersBackend`):
             Tokenizer configured with a padding token, padding side and maximum
             length. The collator applies padding, truncation and target shifting.
-        dataset (`SafeLanceDataset` or `TokenChunkDataset`): Finite, indexable text rows or cached token chunks.
+        dataset (`SafeLanceDataset` or `TokenChunkDataset`): Finite, indexable text rows, cached token chunks or packed rows of chunks.
         runtime ([`training.core.distributed.DistributedRuntime`] or `None`, *optional*):
             Distributed runtime. If `None`, detect ranks and device from the environment.
             For multiple ranks, initialize the process group with `distributed_run()`

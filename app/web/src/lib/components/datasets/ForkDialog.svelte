@@ -1,5 +1,4 @@
 <script lang="ts">
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -147,9 +146,7 @@
 				<Button type="button" variant="outline" disabled={pending} onclick={() => (open = false)}>
 					Cancel
 				</Button>
-				<Button type="submit" disabled={pending}>
-					{#if pending}<LoaderCircleIcon class="animate-spin" /> Forking…{:else}Fork{/if}
-				</Button>
+				<Button type="submit" {pending}>Fork</Button>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>

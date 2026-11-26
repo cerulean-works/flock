@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import SearchIcon from '@lucide/svelte/icons/search';
@@ -19,7 +20,7 @@
 		owner: { name: string; avatar_url: string | null } | null;
 		/** The org's, for the run's cost; null outside the org, where there's no cost (D113). */
 		currency: string | null;
-		/** The model versions it made; null when they can't be read. */
+		/** The model versions it made and scored; null when they can't be read. */
 		models?: RunModels | null;
 		now: number;
 	}
@@ -79,7 +80,7 @@
 				{label}
 				<button
 					class="rounded p-0.5 text-faint opacity-0 group-hover/code:opacity-100 hover:text-foreground focus-visible:opacity-100"
-					title="Copy the {label.toLowerCase()}"
+					{@attach hint(`Copy the ${label.toLowerCase()}`)}
 					aria-label="Copy the {label.toLowerCase()}"
 					onclick={() => copy(label.toLowerCase(), value)}
 				>
@@ -88,7 +89,7 @@
 			</dt>
 			<dd
 				class="mt-0.5 line-clamp-4 rounded-md bg-muted/60 px-2 py-1 font-mono text-[12px] leading-[1.45] break-all"
-				title={value}
+				{@attach hint(value)}
 			>
 				{value}
 			</dd>
@@ -113,10 +114,10 @@
 			{#each rows as [key, value] (key)}
 				{@const shown = formatValue(value)}
 				<div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 px-4 hover:bg-muted">
-					<dt class="truncate text-muted-foreground" title={key}>{key}</dt>
+					<dt class="truncate text-muted-foreground" {@attach hint(key)}>{key}</dt>
 					<dd
 						class={['truncate text-right tabular-nums', shown === '–' && 'text-faint']}
-						title={exact(value)}
+						{@attach hint(exact(value))}
 					>
 						{shown}
 					</dd>
@@ -139,10 +140,10 @@
 		<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-2 py-1">
 			<dt class="text-muted-foreground">ID</dt>
 			<dd class="flex min-w-0 items-center gap-1">
-				<span class="run-id truncate font-mono text-[12px]" title={run.id}>{run.id}</span>
+				<span class="run-id truncate font-mono text-[12px]" {@attach hint(run.id)}>{run.id}</span>
 				<button
 					class="flex-none rounded p-0.5 text-faint hover:text-foreground"
-					title="Copy the run id"
+					{@attach hint('Copy the run id')}
 					aria-label="Copy the run id"
 					onclick={() => copy('run id', run.id)}
 				>
@@ -152,7 +153,7 @@
 		</div>
 		<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-1">
 			<dt class="text-muted-foreground">Started</dt>
-			<dd title={dateTime(run.created_at)}>
+			<dd {@attach hint(dateTime(run.created_at))}>
 				{relativeTime(run.created_at, now)}
 				<span class="block text-xs text-muted-foreground">{dateTime(run.created_at)}</span>
 			</dd>
@@ -201,7 +202,7 @@
 				<dt class="text-muted-foreground">Tags</dt>
 				<dd class="flex min-w-0 flex-wrap gap-1">
 					{#each run.tags as tag (tag)}
-						<Badge variant="secondary" class="max-w-full" title={tag}>
+						<Badge variant="secondary" class="max-w-full" {@attach hint(tag)}>
 							<span class="truncate">{tag}</span>
 						</Badge>
 					{/each}
@@ -213,7 +214,11 @@
 	</dl>
 
 	{#if models?.made.length}
-		<RunModelsList versions={models.made} />
+		<RunModelsList title="Checkpoints" versions={models.made} />
+	{/if}
+	<!-- An API from before 025 answers no `scored`. -->
+	{#if models?.scored?.length}
+		<RunModelsList title="Models scored" versions={models.scored} />
 	{/if}
 
 	{#if run.notes || run.description}

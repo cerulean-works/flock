@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hint } from '#lib/hint.svelte.ts';
 	import Building2Icon from '@lucide/svelte/icons/building-2';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import MailIcon from '@lucide/svelte/icons/mail';
@@ -109,7 +110,10 @@
 						<span class="hidden text-right tabular-nums sm:block">
 							{org.member_count.toLocaleString('en-US')}
 						</span>
-						<span class="hidden text-muted-foreground sm:block" title={dateTime(org.created_at)}>
+						<span
+							class="hidden text-muted-foreground sm:block"
+							{@attach hint(dateTime(org.created_at))}
+						>
 							{relativeTime(org.created_at, data.now)}
 						</span>
 						<Button variant="ghost" size="sm" class="justify-self-end" href={orgHref(org.name)}>
@@ -144,7 +148,7 @@
 					</div>
 					<p
 						class="hidden w-48 truncate text-[13px] text-muted-foreground md:block"
-						title={user.orgs.map((o) => `${o.name} (${o.role})`).join(', ')}
+						{@attach hint(user.orgs.map((o) => `${o.name} (${o.role})`).join(', '))}
 					>
 						<!-- Spaced with margins: Svelte trims whitespace at the edges of tags. -->
 						{#each user.orgs as org, i (org.name)}
@@ -159,7 +163,7 @@
 					</p>
 					<span
 						class="hidden w-20 text-[13px] text-muted-foreground sm:block"
-						title="Joined {dateTime(user.created_at)}"
+						{@attach hint(`Joined ${dateTime(user.created_at)}`)}
 					>
 						{relativeTime(user.created_at, data.now)}
 					</span>
@@ -202,9 +206,7 @@
 						<Button {...props} variant="outline">Cancel</Button>
 					{/snippet}
 				</Dialog.Close>
-				<Button type="submit" disabled={creation.pending}>
-					{creation.pending ? 'Creating…' : 'Create organization'}
-				</Button>
+				<Button type="submit" pending={creation.pending}>Create organization</Button>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>
