@@ -83,7 +83,9 @@ describe('the command menu', () => {
 
 	it('opens a run in place with Tab, listing its pages', async () => {
 		render(CommandPalette, { open: true });
-		await userEvent.keyboard('bert{Tab}');
+		await userEvent.keyboard('bert');
+		await expect.element(screen.getByRole('option', { name: /bert/ })).toBeVisible();
+		await userEvent.keyboard('{Tab}');
 		await expect.element(screen.getByRole('option', { name: /lr-sweep-1/ })).toBeVisible();
 		await userEvent.keyboard('lr-sweep-2');
 		await expect
