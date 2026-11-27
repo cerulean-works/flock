@@ -23,7 +23,7 @@
 		typedIn,
 		withItemsView
 	} from '#lib/evals.ts';
-	import type { ItemDiff, ItemKeep, RunDetail } from '#lib/types.ts';
+	import type { ItemDiff, ItemKeep, ItemsView, RunDetail } from '#lib/types.ts';
 	import { runHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
@@ -36,6 +36,8 @@
 	let failure = $state<string | null>(null);
 	$effect(() => {
 		const pending = data.compared;
+		// Another pair starts from its own link.
+		pickedView = null;
 		diff = null;
 		refusalText = null;
 		failure = null;
@@ -152,6 +154,9 @@
 	// Clicking a task in the counts table opens its items above: the link takes the task (the
 	// reader's group and order kept, or the first group with docs) and the list starts over there.
 	let picked = $state(0);
+	// The view a picked task opens on, handed to the list as it remounts: `page.url` doesn't
+	// follow `replaceState` at once, so reading the link back would show the old task.
+	let pickedView = $state<ItemsView | null>(null);
 	function showTask(task: string) {
 		const view = itemsViewOf(page.url.searchParams);
 		const counts: Partial<Record<ItemKeep, number>> =
@@ -161,7 +166,8 @@
 			view.keep && (counts[view.keep] ?? 0) > 0
 				? view.keep
 				: keeps.find((k) => (counts[k] ?? 0) > 0);
-		replaceState(withItemsView(page.url, { task, keep, sort: view.sort }), page.state);
+		pickedView = { task, keep, sort: view.sort };
+		replaceState(withItemsView(page.url, pickedView), page.state);
 		picked += 1;
 		// The reader goes where the task opened, focus included, so Tab and a screen reader follow.
 		void tick().then(() => document.getElementById('items')?.focus());
@@ -355,7 +361,7 @@
 								]}
 								fallback={ids}
 								bleed
-								view={itemsViewOf(page.url.searchParams)}
+								view={pickedView ?? itemsViewOf(page.url.searchParams)}
 								onview={(view) => replaceState(withItemsView(page.url, view), page.state)}
 							/>
 						{/key}
