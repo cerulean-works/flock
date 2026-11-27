@@ -1,5 +1,5 @@
 import { error, redirect } from '@sveltejs/kit';
-import { loadOrg, orgActions } from '#lib/server/org-settings.ts';
+import { orgActions } from '#lib/server/org-settings.ts';
 import { orgSettingsHref, type OrgSection } from '#lib/settings.ts';
 import type { PageServerLoad } from './$types';
 
@@ -13,13 +13,12 @@ const KNOWN = new Set([
 	'import'
 ]);
 
-export const load: PageServerLoad = async ({ depends, params }) => {
+/** A section's old page of its own: the settings page, at that section (its query kept). */
+export const load: PageServerLoad = ({ params, url }) => {
 	if (!KNOWN.has(params.section)) error(404, `settings page ${params.section} not found`);
-	const data = await loadOrg({ depends, params });
-	// A section this viewer doesn't see (a member on General): the first one they do.
-	if (!data.sections.some((s) => s.slug === params.section))
-		redirect(307, orgSettingsHref(params.org, data.sections[0].slug as OrgSection));
-	return { ...data, section: params.section as OrgSection };
+	const [path, hash] = orgSettingsHref(params.org, params.section as OrgSection).split('#');
+	redirect(307, `${path}${url.search}#${hash}`);
 };
 
+// Forms that still post here (`?/…`) keep working.
 export const actions = orgActions;

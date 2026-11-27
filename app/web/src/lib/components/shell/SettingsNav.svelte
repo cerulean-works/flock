@@ -27,6 +27,7 @@
 		type OrgSection,
 		type SettingsSection
 	} from '#lib/settings.ts';
+	import { jumpTo, toc } from '#lib/settings-toc.svelte.ts';
 	import type { OrgEntry } from '#lib/types.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
 
@@ -38,9 +39,21 @@
 		s3: boolean;
 		/** A sidebar row's classes, so these rows match the app's. */
 		item: string;
+		/** After a jump within the page (the phone drawer closes). */
+		onjump?: () => void;
 	}
 
-	let { org, orgs, superadmin, s3, item }: Props = $props();
+	let { org, orgs, superadmin, s3, item, onjump }: Props = $props();
+
+	/** An entry on the page in view: the section the page is scrolled to marks it. */
+	const here = (href: string) => href.split('#')[0].split('?')[0] === page.url.pathname;
+
+	function jump(e: MouseEvent, href: string) {
+		if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0 || !here(href)) return;
+		if (!jumpTo(href.split('#')[1])) return;
+		e.preventDefault();
+		onjump?.();
+	}
 
 	const ICONS: Record<string, Component> = {
 		profile: UserIcon,
@@ -60,8 +73,8 @@
 
 	const entry = $derived(orgs.find((o) => o.name === org) ?? null);
 	/**
-	 * The org's sections: as its settings page worked them out while one is open, otherwise from
-	 * the viewer's role (a page they can't see sends them on to one they can).
+	 * The org's sections: as its settings page worked them out while it's open, otherwise from the
+	 * viewer's role.
 	 */
 	const orgList = $derived<SettingsSection[]>(
 		!org || (!entry && !superadmin)
@@ -93,7 +106,11 @@
 	);
 </script>
 
-<!-- Settings (S10): in place of the app's rows, every settings section, and the way back. -->
+<!--
+	Settings (S10): in place of the app's rows, the way back and every settings section, the table
+	of contents of the settings pages (one each for the account, an org and the server). On the
+	page in view an entry scrolls to its section, and the section scrolled to is marked.
+-->
 <div class="grid gap-px">
 	<a class={item} href={org ? entityHref(org) : resolve('/(app)')}>
 		<ChevronLeftIcon /> Back
@@ -109,7 +126,12 @@
 		{#each group.sections as section (section.slug)}
 			{@const href = group.href(section.slug)}
 			{@const Icon = ICONS[section.slug]}
-			<a class={item} {href} aria-current={page.url.pathname === href ? 'page' : undefined}>
+			<a
+				class={item}
+				{href}
+				aria-current={here(href) && toc.current === section.slug ? 'page' : undefined}
+				onclick={(e) => jump(e, href)}
+			>
 				<Icon />
 				<span class="min-w-0 flex-1 truncate">{section.label}</span>
 			</a>

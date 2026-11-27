@@ -1,10 +1,8 @@
-import { redirect } from '@sveltejs/kit';
-import { accountActions } from '#lib/server/account-settings.ts';
-import { accountHref } from '#lib/settings.ts';
+import { accountActions, loadAccount } from '#lib/server/account-settings.ts';
 import type { PageServerLoad } from './$types';
 
-/** The account opens on its profile; an old link's `#keys` survives and is followed from there. */
-export const load: PageServerLoad = () => redirect(307, accountHref('profile'));
+/** The account: one page of its sections, the settings sidebar its contents. */
+export const load: PageServerLoad = ({ locals }) => loadAccount({ locals });
 
 // Forms that post here (`/account?/createKey`, from any page) keep working.
 export const actions = accountActions;

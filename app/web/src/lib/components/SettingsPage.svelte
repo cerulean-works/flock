@@ -1,54 +1,54 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import type { ResolvedPathname } from '$app/types';
+	import { untrack, type Snippet } from 'svelte';
+	import { afterNavigate } from '$app/navigation';
 	import Page from '#lib/components/Page.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
+	import { jumpTo, scrollspy } from '#lib/settings-toc.svelte.ts';
 	import type { Crumb } from '#lib/storage.ts';
 
 	interface Props {
-		/** The section, the trail's last step. */
+		/** The area: Settings, Account or Super admin, the trail's last step. */
 		title: string;
-		/** The steps before it: Settings, Account or Super admin. */
-		trail: Crumb[];
+		/** Steps before it. */
+		trail?: Crumb[];
 		/** Lead the trail with the org (an org's settings). */
 		org?: boolean;
-		/**
-		 * Where an old one-page link's `#anchor` now lives: followed once on arrival, when it's
-		 * another section's page.
-		 */
-		follow?: (hash: string) => ResolvedPathname | null;
-		/** How many things the page lists (members, accounts), muted beside the title. */
-		count?: number;
+		/** Where an `#anchor` points, when it isn't an element's own id (an old link's). */
+		target?: (hash: string) => string;
 		/** At the header's right: the page's one action (New organization). */
 		actions?: Snippet;
 		children: Snippet;
 	}
 
-	let { title, trail, org = false, follow, count, actions, children }: Props = $props();
+	let {
+		title,
+		trail = [],
+		org = false,
+		target = (h) => h.slice(1),
+		actions,
+		children
+	}: Props = $props();
 
-	onMount(() => {
-		const to = location.hash && follow?.(location.hash);
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by its type
-		if (to && to !== location.pathname) void goto(to, { replaceState: true });
-	});
+	// Arriving with an `#anchor` (a link to a section, or an old one-page link), or the anchor
+	// changing on this page: straight there, its section marked.
+	const arrive = () => {
+		if (location.hash) jumpTo(decodeURIComponent(target(location.hash)), { smooth: false });
+	};
+	afterNavigate(arrive);
 </script>
 
+<svelte:window onhashchange={arrive} />
+
 <!--
-	A settings page (G1, G2): the trail, whose last step names the page, then one left-aligned
-	640px column. A page's first section is the page itself and goes unheaded; further sections
-	share one heading size. The sidebar lists the other sections.
+	A settings page (G1, G2): the trail naming the area, then one left-aligned 640px column of
+	its sections, each headed, in the order the sidebar lists them as its table of contents.
 -->
-{#snippet counted()}
-	<span class="text-[13px] text-muted-foreground tabular-nums"
-		>{count?.toLocaleString('en-US')}</span
-	>
-{/snippet}
 <Page width="full">
-	<PageHeader {title} {trail} {org} {actions} badges={count == null ? undefined : counted} />
-	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
-		<!-- A page's first section starts at the column's top, whatever its first margin. -->
-		<div class="max-w-160 pt-8 [&>section:first-child>:first-child]:mt-0">{@render children()}</div>
+	<PageHeader {title} {trail} {org} {actions} />
+	<main
+		class="relative min-h-0 flex-1 overflow-y-auto px-5 pb-[40vh]"
+		{@attach (node) => untrack(() => scrollspy(node))}
+	>
+		<div class="max-w-160 pt-8">{@render children()}</div>
 	</main>
 </Page>

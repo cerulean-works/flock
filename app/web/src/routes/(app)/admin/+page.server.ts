@@ -1,8 +1,7 @@
-import { redirect } from '@sveltejs/kit';
-import { adminActions } from '#lib/server/admin-settings.ts';
-import { adminHref } from '#lib/settings.ts';
+import { adminActions, loadAdmin } from '#lib/server/admin-settings.ts';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = () => redirect(307, adminHref('organizations'));
+/** The server's settings (super admins): one page of its sections. */
+export const load: PageServerLoad = () => loadAdmin();
 
 export const actions = adminActions;

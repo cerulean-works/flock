@@ -63,8 +63,9 @@
 	<p class="mt-3 text-[13px] text-muted-foreground">
 		Tools that can’t run <code class="font-mono text-[0.9em]">flock</code> need a long-lived key.
 		You can create one on your
-		<a class="text-link underline-offset-3 hover:underline" href="{accountHref('keys')}?keys=s3"
-			>account page</a
+		<a
+			class="text-link underline-offset-3 hover:underline"
+			href={accountHref('keys', { keys: 's3' })}>account page</a
 		>.
 	</p>
 </div>

@@ -62,8 +62,9 @@
 		</div>
 		<p class="text-[13px] text-muted-foreground">
 			You can create S3 keys on your
-			<a class="text-link underline-offset-3 hover:underline" href="{accountHref('keys')}?keys=s3"
-				>account page</a
+			<a
+				class="text-link underline-offset-3 hover:underline"
+				href={accountHref('keys', { keys: 's3' })}>account page</a
 			>.
 		</p>
 	</Dialog.Content>

@@ -285,7 +285,7 @@ describe('DatasetView', () => {
 		expect(code).toContain('"aws_access_key_id": "YOUR_ACCESS_KEY_ID",');
 		expect(code).toContain('"allow_http": "true",');
 		expect(dialog.getByRole('link', { name: 'account page' }).element().getAttribute('href')).toBe(
-			'/account/keys?keys=s3'
+			'/account?keys=s3#keys'
 		);
 	});
 

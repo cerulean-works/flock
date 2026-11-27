@@ -388,6 +388,7 @@
 				{s3}
 				superadmin={!!page.data.shell?.me?.is_superadmin}
 				item={ITEM}
+				onjump={drawer ? oncollapse : undefined}
 			/>
 		{:else}
 			<div class="grid gap-px">

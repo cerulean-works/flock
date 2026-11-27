@@ -3,7 +3,7 @@ import type { ResolvedPathname } from '$app/types';
 
 /**
  * Settings (S10, G1, G2): the account's, an organization's and the server's (super admins), each
- * section a page of its own, listed in the sidebar while one of them is open (Linear's settings).
+ * one page of sections, listed in the sidebar as its table of contents while one is open.
  */
 
 export interface SettingsSection {
@@ -51,38 +51,33 @@ export const ADMIN_SECTIONS: SettingsSection[] = [
 	{ slug: 'accounts', label: 'Accounts' }
 ];
 
-/** The anchors of the one-page settings before sections had pages, and where they went. */
-const OLD_ORG_ANCHORS: Record<string, OrgSection> = {
-	budget: 'budget',
-	'budget-warnings': 'budget',
-	'deleted-projects': 'budget',
-	's3-keys': 'storage',
-	'model-retention': 'storage',
-	assistant: 'assistant',
-	'deleted-datasets': 'deleted',
-	'deleted-models': 'deleted',
-	import: 'import'
-};
-const OLD_ACCOUNT_ANCHORS: Record<string, AccountSection> = {
-	keys: 'keys',
-	's3-keys': 'keys'
+/**
+ * Old anchors that aren't a section's own id: they land on the section holding them. (Parts of a
+ * section keep their old ids, `#budget-warnings` or `#deleted-models`, and land on themselves.)
+ */
+const ACCOUNT_ALIASES: Record<string, AccountSection> = { 's3-keys': 'keys' };
+
+/** The element an `#anchor` on a settings page stands for. */
+export const settingsTarget = (hash: string, area: 'org' | 'account' | 'admin') => {
+	const id = decodeURIComponent(hash.replace(/^#/, ''));
+	return (area === 'account' && ACCOUNT_ALIASES[id]) || id;
 };
 
-/** The section an old `#anchor` stood for, if any. */
-export function oldOrgAnchor(hash: string): OrgSection | null {
-	return OLD_ORG_ANCHORS[hash.replace(/^#/, '')] ?? null;
-}
-export function oldAccountAnchor(hash: string): AccountSection | null {
-	return OLD_ACCOUNT_ANCHORS[hash.replace(/^#/, '')] ?? null;
-}
+const query = (search?: Record<string, string>) =>
+	search && Object.keys(search).length ? `?${new URLSearchParams(search)}` : '';
 
-/** An org's settings section, and a part of it (`anchor`) to scroll to. */
+/**
+ * An org's settings, at a section, or a part of one (`anchor`) to scroll to: one page per area,
+ * the sidebar its table of contents.
+ */
 export const orgSettingsHref = (org: string, section: OrgSection, anchor?: string) =>
-	`${resolve('/(app)/orgs/[org]/[section]', { org, section })}${anchor ? `#${anchor}` : ''}` as ResolvedPathname;
-export const accountHref = (section: AccountSection) =>
-	resolve('/(app)/account/[section]', { section }) as ResolvedPathname;
+	`${resolve('/(app)/orgs/[org]', { org })}#${anchor ?? section}` as ResolvedPathname;
+export const accountHref = (section: AccountSection, search?: Record<string, string>) =>
+	`${resolve('/(app)/account')}${query(search)}#${section}` as ResolvedPathname;
 export const adminHref = (section: AdminSection) =>
-	resolve('/(app)/admin/[section]', { section }) as ResolvedPathname;
+	`${resolve('/(app)/admin')}#${section}` as ResolvedPathname;
 
-/** A section heading on a settings page (G2): one size for every section. */
+/** A section's heading on a settings page (G2): one size for every section. */
 export const SETTINGS_HEADING = 'text-[15px] leading-6 font-medium';
+/** A part of a section (Invite people, Budget warnings): quieter, under its section's heading. */
+export const SETTINGS_SUBHEADING = 'text-[13px] leading-5 font-medium';

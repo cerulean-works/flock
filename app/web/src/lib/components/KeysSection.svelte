@@ -117,7 +117,7 @@
 	</div>
 {/snippet}
 
-<section id="keys">
+<section>
 	{#if s3}
 		{@const groups = groupKeys(s3.keys)}
 		<Tabs.Root value={tab} onValueChange={(v) => setTab(v as KeysTab)} class="mt-4 gap-4">

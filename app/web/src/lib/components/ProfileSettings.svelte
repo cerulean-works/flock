@@ -4,7 +4,7 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
-	import { SETTINGS_HEADING } from '#lib/settings.ts';
+	import { SETTINGS_SUBHEADING } from '#lib/settings.ts';
 	import type { UserInfo } from '#lib/types.ts';
 	import { formText } from '#lib/utils.ts';
 	import AvatarField from './AvatarField.svelte';
@@ -68,7 +68,7 @@
 </section>
 
 <section class="mt-12">
-	<h2 class={SETTINGS_HEADING}>Password</h2>
+	<h3 class={SETTINGS_SUBHEADING}>Password</h3>
 	<div class="mt-4">
 		<Button variant="outline" onclick={() => (changingPassword = true)}>
 			{profile.has_password ? 'Change password' : 'Set password'}
