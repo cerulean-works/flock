@@ -5,7 +5,11 @@ import type { Theme } from '#lib/theme.ts';
 
 declare global {
 	namespace App {
-		// interface Error {}
+		interface Error {
+			message: string;
+			/** The page needs S3 storage, and this server has none: an empty state, not an error. */
+			noS3?: boolean;
+		}
 		interface Locals {
 			/** What requests to Flock authenticate with: the session's access token. */
 			token: string | null;
