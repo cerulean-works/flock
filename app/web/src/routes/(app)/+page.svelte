@@ -168,9 +168,10 @@
 {#snippet above()}
 	{#if status}
 		{@const s = status}
-		<!-- Attached to the field's top edge, like a composer's notice: one fact, one action. -->
+		<!-- A band the field's width, tucked 16px behind its top edge so the field's corners sit
+		     over it (Harry: not a tab off to one side): one fact, one action. -->
 		<div
-			class="status absolute bottom-[calc(100%-1px)] left-4 z-0 flex max-w-[calc(100%-2rem)] min-w-0 items-center gap-2 rounded-t-lg bg-muted px-3 pt-1.5 pb-2 text-[12px] text-muted-foreground"
+			class="status absolute inset-x-0 bottom-[calc(100%-16px)] z-0 flex min-w-0 items-center gap-2 rounded-t-2xl bg-muted pt-2 pr-4 pb-6 pl-5 text-[12px] text-muted-foreground"
 		>
 			<span class="size-1.5 flex-none rounded-full {TONE[s.tone]}"></span>
 			<span class="min-w-0 truncate text-foreground/80">{s.text}</span>
@@ -181,7 +182,7 @@
 			>
 			<button
 				type="button"
-				class="-mr-1 ml-1 grid size-4 flex-none place-items-center rounded hover:bg-background/60"
+				class="ml-auto grid size-5 flex-none place-items-center rounded hover:bg-background/60"
 				aria-label="Dismiss"
 				{@attach hint('Dismiss')}
 				onclick={() => dismiss(s.id)}
@@ -206,11 +207,11 @@
 			     above the middle; taller than the window, it starts at the top and scrolls. -->
 			<div class="flex min-h-full flex-col justify-center pt-10 pb-[max(2.5rem,6vh)]">
 				<div class="rise relative z-20 mx-auto w-full max-w-240" style:--i="0">
-					<!-- More room while the status tab sits on the field's edge, so it never meets the greeting. -->
+					<!-- While the status band shows, the greeting rises to make room; the field stays put. -->
 					<div
 						class={[
-							'min-h-9 text-center transition-[margin] duration-300',
-							status ? 'mb-12' : 'mb-6'
+							'mb-6 min-h-9 text-center transition-transform duration-300 ease-out',
+							status && '-translate-y-6'
 						]}
 					>
 						{#if welcome}
