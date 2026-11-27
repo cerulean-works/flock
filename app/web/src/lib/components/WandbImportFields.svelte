@@ -58,7 +58,7 @@
 				autocomplete="off"
 				spellcheck="false"
 				maxlength={128}
-				class={[large && 'h-10']}
+				class={[large && 'h-9']}
 			/>
 			<p class="text-xs leading-relaxed text-muted-foreground">
 				The team or user in <code class="font-mono text-[11px]">wandb.ai/&lt;entity&gt;</code>.
@@ -74,7 +74,7 @@
 				autocomplete="off"
 				spellcheck="false"
 				required
-				class={[large && 'h-10']}
+				class={[large && 'h-9']}
 			/>
 			<p class="text-xs leading-relaxed text-muted-foreground">
 				From <a
@@ -96,7 +96,7 @@
 				placeholder="https://api.wandb.ai"
 				autocomplete="off"
 				spellcheck="false"
-				class={[large && 'h-10']}
+				class={[large && 'h-9']}
 			/>
 			<p class="text-xs leading-relaxed text-muted-foreground">
 				Only for W&B Dedicated Cloud or a self-managed server.

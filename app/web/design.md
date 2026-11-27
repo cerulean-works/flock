@@ -95,7 +95,7 @@ The supplied gradient disc (`LogoMark`) followed by "Flock" in Host Grotesk 500.
 
 ### Sky (signed-out pages)
 
-`AuthShell` fills the page with the sky and centers the form on a canvas card above it: a daytime sky in light mode, the night sky in dark. It is the only atmospheric image in the app; text always sits on the card, never on the sky itself.
+`AuthShell` fills the page with the sky and centers the form on a 360px canvas card above it, the mark and a 22px title centred at its head (no subtitles): a daytime sky in light mode, the night sky in dark. It is the only atmospheric image in the app; text always sits on the card, never on the sky itself.
 
 ### Page header and view bar
 
