@@ -63,6 +63,8 @@ describe('the command menu', () => {
 
 		await userEvent.keyboard('bert');
 		await expect.element(screen.getByRole('option', { name: /bert/ })).toBeVisible();
+		// Filtered: the places listed ahead of the projects are gone, so bert is the row Tab opens.
+		await expect.element(screen.getByRole('option', { name: /^Home/ })).not.toBeInTheDocument();
 		await userEvent.keyboard('{Tab}');
 
 		// Inside: a chip for the project, its groups, then its runs.
@@ -83,8 +85,11 @@ describe('the command menu', () => {
 
 	it('opens a run in place with Tab, listing its pages', async () => {
 		render(CommandPalette, { open: true });
+		await expect.element(screen.getByRole('combobox', { name: 'Search or jump to' })).toHaveFocus();
 		await userEvent.keyboard('bert');
 		await expect.element(screen.getByRole('option', { name: /bert/ })).toBeVisible();
+		// Filtered: the places listed ahead of the projects are gone, so bert is the row Tab opens.
+		await expect.element(screen.getByRole('option', { name: /^Home/ })).not.toBeInTheDocument();
 		await userEvent.keyboard('{Tab}');
 		await expect.element(screen.getByRole('option', { name: /lr-sweep-1/ })).toBeVisible();
 		await userEvent.keyboard('lr-sweep-2');

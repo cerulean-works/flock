@@ -15,7 +15,9 @@ export const keyboard = $state<{
 	views: { label: string; key: string; set: () => void }[];
 	/** Opens the page's filter, when it has one. */
 	filter: (() => void) | null;
-}>({ runs: [], views: [], filter: null });
+	/** Home's own command field: Cmd+K puts the cursor there instead of opening the dialog. */
+	search: (() => void) | null;
+}>({ runs: [], views: [], filter: null, search: null });
 
 /** A key meant for a field, or one with a modifier: not the layer's to take. */
 export function typing(e: KeyboardEvent): boolean {

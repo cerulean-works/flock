@@ -1,8 +1,11 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
+	import { tick } from 'svelte';
+	import { recent, visitKind } from '#lib/recent.svelte.ts';
 	import { page } from '$app/state';
 	import { datasetsHref } from '#lib/datasets.ts';
-	import { layerOpen, typing } from '#lib/keys.svelte.ts';
+	import { resolve } from '$app/paths';
+	import { keyboard, layerOpen, typing } from '#lib/keys.svelte.ts';
 	import { modelsHref } from '#lib/models.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import { entityHref, orgHref } from '#lib/workspace/url.ts';
@@ -22,8 +25,25 @@
 		page.data.shell?.access === 'public' ? null : (page.data.shell?.org ?? null)
 	);
 
+	// Each page worth going back to joins Recent, named by its title's first part ("mix-w0.8 ·
+	// pretrain-350m · Flock" reads as the run, in its project).
+	afterNavigate(async ({ to }) => {
+		const kind = visitKind(to?.route.id ?? null);
+		if (!kind || !to) return;
+		await tick();
+		const [label, detail] = document.title.split(' · ');
+		if (!label || label === 'Flock') return;
+		recent.record({
+			href: to.url.pathname + (kind === 'run' ? '' : to.url.search),
+			label,
+			kind,
+			detail: detail && detail !== 'Flock' ? detail : undefined
+		});
+	});
+
 	function destination(key: string): string | null {
 		if (!org) return null;
+		if (key === 'h') return resolve('/(app)');
 		if (key === 'r') return entityHref(org);
 		// Settings on Linear's key, so S is Storage's beside D and M.
 		if (key === ',') return orgHref(org);
@@ -37,7 +57,8 @@
 	function onkeydown(e: KeyboardEvent) {
 		if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
 			e.preventDefault();
-			palette = !palette;
+			if (keyboard.search && !palette) keyboard.search();
+			else palette = !palette;
 			return;
 		}
 		if (e.defaultPrevented || typing(e) || layerOpen()) return;
