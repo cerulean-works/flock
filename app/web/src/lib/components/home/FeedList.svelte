@@ -2,7 +2,7 @@
 	import InlinePager from '#lib/components/InlinePager.svelte';
 	import { keyboard, listKeys } from '#lib/keys.svelte.ts';
 	import { runHref } from '#lib/workspace/url.ts';
-	import { FeedPages } from '#lib/data/feed-pages.svelte.ts';
+	import { FEED_SIZES, FeedPages } from '#lib/data/feed-pages.svelte.ts';
 	import { FeedPager } from '#lib/data/feed.svelte.ts';
 	import type { FeedPage } from '#lib/types.ts';
 	import FeedEntry from './FeedEntry.svelte';
@@ -20,7 +20,7 @@
 
 	// svelte-ignore state_referenced_locally
 	const pager = new FeedPager(first, query);
-	const pages = new FeedPages(pager, 25);
+	const pages = new FeedPages(pager);
 	// A page short of rows (merged events) loads more before it shows.
 	$effect(() => {
 		void pages.fill();
@@ -44,7 +44,7 @@
 		<li class="border-b border-divider py-6 text-[13px] text-muted-foreground">{empty}</li>
 	{/each}
 </ul>
-{#if pages.hasPrev || pages.hasNext}
+{#if pages.hasPrev || pages.hasNext || pages.rows.length > FEED_SIZES[0]}
 	<!-- Pinned at the scroll's foot, at the runs table pager's place (16px in). -->
 	<div class="sticky bottom-3.5 z-5 mt-3 -ml-1 w-fit">
 		<InlinePager
@@ -56,6 +56,10 @@
 			onnext={pages.hasNext ? pages.next : undefined}
 			pending={pager.loading}
 			failed={pager.failed}
+			size={pages.size}
+			sizes={FEED_SIZES}
+			sizeLabel="Entries per page"
+			onsize={pages.resize}
 		/>
 	</div>
 {/if}

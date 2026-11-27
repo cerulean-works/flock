@@ -4,7 +4,7 @@
 	import DataTable, { type Column, ROW_LINK } from '#lib/components/DataTable.svelte';
 	import InlinePager from '#lib/components/InlinePager.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
-	import { FeedPages } from '#lib/data/feed-pages.svelte.ts';
+	import { FEED_SIZES, FeedPages } from '#lib/data/feed-pages.svelte.ts';
 	import { FeedPager } from '#lib/data/feed.svelte.ts';
 	import type { FeedPage } from '#lib/types.ts';
 	import { dateTime, duration, gpus, relativeTime } from '#lib/utils.ts';
@@ -36,8 +36,8 @@
 		{ id: 'started', label: 'Updated', align: 'end' }
 	];
 	const COLUMNS = $derived(mine ? ALL_COLUMNS.filter((c) => c.id !== 'owner') : ALL_COLUMNS);
-	// One row per run, its latest state, 50 to a page.
-	const pages = new FeedPages(pager, 50, (item) => !!item.run);
+	// One row per run, its latest state.
+	const pages = new FeedPages(pager, (item) => !!item.run);
 	// A page short of rows (merged events) loads more before it shows.
 	$effect(() => {
 		void pages.fill();
@@ -51,7 +51,6 @@
 	name={(item) => item.run?.display_name ?? item.run?.id ?? item.id}
 	label="Latest runs"
 	empty={none}
-	footer={pages.hasPrev || pages.hasNext ? more : undefined}
 >
 	{#snippet cell(item, column)}
 		{@const run = item.run!}
@@ -92,15 +91,23 @@
 </DataTable>
 
 {#snippet none()}{empty}{/snippet}
-{#snippet more()}
-	<InlinePager
-		label="Run pages"
-		from={pages.from}
-		to={pages.from + pages.shown.length - 1}
-		total={pages.total}
-		onprev={pages.hasPrev ? pages.prev : undefined}
-		onnext={pages.hasNext ? pages.next : undefined}
-		pending={pager.loading}
-		failed={pager.failed}
-	/>
-{/snippet}
+{#if pages.hasPrev || pages.hasNext || pages.rows.length > FEED_SIZES[0]}
+	<!-- Pinned at the scroll's foot, at the runs table pager's place (16px in, 14px up: the list
+	     page's 40px bottom room is the scroll's padding, which sticky keeps clear of). -->
+	<div class="sticky bottom-[-1.625rem] z-5 mt-3 ml-4 w-fit">
+		<InlinePager
+			label="Run pages"
+			from={pages.from}
+			to={pages.from + pages.shown.length - 1}
+			total={pages.total}
+			onprev={pages.hasPrev ? pages.prev : undefined}
+			onnext={pages.hasNext ? pages.next : undefined}
+			pending={pager.loading}
+			failed={pager.failed}
+			size={pages.size}
+			sizes={FEED_SIZES}
+			sizeLabel="Runs per page"
+			onsize={pages.resize}
+		/>
+	</div>
+{/if}

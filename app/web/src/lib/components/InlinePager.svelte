@@ -3,6 +3,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { hint } from '#lib/hint.svelte.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import PageSizeMenu from './PageSizeMenu.svelte';
 	import { PAGER_PILL } from './Pager.svelte';
 
 	interface Props {
@@ -16,9 +17,27 @@
 		onnext?: () => void;
 		pending?: boolean;
 		failed?: boolean;
+		/** Rows to a page, the sizes offered and what's counted ("Runs per page"). */
+		size?: number;
+		sizes?: readonly number[];
+		sizeLabel?: string;
+		onsize?: (size: number) => void;
 	}
 
-	let { from, to, total, label, onprev, onnext, pending = false, failed = false }: Props = $props();
+	let {
+		from,
+		to,
+		total,
+		label,
+		onprev,
+		onnext,
+		pending = false,
+		failed = false,
+		size,
+		sizes = [],
+		sizeLabel = 'Rows per page',
+		onsize
+	}: Props = $props();
 
 	let nav = $state<HTMLElement>();
 
@@ -60,5 +79,8 @@
 	>
 		<ChevronRightIcon />
 	</Button>
+	{#if size && onsize}
+		<PageSizeMenu {size} {sizes} label={sizeLabel} onsize={(n) => turn(() => onsize(n))} />
+	{/if}
 	{#if failed}<span class="px-2 text-destructive">Couldn’t load more</span>{/if}
 </nav>

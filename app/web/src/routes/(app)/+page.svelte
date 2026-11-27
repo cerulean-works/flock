@@ -50,7 +50,9 @@
 				</Button>
 			{/snippet}
 		</PageHeader>
-		<main class="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-16">
+		<!-- The bottom room is the section's, not the scroll's: a scroll's padding would hold the
+		     floating pager that far off its foot. -->
+		<main class="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
 			<!-- The feed takes the width; the budget is a line in the header (above the feed on
 			     phones, where the header has no room). -->
 			<BudgetPanel
@@ -59,7 +61,7 @@
 				admin={data.shell.access === 'admin'}
 				class="mb-2 -ml-2 sm:hidden"
 			/>
-			<section aria-label="Activity" class="min-w-0">
+			<section aria-label="Activity" class="min-w-0 pb-16">
 				{#key JSON.stringify(data.query)}
 					<FeedList
 						first={() => data.feed!}
