@@ -112,7 +112,9 @@
 				>{run.tags.join(', ')}</span
 			>
 		{:else if column === 'gpus'}
-			<span class="block truncate">{gpus(run.gpu_type, run.gpu_count) ?? '–'}</span>
+			<span class="block truncate text-muted-foreground"
+				>{gpus(run.gpu_type, run.gpu_count) ?? '–'}</span
+			>
 		{:else if column === 'runtime'}
 			<span class="text-muted-foreground">{duration(run.runtime)}</span>
 		{:else}
