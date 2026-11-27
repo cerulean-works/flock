@@ -5,13 +5,19 @@
 	import Columns2Icon from '@lucide/svelte/icons/columns-2';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FileIcon from '@lucide/svelte/icons/file';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FolderIcon from '@lucide/svelte/icons/folder';
+	import GitCommitIcon from '@lucide/svelte/icons/git-commit-horizontal';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
+	import InfoIcon from '@lucide/svelte/icons/info';
 	import LayersIcon from '@lucide/svelte/icons/layers';
+	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
+	import ListTreeIcon from '@lucide/svelte/icons/list-tree';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
 	import MoonIcon from '@lucide/svelte/icons/moon';
+	import ScrollTextIcon from '@lucide/svelte/icons/scroll-text';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SunIcon from '@lucide/svelte/icons/sun';
 	import TableIcon from '@lucide/svelte/icons/table';
@@ -26,7 +32,7 @@
 	import { datasetCall, datasetsApi, datasetsHref } from '#lib/datasets.ts';
 	import { groupHref, groupsHref, type GroupList } from '#lib/groups.ts';
 	import { keyboard } from '#lib/keys.svelte.ts';
-	import { folderApi, modelsHref } from '#lib/models.ts';
+	import { folderApi, modelApi, modelCall, modelsHref } from '#lib/models.ts';
 	import { bucketApi, nameOf, objectHref, storageHref } from '#lib/storage.ts';
 	import { setTheme } from '#lib/theme.svelte.ts';
 	import type {
@@ -36,7 +42,9 @@
 		Listing,
 		ModelAt,
 		ModelFolder,
-		ProjectInfo
+		ModelVersionsPage,
+		ProjectInfo,
+		VersionsPage
 	} from '#lib/types.ts';
 	import { flockFilter } from '#lib/workspace/filters.ts';
 	import { entityHref, orgHref, projectHref, runHref } from '#lib/workspace/url.ts';
@@ -96,15 +104,19 @@
 						filter: flockFilter(query, []),
 						sort: ['-created_at'],
 						limit: 50,
-						columns: ['display_name']
+						columns: ['display_name', 'job_type']
 					})
 				})
 			]);
 			const out: Sections = [];
-			if (list?.groups.length)
+			// Flock searches the runs; the groups are matched here, by name.
+			const groups = (list?.groups ?? []).filter((g) =>
+				g.name.toLowerCase().includes(query.trim().toLowerCase())
+			);
+			if (groups.length)
 				out.push([
 					'Groups',
-					list.groups.map((g) => ({
+					groups.map((g) => ({
 						label: g.name,
 						href: groupHref(o, name, g.id),
 						color: g.color
@@ -114,7 +126,8 @@
 				'Runs',
 				runs.ids.map((id, i) => {
 					const label = String(runs.data.display_name?.[i] ?? id);
-					return { label, keywords: [id], href: runHref(o, name, id), icon: ActivityIcon };
+					const job = (runs.data.job_type?.[i] ?? null) as string | null;
+					return runEntry(o, name, id, label, job);
 				})
 			]);
 			return out;
@@ -136,7 +149,8 @@
 					at.datasets.map((d) => ({
 						label: d.name,
 						href: datasetsHref(o, d.path),
-						icon: DatabaseIcon
+						icon: DatabaseIcon,
+						level: () => datasetItemLevel(o, d.path, d.version)
 					}))
 				]
 			];
@@ -164,7 +178,8 @@
 						label: nameOf(m.name),
 						keywords: [m.name],
 						href: modelsHref(o, m.name),
-						icon: BoxIcon
+						icon: BoxIcon,
+						level: () => modelItemLevel(o, m.name, m.primary)
 					}))
 				]
 			];
@@ -176,6 +191,132 @@
 		href: modelsHref(o, path),
 		icon: FolderIcon,
 		level: () => modelLevel(o, path)
+	});
+
+	/** A page of an item at one of its tabs. */
+	const tabHref = (href: string, tab: string) => `${href}?tab=${tab}`;
+
+	/**
+	 * A run: its tabs. An eval run's open on Results and add Compare with…; a run listed without
+	 * its job type (the page's runs) is asked for it when opened.
+	 */
+	const runLevel = (
+		o: string,
+		project: string,
+		id: string,
+		label: string,
+		job?: string | null
+	): Level => ({
+		label,
+		async load(_, signal) {
+			let kind = job;
+			if (kind === undefined) {
+				const base = `/api/projects/${encodeURIComponent(o)}/${encodeURIComponent(project)}`;
+				const one = await getJson<{ data: Record<string, unknown[]> }>(
+					`${base}/runs/query`,
+					signal,
+					{
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ filter: { name: id }, limit: 1, columns: ['job_type'] })
+					}
+				).catch(() => null);
+				kind = (one?.data.job_type?.[0] ?? null) as string | null;
+			}
+			const href = runHref(o, project, id);
+			const evals = kind === 'eval';
+			const pages: Entry[] = [
+				...(evals ? [{ label: 'Results', href, icon: ListChecksIcon }] : []),
+				{ label: 'Charts', href: tabHref(href, 'charts'), icon: ChartLineIcon },
+				{ label: 'Logs', href: tabHref(href, 'logs'), icon: ScrollTextIcon },
+				{ label: 'Files', href: tabHref(href, 'files'), icon: FileIcon },
+				...(evals ? [{ label: 'Compare with…', href: `${href}/compare`, icon: Columns2Icon }] : [])
+			];
+			return [['Pages', pages]];
+		}
+	});
+	const runEntry = (
+		o: string,
+		project: string,
+		id: string,
+		label: string,
+		job?: string | null,
+		detail?: string
+	): Entry => ({
+		label,
+		keywords: detail ? [id, detail] : [id],
+		href: runHref(o, project, id),
+		detail,
+		icon: ActivityIcon,
+		level: () => runLevel(o, project, id, label, job)
+	});
+
+	/** A dataset: its tabs, then its versions (the newest page of them). */
+	const datasetItemLevel = (o: string, path: string, primary: number | null): Level => ({
+		label: nameOf(path),
+		async load(_, signal) {
+			const href = datasetsHref(o, path);
+			const list = await datasetCall<VersionsPage>(datasetsApi(o, 'versions', { path }), {
+				signal
+			}).catch(() => null);
+			const out: Sections = [
+				[
+					'Pages',
+					[
+						{ label: 'About', href, icon: InfoIcon },
+						{ label: 'Viewer', href: tabHref(href, 'rows'), icon: TableIcon },
+						{ label: 'Schema', href: tabHref(href, 'schema'), icon: ListTreeIcon },
+						{ label: 'Versions', href: tabHref(href, 'versions'), icon: GitCommitIcon }
+					]
+				]
+			];
+			if (list?.versions.length)
+				out.push([
+					'Versions',
+					list.versions.map((v) => ({
+						label: `v${v.version}`,
+						keywords: v.tags,
+						detail: v.version === primary ? 'Primary' : v.tags.join(', ') || undefined,
+						href: `${href}?version=${v.version}`,
+						icon: GitCommitIcon
+					}))
+				]);
+			return out;
+		}
+	});
+
+	/** A model: its tabs, then its versions (the newest page of them). */
+	const modelItemLevel = (o: string, name: string, primary: number | null): Level => ({
+		label: nameOf(name),
+		async load(_, signal) {
+			const href = modelsHref(o, name);
+			const list = await modelCall<ModelVersionsPage>(modelApi(o, name, 'versions'), {
+				signal
+			}).catch(() => null);
+			const out: Sections = [
+				[
+					'Pages',
+					[
+						{ label: 'Overview', href, icon: FileTextIcon },
+						{ label: 'Versions', href: tabHref(href, 'versions'), icon: GitCommitIcon },
+						{ label: 'Evals', href: tabHref(href, 'evals'), icon: ListChecksIcon },
+						{ label: 'Files', href: tabHref(href, 'files'), icon: FileIcon }
+					]
+				]
+			];
+			if (list?.versions.length)
+				out.push([
+					'Versions',
+					list.versions.map((v) => ({
+						label: `v${v.number}`,
+						keywords: v.tags,
+						detail: v.number === primary ? 'Primary' : v.tags.join(', ') || undefined,
+						href: `${href}?version=${v.number}`,
+						icon: GitCommitIcon
+					}))
+				]);
+			return out;
+		}
 	});
 
 	/** A folder of a bucket (`prefix` empty for its top, else ending in `/`). */
@@ -309,13 +450,18 @@
 		if (keyboard.runs.length)
 			out.push([
 				'Runs',
-				keyboard.runs.map((r) => ({
-					label: r.label,
-					href: r.href,
-					keywords: [r.project],
-					detail: r.project,
-					icon: ActivityIcon
-				}))
+				keyboard.runs.map((r) => {
+					const id = r.href.slice(r.href.lastIndexOf('/') + 1);
+					return org
+						? runEntry(org, r.project, id, r.label, undefined, r.project)
+						: {
+								label: r.label,
+								href: r.href,
+								keywords: [r.project],
+								detail: r.project,
+								icon: ActivityIcon
+							};
+				})
 			]);
 		const read = tops;
 		if (read && read.org === org) {
@@ -350,7 +496,19 @@
 	let failed = $state(false);
 
 	const level = $derived(stack.at(-1) ?? null);
-	const sections = $derived(level ? inside : top);
+	// A level Flock searches is matched here as well, by the same score, so rows from the last
+	// answer narrow at once while the next one is on its way (Enter never takes a stale row).
+	const sections = $derived.by((): Sections => {
+		if (!level) return top;
+		const q = query.trim();
+		if (!level.searched || !q) return inside;
+		return inside
+			.map(([name, entries]): [string, Entry[]] => [
+				name,
+				entries.filter((e) => filter('', q, [e.label, ...(e.keywords ?? [])]) > 0)
+			])
+			.filter(([, entries]) => entries.length);
+	});
 	/** A row's value, unique in the list; filtering reads its keywords. */
 	const valueOf = (section: string, i: number) => `${section}/${i}`;
 	const activeEntry = $derived.by(() => {
@@ -463,7 +621,8 @@
 		{onEscapeKeydown}
 	>
 		<Dialog.Title class="sr-only">Command menu</Dialog.Title>
-		<Command.Root loop class="min-w-0" bind:value={active} {filter}>
+		<!-- A level Flock searches comes back filtered: matching it again here hides rows. -->
+		<Command.Root loop class="min-w-0" bind:value={active} {filter} shouldFilter={!level?.searched}>
 			<div class="flex h-11 min-w-0 items-center gap-1.5 border-b border-divider px-3.5">
 				{#each stack as l, i (i)}
 					<span
