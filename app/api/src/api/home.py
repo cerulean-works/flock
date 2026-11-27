@@ -62,9 +62,22 @@ async def feed(
     store: StoreDep,
     user: UserDep,
     org: Annotated[str | None, Query(description="only this organization")] = None,
-    project: Annotated[str | None, Query(description="only this project (needs org)")] = None,
-    owner: Annotated[str | None, Query(description="me, or a user id: only their runs")] = None,
+    project: Annotated[
+        str | None, Query(description="only these projects, comma separated (needs org)")
+    ] = None,
+    owner: Annotated[
+        str | None, Query(description="only runs of these: me or user ids, comma separated")
+    ] = None,
     kinds: Annotated[str | None, Query(description=f"comma separated: {', '.join(KINDS)}")] = None,
+    group: Annotated[
+        str | None, Query(description="only runs in these groups, comma separated")
+    ] = None,
+    job_type: Annotated[
+        str | None, Query(description="only runs of these job types, comma separated")
+    ] = None,
+    gpu: Annotated[
+        str | None, Query(description="only runs on these GPU types, comma separated")
+    ] = None,
     cursor: Annotated[str | None, Query(description="next, from the previous page")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
 ) -> Response:
@@ -74,7 +87,8 @@ async def feed(
         found = await visible_org(org, store, user)
         projects = await store.projects([found])
         if project is not None:
-            projects = [p for p in projects if p.name == project]
+            names = set(split(project))
+            projects = [p for p in projects if p.name in names]
             if not projects:
                 raise APIError(404, f"project {org}/{project} not found")
     elif project is not None:
@@ -87,20 +101,54 @@ async def feed(
         unknown = sorted(wanted - set(KINDS))
         if unknown or not wanted:
             raise APIError(400, f"unknown kinds {unknown}; use {', '.join(KINDS)}")
-    owner_pk = None
+    owners = None
     if owner is not None:
-        if owner == "me":
-            owner_pk = user.pk
-        elif owner.isdigit():
-            owner_pk = int(owner)
-        else:
-            raise APIError(400, "owner is me or a user id")
+        owners = []
+        for one in split(owner):
+            if one == "me":
+                owners.append(user.pk)
+            elif one.isdigit():
+                owners.append(int(one))
+            else:
+                raise APIError(400, "owner is me or a user id")
     try:
         key = decode_cursor(cursor) if cursor else None
     except ValueError as e:
         raise APIError(400, str(e)) from None
-    items, next_cursor = await store.feed.page(projects, wanted, owner_pk, key, limit)
+    items, next_cursor = await store.feed.page(
+        projects,
+        wanted,
+        owners,
+        key,
+        limit,
+        groups=split(group) if group is not None else None,
+        job_types=split(job_type) if job_type is not None else None,
+        gpus=split(gpu) if gpu is not None else None,
+    )
     return JSONResponse({"items": items, "next": next_cursor})
+
+
+def split(values: str) -> list[str]:
+    """A comma separated query value, its parts trimmed, empty ones dropped."""
+    return [v.strip() for v in values.split(",") if v.strip()]
+
+
+@router.get("/orgs/{org}/run-facets")
+async def run_facets(
+    org: str,
+    store: StoreDep,
+    user: UserDep,
+    project: Annotated[str | None, Query(description="only this project's runs")] = None,
+) -> Response:
+    """What the org's runs can be filtered by: owners (user ids), projects, states, groups, job
+    types and GPU types, each value with how many runs have it. Members only, as the feed."""
+    found = await visible_org(org, store, user)
+    projects = await store.projects([found])
+    if project is not None:
+        projects = [p for p in projects if p.name == project]
+        if not projects:
+            raise APIError(404, f"project {org}/{project} not found")
+    return JSONResponse(await store.feed.facets(projects))
 
 
 @router.get("/orgs/{org}/billing")
