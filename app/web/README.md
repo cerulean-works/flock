@@ -29,10 +29,13 @@ no email, so you pass the link on. More organizations are created on the **Super
 
 The SvelteKit server talks to Flock; the browser only talks to SvelteKit. Configure it with:
 
-| Variable               | Default                 | Purpose                                                                                               |
-| ---------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------- |
-| `FLOCK_API_URL`        | `http://127.0.0.1:8080` | Flock, as this server reaches it                                                                      |
-| `FLOCK_API_PUBLIC_URL` | `FLOCK_API_URL`         | Flock as the wandb SDK on your machines reaches it, for the `wandb login --host` line the setup shows |
+| Variable                                             | Default                 | Purpose                                                                                                                                                                                       |
+| ---------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FLOCK_API_URL`                                      | `http://127.0.0.1:8080` | Flock, as this server reaches it                                                                                                                                                              |
+| `FLOCK_API_PUBLIC_URL`                               | `FLOCK_API_URL`         | Flock as the wandb SDK on your machines reaches it, for the `wandb login --host` line the setup shows                                                                                         |
+| `FLOCK_SLURM_URL`                                    | unset                   | The [Slurm queue dashboard](https://github.com/cerulean-works/slurm-dashboard), as this server reaches it. Home shows its GPUs in use and queue; unset, the cell says no cluster is connected |
+| `FLOCK_SLURM_PUBLIC_URL`                             | `FLOCK_SLURM_URL`       | The Slurm dashboard as people open it, for Home's link                                                                                                                                        |
+| `FLOCK_SLURM_ACCESS_ID`, `FLOCK_SLURM_ACCESS_SECRET` | unset                   | A Cloudflare Access service token, when the Slurm dashboard sits behind Access                                                                                                                |
 
 Set the API's `FLOCK_WEB_URL` to this dashboard's public origin for invitation, password reset
 and Google sign-in links. The development Compose file defaults it to `http://localhost:5173`.

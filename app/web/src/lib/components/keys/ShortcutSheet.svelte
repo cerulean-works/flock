@@ -16,6 +16,7 @@
 				['?', 'These shortcuts'],
 				['[', 'Hide or show the sidebar'],
 				[']', 'Hide or show the properties'],
+				['G then H', 'Go to Home'],
 				['G then R', 'Go to Runs'],
 				...(s3
 					? ([

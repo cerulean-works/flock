@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
+	import HouseIcon from '@lucide/svelte/icons/house';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
@@ -408,6 +409,14 @@
 					</a>
 				{/if}
 				{#if org && !outside}
+					<a
+						class={ITEM}
+						href={resolve('/(app)')}
+						aria-current={route === '/(app)' ? 'page' : undefined}
+						{@attach hint('Go to Home  G then H')}
+					>
+						<HouseIcon /> Home
+					</a>
 					<a
 						class={ITEM}
 						href={entityHref(org)}

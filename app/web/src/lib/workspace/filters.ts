@@ -388,6 +388,72 @@ const ownedByColumn = (f: RunFilter, key: string) =>
 	isValuesOf(f, key) ||
 	(isOn(f, key) && ['eq', 'gt', 'gte', 'lt', 'lte', 'contains'].includes(f.op));
 
+/** Whether a group is one column's values (`State is any of A, B`): one chip, not a row of them. */
+const isOneColumn = (f: RunFilterGroup) => {
+	const [first] = f.filters;
+	return !!first && !isGroup(first) && isValuesOf(f, first.key);
+};
+
+/** Whether a filter shows as one chip: a condition, or one column's values. */
+const isChip = (f: RunFilter) => !isGroup(f) || isOneColumn(f);
+
+/**
+ * The filters in effect as a row of chips: top-level filters join with and, and an `any` group
+ * of chips shows as its chips joined with or (a segment). Anything deeper, which only the
+ * advanced editor builds, stays one chip.
+ */
+export function chipSegments(filters: readonly RunFilter[]): RunFilter[][] {
+	const [only] = filters;
+	const top =
+		filters.length === 1 && isGroup(only) && only.match === 'all' ? only.filters : filters;
+	return top.map((f) =>
+		isGroup(f) && f.match === 'any' && !isOneColumn(f) && f.filters.every(isChip)
+			? [...f.filters]
+			: [f]
+	);
+}
+
+/** The filters for a row of segments (what `chipSegments` reads back). */
+export function joinSegments(segments: readonly (readonly RunFilter[])[]): RunFilter[] {
+	return segments
+		.filter((s) => s.length)
+		.map((s): RunFilter => (s.length > 1 ? { match: 'any', filters: [...s] } : s[0]));
+}
+
+/** Where the `k`th chip of a row is: its segment and its place in it. */
+function chipAt(segments: readonly (readonly RunFilter[])[], k: number): [number, number] {
+	let left = k;
+	for (let s = 0; s < segments.length; s++) {
+		if (left < segments[s].length) return [s, left];
+		left -= segments[s].length;
+	}
+	return [-1, -1];
+}
+
+/**
+ * The row with the joiner after chip `k` switched: an and joins the chips either side into one
+ * or-segment; an or splits its segment there.
+ */
+export function flipJoiner(segments: readonly (readonly RunFilter[])[], k: number): RunFilter[][] {
+	const out = segments.map((s) => [...s]);
+	const [s, i] = chipAt(out, k);
+	if (s < 0) return out;
+	if (i < out[s].length - 1) {
+		out.splice(s, 1, out[s].slice(0, i + 1), out[s].slice(i + 1));
+	} else if (s + 1 < out.length) {
+		out.splice(s, 2, [...out[s], ...out[s + 1]]);
+	}
+	return out;
+}
+
+/** The row without chip `k`; a segment left with one chip is a plain chip again. */
+export function dropChip(segments: readonly (readonly RunFilter[])[], k: number): RunFilter[][] {
+	const out = segments.map((s) => [...s]);
+	const [s, i] = chipAt(out, k);
+	if (s >= 0) out[s].splice(i, 1);
+	return out.filter((x) => x.length);
+}
+
 /** A date-and-time field's text for a time in seconds, in local time. */
 export function localDateTime(seconds: number): string {
 	const d = new Date(seconds * 1000);
