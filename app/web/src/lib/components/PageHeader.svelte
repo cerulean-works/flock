@@ -143,7 +143,7 @@
 						{orgName}
 					</a>
 					<ChevronRightIcon
-						class="size-3.5 flex-none self-center text-faint max-sm:hidden"
+						class="size-3.5 flex-none translate-y-px self-center text-faint max-sm:hidden"
 						aria-hidden="true"
 					/>
 				{/if}
@@ -152,12 +152,16 @@
 					{@const far = i < steps.length - 1 && 'max-sm:hidden'}
 					<a href={step.href} class={[far, CRUMB]} {@attach hint(step.label)}>{step.label}</a>
 					<ChevronRightIcon
-						class={['size-3.5 flex-none self-center text-faint', far]}
+						class={['size-3.5 flex-none translate-y-px self-center text-faint', far]}
 						aria-hidden="true"
 					/>
 				{/each}
 				{#if leading}
-					<div class="flex flex-none items-center self-center">{@render leading()}</div>
+					<!-- On the text's line, centred on its x-height like an icon in a sentence, not on
+					     the trail's box (which a version picker makes taller). -->
+					<div class="flex-none self-baseline leading-5 *:inline-block *:align-middle">
+						{@render leading()}&#8203;
+					</div>
 				{/if}
 				<h1
 					class="min-w-0 truncate text-[14px] leading-5 font-medium text-foreground"
@@ -165,10 +169,14 @@
 				>
 					{title}
 				</h1>
-				<!-- In the trail, so their words share its baseline: a control's text sits level
-				     with the crumbs, not centred a pixel high. -->
+				<!-- In the trail, in a box of the text's height: taller controls (a version picker, a
+				     ⋯ button) overflow it rather than stretch the trail, so the trail's marks stay
+				     centred on its text. Chevrons and badges sit 1px low of the box's centre, which is
+				     where the crumbs' capitals centre (the org's mark, 16px, needs no nudge). -->
 				{#if badges}
-					<div class="ml-1 flex flex-none items-baseline gap-2">{@render badges()}</div>
+					<div class="ml-1 flex h-5 flex-none translate-y-px items-center gap-2 self-center">
+						{@render badges()}
+					</div>
 				{/if}
 			</nav>
 			{#if subtitle}

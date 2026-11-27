@@ -198,11 +198,11 @@
 		/>
 	{/if}
 	{#if info?.origin?.kind === 'blend'}
-		<span class="text-[12px] text-muted-foreground">blend</span>
+		<span class="translate-y-px text-[12px] text-muted-foreground">blend</span>
 	{/if}
 	{#if isPublic}
 		<span
-			class="flex items-center gap-1 text-[12px] text-muted-foreground"
+			class="flex translate-y-px items-center gap-1 text-[12px] text-muted-foreground"
 			{@attach hint('Anyone with the link can see every version of it')}
 		>
 			<GlobeIcon class="size-3" /> Public
@@ -210,7 +210,7 @@
 	{/if}
 	{#if newer !== null}
 		<a
-			class="text-[12px] text-link underline-offset-3 hover:underline max-sm:hidden"
+			class="translate-y-px text-[12px] text-link underline-offset-3 hover:underline max-sm:hidden"
 			href={versionHref(String(newer))}
 			{@attach hint('A newer version was written')}>v{newer} available</a
 		>
@@ -312,6 +312,7 @@
 	tabsLabel="Dataset"
 	{controls}
 	properties={tab === 'about' && info ? properties : undefined}
+	flush={tab !== 'about' && !!info && !failed}
 >
 	{#if tab === 'about'}
 		<AboutTab {scope} {path} />

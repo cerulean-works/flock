@@ -342,7 +342,8 @@
 	tableH={data.shell.tableH}
 >
 	{#snippet leading()}
-		<span class="size-3.5 rounded-[4px]" style:background={group.color} title={about}></span>
+		<!-- A 12px swatch: an icon's weight, not a block beside the 14px title. -->
+		<span class="size-3 rounded-[3px]" style:background={group.color} title={about}></span>
 	{/snippet}
 	{#snippet badges()}
 		{#if !readonly}
