@@ -214,6 +214,8 @@ def test_a_groups_workspace_is_the_snapshot_of_its_runs(api: Client) -> None:
     narrowed = header(filter=json.dumps({"config.opt": "sgd"}))
     assert ([r["id"] for r in narrowed["runs"]], narrowed["total"]) == (["c"], 1)
     assert api.get(f"{G}/999/workspace").status == 404
+    counted = api.get(f"{G}/{made['id']}/runs/values", keys="config.opt").json()["values"]
+    assert counted["config.opt"] == [{"value": "adam", "runs": 1}, {"value": "sgd", "runs": 1}]
 
 
 def test_deleted_and_moved_runs_leave_their_groups(api: Client) -> None:
@@ -435,6 +437,7 @@ def test_outsiders_read_groups_of_public_projects_and_members_change_them(
         ("GET", f"{G}/{pk}", None),
         ("POST", f"{G}/{pk}/runs/query", {}),
         ("GET", f"{G}/{pk}/workspace", None),
+        ("GET", f"{G}/{pk}/runs/values?keys=state", None),
         ("GET", f"{G}/{pk}/columns", None),
         ("GET", f"{G}/{pk}/new", None),
         ("GET", f"{G}/{pk}/primary", None),
