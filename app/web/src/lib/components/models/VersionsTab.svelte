@@ -8,7 +8,6 @@
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import type { ResolvedPathname } from '$app/types';
-	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
@@ -109,8 +108,8 @@
 							class="underline-offset-3 hover:text-link hover:underline"
 							href={versionHref(String(v.number))}>{v.number}</a
 						>
-						<!-- Outlined: the muted row of the version shown would hide a tinted one. -->
-						{#if v.primary}<Badge variant="outline" class="ml-1.5">Primary</Badge>{/if}
+						{#if v.primary}<span class="ml-1.5 text-[12px] text-muted-foreground">Primary</span
+							>{/if}
 					</td>
 					<td class="px-3 py-3">
 						{#if v.tags.length}
