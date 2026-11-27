@@ -18,7 +18,8 @@ const reduced = () =>
 
 /** Points the address at a section without a history entry (a scroll isn't a page). */
 function mark(slug: string) {
-	if (page.url.hash === `#${slug}`) return;
+	// The live address: page.url keeps the hash it loaded with through replaceState.
+	if (location.hash === `#${slug}`) return;
 	try {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the page's own address
 		replaceState(`${page.url.pathname}${page.url.search}#${slug}`, page.state);
@@ -58,10 +59,13 @@ export function scrollspy(scroller: HTMLElement) {
 		let current = sections[0];
 		for (const s of sections) if (s.getBoundingClientRect().top <= line) current = s;
 		if (end && scroller.scrollTop > 0) current = sections[sections.length - 1];
+		// At the very top the first section is current, however short it is.
+		if (scroller.scrollTop === 0) current = sections[0];
 		if (toc.current !== current.id) {
 			toc.current = current.id;
-			// Only once the page has been scrolled: arriving at the top leaves the address alone.
-			if (scroller.scrollTop > 0) mark(current.id);
+			// Only once the page has been scrolled, or when the address names a section already:
+			// arriving at the top leaves a bare address alone, coming back to it moves the mark.
+			if (scroller.scrollTop > 0 || location.hash) mark(current.id);
 		}
 	};
 	const onscroll = () => {
