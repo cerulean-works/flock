@@ -685,7 +685,8 @@
 			class="header flex items-stretch border-b text-xs font-medium text-muted-foreground"
 			style:height="{HEAD_H}px"
 		>
-			<div class={[NAME_CELL, 'bg-background']}>
+			<!-- Above the headers that scroll under it, and their controls. -->
+			<div class={[NAME_CELL, 'z-4 bg-background']}>
 				{#if selectable}
 					<Checkbox
 						checked={allSelected}

@@ -63,14 +63,18 @@
 				{...props}
 				type="button"
 				class={[
-					'relative z-2 grid size-5 flex-none place-items-center rounded outline-none hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none data-[state=open]:bg-muted data-[state=open]:opacity-100',
+					'relative grid size-5 flex-none place-items-center rounded outline-none hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none data-[state=open]:bg-muted data-[state=open]:opacity-100',
 					dir
 						? 'text-foreground'
 						: 'text-faint opacity-0 group-hover/h:opacity-100 pointer-coarse:opacity-100'
 				]}
 				aria-label={dir ? `${what}, ${dir === 'asc' ? 'ascending' : 'descending'}` : what}
 				{@attach hint(what)}
-				onpointerdown={(e) => e.stopPropagation()}
+				onpointerdown={(e) => {
+					// Not a press on the header (which drags or sorts), but still the menu's own.
+					e.stopPropagation();
+					(props.onpointerdown as ((e: PointerEvent) => void) | undefined)?.(e);
+				}}
 			>
 				{#if dir === 'asc'}
 					<ArrowUpIcon class="size-3" />
