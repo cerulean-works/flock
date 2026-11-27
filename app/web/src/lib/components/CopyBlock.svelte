@@ -38,7 +38,8 @@
 			>{#if html !== null}{@html html}{:else}{code}{/if}</code
 		></pre>
 	<!-- eslint-enable svelte/no-at-html-tags -->
-	<CopyButton text={code} {label} class="absolute top-2 right-2" />
+	<!-- On the block's fill, so a long line scrolls under it rather than through it. -->
+	<CopyButton text={code} {label} class="absolute top-2 right-2 bg-muted" />
 </div>
 
 <!-- Token colours are the --hl-* tokens in layout.css, which Markdown's code uses too. -->
