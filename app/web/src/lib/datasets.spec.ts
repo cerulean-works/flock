@@ -13,6 +13,7 @@ import {
 	parentOf,
 	pathError,
 	readSnippet,
+	shortFloat,
 	tagError
 } from './datasets.ts';
 
@@ -113,5 +114,21 @@ describe('readSnippet', () => {
 		expect(https).toContain('"aws_region": "us-east-1",');
 		expect(https).not.toContain('allow_http');
 		expect(readSnippet('x', 'http://localhost:9000', 'auto')).toContain('"allow_http": "true",');
+	});
+});
+
+describe('shortFloat', () => {
+	it('reads a float32 at its shortest decimal', () => {
+		expect(shortFloat(2.6500000953674316)).toBe(2.65);
+		expect(shortFloat(Math.fround(0.1))).toBe(0.1);
+		expect(shortFloat(Math.fround(-1e-7))).toBe(-1e-7);
+	});
+
+	it('leaves integers, float64s and non-finite values as they are', () => {
+		expect(shortFloat(3)).toBe(3);
+		expect(shortFloat(0.1)).toBe(0.1);
+		expect(shortFloat(2.65)).toBe(2.65);
+		expect(shortFloat(Infinity)).toBe(Infinity);
+		expect(shortFloat(NaN)).toBeNaN();
 	});
 });

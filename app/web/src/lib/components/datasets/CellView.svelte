@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
-	import { cellCut, cellText } from '#lib/datasets.ts';
+	import { cellCut, cellText, shortFloat } from '#lib/datasets.ts';
 	import { prettyJson } from '#lib/storage.ts';
 	import type { Cell } from '#lib/types.ts';
 	import { bytes } from '#lib/utils.ts';
@@ -18,16 +18,23 @@
 	let { cell, full = false, wrap = true, onopen }: Props = $props();
 
 	const formatNumber = (v: number | string) =>
-		typeof v === 'number' && Number.isInteger(v) ? v.toLocaleString('en-US') : String(v);
+		typeof v !== 'number'
+			? v
+			: Number.isInteger(v)
+				? v.toLocaleString('en-US')
+				: String(shortFloat(v));
+	/** The stored value, for the hint, when the cell shows it shorter (D8). */
+	const fullNumber = (v: number | string) =>
+		typeof v === 'number' && shortFloat(v) !== v ? String(v) : undefined;
 	const formatHead = (v: number | string | null) =>
-		typeof v === 'number' && !full ? Number(v.toPrecision(4)) : v;
+		typeof v !== 'number' ? v : full ? shortFloat(v) : Number(v.toPrecision(4));
 </script>
 
 <!-- One cell of the row viewer, as the API rendered it (D90). -->
 {#if cell.k === 'null'}
 	<span class="text-faint">null</span>
 {:else if cell.k === 'num'}
-	<span class="tabular-nums">{formatNumber(cell.v)}</span>
+	<span class="tabular-nums" {@attach hint(fullNumber(cell.v))}>{formatNumber(cell.v)}</span>
 	{#if cell.label !== undefined}<span class="text-muted-foreground">{cell.label}</span>{/if}
 {:else if cell.k === 'bool'}
 	<span>{cell.v}</span>
