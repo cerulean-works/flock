@@ -28,6 +28,7 @@
 	} from '#lib/evals.ts';
 	import type { ItemDiff, ItemKeep, ItemsView, RunDetail } from '#lib/types.ts';
 	import { runHref } from '#lib/workspace/url.ts';
+	import { refusalSentence } from '#lib/eval-refusal.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -205,13 +206,13 @@
 		e.preventDefault();
 	}
 
-	// Flock names a run without a results file by its tracker source, `run:entity/project/id`:
-	// the page says it with the run's name.
+	// Flock's reason, in one plain sentence naming the runs; the reason itself stays in a hint.
 	const refusal = $derived(
-		refusalText
-			?.replaceAll(`run:${pathOf(data.a)}`, `${nameOf(data.a)}`)
-			.replaceAll(`run:${data.b ? pathOf(data.b) : ''}`, `${data.b ? nameOf(data.b) : ''}`)
-			.replace(/ has no results\.json$/, ' has no eval results (no results.json)')
+		refusalText &&
+			refusalSentence(refusalText, {
+				[pathOf(data.a)]: nameOf(data.a),
+				...(data.b ? { [pathOf(data.b)]: nameOf(data.b) } : {})
+			})
 	);
 </script>
 
@@ -334,8 +335,8 @@
 			{#if failure}
 				<p class="bg-card px-3 py-2.5" role="alert">The comparison failed: {failure}</p>
 			{:else if refusal}
-				<p class="bg-card px-3 py-2.5" role="alert">
-					These runs can’t be compared doc by doc: {refusal}
+				<p class="bg-card px-3 py-2.5" role="alert" {@attach hint(refusalText ?? undefined)}>
+					{refusal}
 				</p>
 			{:else if !data.b}
 				<!-- Only A so far: B's list may be closed without a pick. -->

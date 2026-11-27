@@ -6,7 +6,7 @@
 
 	/**
 	 * One choice of an opened eval item, a row in the items table's own columns (027): the choice
-	 * as scored, the gold mark, and each run's share bar and numbers for it, then its tokens as
+	 * as scored, the gold mark, and each run's probability bar and numbers for it, then its tokens as
 	 * that run cut them, tinted by `heat` (030).
 	 */
 	interface Props {
@@ -67,7 +67,7 @@
 			     (Winogrande) reads after it. -->
 		<span class="whitespace-pre-wrap"
 			>{#if item.contexts}<span class="text-muted-foreground">{item.contexts[choice]}</span
-				>{/if}{item.choices[choice]}</span
+				>{/if}{item.contexts ? item.choices[choice] : item.choices[choice].trimStart()}</span
 		>
 	</th>
 	<td class="px-3 py-1">
@@ -84,25 +84,19 @@
 		{@const own = tokens?.runs[side]?.choices?.[choice]}
 		<!-- The run's numbers for this choice, short enough for its column. -->
 		{@const said = [
-			answer.share ? `share ${percent(answer.share[choice])}` : null,
 			`prob ${percent(answer.prob[choice])}`,
 			`logprob ${answer.logprob[choice].toFixed(2)}`
-		]
-			.filter(Boolean)
-			.join(' · ')}
+		].join(' · ')}
 		<!-- The run's pick: its bar solid and its numbers dark, the others lighter.
 			     Right or wrong is the row's own icon, above. -->
 		<td class="px-3 py-1" aria-label="{sides[side]}{picked ? ' (its pick)' : ''}: {said}">
-			<!-- The share as a meter (reading blue, design.md): near even under a
-				     length-normalized metric, as it is. `acc_greedy` has none. -->
-			{#if answer.share}
-				<span class="block h-1.5 rounded-full bg-muted" aria-hidden="true">
-					<span
-						class={['block h-full rounded-full', picked ? 'bg-primary' : 'bg-primary/35']}
-						style:width={percent(answer.share[choice])}
-					></span>
-				</span>
-			{/if}
+			<!-- The probability as a meter (reading blue, design.md). -->
+			<span class="block h-1.5 rounded-full bg-muted" aria-hidden="true">
+				<span
+					class={['block h-full rounded-full', picked ? 'bg-primary' : 'bg-primary/35']}
+					style:width={percent(answer.prob[choice])}
+				></span>
+			</span>
 			<span
 				class={['mt-1 block text-[11px]', picked ? 'text-foreground' : 'text-muted-foreground']}
 				aria-hidden="true">{said}</span

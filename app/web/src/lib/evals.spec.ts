@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
 	compareHref,
+	docIdParts,
+	shownQuestion,
+	tokenNote,
 	evalRows,
 	evalScores,
 	isEvalResults,
@@ -173,5 +176,24 @@ describe('items links', () => {
 		for (const page of ['0', '1', '2.5', 'x', '-3'])
 			expect(itemsViewOf(new URLSearchParams({ page })).page, page).toBeUndefined();
 		expect(itemsViewOf(new URLSearchParams({ sort: 'margin' })).sort).toBeUndefined();
+	});
+});
+
+describe('items text', () => {
+	it('drops the prompt’s closing Answer: cue', () => {
+		expect(shownQuestion('Question: Why?\nAnswer:')).toBe('Question: Why?');
+		expect(shownQuestion('Answer: is mid-text here')).toBe('Answer: is mid-text here');
+	});
+	it('cuts a doc id before its last dash', () => {
+		expect(docIdParts('hellaswag-0123')).toEqual(['hellaswag', '-0123']);
+		expect(docIdParts('Mercury_7017010')).toEqual(['Mercury_7017010', '']);
+	});
+	it('says a tokenizer fetch failed without the hub’s error', () => {
+		expect(
+			tokenNote('404 Client Error for url: https://huggingface.co/x/resolve/main/tokenizer.json')
+		).toBe('Source unavailable');
+		expect(tokenNote('A has no per-token values for mmlu')).toBe(
+			'A has no per-token values for mmlu'
+		);
 	});
 });

@@ -18,7 +18,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-	import { signedMargin, typedIn } from '#lib/evals.ts';
+	import { docIdParts, shownQuestion, signedMargin, tokenNote, typedIn } from '#lib/evals.ts';
 	import type {
 		EvalItem,
 		ItemKeep,
@@ -363,11 +363,14 @@
 		tell();
 	}
 
-	// After the rows render: the doc's toggle takes the focus, which scrolls it into view.
+	// After the rows render: the doc's toggle takes the focus, scrolled into view clear of the
+	// floating pager (its bottom scroll margin).
 	function focus(id: string) {
-		void tick().then(() =>
-			root?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id)}"]`)?.focus()
-		);
+		void tick().then(() => {
+			const toggle = root?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id)}"]`);
+			toggle?.focus({ preventScroll: true });
+			toggle?.scrollIntoView({ block: 'nearest' });
+		});
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -651,19 +654,24 @@
 						<!-- The open row's whole item, once it has come. -->
 						{@const item = shown && detail?.id === row.id ? detail : null}
 						{@const m = row.runs.map((r) => r.margin)}
+						{@const [lead, tail] = docIdParts(row.id)}
 						<!-- With a row open, the closed ones fade back so it reads on its own; hovering one brings it
 						     forward again. -->
 						<tr
 							class={[
-								'align-top transition-opacity hover:bg-muted/50 has-[:focus-visible]:bg-muted/50',
+								'group/item align-top transition-opacity hover:bg-muted/50 has-[[data-item]:focus-visible]:bg-muted',
 								!shown && 'border-b border-divider',
 								opened && !shown && 'opacity-40 focus-within:opacity-100 hover:opacity-100'
 							]}
 						>
-							<td class="px-3 py-1.5">
+							<!-- j and k move a fill and an edge bar, as the runs table's cursor does. -->
+							<td
+								class="px-3 py-1.5 group-has-[[data-item]:focus-visible]/item:shadow-[inset_2px_0_0_var(--ring)]"
+							>
 								<button
 									type="button"
-									class="flex max-w-full items-center gap-1 font-mono text-[12px]"
+									class="flex max-w-full scroll-mb-20 items-center gap-1 font-mono text-[12px] outline-none"
+									aria-label={row.id}
 									aria-expanded={shown}
 									data-item={row.id}
 									onclick={() => toggle(row.id)}
@@ -671,13 +679,16 @@
 									<ChevronRightIcon
 										class={['size-3.5 flex-none transition-transform', shown && 'rotate-90']}
 									/>
-									<span class="truncate" {@attach hint(row.id)}>{row.id}</span>
+									<!-- Cut in the middle: the tail that tells docs apart always shows. -->
+									<span class="flex min-w-0" {@attach hint(row.id)}
+										><span class="truncate">{lead}</span><span class="flex-none">{tail}</span></span
+									>
 								</button>
 							</td>
 							<td class="px-3 py-1.5">
 								<!-- Opened, the whole question as scored; closed, the part that varies. -->
 								<span class={['whitespace-pre-wrap', !item && 'line-clamp-2']}
-									>{item ? (item.question ?? '') : row.text}</span
+									>{shownQuestion(item ? (item.question ?? '') : row.text)}</span
 								>
 							</td>
 							<td class="px-3 py-1.5"><span class="line-clamp-2">{row.gold_text}</span></td>
@@ -729,7 +740,9 @@
 									delta={!!other}
 									{tokens}
 									{heat}
-									notes={tokens?.runs.map((r) => r.note && refused({ message: r.note }, 0))}
+									notes={tokens?.runs.map(
+										(r) => r.note && tokenNote(refused({ message: r.note }, 0))
+									)}
 								/>
 							{/each}
 						{:else if shown}

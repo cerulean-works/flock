@@ -196,9 +196,9 @@
 		{#if !readonly}{@render runMenu()}{/if}
 	{/snippet}
 	<!-- The run's state at the row's end, apart from its menu: two marks side by side read as
-	     one cluster. -->
+	     one cluster. Phones show it in the Details row instead, so the name keeps the width. -->
 	{#snippet actions()}
-		<StateBadge state={runState} />
+		<span class="hidden sm:contents"><StateBadge state={runState} /></span>
 	{/snippet}
 	{#snippet controls()}
 		{#if tab === 'charts'}
