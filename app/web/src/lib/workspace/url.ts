@@ -1,5 +1,6 @@
 import { resolve } from '$app/paths';
 import type { ResolvedPathname } from '$app/types';
+import { orgSettingsHref, type OrgSection } from '#lib/settings.ts';
 import type { RunQuery, SortOrder } from '#lib/types.ts';
 import { readFilters, writeFilters } from './filters.ts';
 
@@ -68,9 +69,14 @@ export function flockSort(q: RunQuery): string {
 /** An entity's projects page. */
 export const entityHref = (entity: string) => resolve('/(app)/[entity]', { entity });
 
-/** An organization's members, invitations and settings; `section` jumps to one of them. */
-export const orgHref = (org: string, section?: 'budget' | 'deleted-projects') =>
-	`${resolve('/(app)/orgs/[org]', { org })}${section ? `#${section}` : ''}` as ResolvedPathname;
+/**
+ * An organization's settings: one section's page, or without one their first (General for
+ * admins, Members for everyone else).
+ */
+export const orgHref = (org: string, section?: OrgSection, anchor?: string) =>
+	section
+		? orgSettingsHref(org, section, anchor)
+		: (resolve('/(app)/orgs/[org]', { org }) as ResolvedPathname);
 
 /** Where a signed-out visitor signs in, coming back to the page they're on afterwards. */
 export const loginHref = (url: { pathname: string; search: string }) =>

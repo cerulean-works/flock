@@ -14,6 +14,7 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import { groupKeys } from '#lib/s3.ts';
+	import { SETTINGS_HEADING } from '#lib/settings.ts';
 	import type { KeysTab, S3Config, S3Key, WandbKey } from '#lib/types.ts';
 	import { count, dateTime, duration, relativeTime } from '#lib/utils.ts';
 	import { withParam } from '#lib/workspace/url.ts';
@@ -117,8 +118,8 @@
 	</div>
 {/snippet}
 
-<section class="mt-10" id="keys">
-	<h2 class="text-2xl tracking-[-0.01em]">Keys</h2>
+<section id="keys">
+	<h2 class={SETTINGS_HEADING}>Keys</h2>
 	{#if s3}
 		{@const groups = groupKeys(s3.keys)}
 		<Tabs.Root value={tab} onValueChange={(v) => setTab(v as KeysTab)} class="mt-4 gap-4">

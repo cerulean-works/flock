@@ -101,7 +101,7 @@ describe('server setup', () => {
 		};
 		await expect(actions.workspace(submission(fields))).rejects.toMatchObject({
 			status: 303,
-			location: '/orgs/cerulean'
+			location: '/orgs/cerulean/import'
 		});
 		expect(change).toHaveBeenNthCalledWith(1, 'POST', '/api/v1/orgs', {
 			name: 'cerulean',
