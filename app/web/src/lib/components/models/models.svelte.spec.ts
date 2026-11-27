@@ -377,23 +377,22 @@ describe('ModelView', () => {
 		await expect.element(shell.getByText('flock models pull acme/olmo2-1b@12')).toBeVisible();
 	});
 
-	it('picks versions and tags, with checkpoint tags in step order and the primary first', async () => {
+	it('picks versions from one list, by number or by a tag', async () => {
 		serve({ ...storage(), [`${API}/olmo2-1b/-/versions`]: () => page(versions) });
 		view();
 		await screen.getByRole('button', { name: /^Version 12/ }).click();
 		const list = screen.getByRole('listbox');
-		await expect.element(list.getByRole('option', { name: /^primary/ })).toBeVisible();
-		const items = list
+		// One list of versions, newest first, each once with its names.
+		await expect.element(list.getByRole('option', { name: /Version 12.*Primary/ })).toBeVisible();
+		const numbers = list
 			.getByRole('option')
 			.all()
-			.map((i) => i.element().textContent!.replace(/\s+/g, ' ').trim());
-		expect(items.slice(0, 4)).toEqual([
-			'primary version 12',
-			'release version 13',
-			'checkpoint-900 version 13',
-			'checkpoint-12000 version 14'
-		]);
-		await list.getByRole('option', { name: /^release/ }).click();
+			.map((i) => Number(/Version (\d+)/.exec(i.element().textContent!)![1]));
+		expect(numbers).toEqual([...numbers].sort((x, y) => y - x));
+		expect(new Set(numbers).size).toBe(numbers.length);
+		// Found by a tag, it goes by the tag.
+		await screen.getByRole('combobox', { name: 'Search versions' }).fill('release');
+		await list.getByRole('option', { name: /release/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/models/acme/olmo2-1b?version=release', {
 			reset: false
 		});

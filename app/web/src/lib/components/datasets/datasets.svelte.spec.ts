@@ -511,7 +511,7 @@ describe('DatasetView', () => {
 		const search = screen.getByRole('combobox', { name: 'Search versions' });
 		await expect.element(search).toHaveFocus();
 		await search.fill('best');
-		await screen.getByRole('option', { name: /^best/ }).click();
+		await screen.getByRole('option', { name: /best/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=best', {
 			reset: false
 		});

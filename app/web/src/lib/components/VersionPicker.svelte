@@ -1,5 +1,4 @@
 <script lang="ts">
-	import TagIcon from '@lucide/svelte/icons/tag';
 	import { untrack } from 'svelte';
 	import type { ResolvedPathname } from '$app/types';
 	import { goto } from '$app/navigation';
@@ -37,13 +36,9 @@
 		versionHref
 	}: Props = $props();
 
-	/** A tag going to the version it's on, or a version by its number. */
+	/** A version, by its number, with the names on it (`primary`, `latest`, its tags). */
 	interface Choice {
-		/** The `?version=` it sets. */
-		value: string | null;
-		tag: string | null;
 		version: number;
-		/** The names on a version. */
 		names: string[];
 	}
 
@@ -55,23 +50,31 @@
 
 	const tagged = $derived(requested !== null && !/^\d+$/.test(requested) ? requested : null);
 
-	// The tags first, then the versions, narrowed by the search.
+	// One list of versions, newest first, each once with its names (Gate 2). Tags and the primary
+	// on versions older than the page read are added, so every name can still be found.
 	const choices = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		const all: Choice[] = [];
-		if (primary !== null) all.push({ value: null, tag: 'primary', version: primary, names: [] });
-		for (const t of tags) all.push({ value: t.name, tag: t.name, version: t.version, names: [] });
-		for (const v of versions ?? []) {
-			all.push({ value: String(v.number), tag: null, version: v.number, names: v.names });
+		const byNumber: Record<number, string[]> = {};
+		for (const v of versions ?? []) byNumber[v.number] = [...v.names];
+		const name = (n: number, label: string) => {
+			const names = (byNumber[n] ??= []);
+			if (!names.includes(label)) names.push(label);
+		};
+		if (versions !== null) {
+			if (primary !== null) name(primary, 'primary');
+			for (const t of tags) name(t.version, t.name);
 		}
-		const shown: Choice[] = [];
-		for (const c of all) {
-			const text = c.tag ?? `version ${c.version} ${c.names.join(' ')}`;
-			if (text.toLowerCase().includes(q)) shown.push(c);
-		}
-		return shown;
+		const all: Choice[] = Object.entries(byNumber)
+			.map(([n, names]) => ({ version: Number(n), names }))
+			.sort((x, y) => y.version - x.version);
+		return all.filter((c) =>
+			`version ${c.version} v${c.version} ${c.names.join(' ')}`.toLowerCase().includes(q)
+		);
 	});
-	const current = (c: Choice) => c.tag === null && c.version === version;
+	const current = (c: Choice) => c.version === version;
+	/** A version's names as words: Primary capitalised, the others as they are. */
+	const words = (names: string[]) =>
+		names.map((n) => (n === 'primary' ? 'Primary' : n)).join(' · ');
 
 	// The newest versions, read when the list first opens.
 	$effect(() => {
@@ -98,7 +101,11 @@
 
 	function onpick(choice: Choice) {
 		open = false;
-		void goto(versionHref(choice.value), { reset: false });
+		// Found by a tag (or the primary), it goes by that name, so the link follows it.
+		const q = query.trim().toLowerCase();
+		const by = q ? choice.names.find((n) => n !== 'latest' && n.toLowerCase().includes(q)) : null;
+		const value = by === 'primary' ? null : (by ?? String(choice.version));
+		void goto(versionHref(value), { reset: false });
 	}
 </script>
 
@@ -117,7 +124,7 @@
 	{#snippet list()}
 		<PickerList
 			options={choices}
-			key={(c) => `${c.tag ?? ''}@${c.version}`}
+			key={(c) => String(c.version)}
 			{current}
 			noun="versions"
 			label="Search versions"
@@ -129,18 +136,10 @@
 			{onpick}
 		>
 			{#snippet row(c: Choice)}
-				{#if c.tag !== null}
-					<TagIcon class="size-3.5 flex-none text-muted-foreground" />
-					<span class="min-w-0 flex-1 truncate">{c.tag}</span>
-					<span class="flex-none text-xs text-muted-foreground tabular-nums"
-						>version {c.version}</span
-					>
-				{:else}
-					<span class="flex-none tabular-nums">Version {c.version}</span>
-					<span class="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground"
-						>{c.names.join(', ')}</span
-					>
-				{/if}
+				<span class="flex-none tabular-nums">Version {c.version}</span>
+				<span class="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground"
+					>{words(c.names)}</span
+				>
 			{/snippet}
 		</PickerList>
 	{/snippet}
