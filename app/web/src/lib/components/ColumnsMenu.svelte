@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import Columns3Icon from '@lucide/svelte/icons/columns-3';
 	import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import SearchIcon from '@lucide/svelte/icons/search';
@@ -11,7 +10,6 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import * as Popover from '#lib/components/ui/popover/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { toggle } from '#lib/utils.ts';
 	import {
@@ -34,11 +32,11 @@
 		 * their settings. Every column when not set.
 		 */
 		keys?: readonly string[];
-		/** An icon button, hidden columns marked with a dot (a group's crowded toolbar). */
-		compact?: boolean;
+		/** Closes the view's settings (ViewSettings), which hold this list. */
+		onclose?: () => void;
 	}
 
-	let { onjump, keys, compact = false }: Props = $props();
+	let { onjump, keys, onclose }: Props = $props();
 
 	const ws = getWorkspace();
 	let search = $state<HTMLInputElement | null>(null);
@@ -49,7 +47,6 @@
 		return col ? columnLabel(col) : name;
 	}
 
-	let open = $state(false);
 	let query = $state('');
 	/** Folders the viewer opened; the groups (Run, Config, Summary) start open. */
 	const expanded = new SvelteSet<string>(['info', 'config', 'summary']);
@@ -83,7 +80,7 @@
 	/** Show the column (if hidden), close, and scroll the table to it. */
 	async function jump(key: string) {
 		if (hidden.has(key)) ws.setColumnsHidden([key], false);
-		open = false;
+		onclose?.();
 		await tick();
 		onjump(key);
 	}
@@ -385,102 +382,57 @@
 	{/each}
 {/snippet}
 
-<Popover.Root
-	bind:open
-	onOpenChangeComplete={(o) => {
-		if (o) return;
-		query = '';
-		status = '';
-	}}
+{#snippet body()}
+	<div class="relative m-2">
+		<SearchIcon
+			class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+		/>
+		<Input
+			bind:ref={search}
+			bind:value={query}
+			class="h-8 pl-8"
+			placeholder={searching ? 'Clear the search to reorder' : 'Find a column'}
+			aria-label="Find a column"
+			onkeydown={onsearchkey}
+		/>
+	</div>
+	<div class="min-h-0 flex-1 overflow-y-auto border-t p-2 text-[13px]" bind:this={scroller}>
+		{#if nodes.length}
+			<ul class="relative" aria-label="Columns">{@render level(nodes, '', 0)}</ul>
+		{:else}
+			<p class="px-2 py-3 text-muted-foreground">No column’s key contains “{query.trim()}”.</p>
+		{/if}
+	</div>
+	<p class="sr-only" aria-live="polite">{status}</p>
+	<div class="flex flex-wrap items-center gap-1 border-t py-1.5 pr-1.5 pl-3">
+		<span class="mr-auto text-xs text-muted-foreground tabular-nums">
+			{total - hiddenCount} of {total} shown
+		</span>
+		<Button
+			variant="quiet"
+			size="bar"
+			disabled={!moved}
+			onclick={() => {
+				ws.resetColumnOrder(keys);
+				status = 'Columns back in their default order';
+			}}
+		>
+			Reset order
+		</Button>
+		<Button
+			variant="quiet"
+			size="bar"
+			disabled={!hiddenCount}
+			onclick={() => (keys ? ws.setColumnsHidden(keys, false) : ws.showAllColumns())}
+		>
+			Show all
+		</Button>
+	</div>
+{/snippet}
+
+<div
+	class="flex max-h-[min(70vh,36rem)] min-h-0 flex-col"
+	{@attach (el) => el.querySelector('input')?.focus()}
 >
-	<Popover.Trigger>
-		{#snippet child({ props })}
-			{#if compact}
-				<Button
-					{...props}
-					variant={hiddenCount ? 'quiet-on' : 'quiet'}
-					size="icon-bar"
-					aria-label={hiddenCount ? `Columns, ${hiddenCount} hidden` : 'Columns'}
-					{@attach hint(
-						hiddenCount
-							? `Columns: ${hiddenCount} of ${total} hidden`
-							: 'Columns: show, hide, reorder or jump to them'
-					)}
-				>
-					<Columns3Icon />
-				</Button>
-			{:else}
-				<Button
-					{...props}
-					variant={hiddenCount ? 'quiet-on' : 'quiet'}
-					size="bar"
-					{@attach hint(
-						hiddenCount
-							? `${hiddenCount} of ${total} columns hidden`
-							: 'Show, hide, reorder or jump to columns'
-					)}
-				>
-					<Columns3Icon /> Columns
-					{#if hiddenCount}
-						<span class="font-normal text-muted-foreground tabular-nums">{hiddenCount} hidden</span>
-					{/if}
-				</Button>
-			{/if}
-		{/snippet}
-	</Popover.Trigger>
-	<!-- Anchored under its control, like Linear's Display: no page behind dimmed or blurred. -->
-	<Popover.Content
-		align="end"
-		class="flex max-h-[min(70vh,36rem)] w-80 flex-col gap-0 p-0"
-		onOpenAutoFocus={(e) => {
-			e.preventDefault();
-			search?.focus();
-		}}
-	>
-		<div class="relative m-2">
-			<SearchIcon
-				class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-			/>
-			<Input
-				bind:ref={search}
-				bind:value={query}
-				class="h-8 pl-8"
-				placeholder={searching ? 'Clear the search to reorder' : 'Find a column'}
-				aria-label="Find a column"
-				onkeydown={onsearchkey}
-			/>
-		</div>
-		<div class="min-h-0 flex-1 overflow-y-auto border-t p-2 text-[13px]" bind:this={scroller}>
-			{#if nodes.length}
-				<ul class="relative" aria-label="Columns">{@render level(nodes, '', 0)}</ul>
-			{:else}
-				<p class="px-2 py-3 text-muted-foreground">No column’s key contains “{query.trim()}”.</p>
-			{/if}
-		</div>
-		<p class="sr-only" aria-live="polite">{status}</p>
-		<div class="flex flex-wrap items-center gap-1 border-t py-1.5 pr-1.5 pl-3">
-			<span class="mr-auto text-xs text-muted-foreground tabular-nums">
-				{total - hiddenCount} of {total} shown
-			</span>
-			<Button
-				variant="quiet"
-				size="bar"
-				disabled={!moved}
-				onclick={() => {
-					ws.resetColumnOrder(keys);
-					status = 'Columns back in their default order';
-				}}
-			>
-				Reset order
-			</Button>
-			<Button
-				variant="quiet"
-				size="bar"
-				disabled={!hiddenCount}
-				onclick={() => (keys ? ws.setColumnsHidden(keys, false) : ws.showAllColumns())}
-			>
-				Show all
-			</Button>
-		</div>
-	</Popover.Content>
-</Popover.Root>
+	{@render body()}
+</div>

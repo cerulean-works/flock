@@ -13,9 +13,9 @@
 	/** Kinds whose columns fit their content (up to their default width); others keep it. */
 	const FITTED = new Set(['num', 'duration', 'str', 'bool', 'json']);
 	const MIN_W = 64;
-	/** A cell's padding (px-3 each side), and room for the header's sort arrow. */
+	/** A cell's padding (px-3 each side), and room for the header's sort arrow and funnel. */
 	const PAD = 24;
-	const ARROW = 14;
+	const ARROW = 42;
 	/** Rows measured per page: enough to see its widest values, cheap on long pages. */
 	const SAMPLE = 200;
 
@@ -32,6 +32,9 @@
 </script>
 
 <script lang="ts">
+	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
+	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
+	import ArrowUpDownIcon from '@lucide/svelte/icons/arrow-up-down';
 	import GripHorizontalIcon from '@lucide/svelte/icons/grip-horizontal';
 	import { untrack } from 'svelte';
 	import { hint } from '#lib/hint.svelte.ts';
@@ -55,7 +58,9 @@
 		listDrops,
 		nearestGap
 	} from '#lib/workspace/columns.ts';
-	import { writeFilters } from '#lib/workspace/filters.ts';
+	import { columnFilterKind, writeFilters, type RunFilter } from '#lib/workspace/filters.ts';
+	import { columnFilterProps } from '#lib/workspace/column-filter.ts';
+	import { runValues } from '#lib/data/run-values.svelte.ts';
 	import { moveKey } from '#lib/workspace/layout.ts';
 	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
 	import { layerOpen, typing } from '#lib/keys.svelte.ts';
@@ -64,6 +69,7 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import Avatar from './Avatar.svelte';
+	import ColumnFilter from './ColumnFilter.svelte';
 	import ColumnResizer from './ColumnResizer.svelte';
 	import RunEye from './RunEye.svelte';
 	import RunMenu from './RunMenu.svelte';
@@ -353,6 +359,28 @@
 	const leaveSort = () => clearTimeout(intent);
 
 	// ------------------------------------------------------------------------------------------
+	// Filtering from the headers: each column's funnel adds or replaces that column's condition,
+	// the others stay. Listed columns show their values with how many runs have each.
+
+	const listed = $derived(
+		ws.meta.columns.filter((c) => columnFilterKind(c.key, c.kind) === 'values').map((c) => c.key)
+	);
+	const counted = $derived(
+		wide ? runValues(ws.meta.entity, ws.meta.project, listed, ws.group) : {}
+	);
+	const me = $derived(appPage.data.shell?.me?.id as number | undefined);
+
+	function filterWith(filters: RunFilter[]) {
+		const params = new URLSearchParams(appPage.url.search);
+		applyRunQuery(params, { ...query, filters, page: 1 });
+		ws.selected.clear();
+		void goto(ws.href(params), { reset: false });
+	}
+
+	const filterOf = (c: number) =>
+		columnFilterProps(columns[c], labels[c], query.filters, counted, ws.people, me, filterWith);
+
+	// ------------------------------------------------------------------------------------------
 	// Moving columns: a header dragged sideways lands in the gap nearest the pointer. Suggested
 	// columns move among themselves; the rest within their folder, as in the Columns menu (and
 	// saved the same way). The header follows the pointer, a line marks where it would land, and
@@ -561,6 +589,24 @@
 
 <svelte:window {onkeydown} />
 
+<!-- A header's sort: ↑ or ↓ while the table sorts by it, a faint ↕ on hover otherwise. -->
+{#snippet arrow(key: string)}
+	<span class="grid size-4 flex-none place-items-center">
+		{#if query.sort === key}
+			{@const Icon = query.order === 'asc' ? ArrowUpIcon : ArrowDownIcon}
+			<Icon
+				class="arrow size-3 flex-none text-foreground"
+				aria-label={query.order === 'asc' ? 'ascending' : 'descending'}
+			/>
+		{:else}
+			<ArrowUpDownIcon
+				class="size-3 flex-none text-faint opacity-0 group-hover/h:opacity-100"
+				aria-hidden="true"
+			/>
+		{/if}
+	</span>
+{/snippet}
+
 <!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across;
      above them (stacked), it spans the page and is as tall as `--table-h`. -->
 <div
@@ -606,15 +652,14 @@
 					onclick={() => ws.toggleAll()}
 				/>
 				<a
-					class="flex h-full items-center gap-1 text-foreground"
+					class="group/h flex h-full items-center gap-1 text-foreground"
 					href={sortHref('name')}
 					data-sveltekit-preload-data="tap"
 					onpointerenter={() => hoverSort('name')}
 					onpointerleave={leaveSort}
 				>
 					Name
-					{#if query.sort === 'name'}<span class="arrow">{query.order === 'asc' ? '↑' : '↓'}</span
-						>{/if}
+					{@render arrow('name')}
 				</a>
 				<!-- How many runs the charts show; the pager alone counts the table's rows. -->
 				{#if !wide}
@@ -648,7 +693,7 @@
 						</span>
 					{/if}
 					<a
-						class={['flex size-full min-w-0 items-center gap-1', isNumeric(col) && 'justify-end']}
+						class={['flex h-full min-w-0 flex-1 items-center gap-1.5']}
 						href={sortHref(col.key)}
 						{@attach hint(
 							`${groupOf[c] ? `${groupOf[c].label} · ` : ''}${col.key}${grabbable ? ' (click to sort, drag to move)' : ''}`
@@ -658,11 +703,15 @@
 						onpointerenter={() => hoverSort(col.key)}
 						onpointerleave={leaveSort}
 					>
-						<span class="label truncate">{labels[c]}</span>
-						{#if query.sort === col.key}<span class="arrow text-foreground"
-								>{query.order === 'asc' ? '↑' : '↓'}</span
-							>{/if}
+						<span class={['label min-w-0 flex-1 truncate', isNumeric(col) && 'text-right']}
+							>{labels[c]}</span
+						>
+						<!-- Sort and filter side by side at the cell's right edge. -->
+						{@render arrow(col.key)}
 					</a>
+					{#if wide}
+						<ColumnFilter {...filterOf(c)} />
+					{/if}
 					<ColumnResizer
 						width={widths[c]}
 						onresize={(w) => (widthOverrides = { ...widthOverrides, [col.key]: w })}

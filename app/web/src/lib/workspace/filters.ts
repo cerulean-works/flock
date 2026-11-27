@@ -243,21 +243,113 @@ export function describeFilters(
 		.join(`${sep}${top.match === 'any' ? 'or' : 'and'} `);
 }
 
-/** A top-level `owner is …`, as "My runs" adds. */
-const isOwnerIs = (f: RunFilter): f is RunCondition =>
-	!isGroup(f) && f.key === 'owner' && f.op === 'eq';
+/**
+ * How a column filters from its header (the slurm dashboard's ColumnFilter): a list of its
+ * values with counts (states, people, lists, true/false and the run's group, job type and GPU
+ * type), a range (numbers and durations, or dates), or text it contains.
+ */
+export type ColumnFilterKind = 'values' | 'range' | 'date' | 'text';
 
-/** Whether the filters keep only the runs `user` logged ("My runs"). */
-export const ownedBy = (filters: readonly RunFilter[], user: number) =>
-	filters.some((f) => isOwnerIs(f) && f.value === user);
+/** Text columns whose values are few and named: listed rather than searched. */
+const LISTED: ReadonlySet<string> = new Set(['group', 'job_type', 'gpu_type']);
+
+export function columnFilterKind(key: string, kind: ColumnKind | undefined): ColumnFilterKind {
+	if (kind === 'state' || kind === 'user' || kind === 'bool' || kind === 'json' || LISTED.has(key))
+		return 'values';
+	if (kind === 'num' || kind === 'duration') return 'range';
+	if (kind === 'time') return 'date';
+	return 'text';
+}
+
+/** What a column's filter holds now: the values ticked, a range's ends, or text it contains. */
+export interface ColumnFilterState {
+	values: string[];
+	range: { min?: string; max?: string };
+	text: string;
+	active: boolean;
+}
+
+const isOn = (f: RunFilter, key: string): f is RunCondition => !isGroup(f) && f.key === key;
+
+/** An `any` group of `key is …` conditions: one column's values, as its header sets them. */
+const isValuesOf = (f: RunFilter, key: string): f is RunFilterGroup =>
+	isGroup(f) &&
+	f.match === 'any' &&
+	f.filters.length > 0 &&
+	f.filters.every((g) => isOn(g, key) && g.op === 'eq');
+
+/** Whether a top-level filter is one a column's header set (and so replaces). */
+const ownedByColumn = (f: RunFilter, key: string) =>
+	isValuesOf(f, key) ||
+	(isOn(f, key) && ['eq', 'gt', 'gte', 'lt', 'lte', 'contains'].includes(f.op));
+
+/** A date-and-time field's text for a time in seconds, in local time. */
+export function localDateTime(seconds: number): string {
+	const d = new Date(seconds * 1000);
+	const pad = (n: number) => String(n).padStart(2, '0');
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** The column `key`'s filter among the top-level `filters`, as its header shows it. */
+export function readColumnFilter(
+	filters: readonly RunFilter[],
+	key: string,
+	kind: ColumnKind | undefined
+): ColumnFilterState {
+	const out: ColumnFilterState = { values: [], range: {}, text: '', active: false };
+	const show = (v: FilterValue | null) =>
+		kind === 'time' && typeof v === 'number' ? localDateTime(v) : String(v ?? '');
+	for (const f of filters) {
+		if (!ownedByColumn(f, key)) continue;
+		out.active = true;
+		if (isGroup(f)) out.values.push(...f.filters.map((g) => String((g as RunCondition).value)));
+		else if (f.op === 'eq') out.values.push(String(f.value));
+		else if (f.op === 'contains') out.text = String(f.value);
+		else if (f.op === 'gt' || f.op === 'gte') out.range.min = show(f.value);
+		else out.range.max = show(f.value);
+	}
+	return out;
+}
+
+/** A listed value as Flock compares it: people by id, true and false as such. */
+function typed(text: string, kind: ColumnKind | undefined): FilterValue {
+	if (kind === 'user' && /^\d+$/.test(text)) return Number(text);
+	if (kind === 'bool' && (text === 'true' || text === 'false')) return text === 'true';
+	return text;
+}
 
 /**
- * The filters keeping only the runs `user` logged, in place of any other top-level owner; or,
- * when not `on`, no longer. The other filters stay as they were.
+ * The filters with column `key`'s header filter set to `to` (or cleared, without it): what the
+ * header set before is replaced, and every other filter stays as it was. Several values hold
+ * as any of them; a range's ends hold together.
  */
-export function setOwner(filters: readonly RunFilter[], user: number, on: boolean): RunFilter[] {
-	const rest = filters.filter((f) => !(isOwnerIs(f) && (on || f.value === user)));
-	return on ? [{ key: 'owner', op: 'eq', value: user }, ...rest] : rest;
+export function setColumnFilter(
+	filters: readonly RunFilter[],
+	key: string,
+	kind: ColumnKind | undefined,
+	to?: { values?: readonly string[]; range?: { min?: string; max?: string }; text?: string }
+): RunFilter[] {
+	const rest = filters.filter((f) => !ownedByColumn(f, key));
+	const added: RunFilter[] = [];
+	const values = to?.values ?? [];
+	if (values.length === 1) added.push({ key, op: 'eq', value: typed(values[0], kind) });
+	else if (values.length > 1)
+		added.push({
+			match: 'any',
+			filters: values.map((v) => ({ key, op: 'eq' as const, value: typed(v, kind) }))
+		});
+	for (const [end, op] of [
+		['min', 'gte'],
+		['max', 'lte']
+	] as const) {
+		const text = to?.range?.[end]?.trim();
+		if (!text) continue;
+		const parsed = parseValue(text, kind);
+		if ('value' in parsed) added.push({ key, op, value: parsed.value });
+	}
+	const text = to?.text?.trim();
+	if (text) added.push({ key, op: 'contains', value: text });
+	return [...rest, ...added];
 }
 
 /** `text` as a Python regular expression matching it literally. */

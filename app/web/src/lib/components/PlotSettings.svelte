@@ -13,18 +13,75 @@
 	import SmoothingPicker from './SmoothingPicker.svelte';
 	import XAxisPicker from './XAxisPicker.svelte';
 
-	/** `compact`: an icon button, its name in the tooltip (a group page's dense toolbar). */
-	let { compact = false }: { compact?: boolean } = $props();
+	/** `embedded`: the settings alone, inside the view's settings (ViewSettings). */
+	let { embedded = false }: { embedded?: boolean } = $props();
 
 	const ws = getWorkspace();
 	let content = $state<HTMLElement | null>(null);
 </script>
 
 <!-- X axis, smoothing, outliers and rows of panels for every line plot of the workspace. -->
-<Popover.Root>
-	<Popover.Trigger>
-		{#snippet child({ props })}
-			{#if compact}
+{#snippet body()}
+	<div class="grid gap-2">
+		<div class="flex items-center gap-1.5">
+			<Label>X axis</Label>
+			<InfoHint label="About the x axis">
+				For panels without their own. Step plots each metric against its step metric, when its run
+				defined one. System metrics stay on time.
+			</InfoHint>
+		</div>
+		<XAxisPicker value={ws.xAxis} onchange={(v) => (ws.xAxis = v ?? '_step')} />
+	</div>
+	<SmoothingPicker
+		id="ws-smoothing"
+		label="Smoothing"
+		value={ws.smoothing}
+		onchange={(v) => (ws.smoothing = v ?? NO_SMOOTHING)}
+	/>
+	<div class="flex items-center justify-between gap-4">
+		<Label for="show-original" class={[!smooths(ws.smoothing) && 'opacity-50']}>
+			Show original lines
+		</Label>
+		<Switch id="show-original" bind:checked={ws.showOriginal} disabled={!smooths(ws.smoothing)} />
+	</div>
+	<div class="flex items-center justify-between gap-4">
+		<Label for="forecast">Forecast</Label>
+		<Switch id="forecast" bind:checked={ws.forecast} />
+	</div>
+	<div class="flex items-center justify-between gap-4">
+		<Label for="ignore-outliers">Ignore outliers when scaling</Label>
+		<Switch id="ignore-outliers" bind:checked={ws.ignoreOutliers} />
+	</div>
+	<div class="flex items-center justify-between gap-4">
+		<div class="flex items-center gap-1.5">
+			<Label>Default rows per section</Label>
+			<InfoHint label="About rows per section">
+				Drag a section’s bottom edge to show more or fewer rows of it.
+			</InfoHint>
+		</div>
+		<Select.Root
+			type="single"
+			value={String(ws.defaultRows)}
+			onValueChange={(v) => (ws.defaultRows = Number(v))}
+		>
+			<Select.Trigger size="sm" class="w-20" aria-label="Default rows per section">
+				{ws.defaultRows === ROWS_MAX ? 'All' : ws.defaultRows}
+			</Select.Trigger>
+			<Select.Content>
+				{#each [1, 2, 3, 4, 6, ROWS_MAX] as n (n)}
+					<Select.Item value={String(n)}>{n === ROWS_MAX ? 'All' : n}</Select.Item>
+				{/each}
+			</Select.Content>
+		</Select.Root>
+	</div>
+{/snippet}
+
+{#if embedded}
+	<div class="grid gap-4 p-4">{@render body()}</div>
+{:else}
+	<Popover.Root>
+		<Popover.Trigger>
+			{#snippet child({ props })}
 				<Button
 					{...props}
 					variant="quiet"
@@ -34,76 +91,19 @@
 				>
 					<SlidersHorizontalIcon />
 				</Button>
-			{:else}
-				<Button {...props} variant="quiet" size="bar" {@attach hint('Line plot settings')}>
-					<SlidersHorizontalIcon /> Settings
-				</Button>
-			{/if}
-		{/snippet}
-	</Popover.Trigger>
-	<!-- Focus starts on the popover, not in the x-axis picker, whose list would cover the rest. -->
-	<Popover.Content
-		bind:ref={content}
-		align="end"
-		collisionPadding={16}
-		class="w-80 gap-4"
-		onOpenAutoFocus={(e) => {
-			e.preventDefault();
-			content?.focus();
-		}}
-	>
-		<p class="text-xs text-muted-foreground">Line plots</p>
-		<div class="grid gap-2">
-			<div class="flex items-center gap-1.5">
-				<Label>X axis</Label>
-				<InfoHint label="About the x axis">
-					For panels without their own. Step plots each metric against its step metric, when its run
-					defined one. System metrics stay on time.
-				</InfoHint>
-			</div>
-			<XAxisPicker value={ws.xAxis} onchange={(v) => (ws.xAxis = v ?? '_step')} />
-		</div>
-		<SmoothingPicker
-			id="ws-smoothing"
-			label="Smoothing"
-			value={ws.smoothing}
-			onchange={(v) => (ws.smoothing = v ?? NO_SMOOTHING)}
-		/>
-		<div class="flex items-center justify-between gap-4">
-			<Label for="show-original" class={[!smooths(ws.smoothing) && 'opacity-50']}>
-				Show original lines
-			</Label>
-			<Switch id="show-original" bind:checked={ws.showOriginal} disabled={!smooths(ws.smoothing)} />
-		</div>
-		<div class="flex items-center justify-between gap-4">
-			<Label for="forecast">Forecast</Label>
-			<Switch id="forecast" bind:checked={ws.forecast} />
-		</div>
-		<div class="flex items-center justify-between gap-4">
-			<Label for="ignore-outliers">Ignore outliers when scaling</Label>
-			<Switch id="ignore-outliers" bind:checked={ws.ignoreOutliers} />
-		</div>
-		<div class="flex items-center justify-between gap-4">
-			<div class="flex items-center gap-1.5">
-				<Label>Default rows per section</Label>
-				<InfoHint label="About rows per section">
-					Drag a section’s bottom edge to show more or fewer rows of it.
-				</InfoHint>
-			</div>
-			<Select.Root
-				type="single"
-				value={String(ws.defaultRows)}
-				onValueChange={(v) => (ws.defaultRows = Number(v))}
-			>
-				<Select.Trigger size="sm" class="w-20" aria-label="Default rows per section">
-					{ws.defaultRows === ROWS_MAX ? 'All' : ws.defaultRows}
-				</Select.Trigger>
-				<Select.Content>
-					{#each [1, 2, 3, 4, 6, ROWS_MAX] as n (n)}
-						<Select.Item value={String(n)}>{n === ROWS_MAX ? 'All' : n}</Select.Item>
-					{/each}
-				</Select.Content>
-			</Select.Root>
-		</div>
-	</Popover.Content>
-</Popover.Root>
+			{/snippet}
+		</Popover.Trigger>
+		<Popover.Content
+			bind:ref={content}
+			align="end"
+			collisionPadding={16}
+			class="w-80 gap-4"
+			onOpenAutoFocus={(e) => {
+				e.preventDefault();
+				content?.focus();
+			}}
+		>
+			{@render body()}
+		</Popover.Content>
+	</Popover.Root>
+{/if}

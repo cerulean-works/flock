@@ -119,10 +119,12 @@
 	     filled, while the column filters the list. The list is newest first: Updated carries
 	     the arrow (it can't sort by other columns). -->
 	{@const f = FILTERED[c.id]}
-	<span class={['group/h flex w-full items-center gap-1', c.align === 'end' && 'justify-end']}>
-		<span class="truncate">{c.label}</span>
+	<span class="group/h flex w-full items-center gap-1.5">
+		<span class={['min-w-0 flex-1 truncate', c.align === 'end' && 'text-right']}>{c.label}</span>
 		{#if c.id === 'started'}
-			<ArrowDownIcon class="size-3 flex-none text-foreground" aria-label="newest first" />
+			<span class="grid size-4 flex-none place-items-center">
+				<ArrowDownIcon class="size-3 text-foreground" aria-label="newest first" />
+			</span>
 		{/if}
 		{#if f}
 			<ColumnFilter

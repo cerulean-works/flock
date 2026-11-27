@@ -330,12 +330,10 @@
 	initialView={evalGroup ? 'table' : 'visualize'}
 	evalPreset
 	evalsFirst={evalGroup}
-	compactTools
 	{primary}
 	{onprimaryorder}
 	{onproject}
 	{readonly}
-	mine={false}
 	nameW={data.shell.nameW}
 	tableW={data.shell.tableW}
 	stacked={data.shell.stacked}

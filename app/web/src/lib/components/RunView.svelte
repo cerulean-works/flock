@@ -13,7 +13,6 @@
 <script lang="ts">
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
-	import PinIcon from '@lucide/svelte/icons/pin';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import ClipboardCheckIcon from '@lucide/svelte/icons/clipboard-check';
@@ -26,7 +25,6 @@
 	import { goto, refreshAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ResolvedPathname } from '$app/types';
-	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
@@ -46,7 +44,7 @@
 	} from '#lib/workspace/project-view.svelte.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import ChartsPane from './ChartsPane.svelte';
-	import ColumnsMenu from './ColumnsMenu.svelte';
+	import ViewSettings from './ViewSettings.svelte';
 	import DeleteRunsDialog from './DeleteRunsDialog.svelte';
 	import EditRunDialog from './EditRunDialog.svelte';
 	import EmptyState from './EmptyState.svelte';
@@ -57,7 +55,6 @@
 	import PageHeader from './PageHeader.svelte';
 	import Pager from './Pager.svelte';
 	import PanelEditor from './PanelEditor.svelte';
-	import PlotSettings from './PlotSettings.svelte';
 	import ResizeHandle from './ResizeHandle.svelte';
 	import RunFilters from './RunFilters.svelte';
 	import RunSearch from './RunSearch.svelte';
@@ -84,8 +81,6 @@
 		chartTools?: Snippet;
 		/** At the toolbar's right end, before the charts' own controls. */
 		trailing?: Snippet;
-		/** Filter and Columns as icon buttons, for a toolbar with more in it (a group's). */
-		compactTools?: boolean;
 		/** The view a URL that names none opens in. */
 		initialView: ProjectView;
 		/** Whether a view picked here is the one the next project opens in (the Runs page). */
@@ -107,8 +102,6 @@
 		tableH?: number;
 		/** Outside the org: read-only, with no run actions (D116). */
 		readonly: boolean;
-		/** Whether the filters offer "My runs" (not among a group's few runs). */
-		mine?: boolean;
 		/** Whether the table offers its Evals preset (the Runs page). */
 		evalPreset?: boolean;
 		/** Whether the preset is on until the viewer turns it off (a group of eval runs). */
@@ -125,7 +118,6 @@
 		actions,
 		chartTools,
 		trailing,
-		compactTools = false,
 		initialView,
 		remember = false,
 		primary = null,
@@ -137,7 +129,6 @@
 		stacked: savedStacked = false,
 		tableH: savedTableH = TABLE_H.initial,
 		readonly,
-		mine = true,
 		evalPreset = false,
 		evalsFirst = false
 	}: Props = $props();
@@ -383,9 +374,6 @@
 
 	let table = $state<RunsTable>();
 
-	const focusLabel = $derived(ws.focus == null ? '' : ws.page.runs[ws.focus].name);
-	const focusPinned = $derived(ws.focus != null && ws.pinned === ws.focus && ws.hover == null);
-
 	/** The runs shown are a search's or a filter's, not all of the page's. */
 	let more = $state(false);
 	let filterControl = $state<{ edit: () => void; pick: () => void } | null>(null);
@@ -537,39 +525,42 @@
 				>
 					<!-- With no runs yet, only the view tabs: nothing here could act. -->
 					<RunSearch />
-					<RunFilters bind:this={filterControl} noMine={!mine} compact={compactTools} />
+					<RunFilters bind:this={filterControl} />
 
-					{#if tableShown}
-						{#if hasEvals && view === 'table'}
-							<Button
-								variant={evals ? 'quiet-on' : 'quiet'}
-								size="bar"
-								aria-pressed={evals}
-								href={hrefWith(
-									evals
-										? { preset: evalsFirst ? 'off' : null, view: 'table' }
-										: { preset: evalsFirst ? null : 'evals' }
-								)}
-								data-sveltekit-replacestate
-								{@attach hint('Eval runs by suites, ranked')}
-							>
-								<ClipboardCheckIcon /> Evals
-							</Button>
-						{/if}
-						{#if evalsShown}
-							<ColumnsMenu
-								keys={evalsView.keys}
-								onjump={(key) => evalsTable?.scrollToColumn(key)}
-							/>
-						{:else}
-							<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} compact={compactTools} />
-						{/if}
+					{#if tableShown && hasEvals && view === 'table'}
+						<Button
+							variant={evals ? 'quiet-on' : 'quiet'}
+							size="icon-bar"
+							aria-pressed={evals}
+							aria-label="Evals"
+							href={hrefWith(
+								evals
+									? { preset: evalsFirst ? 'off' : null, view: 'table' }
+									: { preset: evalsFirst ? null : 'evals' }
+							)}
+							data-sveltekit-replacestate
+							{@attach hint('Evals: runs by suite, ranked')}
+						>
+							<ClipboardCheckIcon />
+						</Button>
 					{/if}
+					<ViewSettings
+						columns={!tableShown
+							? null
+							: evalsShown
+								? { keys: evalsView.keys, onjump: (key) => evalsTable?.scrollToColumn(key) }
+								: { onjump: (key) => table?.scrollToColumn(key) }}
+						charts={chartsShown}
+					/>
 					{#if chartsShown}
-						<PlotSettings compact={compactTools} />
-						<!-- Named in every view, Visualize too; on a phone the icon alone. -->
-						<Button variant="quiet" size="bar" onclick={() => ws.newPanel()}>
-							<PlusIcon /> <span class="max-sm:sr-only">Add panel</span>
+						<Button
+							variant="quiet"
+							size="icon-bar"
+							aria-label="Add panel"
+							{@attach hint('Add panel')}
+							onclick={() => ws.newPanel()}
+						>
+							<PlusIcon />
 						</Button>
 					{/if}
 				</div>
@@ -584,16 +575,6 @@
 					{evalsView.showOther ? 'Hide' : 'Show'}
 					{evalsView.others} on other settings
 				</Button>
-			{/if}
-			{#if view === 'charts' && focusLabel}
-				<Badge
-					variant="secondary"
-					class="focus-label max-w-[46%] text-muted-foreground"
-					{@attach hint(focusPinned ? `${focusLabel} (pinned)` : focusLabel)}
-				>
-					{#if focusPinned}<PinIcon aria-label="Pinned" />{/if}
-					<span class="truncate">{focusLabel}</span>
-				</Badge>
 			{/if}
 			{@render trailing?.()}
 			{#if chartsShown && chartTools && !selecting}
