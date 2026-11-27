@@ -22,7 +22,6 @@
 
 	$effect(() => pollFeed());
 
-	const running = $derived(data.shell.projects.reduce((n, p) => n + p.active_run_count, 0));
 	// Nothing logged yet: how to log the first run, instead of an empty table.
 	const fresh = $derived(!data.mine && !data.project && !data.feed?.items.length);
 
@@ -71,7 +70,6 @@
 
 <ListPage
 	title={data.outside ? data.org.display_name : 'Runs'}
-	live={running}
 	controls={fresh || data.outside ? undefined : feedControls}
 	actions={data.outside ? undefined : actions}
 >

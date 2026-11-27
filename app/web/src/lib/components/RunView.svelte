@@ -74,8 +74,6 @@
 		title: string;
 		/** The header's steps between the project and the title (see PageHeader). */
 		trail?: Crumb[];
-		/** How many runs are live here, for the header's mark. */
-		live?: number;
 		subtitleTitle?: string;
 		leading?: Snippet;
 		badges?: Snippet;
@@ -120,7 +118,6 @@
 	let {
 		title,
 		trail,
-		live: liveCount,
 		subtitleTitle,
 		leading,
 		badges,
@@ -432,16 +429,7 @@
 	data-sveltekit-reset={false}
 	style="--name-w: {nameW}px; --table-w: {shownTableW}px; --table-h: {tableHCss}; --pane-left: {paneLeft}px"
 >
-	<PageHeader
-		{title}
-		{trail}
-		live={liveCount}
-		{subtitleTitle}
-		{leading}
-		{badges}
-		{subtitle}
-		{actions}
-	>
+	<PageHeader {title} {trail} {subtitleTitle} {leading} {badges} {subtitle} {actions}>
 		{#snippet toolbar()}
 			<Tabs.Root
 				value={view}

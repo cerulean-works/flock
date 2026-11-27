@@ -13,8 +13,6 @@
 		trail?: Crumb[];
 		/** Lead the trail with the org (off on Datasets, Models and Storage). */
 		org?: boolean;
-		/** How many runs are live here, for the header's mark. */
-		live?: number;
 		/** Beside the title: a ⋯ menu, a badge. */
 		badges?: Snippet;
 		/** Muted text on the title's line: a count of running runs. */
@@ -38,7 +36,6 @@
 		title,
 		trail = [],
 		org = true,
-		live = 0,
 		badges,
 		subtitle,
 		actions,
@@ -90,7 +87,6 @@
 		{title}
 		{trail}
 		{org}
-		{live}
 		{badges}
 		{subtitle}
 		actions={inline ? both : actions}

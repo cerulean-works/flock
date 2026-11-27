@@ -15,8 +15,6 @@
 	let { data }: PageProps = $props();
 
 	$effect(() => pollFeed());
-
-	const running = $derived(data.shell.projects.reduce((n, p) => n + p.active_run_count, 0));
 </script>
 
 <svelte:head>
@@ -25,7 +23,7 @@
 
 {#if data.org && data.feed && data.budget}
 	<Page width="full">
-		<PageHeader title="Home" live={running}>
+		<PageHeader title="Home">
 			<!-- No view tabs here: the filters sit in the header row, one row as in Linear's Inbox. -->
 			{#snippet actions()}
 				<BudgetPanel
