@@ -228,6 +228,10 @@
 	<PageHeader title={name}>
 		{#snippet badges()}
 			{#if !readonly}{@render runMenu()}{/if}
+		{/snippet}
+		<!-- The run's state at the row's end, apart from its menu: two marks side by side read
+		     as one cluster. -->
+		{#snippet actions()}
 			<StateBadge state={runState} />
 		{/snippet}
 		{#snippet toolbar()}
