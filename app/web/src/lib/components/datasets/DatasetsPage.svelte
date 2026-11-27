@@ -1,10 +1,7 @@
 <script lang="ts">
 	import BlendIcon from '@lucide/svelte/icons/blend';
-	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import Page from '#lib/components/Page.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
-	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
+	import { headerTrail } from '#lib/storage.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
 	import HFImportRows from '#lib/components/imports/HFImportRows.svelte';
@@ -61,7 +58,10 @@
 		return writer ? new Selection() : undefined;
 	});
 	// Org scope: Datasets › org › folders; a project's: project › Datasets › folders.
-	const subtrail = $derived(trail.filter((_, i) => i !== (project === null ? 0 : 1)));
+	// Datasets › folders: without the org's crumb, or the project's, which the header leads with.
+	const subtrail = $derived(trail.filter((_, i) => i !== (project === null ? 1 : 0)));
+	// The header leads with the org (and project) by itself: Datasets › folders, the last the title.
+	const header = $derived(headerTrail(subtrail, 'Datasets'));
 	const projects = $derived(shell.projects.map((p) => p.name));
 </script>
 
@@ -71,12 +71,10 @@
 	>
 </svelte:head>
 
-{#snippet trailCrumbs()}<Breadcrumbs crumbs={subtrail} />{/snippet}
-
 {#snippet actions()}
-	<!-- One filled action (the import), with the quieter ones beside it. -->
+	<!-- Quiet actions, as on every header. -->
 	{#if writer}
-		<Button variant="ghost" onclick={() => blend()}>
+		<Button variant="quiet" size="bar" onclick={() => blend()}>
 			<BlendIcon /> <span class="max-sm:sr-only">New blend</span>
 		</Button>
 	{/if}
@@ -86,35 +84,8 @@
 	{/if}
 {/snippet}
 
-<!-- While rows are checked: what to do with them. -->
-{#snippet selected()}
-	{#if selection}
-		<Button variant="outline" size="sm" onclick={() => blend(selection.chosen)}>
-			<BlendIcon /> Blend
-		</Button>
-		<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
-			<FolderInputIcon /> Move
-		</Button>
-		<Button
-			variant="outline"
-			size="sm"
-			class="text-destructive"
-			onclick={() => selection.act('delete')}
-		>
-			<Trash2Icon /> Delete
-		</Button>
-	{/if}
-{/snippet}
-
 {#if data.kind === 'folder'}
-	<ListPage
-		title="Datasets"
-		heading="All datasets"
-		location={subtrail.length ? trailCrumbs : undefined}
-		{actions}
-		{selection}
-		{selected}
-	>
+	<ListPage title={header.title} trail={header.trail} org={false} {actions}>
 		<!-- Imports and blends writing into this folder, over its listing. -->
 		<div class="px-5 has-[li]:pt-4">
 			<HFImportRows {scope} list={imports} kind="dataset" folder={data.path} />
@@ -127,6 +98,7 @@
 				folder={data.folder}
 				now={data.now}
 				{selection}
+				onblend={blend}
 				{projects}
 			/>
 		{/key}
@@ -141,23 +113,19 @@
 		{/if}
 	</ListPage>
 {:else}
-	<Page width="home">
-		<div class="pt-5">
-			{#if trail.length}<Breadcrumbs crumbs={trail} />{/if}
-		</div>
-		{#key data.path}
-			<DatasetView
-				{scope}
-				path={data.path}
-				info={data.info}
-				failed={data.failed}
-				requested={data.requested}
-				s3={data.s3}
-				objectKey={data.key}
-				access={shell.access}
-				now={data.now}
-				{projects}
-			/>
-		{/key}
-	</Page>
+	{#key data.path}
+		<DatasetView
+			{scope}
+			path={data.path}
+			trail={shell.access === 'public' ? [] : header.trail}
+			info={data.info}
+			failed={data.failed}
+			requested={data.requested}
+			s3={data.s3}
+			objectKey={data.key}
+			access={shell.access}
+			now={data.now}
+			{projects}
+		/>
+	{/key}
 {/if}

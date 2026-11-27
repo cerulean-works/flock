@@ -21,10 +21,12 @@
 		lang?: CodeLanguage;
 		/** The copy button's name. */
 		label?: string;
+		/** Wraps long lines instead of scrolling them: a one-line command, read whole. */
+		wrap?: boolean;
 		class?: ClassValue;
 	}
 
-	let { code, lang, label = 'Copy code', class: className }: Props = $props();
+	let { code, lang, label = 'Copy code', wrap = false, class: className }: Props = $props();
 
 	const html = $derived(lang ? hljs.highlight(code, { language: lang }).value : null);
 </script>
@@ -33,12 +35,15 @@
 <div class={['code-sample relative min-w-0 rounded-lg bg-muted', className]}>
 	<!-- eslint-disable svelte/no-at-html-tags -- highlight.js escapes the code it marks up -->
 	<pre
-		class="overflow-x-auto py-3.5 pr-12 pl-4 font-mono text-[13px] leading-[1.65] [tab-size:4]"><code
-			class={lang ? `hljs language-${lang}` : undefined}
+		class={[
+			'py-3.5 pr-12 pl-4 font-mono text-[13px] leading-[1.65] [tab-size:4]',
+			wrap ? 'break-words whitespace-pre-wrap' : 'overflow-x-auto'
+		]}><code class={lang ? `hljs language-${lang}` : undefined}
 			>{#if html !== null}{@html html}{:else}{code}{/if}</code
 		></pre>
 	<!-- eslint-enable svelte/no-at-html-tags -->
-	<CopyButton text={code} {label} class="absolute top-2 right-2" />
+	<!-- On the block's fill, so a long line scrolls under it rather than through it. -->
+	<CopyButton text={code} {label} class="absolute top-2 right-2 bg-muted" />
 </div>
 
 <!-- Token colours are the --hl-* tokens in layout.css, which Markdown's code uses too. -->

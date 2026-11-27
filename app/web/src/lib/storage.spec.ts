@@ -58,7 +58,9 @@ describe('types and previews', () => {
 		expect(typeLabel('plot.PNG')).toBe('PNG image');
 		expect(typeLabel('config.json')).toBe('JSON');
 		expect(typeLabel('README.md')).toBe('Markdown');
-		expect(typeLabel('train.log')).toBe('LOG');
+		expect(typeLabel('train.log')).toBe('Log');
+		expect(typeLabel('model.SAFETENSORS')).toBe('Safetensors');
+		expect(typeLabel('weights.npy')).toBe('.npy');
 		expect(typeLabel('Makefile')).toBe('File');
 	});
 	it('previews by content type, then by extension', () => {

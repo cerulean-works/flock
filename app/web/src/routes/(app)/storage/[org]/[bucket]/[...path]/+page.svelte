@@ -1,9 +1,7 @@
 <script lang="ts">
-	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
 	import ObjectBrowser from '#lib/components/storage/ObjectBrowser.svelte';
 	import ObjectView from '#lib/components/storage/ObjectView.svelte';
-	import { crumbs as crumbsFor, nameOf } from '#lib/storage.ts';
-	import ListPage from '#lib/components/ListPage.svelte';
+	import { crumbs as crumbsFor, headerTrail, nameOf } from '#lib/storage.ts';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
@@ -14,13 +12,12 @@
 			(_, i) => i !== 1
 		)
 	);
+	const header = $derived(headerTrail(trail, params.bucket));
 </script>
 
 <svelte:head>
 	<title>{data.key ? nameOf(data.key) : params.bucket} · Storage · {data.shell.orgName}</title>
 </svelte:head>
-
-{#snippet path()}<Breadcrumbs crumbs={trail} />{/snippet}
 
 {#if data.kind === 'folder'}
 	<ObjectBrowser
@@ -34,7 +31,5 @@
 		crumbs={trail}
 	/>
 {:else}
-	<ListPage title={params.bucket} location={path} class="px-5 pt-4">
-		<ObjectView org={params.org} bucket={params.bucket} object={data.object} />
-	</ListPage>
+	<ObjectView org={params.org} bucket={params.bucket} object={data.object} trail={header.trail} />
 {/if}

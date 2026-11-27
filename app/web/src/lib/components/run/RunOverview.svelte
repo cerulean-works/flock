@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import CopyIcon from '@lucide/svelte/icons/copy';
 	import SearchIcon from '@lucide/svelte/icons/search';
-	import { toast } from 'svelte-sonner';
+	import { tick } from 'svelte';
 	import Avatar from '#lib/components/Avatar.svelte';
-	import MetaItem from '#lib/components/MetaItem.svelte';
+	import BarSearch from '#lib/components/BarSearch.svelte';
+	import CopyButton from '#lib/components/CopyButton.svelte';
+	import Properties from '#lib/components/Properties.svelte';
+	import Property from '#lib/components/Property.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
-	import { Badge } from '#lib/components/ui/badge/index.js';
+	import TagChip from '#lib/components/TagChip.svelte';
 	import { flatten } from '#lib/data/run.ts';
 	import type { RunDetail, RunModels } from '#lib/types.ts';
 	import RunModelsList from './RunModels.svelte';
@@ -23,11 +25,14 @@
 		/** The model versions it made and scored; null when they can't be read. */
 		models?: RunModels | null;
 		now: number;
+		/** Opens the Logs tab, where a failed run's error is. */
+		onlogs?: () => void;
 	}
 
-	let { run, runState, owner, currency, models = null, now }: Props = $props();
+	let { run, runState, owner, currency, models = null, now, onlogs }: Props = $props();
 
-	let query = $state('');
+	const failed = $derived(runState === 'failed' || runState === 'crashed');
+
 	const config = $derived(flatten(run.config).sort(([a], [b]) => a.localeCompare(b)));
 	// wandb's bookkeeping (`_step`, `_runtime`, ...) is in the details already.
 	const summary = $derived(
@@ -35,12 +40,6 @@
 			.filter(([k]) => !k.startsWith('_'))
 			.sort(([a], [b]) => a.localeCompare(b))
 	);
-	const match = (rows: [string, unknown][]) => {
-		const q = query.trim().toLowerCase();
-		return q ? rows.filter(([k]) => k.toLowerCase().includes(q)) : rows;
-	};
-	const shownConfig = $derived(match(config));
-	const shownSummary = $derived(match(summary));
 
 	/** Full precision on hover, where the list rounds. */
 	const exact = (v: unknown) =>
@@ -52,200 +51,234 @@
 		run.gpu_type !== run.gpu_detected.type || run.gpu_count !== run.gpu_detected.count
 	);
 
-	async function copy(label: string, text: string) {
-		try {
-			await navigator.clipboard.writeText(text);
-			toast(`Copied the ${label}`);
-		} catch {
-			toast.error('Couldn’t copy to the clipboard');
-		}
+	// Each list's search: an icon on its row that opens a field in the title's place.
+	const queries = $state<Record<string, string | null>>({ Config: null, Summary: null });
+	const match = (rows: [string, unknown][], q: string | null) => {
+		const t = q?.trim().toLowerCase();
+		return t ? rows.filter(([k]) => k.toLowerCase().includes(t)) : rows;
+	};
+
+	/** Closed, the focus goes back to the icon that opened it. */
+	async function closeSearch(title: string) {
+		queries[title] = null;
+		await tick();
+		document
+			.querySelector<HTMLElement>(`button[aria-label="Search ${title.toLowerCase()} keys"]`)
+			?.focus();
+	}
+
+	async function openSearch(title: string, details: HTMLDetailsElement | null) {
+		queries[title] = '';
+		if (details) details.open = true;
+		await tick();
+		document.querySelector<HTMLInputElement>(`#find-${title} input`)?.focus();
 	}
 </script>
 
-<!-- Label and value on one row: the value takes what the label leaves. -->
-{#snippet field(label: string, value: string | null | undefined, title?: string)}
-	{#if value}
-		<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-1">
-			<dt class="text-muted-foreground">{label}</dt>
-			<dd class="min-w-0 break-words" {title}>{value}</dd>
-		</div>
-	{/if}
+<!-- Copy on hover, at the row's end. -->
+{#snippet copy(text: string, label: string)}
+	<CopyButton
+		{text}
+		{label}
+		class="-my-1 size-6 flex-none opacity-0 group-hover/prop:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 [&_svg]:size-3.5"
+	/>
 {/snippet}
 
-<!-- Long, unbreakable values (commands, hashes) under their label, with a copy button. -->
-{#snippet code(label: string, value: string | null | undefined)}
-	{#if value}
-		<div class="group/code py-1">
-			<dt class="flex items-center justify-between text-muted-foreground">
-				{label}
-				<button
-					class="rounded p-0.5 text-faint opacity-0 group-hover/code:opacity-100 hover:text-foreground focus-visible:opacity-100"
-					{@attach hint(`Copy the ${label.toLowerCase()}`)}
-					aria-label="Copy the {label.toLowerCase()}"
-					onclick={() => copy(label.toLowerCase(), value)}
+{#snippet list(title: string, all: [string, unknown][])}
+	{@const q = queries[title]}
+	{@const rows = match(all, q)}
+	{#if all.length}
+		<Properties label={title}>
+			<details class="group/list" open>
+				<summary
+					class="-mx-2 flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md px-2 text-[13px] select-none hover:bg-muted/60 [&::-webkit-details-marker]:hidden"
 				>
-					<CopyIcon class="size-3.5" />
-				</button>
-			</dt>
-			<dd
-				class="mt-0.5 line-clamp-4 rounded-md bg-muted/60 px-2 py-1 font-mono text-[12px] leading-[1.45] break-all"
-				{@attach hint(value)}
-			>
-				{value}
-			</dd>
-		</div>
-	{/if}
-{/snippet}
-
-{#snippet list(title: string, rows: [string, unknown][], total: number)}
-	<details class="group/list border-t border-divider" open>
-		<summary
-			class="flex cursor-pointer list-none items-center gap-1.5 px-4 py-2.5 select-none hover:bg-muted/60 [&::-webkit-details-marker]:hidden"
-		>
-			<ChevronRightIcon
-				class="size-3.5 text-muted-foreground transition-transform group-open/list:rotate-90"
-			/>
-			<span class="font-medium">{title}</span>
-			<span class="ml-auto text-xs text-muted-foreground tabular-nums">
-				{rows.length === total ? total : `${rows.length} of ${total}`}
-			</span>
-		</summary>
-		<dl class="pb-3 font-mono text-[12px] leading-5">
-			{#each rows as [key, value] (key)}
-				{@const shown = formatValue(value)}
-				<div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 px-4 hover:bg-muted">
-					<dt class="truncate text-muted-foreground" {@attach hint(key)}>{key}</dt>
-					<dd
-						class={['truncate text-right tabular-nums', shown === '–' && 'text-faint']}
-						{@attach hint(exact(value))}
-					>
-						{shown}
-					</dd>
-				</div>
-			{:else}
-				<p class="px-4 font-sans text-[13px] text-muted-foreground">
-					{total ? 'No matching keys' : 'Nothing logged'}
-				</p>
-			{/each}
-		</dl>
-	</details>
-{/snippet}
-
-<div class="text-[13px]">
-	<dl class="px-4 pt-3 pb-4">
-		<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-2 py-1">
-			<dt class="text-muted-foreground">State</dt>
-			<dd><StateBadge state={runState} /></dd>
-		</div>
-		<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-2 py-1">
-			<dt class="text-muted-foreground">ID</dt>
-			<dd class="flex min-w-0 items-center gap-1">
-				<span class="run-id truncate font-mono text-[12px]" {@attach hint(run.id)}>{run.id}</span>
-				<button
-					class="flex-none rounded p-0.5 text-faint hover:text-foreground"
-					{@attach hint('Copy the run id')}
-					aria-label="Copy the run id"
-					onclick={() => copy('run id', run.id)}
-				>
-					<CopyIcon class="size-3.5" />
-				</button>
-			</dd>
-		</div>
-		<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-1">
-			<dt class="text-muted-foreground">Started</dt>
-			<dd {@attach hint(dateTime(run.created_at))}>
-				{relativeTime(run.created_at, now)}
-				<span class="block text-xs text-muted-foreground">{dateTime(run.created_at)}</span>
-			</dd>
-		</div>
-		{@render field('Runtime', duration(run.runtime))}
-		<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-2 py-1">
-			<dt class="text-muted-foreground">Logged by</dt>
-			<dd class="flex min-w-0 items-center gap-2">
-				{#if owner}
-					<Avatar name={owner.name} src={owner.avatar_url} class="size-5 text-[9px]" />
-					<span class="truncate">{owner.name}</span>
-				{:else}
-					<span class="text-faint">–</span>
+					<ChevronRightIcon
+						class="size-3.5 flex-none text-muted-foreground transition-transform group-open/list:rotate-90"
+					/>
+					<span class="font-medium">{title}</span>
+					<span class="text-muted-foreground tabular-nums">{all.length}</span>
+					{#if q == null}
+						<button
+							type="button"
+							class="-mr-1 ml-auto grid size-6 place-items-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+							aria-label="Search {title.toLowerCase()} keys"
+							{@attach hint(`Search ${title.toLowerCase()} keys`)}
+							onclick={(e) => {
+								e.preventDefault();
+								void openSearch(title, e.currentTarget.closest('details'));
+							}}
+						>
+							<SearchIcon class="size-3.5" />
+						</button>
+					{/if}
+				</summary>
+				<!-- Under the list's name, which stays: what's searched and how many keys it holds. -->
+				{#if q != null}
+					<div class="pt-1" id="find-{title}">
+						<BarSearch
+							bind:value={() => queries[title] ?? '', (v) => (queries[title] = v)}
+							things="{title.toLowerCase()} keys"
+							open
+							slash={false}
+							onclose={() => closeSearch(title)}
+						>
+							{#snippet trailing()}
+								<span class="flex-none pr-1.5 text-xs text-muted-foreground tabular-nums"
+									>{rows.length}</span
+								>
+							{/snippet}
+						</BarSearch>
+					</div>
 				{/if}
-			</dd>
-		</div>
-		{#if gpu}
-			<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-1">
-				<dt class="text-muted-foreground">GPUs</dt>
-				<dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-					<span class="break-words">{gpu}</span>
-					{#if gpuSetByHand}<MetaItem chip class="font-normal text-muted-foreground"
-							>Set by hand</MetaItem
-						>{/if}
-				</dd>
-			</div>
-		{/if}
-		{#if run.gpu_hours}
-			<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-1">
-				<dt class="text-muted-foreground">GPU hours</dt>
-				<dd class="flex min-w-0 flex-wrap items-baseline gap-x-2 tabular-nums">
-					{hours(run.gpu_hours)}
-					{#if currency && run.cost != null}<span class="text-muted-foreground"
-							>{money(run.cost, currency)}</span
-						>{/if}
-				</dd>
-			</div>
-		{/if}
-		{@render field('Host', run.host)}
-		{@render field('Group', run.group)}
-		{@render field('Job type', run.job_type)}
-		{@render field('Sweep', run.sweep)}
-		{@render field('Exit code', run.exitcode == null ? null : String(run.exitcode))}
-		{#if run.tags.length}
-			<div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 py-1">
-				<dt class="text-muted-foreground">Tags</dt>
-				<dd class="flex min-w-0 flex-wrap gap-1">
-					{#each run.tags as tag (tag)}
-						<Badge variant="secondary" class="max-w-full" {@attach hint(tag)}>
-							<span class="truncate">{tag}</span>
-						</Badge>
+				<!-- Keys take what the longest needs, up to two fifths; values the rest. -->
+				<dl
+					class="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3 pt-1 pb-1 font-mono text-[12px] leading-6"
+				>
+					{#each rows as [key, value] (key)}
+						{@const shown = formatValue(value)}
+						<!-- Copy on hover over the value's end (the full value): the value keeps the room. -->
+						<div
+							class="group/prop col-span-2 -mx-2 grid grid-cols-subgrid rounded px-2 hover:bg-muted"
+						>
+							<dt class="truncate text-muted-foreground" {@attach hint(key)}>{key}</dt>
+							<dd class="relative flex min-w-0 items-center justify-end">
+								<span
+									class={['truncate tabular-nums', shown === '–' && 'text-faint']}
+									{@attach hint(exact(value))}>{shown}</span
+								>
+								{#if shown !== '–'}
+									<span
+										class="absolute inset-y-0 right-0 flex items-center bg-muted pl-1 opacity-0 group-hover/prop:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100"
+									>
+										{@render copy(exact(value), `Copy ${key}`)}
+									</span>
+								{/if}
+							</dd>
+						</div>
+					{:else}
+						<p class="col-span-2 py-1 font-sans text-[13px] text-muted-foreground">
+							No matching keys
+						</p>
 					{/each}
-				</dd>
-			</div>
-		{/if}
-		{@render code('Command', run.program)}
-		{@render code('Commit', run.commit)}
-	</dl>
-
-	{#if models?.made.length}
-		<RunModelsList title="Checkpoints" versions={models.made} />
+				</dl>
+			</details>
+		</Properties>
 	{/if}
-	<!-- An API from before 025 answers no `scored`. -->
-	{#if models?.scored?.length}
-		<RunModelsList title="Models scored" versions={models.scored} />
-	{/if}
+{/snippet}
 
-	{#if run.notes || run.description}
-		<div class="grid gap-2 border-t border-divider px-4 py-3">
-			{#if run.notes}<p class="break-words whitespace-pre-line">{run.notes}</p>{/if}
-			{#if run.description}
-				<p class="break-words whitespace-pre-line text-muted-foreground">{run.description}</p>
+<!-- The run's state first: a failed one leads with its exit code and the way to its error. -->
+<Properties label="Run">
+	<Property label="State">
+		<span class="flex flex-wrap items-baseline gap-x-2">
+			<span class="flex items-baseline gap-1.5">
+				<StateBadge state={runState} />
+				{#if run.exitcode != null && run.exitcode !== 0}
+					<span class="text-muted-foreground">· exit {run.exitcode}</span>
+				{/if}
+			</span>
+			{#if failed && onlogs}
+				<button
+					type="button"
+					class="rounded-sm text-link underline-offset-3 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+					onclick={onlogs}>See logs</button
+				>
 			{/if}
-		</div>
+		</span>
+	</Property>
+	{#if run.notes}
+		<Property label="Notes" stack>
+			<p class="whitespace-pre-line">{run.notes}</p>
+		</Property>
 	{/if}
+	{#if run.description}
+		<Property label="Description" stack>
+			<p class="whitespace-pre-line text-muted-foreground">{run.description}</p>
+		</Property>
+	{/if}
+</Properties>
 
-	{#if config.length || summary.length}
-		<div class="border-t border-divider px-4 py-2.5">
-			<label
-				class="flex h-7 w-full items-center gap-2 rounded-[min(var(--radius-md),10px)] border border-input bg-background px-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
-			>
-				<SearchIcon class="size-3.5 flex-none text-muted-foreground" />
-				<input
-					class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-					placeholder="Find a config or summary key"
-					aria-label="Find a config or summary key"
-					bind:value={query}
-					onkeydown={(e) => e.key === 'Escape' && (query = '')}
+<Properties label="Details">
+	<Property label="ID" mono class="group/prop">
+		<span class="flex min-w-0 items-center gap-1">
+			<span class="run-id truncate">{run.id}</span>
+			{@render copy(run.id, 'Copy the run id')}
+		</span>
+	</Property>
+	<Property label="Started">
+		<span {@attach hint(relativeTime(run.created_at, now))}>{dateTime(run.created_at)}</span>
+	</Property>
+	{#if run.runtime}<Property label="Runtime">{duration(run.runtime)}</Property>{/if}
+	<Property label="Logged by">
+		{#if owner}
+			<!-- On the name's baseline, as every row: the avatar centres itself beside it. -->
+			<span class="flex min-w-0 items-baseline gap-2">
+				<Avatar
+					name={owner.name}
+					src={owner.avatar_url}
+					class="size-4 flex-none self-center text-[8px]"
 				/>
-			</label>
-		</div>
+				<span class="truncate">{owner.name}</span>
+			</span>
+		{:else}
+			<span class="text-faint">–</span>
+		{/if}
+	</Property>
+	{#if gpu}
+		<Property label="GPUs">
+			{gpu}
+			{#if gpuSetByHand}<span class="text-muted-foreground">&nbsp;· set by hand</span>{/if}
+		</Property>
 	{/if}
-	{@render list('Config', shownConfig, config.length)}
-	{@render list('Summary', shownSummary, summary.length)}
-</div>
+	{#if run.gpu_hours}
+		<Property label="GPU hours">
+			{hours(run.gpu_hours)}{#if currency && run.cost != null}<span class="text-muted-foreground"
+					>&nbsp;· {money(run.cost, currency)}</span
+				>{/if}
+		</Property>
+	{/if}
+	{#if run.host}<Property label="Host">{run.host}</Property>{/if}
+	{#if run.group}<Property label="Group">{run.group}</Property>{/if}
+	{#if run.job_type}<Property label="Job type">{run.job_type}</Property>{/if}
+	{#if run.sweep}<Property label="Sweep">{run.sweep}</Property>{/if}
+	{#if run.tags.length}
+		<Property label={run.tags.length === 1 ? 'Tag' : 'Tags'}>
+			<ul class="flex flex-wrap gap-1" aria-label="Tags">
+				{#each run.tags as tag (tag)}
+					<TagChip as="li" {tag} />
+				{/each}
+			</ul>
+		</Property>
+	{/if}
+	{#if run.program}
+		<Property label="Command" mono class="group/prop">
+			<span class="flex min-w-0 items-start gap-1">
+				<span class="min-w-0 break-all">{run.program}</span>
+				{@render copy(run.program, 'Copy the command')}
+			</span>
+		</Property>
+	{/if}
+	{#if run.commit}
+		<Property label="Commit" mono class="group/prop">
+			<span class="flex min-w-0 items-center gap-1">
+				<span class="truncate" {@attach hint(run.commit)}>{run.commit.slice(0, 12)}</span>
+				{@render copy(run.commit, 'Copy the commit')}
+			</span>
+		</Property>
+	{/if}
+</Properties>
+
+{#if models?.made.length}
+	<Properties label="Checkpoints">
+		<RunModelsList title="Checkpoints" versions={models.made} />
+	</Properties>
+{/if}
+<!-- An API from before 025 answers no `scored`. -->
+{#if models?.scored?.length}
+	<Properties label="Models scored">
+		<RunModelsList title="Models scored" versions={models.scored} />
+	</Properties>
+{/if}
+
+{@render list('Config', config)}
+{@render list('Summary', summary)}

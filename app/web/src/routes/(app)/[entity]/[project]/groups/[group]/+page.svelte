@@ -7,15 +7,14 @@
 	import { page } from '$app/state';
 	import type { ResolvedPathname } from '$app/types';
 	import { bestRows, chartStyle } from '#lib/chart/grouping.ts';
+	import { runValues } from '#lib/data/run-values.svelte.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import { evalTable } from '#lib/eval-table.ts';
 	import { evalRuns } from '#lib/evals-view.svelte.ts';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
 	import RunView from '#lib/components/RunView.svelte';
-	import BestByPicker from '#lib/components/groups/BestByPicker.svelte';
-	import DisplayMenu, { type DisplaySetting } from '#lib/components/groups/DisplayMenu.svelte';
+	import type { DisplaySetting } from '#lib/components/ViewSettings.svelte';
 	import DeleteGroupDialog from '#lib/components/groups/DeleteGroupDialog.svelte';
-	import EditGroupDialog from '#lib/components/groups/EditGroupDialog.svelte';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
@@ -26,6 +25,7 @@
 		GroupsError,
 		classifyColumns,
 		displayKey,
+		editGroupHref,
 		fromFlockFilter,
 		groupHref,
 		groupsApi,
@@ -119,7 +119,8 @@
 						groupBy: by && displayKey(by),
 						colorBy: color && displayKey(color),
 						band: view.seeds === 'minmax' ? 'minmax' : 'std',
-						dark: scheme.dark
+						dark: scheme.dark,
+						domain: domainOf(by, color)
 					}
 				);
 				if (!showBest || !bestKey || !bestOrder) return style;
@@ -136,6 +137,18 @@
 		}
 	);
 	setWorkspace(ws);
+
+	/**
+	 * Every value the Group by and Color by keys take in the whole group, so a run keeps its
+	 * color while a search or filter shows only some (the values route, read once per visit).
+	 */
+	function domainOf(by: string | null | undefined, color: string | null | undefined) {
+		const keys = [by, color].filter((k): k is string => !!k);
+		if (!keys.length) return undefined;
+		const all = runValues(entity, project, keys, data.group.id);
+		const values = (k: string | null | undefined) => (k ? all[k]?.map((v) => v.value) : undefined);
+		return { group: values(by), color: values(color) };
+	}
 
 	/**
 	 * A group of eval runs (some run has a suite score; the columns are the project's) opens on
@@ -228,7 +241,7 @@
 		{ value: 'runs', label: 'Each run' }
 	];
 
-	/** The charts' settings, in the Display menu: those that apply to this group's runs. */
+	/** How the runs are drawn, atop the view's settings: those that apply to this group's runs. */
 	const display = $derived.by((): DisplaySetting[] => {
 		const out: DisplaySetting[] = [];
 		if (varies.length)
@@ -291,15 +304,10 @@
 		`${filterText ? `Runs where ${filterText}` : 'Picked by hand'} · ${count(group.run_count, 'run')}`
 	);
 
-	let editing = $state(false);
 	/** The "Delete group…" confirmation is open. */
 	let deleting = $state(false);
-	/** Opened from its new matches, which then come first (D216). */
-	let fresh = $state(false);
-	function edit(withNew = false) {
-		fresh = withNew;
-		editing = true;
-	}
+	/** The edit page (D223); with its new matches first (D216). */
+	const editHref = (fresh = false) => editGroupHref(entity, project, group.id, fresh);
 
 	// ------------------------------------------------------------------------------------------
 	// Live updates (D228): the project renamed, deleted or made private.
@@ -330,19 +338,26 @@
 	initialView={evalGroup ? 'table' : 'visualize'}
 	evalPreset
 	evalsFirst={evalGroup}
-	compactTools
 	{primary}
 	{onprimaryorder}
 	{onproject}
 	{readonly}
-	mine={false}
 	nameW={data.shell.nameW}
 	tableW={data.shell.tableW}
 	stacked={data.shell.stacked}
 	tableH={data.shell.tableH}
+	best={{
+		key: bestKey,
+		order: bestOrder,
+		source: group.best_key ? 'this group’s own setting' : 'the project’s setting',
+		onchange: (key, o) => void save({ best_key: key, best_order: o }, 'Best by'),
+		disabled: readonly
+	}}
+	{display}
 >
 	{#snippet leading()}
-		<span class="size-3.5 rounded-[4px]" style:background={group.color} title={about}></span>
+		<!-- A 12px swatch: an icon's weight, not a block beside the title. -->
+		<span class="size-3 rounded-[3px]" style:background={group.color} title={about}></span>
 	{/snippet}
 	{#snippet badges()}
 		{#if !readonly}
@@ -372,13 +387,19 @@
 				<DropdownMenu.Content align="start" class="w-72">
 					<DropdownMenu.Label class="font-normal text-muted-foreground">{about}</DropdownMenu.Label>
 					<DropdownMenu.Separator />
-					<DropdownMenu.Item onSelect={() => edit()}>
-						<PencilIcon /> Edit group…
+					<DropdownMenu.Item>
+						{#snippet child({ props })}
+							<a {...props} href={editHref()}><PencilIcon /> Edit group</a>
+						{/snippet}
 					</DropdownMenu.Item>
 					{#if group.new_count > 0}
-						<DropdownMenu.Item onSelect={() => edit(true)}>
-							<span class="mx-[3px] size-[7px] rounded-full bg-state-preempting"></span>
-							Review {count(group.new_count, 'new match', 'new matches')}…
+						<DropdownMenu.Item>
+							{#snippet child({ props })}
+								<a {...props} href={editHref(true)}>
+									<span class="mx-[3px] size-[7px] rounded-full bg-state-preempting"></span>
+									Review {count(group.new_count, 'new match', 'new matches')}
+								</a>
+							{/snippet}
 						</DropdownMenu.Item>
 					{/if}
 					<DropdownMenu.Separator />
@@ -392,21 +413,6 @@
 	{#snippet actions()}
 		<LiveStatus />
 	{/snippet}
-	{#snippet trailing()}
-		<BestByPicker
-			key={bestKey}
-			order={bestOrder}
-			keys={ws.meta.columns
-				.filter((c) => c.key.startsWith('summary.') && c.kind === 'num')
-				.map((c) => c.key)}
-			disabled={readonly}
-			title={group.best_key ? 'This group’s own setting' : 'The project’s setting'}
-			onchange={(key, o) => save({ best_key: key, best_order: o }, 'Best by')}
-			align="end"
-		/>
-		<!-- In every view: Group by and Color by color the table's runs as well as the charts. -->
-		<DisplayMenu settings={display} />
-	{/snippet}
 	{#snippet empty()}
 		<EmptyState
 			variant="onboarding"
@@ -416,7 +422,7 @@
 			{#snippet lead()}Its runs were deleted or moved away, or none were added yet.{/snippet}
 			{#snippet actions()}
 				{#if !readonly}
-					<Button variant="outline" onclick={() => edit()}>Edit group</Button>
+					<Button variant="outline" href={editHref()}>Edit group</Button>
 				{/if}
 			{/snippet}
 		</EmptyState>
@@ -424,6 +430,5 @@
 </RunView>
 
 {#if !readonly}
-	<EditGroupDialog bind:open={editing} {group} {fresh} />
 	<DeleteGroupDialog bind:open={deleting} {entity} {project} {group} />
 {/if}

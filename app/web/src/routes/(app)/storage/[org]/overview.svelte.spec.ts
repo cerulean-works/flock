@@ -37,9 +37,9 @@ describe('the Storage overview', () => {
 		// @ts-expect-error -- a page's props: only what the overview reads
 		render(Page, { data, params: { org: 'acme' } });
 		const managed = page.getByRole('row').filter({ hasText: 'flock-datasets' });
-		await expect.element(managed.getByText('Managed by Flock')).toBeVisible();
+		await expect.element(managed.getByText('managed', { exact: true })).toBeVisible();
 		const other = page.getByRole('row').filter({ hasText: 'checkpoints' });
-		await expect.element(other.getByText('Managed by Flock')).not.toBeInTheDocument();
+		await expect.element(other.getByText('managed', { exact: true })).not.toBeInTheDocument();
 
 		await page.getByRole('button', { name: 'Actions for flock-datasets' }).click();
 		const open = page.getByRole('menuitem', { name: 'Open in Datasets' });
@@ -55,7 +55,7 @@ describe('the Storage overview', () => {
 		// @ts-expect-error -- a page's props: only what the overview reads
 		render(Page, { data, params: { org: 'acme' } });
 		const managed = page.getByRole('row').filter({ hasText: 'flock-models' });
-		await expect.element(managed.getByText('Managed by Flock')).toBeVisible();
+		await expect.element(managed.getByText('managed', { exact: true })).toBeVisible();
 		await page.getByRole('button', { name: 'Actions for flock-models' }).click();
 		const open = page.getByRole('menuitem', { name: 'Open in Models' });
 		await expect.element(open).toBeVisible();

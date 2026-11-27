@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../routes/layout.css';
 import { app, resetApp } from '#lib/testing/app.svelte.ts';
 import type { UserInfo } from '#lib/types.ts';
-import ProfileHeader from './ProfileHeader.svelte';
+import ProfileSettings from './ProfileSettings.svelte';
 
 vi.mock('$app/forms', () => import('#lib/testing/app.svelte.ts'));
 vi.mock('$app/navigation', () => import('#lib/testing/app.svelte.ts'));
@@ -31,90 +31,87 @@ beforeEach(() => resetApp('http://flock.test/account'));
 
 const dialog = () => page.getByRole('dialog');
 
-describe('the profile header', () => {
-	it('shows the picture, then the name, the email and two buttons', async () => {
-		render(ProfileHeader, { profile: { ...ADA, avatar_url: PICTURE } });
-		await expect.element(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
-		await expect.element(page.getByText('ada@example.com')).toBeVisible();
-		await expect.element(page.getByRole('button', { name: 'Change profile' })).toBeVisible();
+describe('the profile section', () => {
+	it('shows the picture, the name, the email and the password button', async () => {
+		render(ProfileSettings, { profile: { ...ADA, avatar_url: PICTURE } });
+		// The page's header names it; the section itself goes unheaded.
+		await expect.element(page.getByRole('heading', { name: 'Password' })).toBeVisible();
+		await expect.element(page.getByLabelText('Name')).toHaveValue('Ada Lovelace');
+		await expect.element(page.getByLabelText('Email')).toHaveValue('ada@example.com');
+		await expect.element(page.getByLabelText('Email')).toHaveAttribute('readonly');
 		await expect.element(page.getByRole('button', { name: 'Change password' })).toBeVisible();
-		const img = document.querySelector('header img')!;
-		expect(img.getAttribute('src')).toBe(PICTURE);
-		// The picture is on the left of the name.
-		const heading = document.querySelector('h1')!.getBoundingClientRect();
-		expect(img.getBoundingClientRect().right).toBeLessThan(heading.left);
+		expect(document.querySelector('section img')!.getAttribute('src')).toBe(PICTURE);
 	});
 
-	it('shows initials without a picture', async () => {
-		render(ProfileHeader, { profile: ADA });
+	it('has the picture controls, and no Gravatar button', async () => {
+		render(ProfileSettings, { profile: { ...ADA, avatar_url: PICTURE, avatar_source: 'upload' } });
+		await expect.element(page.getByRole('button', { name: 'Change picture' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Remove' })).toBeVisible();
+		await expect.element(page.getByText('PNG, JPEG, GIF or WebP, up to 1 MB.')).toBeVisible();
+		expect(document.body.textContent).not.toMatch(/gravatar/i);
+	});
+
+	it('shows initials and offers an upload without a picture, and nothing to remove', async () => {
+		render(ProfileSettings, { profile: ADA });
 		await expect.element(page.getByText('AL', { exact: true })).toBeVisible();
-		expect(document.querySelector('header img')).toBeNull();
+		await expect.element(page.getByRole('button', { name: 'Upload a picture' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
 	});
 
+	it('removes the picture', async () => {
+		render(ProfileSettings, { profile: { ...ADA, avatar_url: PICTURE } });
+		await page.getByRole('button', { name: 'Remove' }).click();
+		await expect.poll(() => app.sent.map((s) => s.action)).toEqual(['/account?/removeAvatar']);
+	});
+
+	it('refuses a file of the wrong type without sending it', async () => {
+		render(ProfileSettings, { profile: ADA });
+		const input = document.querySelector<HTMLInputElement>('input[type=file]')!;
+		const files = new DataTransfer();
+		files.items.add(new File(['%PDF'], 'cv.pdf', { type: 'application/pdf' }));
+		input.files = files.files;
+		input.dispatchEvent(new Event('change', { bubbles: true }));
+		await expect.element(page.getByText('Use a PNG, JPEG, GIF or WebP image')).toBeVisible();
+		expect(app.sent).toEqual([]);
+	});
+
+	it('saves the name on Enter, with a tick, and not again when nothing changed', async () => {
+		app.result = { type: 'success', status: 200, data: { name: 'Ada King' } };
+		render(ProfileSettings, { profile: ADA });
+		const field = page.getByLabelText('Name');
+		await field.fill('Ada King');
+		await userEvent.keyboard('{Enter}');
+		await expect.element(page.getByRole('status').getByText('Saved')).toBeVisible();
+		expect(app.sent.map((s) => [s.action, s.form.get('name')])).toEqual([
+			['/account?/profile', 'Ada King']
+		]);
+	});
+
+	it('saves the name when the field is left, and sends nothing unchanged', async () => {
+		render(ProfileSettings, { profile: ADA });
+		const field = page.getByLabelText('Name');
+		await field.click();
+		await userEvent.keyboard('{Enter}');
+		await userEvent.tab();
+		expect(app.sent).toEqual([]);
+		await field.fill('Ada King');
+		await userEvent.tab();
+		await expect.poll(() => app.sent.map((s) => s.form.get('name'))).toEqual(['Ada King']);
+	});
+});
+
+describe('the password dialog', () => {
 	it('offers to set a password to an account without one', async () => {
-		render(ProfileHeader, { profile: { ...ADA, has_password: false, google: true } });
+		render(ProfileSettings, { profile: { ...ADA, has_password: false, google: true } });
 		await page.getByRole('button', { name: 'Set password' }).click();
 		await expect.element(dialog().getByText(/You sign in with Google/)).toBeVisible();
 		await expect
 			.element(dialog().getByLabelText('Current password', { exact: true }))
 			.not.toBeInTheDocument();
 	});
-});
 
-describe('the profile dialog', () => {
-	it('has the name and the picture controls, and no Gravatar button', async () => {
-		render(ProfileHeader, { profile: { ...ADA, avatar_url: PICTURE, avatar_source: 'upload' } });
-		await page.getByRole('button', { name: 'Change profile' }).click();
-		await expect.element(dialog().getByLabelText('Name')).toHaveValue('Ada Lovelace');
-		await expect.element(dialog().getByRole('button', { name: 'Change picture' })).toBeVisible();
-		await expect.element(dialog().getByRole('button', { name: 'Remove' })).toBeVisible();
-		await expect.element(dialog().getByText('PNG, JPEG, GIF or WebP, up to 1 MB.')).toBeVisible();
-		expect(document.body.textContent).not.toMatch(/gravatar/i);
-	});
-
-	it('offers an upload without a picture, and nothing to remove', async () => {
-		render(ProfileHeader, { profile: ADA });
-		await page.getByRole('button', { name: 'Change profile' }).click();
-		await expect.element(dialog().getByRole('button', { name: 'Upload a picture' })).toBeVisible();
-		await expect.element(dialog().getByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
-		expect(document.body.textContent).not.toMatch(/gravatar/i);
-	});
-
-	it('removes the picture', async () => {
-		render(ProfileHeader, { profile: { ...ADA, avatar_url: PICTURE } });
-		await page.getByRole('button', { name: 'Change profile' }).click();
-		await dialog().getByRole('button', { name: 'Remove' }).click();
-		await expect.poll(() => app.sent.map((s) => s.action)).toEqual(['/account?/removeAvatar']);
-	});
-
-	it('refuses a file of the wrong type without sending it', async () => {
-		render(ProfileHeader, { profile: ADA });
-		await page.getByRole('button', { name: 'Change profile' }).click();
-		const input = document.querySelector<HTMLInputElement>('input[type=file]')!;
-		const files = new DataTransfer();
-		files.items.add(new File(['%PDF'], 'cv.pdf', { type: 'application/pdf' }));
-		input.files = files.files;
-		input.dispatchEvent(new Event('change', { bubbles: true }));
-		await expect.element(dialog().getByText('Use a PNG, JPEG, GIF or WebP image')).toBeVisible();
-		expect(app.sent).toEqual([]);
-	});
-
-	it('saves the name and closes', async () => {
-		app.result = { type: 'success', status: 200, data: { name: 'Ada King' } };
-		render(ProfileHeader, { profile: ADA });
-		await page.getByRole('button', { name: 'Change profile' }).click();
-		await dialog().getByLabelText('Name').fill('Ada King');
-		await dialog().getByRole('button', { name: 'Save' }).click();
-		await expect.element(dialog()).not.toBeInTheDocument();
-		expect(app.sent.map((s) => [s.action, s.form.get('name')])).toEqual([
-			['/account?/profile', 'Ada King']
-		]);
-	});
-});
-
-describe('the password dialog', () => {
 	it('has the three fields and says it signs you out elsewhere', async () => {
-		render(ProfileHeader, { profile: ADA });
+		render(ProfileSettings, { profile: ADA });
 		await page.getByRole('button', { name: 'Change password' }).click();
 		await expect
 			.element(dialog().getByText('Changing it signs you out everywhere else.'))
@@ -127,7 +124,7 @@ describe('the password dialog', () => {
 
 	it('keeps a refusal in the dialog', async () => {
 		app.result = { type: 'failure', status: 400, data: { error: 'The new passwords don’t match' } };
-		render(ProfileHeader, { profile: ADA });
+		render(ProfileSettings, { profile: ADA });
 		await page.getByRole('button', { name: 'Change password' }).click();
 		await dialog().getByLabelText('Current password', { exact: true }).fill('old-password');
 		await dialog().getByLabelText('New password', { exact: true }).fill('new-password');
@@ -144,7 +141,7 @@ describe('the password dialog', () => {
 	});
 
 	it('closes once the password is changed', async () => {
-		render(ProfileHeader, { profile: ADA });
+		render(ProfileSettings, { profile: ADA });
 		await page.getByRole('button', { name: 'Change password' }).click();
 		await dialog().getByLabelText('Current password', { exact: true }).fill('old-password');
 		await dialog().getByLabelText('New password', { exact: true }).fill('new-password');

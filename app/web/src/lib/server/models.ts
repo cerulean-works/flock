@@ -38,7 +38,7 @@ export async function loadModels(
 	viewer: Promise<Access>
 ): Promise<ModelsPath> {
 	const [{ s3 }, access] = await Promise.all([authConfig(), viewer]);
-	if (!s3) error(404, 'This Flock server has no S3 storage');
+	if (!s3) error(404, { message: 'This Flock server has no S3 storage', noS3: true });
 	if (access === 'public' && scope.project !== null) error(404, 'Not found');
 	const query = scopeQuery(scope);
 	const at = (await flock(

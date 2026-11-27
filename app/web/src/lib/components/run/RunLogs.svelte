@@ -1,14 +1,11 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
-	import ArrowDownToLineIcon from '@lucide/svelte/icons/arrow-down-to-line';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
-	import ClockIcon from '@lucide/svelte/icons/clock';
+	import ChevronsDownIcon from '@lucide/svelte/icons/chevrons-down';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import DownloadIcon from '@lucide/svelte/icons/download';
-	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
-	import SearchIcon from '@lucide/svelte/icons/search';
-	import TextWrapIcon from '@lucide/svelte/icons/text-wrap';
+	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
 	import { onMount, tick, untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import { toast } from 'svelte-sonner';
@@ -16,6 +13,7 @@
 	import { page } from '$app/state';
 	import type { ResolvedPathname } from '$app/types';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import BarSearch from '#lib/components/BarSearch.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { clock, elapsed, parseLine, type Level, type LogLine, type Span } from '#lib/logs.ts';
@@ -48,9 +46,18 @@
 		start: number;
 		/** For the downloaded file's name. */
 		name: string;
+		/** The page's view bar: the log's controls go there, rather than in a row of their own. */
+		bar?: HTMLElement | null;
 	}
 
-	let { url, total, live, start, name }: Props = $props();
+	let { url, total, live, start, name, bar = null }: Props = $props();
+
+	/** Moves the controls into the view bar, and takes them out with the log. */
+	const into = (target: HTMLElement | null) => (node: HTMLElement) => {
+		if (!target) return;
+		target.append(node);
+		return () => node.remove();
+	};
 
 	/** Lines fetched at first, and by each "Show earlier" / "Show later". */
 	const CHUNK = 1000;
@@ -67,7 +74,9 @@
 	let loading = $state(true);
 	let failed = $state(false);
 	let scroller = $state<HTMLDivElement>();
-	let input = $state<HTMLInputElement>();
+	/** The search: the bar's, an icon that opens into a field, open while it holds text. */
+	let field = $state<BarSearch>();
+	const openSearch = () => field?.focus();
 
 	// ---------------------------------------------------------------------------- view options
 
@@ -167,8 +176,6 @@
 		if (e.key === 'Enter') {
 			e.preventDefault();
 			step(e.shiftKey ? -1 : 1);
-		} else if (e.key === 'Escape') {
-			query = '';
 		}
 	}
 
@@ -176,8 +183,7 @@
 	function onwindowkey(e: KeyboardEvent) {
 		if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'f') {
 			e.preventDefault();
-			input?.focus();
-			input?.select();
+			void openSearch();
 		} else if (e.key === 'F3' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g')) {
 			if (!q) return;
 			e.preventDefault();
@@ -402,7 +408,13 @@
 	// ------------------------------------------------------------------------- copy, download
 
 	const asText = (ls: LogLine[]) =>
-		ls.map((l) => (l.at == null ? l.text : `${dateTime(l.at)}  ${l.text}`)).join('\n');
+		ls
+			.map((l) => {
+				// The time as the log shows it, so a pasted line reads the same.
+				const at = stampOf(l);
+				return at ? `${at}  ${l.text}` : l.text;
+			})
+			.join('\n');
 
 	async function copy() {
 		try {
@@ -447,7 +459,7 @@
 	};
 
 	const TOKEN_COLOR: Record<TokenKind, string> = {
-		number: 'text-ansi-cyan',
+		number: 'text-foreground',
 		key: 'text-muted-foreground',
 		string: 'text-ansi-green',
 		time: 'text-faint',
@@ -467,18 +479,21 @@
 
 	function pieceClass(p: Piece) {
 		const level = p.token === 'error' || p.token === 'warning' || p.token === 'info';
+		// A match takes its own text colour: a token's colour on the match's fill can't be read.
 		return [
-			p.color
-				? SPAN_COLOR[p.color]
-				: p.dim && !level
-					? 'text-faint'
-					: p.token && TOKEN_COLOR[p.token],
+			p.mark
+				? null
+				: p.color
+					? SPAN_COLOR[p.color]
+					: p.dim && !level
+						? 'text-faint'
+						: p.token && TOKEN_COLOR[p.token],
 			p.bold && 'font-semibold',
 			p.italic && 'italic',
 			p.underline && 'underline',
 			p.mark === 'hit' && 'rounded-[2px] bg-ansi-yellow/25 text-foreground',
 			p.mark === 'current' &&
-				'rounded-[2px] bg-ansi-yellow text-background outline-1 outline-ansi-yellow'
+				'rounded-[2px] bg-ansi-yellow text-white outline-1 outline-ansi-yellow dark:text-black'
 		];
 	}
 
@@ -493,7 +508,9 @@
 		return pieces(l.spans, tokenize(l.text), marks, l.dim);
 	}
 
-	const levelsShown = $derived(LEVEL_KEYS.filter((k) => !hidden.includes(k)).length);
+	/** The levels this log has (and any hidden one), in order: the menu lists only these. */
+	const present = $derived(LEVEL_KEYS.filter((k) => counts[k] > 0 || hidden.includes(k)));
+	const levelsShown = $derived(present.filter((k) => !hidden.includes(k)).length);
 	const laterCount = $derived(Math.max(0, known - first - lines.length));
 </script>
 
@@ -501,110 +518,117 @@
 
 <!-- A log panel in the page's own theme, one step deeper than the page like a chart panel. -->
 <div class="absolute inset-0 flex flex-col bg-card text-foreground">
+	<!-- The log's controls: in the page's view bar when it gives one (`bar`), quiet like every
+	     control there; otherwise a row of their own above the lines. -->
 	<div
-		class="flex min-h-10 flex-none flex-wrap items-center gap-1.5 border-b border-divider bg-background px-5 py-1"
+		class={[
+			'flex flex-none items-center gap-0.5',
+			!bar && 'min-h-9 flex-wrap border-b border-divider bg-background px-5 py-1'
+		]}
+		{@attach into(bar)}
 	>
-		<label
-			class="flex h-7 max-w-md min-w-48 flex-1 items-center gap-2 rounded-[min(var(--radius-md),10px)] border border-input bg-background pr-1 pl-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
+		<BarSearch
+			bind:this={field}
+			bind:value={query}
+			things="the log"
+			keys="⌘ F"
+			clearable={false}
+			class="max-sm:w-28"
+			oninput={onquery}
+			onkeydown={onsearchkey}
 		>
-			<SearchIcon class="size-3.5 flex-none text-muted-foreground" />
-			<input
-				bind:this={input}
-				class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-				placeholder="Search the log"
-				aria-label="Search the log"
-				bind:value={query}
-				oninput={onquery}
-				onkeydown={onsearchkey}
-			/>
-			{#if q}
-				<span class="flex-none text-xs text-muted-foreground tabular-nums" aria-live="polite">
-					{#if matches.length}
-						{(cur + 1).toLocaleString('en-US')} / {matches.length.toLocaleString(
-							'en-US'
-						)}{matches.length >= 10_000 ? '+' : ''}
-					{:else}
-						No matches
-					{/if}
-				</span>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					{@attach hint('Previous match (Shift+Enter)')}
-					aria-label="Previous match"
-					disabled={!matches.length}
-					onclick={() => step(-1)}
-				>
-					<ChevronUpIcon />
-				</Button>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					{@attach hint('Next match (Enter)')}
-					aria-label="Next match"
-					disabled={!matches.length}
-					onclick={() => step(1)}
-				>
-					<ChevronDownIcon />
-				</Button>
-			{/if}
-		</label>
-
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger>
-				{#snippet child({ props })}
-					<Button {...props} variant="ghost" size="sm" {@attach hint('Filter by level')}>
-						<ListFilterIcon />
-						{levelsShown === LEVEL_KEYS.length ? 'All levels' : `${levelsShown} levels`}
+			{#snippet trailing()}
+				{#if q}
+					<span class="flex-none text-xs text-muted-foreground tabular-nums" aria-live="polite">
+						{#if matches.length}
+							{(cur + 1).toLocaleString('en-US')} / {matches.length.toLocaleString(
+								'en-US'
+							)}{matches.length >= 10_000 ? '+' : ''}
+						{:else}
+							No matches
+						{/if}
+					</span>
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						{@attach hint('Previous match  Shift Enter')}
+						aria-label="Previous match"
+						disabled={!matches.length}
+						onclick={() => step(-1)}
+					>
+						<ChevronUpIcon />
 					</Button>
-				{/snippet}
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="start" class="w-48">
-				<DropdownMenu.Group>
-					<DropdownMenu.Label>Levels</DropdownMenu.Label>
-					{#each LEVEL_KEYS as k (k)}
-						<DropdownMenu.CheckboxItem
-							checked={!hidden.includes(k)}
-							onCheckedChange={(on) => toggleLevel(k, on)}
-						>
-							<span
-								class={[
-									'size-2 flex-none rounded-full',
-									k === 'error'
-										? 'bg-ansi-red'
-										: k === 'warning'
-											? 'bg-ansi-yellow'
-											: k === 'info'
-												? 'bg-ansi-blue'
-												: 'bg-faint'
-								]}
-							></span>
-							{LEVEL_LABEL[k]}
-							<span class="ml-auto text-xs text-muted-foreground tabular-nums">
-								{counts[k].toLocaleString('en-US')}
-							</span>
-						</DropdownMenu.CheckboxItem>
-					{/each}
-				</DropdownMenu.Group>
-				{#if hidden.length}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item onSelect={() => ((hidden = []), remember())}>
-						Show all levels
-					</DropdownMenu.Item>
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						{@attach hint('Next match  Enter')}
+						aria-label="Next match"
+						disabled={!matches.length}
+						onclick={() => step(1)}
+					>
+						<ChevronDownIcon />
+					</Button>
 				{/if}
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
+			{/snippet}
+		</BarSearch>
 
+		<!-- How the lines show, in one menu as a view's Display: the levels shown (only those the
+		     log has), the timestamps, wrapping. Lit while it hides levels. -->
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
-					<Button {...props} variant="ghost" size="sm" {@attach hint('Timestamps')}>
-						<ClockIcon />
-						<span class="max-sm:hidden">{STAMPS.find((s) => s.value === stamps)?.label}</span>
+					<Button
+						{...props}
+						variant={hidden.length ? 'quiet-on' : 'quiet'}
+						size="icon-bar"
+						aria-label={hidden.length
+							? `Display, ${levelsShown} of ${present.length} levels shown`
+							: 'Display'}
+						{@attach hint(
+							hidden.length
+								? `Display: ${levelsShown} of ${present.length} levels shown`
+								: 'Display'
+						)}
+					>
+						<SlidersHorizontalIcon />
 					</Button>
 				{/snippet}
 			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="start" class="w-56">
+			<DropdownMenu.Content align="end" class="w-56">
+				{#if present.length > 1}
+					<DropdownMenu.Group>
+						<DropdownMenu.Label>Levels</DropdownMenu.Label>
+						{#each present as k (k)}
+							<DropdownMenu.CheckboxItem
+								checked={!hidden.includes(k)}
+								onCheckedChange={(on) => toggleLevel(k, on)}
+							>
+								<span
+									class={[
+										'size-2 flex-none rounded-full',
+										k === 'error'
+											? 'bg-ansi-red'
+											: k === 'warning'
+												? 'bg-ansi-yellow'
+												: k === 'info'
+													? 'bg-ansi-blue'
+													: 'bg-faint'
+									]}
+								></span>
+								{LEVEL_LABEL[k]}
+								<span class="ml-auto text-xs text-muted-foreground tabular-nums">
+									{counts[k].toLocaleString('en-US')}
+								</span>
+							</DropdownMenu.CheckboxItem>
+						{/each}
+						{#if hidden.length}
+							<DropdownMenu.Item onSelect={() => ((hidden = []), remember())}>
+								<span class="size-4" aria-hidden="true"></span> Show all levels
+							</DropdownMenu.Item>
+						{/if}
+					</DropdownMenu.Group>
+					<DropdownMenu.Separator />
+				{/if}
 				<DropdownMenu.Group>
 					<DropdownMenu.Label>Timestamps</DropdownMenu.Label>
 					<DropdownMenu.RadioGroup
@@ -616,40 +640,35 @@
 						{/each}
 					</DropdownMenu.RadioGroup>
 				</DropdownMenu.Group>
+				<DropdownMenu.Separator />
+				<DropdownMenu.CheckboxItem
+					checked={wrap}
+					onCheckedChange={(on) => ((wrap = on), remember())}
+				>
+					Wrap long lines
+				</DropdownMenu.CheckboxItem>
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
-
-		<Button
-			variant="ghost"
-			size="icon-sm"
-			class="aria-pressed:bg-muted aria-pressed:text-foreground"
-			{@attach hint(wrap ? 'Don’t wrap long lines' : 'Wrap long lines')}
-			aria-label="Wrap long lines"
-			aria-pressed={wrap}
-			onclick={() => ((wrap = !wrap), remember())}
-		>
-			<TextWrapIcon />
-		</Button>
 		{#if live}
 			<Button
-				variant="ghost"
-				size="sm"
-				class="aria-pressed:bg-muted aria-pressed:text-foreground"
+				variant={following ? 'quiet-on' : 'quiet'}
+				size="icon-bar"
 				{@attach hint(
 					following ? 'Stop following new lines' : 'Follow new lines as they’re printed'
 				)}
+				aria-label="Follow new lines"
 				aria-pressed={following}
 				onclick={follow}
 			>
-				<ArrowDownToLineIcon />
-				Follow
+				<ChevronsDownIcon />
 			</Button>
 		{/if}
 
-		<span class="ml-auto"></span>
+		{#if !bar}<span class="ml-auto"></span>{/if}
 		<Button
-			variant="ghost"
-			size="icon-sm"
+			variant="quiet"
+			size="icon-bar"
+			class={bar ? 'max-sm:hidden' : undefined}
 			{@attach hint('Copy the lines loaded')}
 			aria-label="Copy the lines loaded"
 			disabled={!shown.lines.length}
@@ -658,8 +677,9 @@
 			<CopyIcon />
 		</Button>
 		<Button
-			variant="ghost"
-			size="icon-sm"
+			variant="quiet"
+			size="icon-bar"
+			class={bar ? 'max-sm:hidden' : undefined}
 			{@attach hint('Download all of it')}
 			aria-label="Download the console output"
 			disabled={downloading || !known}
@@ -669,8 +689,12 @@
 		</Button>
 	</div>
 
+	<!-- A stop of its own, so the keyboard can scroll the log (the line links are left out). -->
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 	<div
-		class="relative min-h-0 flex-1 overflow-auto [overflow-anchor:none]"
+		class="relative min-h-0 flex-1 overflow-auto outline-none [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+		tabindex="0"
+		aria-label="Console output"
 		bind:this={scroller}
 		bind:clientHeight={viewH}
 		bind:clientWidth={viewW}
@@ -726,8 +750,10 @@
 							data-index={row}
 							{@attach wrap && measure}
 						>
+							<!-- Out of the Tab order: a stop per line would trap the keyboard in the log. -->
 							<a
 								href="#L{l.line + 1}"
+								tabindex="-1"
 								class={[
 									'w-[8ch] flex-none pr-[2ch] text-right tabular-nums select-none hover:text-foreground hover:underline',
 									selected === l.line
@@ -749,9 +775,8 @@
 									]}
 								>
 									{#if l.at != null}
-										<span
-											class="mt-px inline-flex h-[18px] items-center rounded-[4px] bg-muted px-1.5 align-top text-[11px] text-muted-foreground tabular-nums"
-											{@attach hint(dateTime(l.at))}>{stampOf(l)}</span
+										<span class="text-muted-foreground tabular-nums" {@attach hint(dateTime(l.at))}
+											>{stampOf(l)}</span
 										>
 									{/if}
 								</span>
@@ -772,14 +797,12 @@
 			</div>
 			<div class="px-5 py-3 text-xs text-muted-foreground">
 				{#if laterCount > 0}
-					<Button variant="outline" size="sm" onclick={later} pending={loadingLater}>
+					<Button variant="quiet" size="bar" onclick={later} pending={loadingLater}>
 						Show later lines
 					</Button>
 					<span class="ml-2"
 						>{laterCount.toLocaleString('en-US')} later{q ? ', not searched' : ''}</span
 					>
-				{:else if live}
-					{known.toLocaleString('en-US')} lines so far, and new ones appear as the run prints them
 				{/if}
 			</div>
 		{/if}

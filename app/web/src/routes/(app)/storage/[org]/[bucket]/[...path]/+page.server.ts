@@ -1,3 +1,4 @@
+import { isHttpError, redirect } from '@sveltejs/kit';
 import { authConfig } from '#lib/server/auth.ts';
 import { flock } from '#lib/server/flock.ts';
 import { bucketPath } from '#lib/server/storage.ts';
@@ -21,8 +22,21 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		const listing = (await flock(`${path}/objects?${search}`).then((r) => r.json())) as Listing;
 		return { kind: 'folder' as const, key, listing, s3, object: null, now: Date.now() / 1000 };
 	}
-	const object = (await flock(`${path}/object?${new URLSearchParams({ key })}`).then((r) =>
-		r.json()
-	)) as ObjectDetails;
+	let object: ObjectDetails;
+	try {
+		object = (await flock(`${path}/object?${new URLSearchParams({ key })}`).then((r) =>
+			r.json()
+		)) as ObjectDetails;
+	} catch (e) {
+		// No object by that name, but a folder (D11): the folder, at its URL with the slash.
+		if (isHttpError(e) && e.status === 404) {
+			const search = new URLSearchParams({ prefix: `${key}/`, limit: '1' });
+			const folder = (await flock(`${path}/objects?${search}`).then((r) => r.json())) as Listing;
+			if (folder.folders.length || folder.objects.length) {
+				redirect(308, `${url.pathname}/${url.search}`);
+			}
+		}
+		throw e;
+	}
 	return { kind: 'object' as const, key, listing: null, s3, object, now: Date.now() / 1000 };
 };

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
-	import { enhance } from '$app/forms';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
@@ -10,7 +9,7 @@
 	import { expiryChoices } from '#lib/s3.ts';
 	import type { S3KeyCreated } from '#lib/types.ts';
 	import { dateTime, formText } from '#lib/utils.ts';
-	import FormError from './FormError.svelte';
+	import AnchoredForm from './AnchoredForm.svelte';
 	import SecretField from './SecretField.svelte';
 
 	interface Props {
@@ -41,8 +40,12 @@
 	const mutation = new Mutation<{ s3Key: S3KeyCreated }>({
 		validate: (form) => (formText(form, 'name') ? null : 'Name the key'),
 		success: ({ s3Key }) => `Created S3 key “${s3Key.name}”`,
-		done: (data) => (created = data.s3Key)
+		done: (data) => {
+			created = data.s3Key;
+			open = false;
+		}
 	});
+	let open = $state(false);
 	// Read and write unless the key is made read only.
 	let permissions = $state<'write' | 'read'>('write');
 	const PERMISSIONS = { write: 'Read & write', read: 'Read only' } as const;
@@ -69,28 +72,40 @@
 		</div>
 	</div>
 {:else}
-	<form
-		method="POST"
+	<!-- In a small form opened from the button, as a wandb key is (Harry): the same fields. -->
+	<AnchoredForm
+		bind:open
+		title="New S3 key"
+		submit="Create key"
 		action="/account?/createS3Key"
-		class="grid gap-3"
-		use:enhance={mutation.enhance}
+		enhance={mutation.enhance}
+		pending={mutation.pending}
+		error={mutation.error}
+		disabled={!org}
+		align="start"
+		wide
+		onclosed={() => mutation.reset()}
 	>
-		<div class="flex flex-wrap items-end gap-2">
-			<div class="grid min-w-48 flex-1 gap-2">
-				<Label for="s3-key-name">Name</Label>
-				<Input
-					id="s3-key-name"
-					name="name"
-					placeholder="e.g., notebook"
-					autocomplete="off"
-					maxlength={128}
-				/>
-			</div>
-			<div class="grid gap-2">
-				<Label for="s3-key-org">Organization</Label>
+		{#snippet trigger(props)}
+			<Button {...props} variant="outline"><KeyRoundIcon /> Create S3 key</Button>
+		{/snippet}
+		<div class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 text-[13px]">
+			<Label for="s3-key-name" class="text-[13px] font-normal text-muted-foreground">Name</Label>
+			<Input
+				id="s3-key-name"
+				name="name"
+				class="h-8"
+				placeholder="e.g., notebook"
+				autocomplete="off"
+				maxlength={128}
+			/>
+			<Label for="s3-key-org" class="text-[13px] font-normal text-muted-foreground">
+				Organization
+			</Label>
+			<div>
 				<input type="hidden" name="org" value={org} />
 				<Select.Root type="single" bind:value={org}>
-					<Select.Trigger id="s3-key-org" class="w-44">{orgLabel(org)}</Select.Trigger>
+					<Select.Trigger id="s3-key-org" class="w-full">{orgLabel(org)}</Select.Trigger>
 					<Select.Content>
 						{#each orgs as option (option.name)}
 							<Select.Item value={option.name} label={option.display_name}>
@@ -100,11 +115,13 @@
 					</Select.Content>
 				</Select.Root>
 			</div>
-			<div class="grid gap-2">
-				<Label for="s3-key-expiry">Expires after</Label>
+			<Label for="s3-key-expiry" class="text-[13px] font-normal text-muted-foreground">
+				Expires after
+			</Label>
+			<div>
 				<input type="hidden" name="ttl" value={ttl} />
 				<Select.Root type="single" bind:value={ttl}>
-					<Select.Trigger id="s3-key-expiry" class="w-32"
+					<Select.Trigger id="s3-key-expiry" class="w-full"
 						>{chosen?.label ?? 'Choose'}</Select.Trigger
 					>
 					<Select.Content>
@@ -121,11 +138,13 @@
 					</Select.Content>
 				</Select.Root>
 			</div>
-			<div class="grid gap-2">
-				<Label for="s3-key-permissions">Permissions</Label>
+			<Label for="s3-key-permissions" class="text-[13px] font-normal text-muted-foreground">
+				Permissions
+			</Label>
+			<div>
 				{#if permissions === 'read'}<input type="hidden" name="read_only" value="on" />{/if}
 				<Select.Root type="single" bind:value={permissions}>
-					<Select.Trigger id="s3-key-permissions" class="w-36"
+					<Select.Trigger id="s3-key-permissions" class="w-full"
 						>{PERMISSIONS[permissions]}</Select.Trigger
 					>
 					<Select.Content>
@@ -136,17 +155,5 @@
 				</Select.Root>
 			</div>
 		</div>
-		<FormError error={mutation.error} />
-		<div>
-			<Button
-				type="submit"
-				variant="outline"
-				disabled={mutation.pending || !org}
-				pending={mutation.pending}
-			>
-				<KeyRoundIcon />
-				Create S3 key
-			</Button>
-		</div>
-	</form>
+	</AnchoredForm>
 {/if}

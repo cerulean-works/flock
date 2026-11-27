@@ -1,7 +1,7 @@
 <script lang="ts">
+	import { accountHref } from '#lib/settings.ts';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
@@ -87,7 +87,7 @@
 </svelte:head>
 
 <RunView
-	title={ws.meta.project}
+	title="Runs"
 	subtitleTitle={description ?? undefined}
 	badges={visibility === 'public' ? publicBadge : undefined}
 	initialView={lastView(data.shell.projectView)}
@@ -100,11 +100,6 @@
 	stacked={data.shell.stacked}
 	tableH={data.shell.tableH}
 >
-	{#snippet subtitle()}
-		{#if description}
-			<span class="description">{description}</span>
-		{/if}
-	{/snippet}
 	{#snippet actions()}
 		<LiveStatus />
 	{/snippet}
@@ -128,9 +123,8 @@
 				{#snippet actions()}
 					<span>
 						Sign in with your wandb key, or
-						<a
-							class="text-link underline-offset-3 hover:underline"
-							href="{resolve('/(app)/account')}#keys">create one</a
+						<a class="text-link underline-offset-3 hover:underline" href={accountHref('keys')}
+							>create one</a
 						>.
 					</span>
 				{/snippet}

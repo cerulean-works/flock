@@ -71,14 +71,17 @@ afterEach(() => {
 });
 
 describe('the Results tab', () => {
-	it('shows suites, each task’s primary metric with its hash and dataset, and the provenance', async () => {
+	it('shows suites, each task’s primary metric, its hash to copy and dataset, and the provenance', async () => {
 		noText();
+		// The metric and docs columns show from the small breakpoint up.
+		await screen.viewport(1280, 800);
 		render(RunResults, { run: run('r1'), results: RESULTS });
 		const task = screen.getByRole('row').filter({ hasText: 'tw_exam' });
 		await expect.element(task).toBeVisible();
 		await expect.element(task.getByText('acc_per_char')).toBeVisible();
 		await expect.element(task.getByText('571')).toBeVisible();
-		await expect.element(task.getByText('eeeeeeeeeeee')).toBeVisible();
+		// The hash isn't a column: a copy away on the name's row.
+		await expect.element(task.getByRole('button', { name: 'Copy the hash' })).toBeInTheDocument();
 		await expect.element(task.getByLabelText('Private dataset')).toBeInTheDocument();
 		await expect.element(screen.getByText('EFFICIENT_ATTENTION')).toBeVisible();
 		await expect
@@ -224,7 +227,11 @@ describe('the compare page', () => {
 		render(ComparePage, {
 			data: { a: run('r1'), b: run('r2'), compared: Promise.resolve({ diff: null, refusal }) }
 		} as never);
-		await expect.element(screen.getByRole('alert')).toHaveTextContent(refusal);
+		// One plain sentence; Flock's own reason stays in the hint.
+		await expect
+			.element(screen.getByRole('alert'))
+			.toHaveTextContent('These runs were evaluated with different settings');
+		expect(document.body.textContent).not.toContain('provenance');
 	});
 
 	it('loads a linked task’s items before the diff lands', async () => {

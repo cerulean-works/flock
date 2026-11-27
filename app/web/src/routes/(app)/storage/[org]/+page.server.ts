@@ -20,7 +20,7 @@ export const load: PageServerLoad = async ({ params }) => {
 				throw e;
 			})
 	]);
-	if (!s3) error(404, 'This Flock server has no S3 storage');
+	if (!s3) error(404, { message: 'This Flock server has no S3 storage', noS3: true });
 	if (!listed) error(404, `Organization ${params.org} not found`);
 	return {
 		s3,

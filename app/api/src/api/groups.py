@@ -448,6 +448,25 @@ async def query_group_runs(
     return await query_runs(project, body.model_copy(update={"filter": combined}), store)
 
 
+@public.get(P + "/{group}/runs/values")
+async def group_run_values(
+    project: ReadableProjectDep,
+    group: int,
+    store: StoreDep,
+    keys: Annotated[str, Query(description="comma separated columns, e.g. state,owner,tags")],
+) -> Response:
+    """The values of ``keys`` among the group's runs, with how many have each (``GET
+    .../runs/values``)."""
+    found = await find_group(store, project, group)
+    api = Groups(store)
+    members = (await api.membership(project, [found]))[found.pk].members
+    ids = list((await api.names(members)).values())
+    selection = RunSelection(filter={"name": {"$in": ids}}).selection()
+    names = [key.strip() for key in keys.split(",") if key.strip()][:32]
+    counted = await query.value_counts(store.db.pool, project.pk, selection, names)
+    return JSONResponse({"values": counted})
+
+
 @public.get(P + "/{group}/workspace")
 async def group_workspace(
     project: ReadableProjectDep,

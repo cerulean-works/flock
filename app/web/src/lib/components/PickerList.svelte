@@ -2,10 +2,11 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import type { Snippet } from 'svelte';
+	import MenuSearch from '#lib/components/MenuSearch.svelte';
 
 	/**
 	 * A picker's list, worked from its search box: ↑↓ move and wrap, Enter picks the active option,
-	 * Backspace in an empty box goes up a level and Escape goes back one. The popover pickers and the
+	 * Backspace in an empty box goes up a level and Escape clears the box, then goes back one. The popover pickers and the
 	 * inline folder panel all list through it, so they read and answer keys the same way.
 	 */
 	interface Props {
@@ -27,8 +28,6 @@
 		active?: number;
 		loading?: boolean;
 		error?: string | null;
-		/** What Enter does to the active option, for the key footer. */
-		verb?: 'pick' | 'open';
 		/** The search box's id, for a label outside. */
 		id?: string;
 		disabled?: boolean;
@@ -55,7 +54,6 @@
 		active = $bindable(0),
 		loading = false,
 		error = null,
-		verb = 'pick',
 		id,
 		disabled = false,
 		class: height = 'max-h-72',
@@ -81,11 +79,6 @@
 		} else if (e.key === 'Backspace' && !query && onup) {
 			e.preventDefault();
 			onup();
-		} else if (e.key === 'Escape' && onback) {
-			// Before the popover or dialog around it sees the key and closes.
-			e.preventDefault();
-			e.stopPropagation();
-			onback();
 		}
 	}
 
@@ -95,24 +88,20 @@
 	});
 </script>
 
-<div class="border-b border-divider px-2 py-1.5">
-	<input
-		{id}
-		{disabled}
-		role="combobox"
-		aria-expanded="true"
-		aria-controls="{uid}-list"
-		aria-activedescendant={options[active] !== undefined ? `${uid}-${active}` : undefined}
-		aria-label={label}
-		{placeholder}
-		class="h-7 w-full min-w-0 bg-transparent text-[13px] outline-none placeholder:text-faint disabled:opacity-50"
-		spellcheck="false"
-		autocomplete="off"
-		bind:value={query}
-		oninput={() => (active = 0)}
-		{onkeydown}
-	/>
-</div>
+<MenuSearch
+	{id}
+	{disabled}
+	role="combobox"
+	aria-expanded="true"
+	aria-controls="{uid}-list"
+	aria-activedescendant={options[active] !== undefined ? `${uid}-${active}` : undefined}
+	{label}
+	{placeholder}
+	bind:value={query}
+	oninput={() => (active = 0)}
+	{onkeydown}
+	{onback}
+/>
 <div class={['overflow-y-auto p-1 text-[13px]', height]}>
 	<div id="{uid}-list" role="listbox" aria-label={noun}>
 		{#each options as option, i (key(option))}
@@ -149,11 +138,3 @@
 	{/if}
 </div>
 {@render actions?.()}
-<p
-	class="flex gap-3 border-t border-divider px-3 py-1.5 text-[11px] text-muted-foreground"
-	aria-hidden="true"
->
-	<span>↑↓ move</span><span>↵ {verb}</span>
-	{#if onup}<span>⌫ up a folder</span>{/if}
-	{#if onback}<span>esc back</span>{/if}
-</p>

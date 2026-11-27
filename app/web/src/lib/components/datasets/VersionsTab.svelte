@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
-	import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import type { ResolvedPathname } from '$app/types';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -10,9 +9,11 @@
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
+	import DataTable, { ROW_LINK, type Column } from '../DataTable.svelte';
 	import TagChip from '../TagChip.svelte';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
 	import TagDialog from './TagDialog.svelte';
+	import { openMenuTrigger } from '../AnchoredForm.svelte';
 	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
@@ -30,6 +31,13 @@
 	}
 
 	let { scope, path, shown, versionHref, ontags, readonly = false, now }: Props = $props();
+
+	const columns: Column[] = [
+		{ id: 'version', label: 'Version', size: 'fit' },
+		{ id: 'change', label: 'Change' },
+		{ id: 'tags', label: 'Tags', from: 'sm' },
+		{ id: 'written', label: 'Updated', align: 'end' }
+	];
 
 	// The history, newest first, 50 a page (D89).
 	let versions = $state<DatasetVersion[]>([]);
@@ -66,6 +74,7 @@
 	}
 
 	const tagging = new DialogSubject<number>();
+	let tagAnchor = $state<HTMLElement | null>(null);
 	const removing = new DialogSubject<{ tag: string; version: number }>();
 
 	/** The message a writer gave Lance's commit; it reads as the change's description. */
@@ -77,139 +86,104 @@
 		`${delta > 0 ? '+' : '−'}${Math.abs(delta).toLocaleString('en-US')} ${Math.abs(delta) === 1 ? 'row' : 'rows'}`;
 </script>
 
-{#if failed && !loaded}
-	<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
-{:else if !loaded}
-	<Skeleton />
-{:else}
-	<!-- Every cell starts on the same 24px line, so a row reads level whatever it holds. -->
-	<table class="w-full border-collapse text-[13px] leading-6">
-		<thead>
-			<tr class="h-10 border-b text-left text-xs text-muted-foreground">
-				<th class="w-px px-3 font-medium">Version</th>
-				<th class="w-px px-3 font-medium">Tags</th>
-				<th class="w-px px-3 font-medium">Written</th>
-				<th class="px-3 font-medium">Change</th>
-				<th class="w-px"><span class="sr-only">Actions</span></th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each versions as v (v.version)}
-				{@const message = v.properties[MESSAGE]}
-				<tr
-					class={['border-b border-divider align-top', v.version === shown && 'bg-muted']}
-					aria-current={v.version === shown ? 'true' : undefined}
-				>
-					<td class="px-3 py-3 tabular-nums">{v.version}</td>
-					<td class="px-3 py-3">
-						{#if v.tags.length}
-							<ul
-								class="flex w-max max-w-72 flex-wrap gap-1"
-								aria-label="Tags of version {v.version}"
-							>
-								{#each v.tags as tag (tag)}
-									<TagChip
-										as="li"
-										{tag}
-										onremove={readonly
-											? undefined
-											: () => removing.show({ tag, version: v.version })}
-									/>
-								{/each}
-							</ul>
-						{:else if !v.kept_for}
-							<span class="text-faint">None</span>
-						{/if}
-						{#if v.kept_for}
-							<p
-								class="mt-1 text-xs whitespace-nowrap text-muted-foreground"
-								{@attach hint(
-									"Forks or blends read this version, so it's never cleaned up (D173)."
-								)}
-							>
-								Kept for {v.kept_for} dataset{v.kept_for === 1 ? '' : 's'}
-							</p>
-						{/if}
-					</td>
-					<td
-						class="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums"
-						{@attach hint(dateTime(v.timestamp))}
-					>
-						{relativeTime(v.timestamp, now)}
-					</td>
-					<td class="px-3 py-3">
-						<p>
-							{v.operation ?? 'Unknown'}
-							{#if v.rows_delta}
-								<span class="ml-1 text-muted-foreground tabular-nums"
-									>{rowsChange(v.rows_delta)}</span
-								>
-							{/if}
-						</p>
-						{#if message}
-							<p class="whitespace-pre-line text-muted-foreground">{message}</p>
-						{/if}
-						{#each extra(v.properties) as [key, value] (key)}
-							<p class="text-[12px] leading-5">
-								<span class="font-mono text-faint">{key}</span>
-								<span class="text-muted-foreground">{value}</span>
-							</p>
+{#snippet cell(v: DatasetVersion, id: string)}
+	{#if id === 'version'}
+		<a
+			class={[ROW_LINK, 'tabular-nums', v.version === shown && 'font-medium']}
+			href={versionHref(String(v.version))}
+			aria-label="View version {v.version}">v{v.version}</a
+		>
+	{:else if id === 'change'}
+		{@const message = v.properties[MESSAGE]}
+		<p>
+			{v.operation ?? 'Unknown'}
+			{#if v.rows_delta}
+				<span class="ml-1 text-muted-foreground tabular-nums">{rowsChange(v.rows_delta)}</span>
+			{/if}
+		</p>
+		{#if message}
+			<p class="whitespace-pre-line text-muted-foreground">{message}</p>
+		{/if}
+		{#each extra(v.properties) as [key, value] (key)}
+			<p class="text-[12px] leading-5">
+				<span class="font-mono text-faint">{key}</span>
+				<span class="text-muted-foreground">{value}</span>
+			</p>
+		{/each}
+	{:else if id === 'tags'}
+		{#if v.tags.length || v.kept_for}
+			<div class="relative z-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+				{#if v.tags.length}
+					<ul class="flex flex-wrap gap-1" aria-label="Tags of version {v.version}">
+						{#each v.tags as tag (tag)}
+							<TagChip
+								as="li"
+								{tag}
+								onremove={readonly ? undefined : () => removing.show({ tag, version: v.version })}
+							/>
 						{/each}
-					</td>
-					<td class="py-2.5 pr-2 pl-3 whitespace-nowrap">
-						<div class="flex items-center gap-1">
-							<Button
-								variant="ghost"
-								size="sm"
-								class="text-muted-foreground"
-								href={versionHref(String(v.version))}
-								aria-label="View version {v.version}"
-							>
-								View
-							</Button>
-							{#if !readonly}
-								<DropdownMenu.Root>
-									<DropdownMenu.Trigger>
-										{#snippet child({ props })}
-											<Button
-												{...props}
-												variant="ghost"
-												size="icon-sm"
-												class="text-muted-foreground"
-												aria-label="Version {v.version} actions"
-											>
-												<EllipsisVerticalIcon />
-											</Button>
-										{/snippet}
-									</DropdownMenu.Trigger>
-									<DropdownMenu.Content align="end" class="w-40">
-										<DropdownMenu.Item onSelect={() => tagging.show(v.version)}>
-											<TagIcon /> Add tag…
-										</DropdownMenu.Item>
-									</DropdownMenu.Content>
-								</DropdownMenu.Root>
-							{/if}
-						</div>
-					</td>
-				</tr>
-			{/each}
-		</tbody>
-	</table>
-	{#if failed}
-		<p class="mt-2 text-[13px] text-destructive" role="alert">{failed}</p>
+					</ul>
+				{/if}
+				{#if v.kept_for}
+					<span
+						class="text-xs whitespace-nowrap text-muted-foreground"
+						{@attach hint("Forks or blends read this version, so it's never cleaned up (D173).")}
+					>
+						kept for {v.kept_for} dataset{v.kept_for === 1 ? '' : 's'}
+					</span>
+				{/if}
+			</div>
+		{/if}
+	{:else if id === 'written'}
+		<span class="text-muted-foreground" {@attach hint(dateTime(v.timestamp))}
+			>{relativeTime(v.timestamp, now)}</span
+		>
 	{/if}
+{/snippet}
+
+{#snippet menu(v: DatasetVersion)}
+	<DropdownMenu.Item
+		onSelect={() => {
+			tagAnchor = openMenuTrigger();
+			tagging.show(v.version);
+		}}
+	>
+		<TagIcon /> Add tag…
+	</DropdownMenu.Item>
+{/snippet}
+
+{#snippet more()}
+	{#if failed}<p class="text-[13px] text-destructive" role="alert">{failed}</p>{/if}
 	{#if cursor !== null}
-		<div class="mt-3">
-			<Button variant="outline" size="sm" onclick={() => load(true)} pending={loading}>
-				Load more
-			</Button>
-		</div>
+		<Button variant="quiet" size="bar" onclick={() => load(true)} pending={loading}
+			>Load more</Button
+		>
 	{/if}
+{/snippet}
+
+{#if failed && !loaded}
+	<p class="px-5 pt-5 text-[13px] text-destructive" role="alert">{failed}</p>
+{:else if !loaded}
+	<div class="px-5 pt-5"><Skeleton /></div>
+{:else}
+	<!-- The list tables' look (Gate 2): 36px rows to the edges, the row opens its version. -->
+	<DataTable
+		{columns}
+		rows={versions}
+		key={(v) => String(v.version)}
+		name={(v) => `Version ${v.version}`}
+		current={(v) => v.version === shown}
+		{cell}
+		menu={readonly ? undefined : menu}
+		footer={failed || cursor !== null ? more : undefined}
+		label="Versions"
+	/>
 {/if}
 
 {#if !readonly}
 	<TagDialog
 		bind:open={tagging.open}
+		anchor={tagAnchor}
 		{scope}
 		{path}
 		version={tagging.value ?? 0}

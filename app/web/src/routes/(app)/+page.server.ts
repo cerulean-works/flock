@@ -1,43 +1,27 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { refreshUser } from '#lib/server/auth.ts';
-import { change, refused, flock } from '#lib/server/flock.ts';
-import { FEED, feedKinds } from '#lib/data/feed.svelte.ts';
-import type { Budget, FeedPage } from '#lib/types.ts';
-import { formText, monthOf } from '#lib/utils.ts';
+import { change, refused } from '#lib/server/flock.ts';
+import { formText } from '#lib/utils.ts';
 import { entityHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
- * Home: the activity of the organization in the sidebar (the user's default), and its budget.
- * `?feed=mine` keeps the feed to the user's own runs, `?kinds=` to some kinds of activity and
- * `?project=` to one project; `?month=YYYY-MM` shows an earlier month.
+ * The way in: the runs of the organization in the sidebar (the user's default), which hold its
+ * budget too. Home's old links keep their filters: `?feed=mine` becomes `?runs=mine`, and
+ * `?project=` and `?month=` carry over. Without an org there is nothing to show but how to
+ * get one.
  */
-export const load: PageServerLoad = async ({ parent, url, depends }) => {
-	depends(FEED);
+export const load: PageServerLoad = async ({ parent, url }) => {
 	const { shell } = await parent();
-	const now = Date.now() / 1000;
-	const thisMonth = monthOf(now);
-	if (!shell.org)
-		return { org: null, now, thisMonth, feed: null, budget: null, query: {}, kinds: null };
-
-	const mine = url.searchParams.get('feed') === 'mine';
-	const kinds = feedKinds(url.searchParams.get('kinds'));
-	const project = url.searchParams.get('project') || null;
-	const month = url.searchParams.get('month');
-	const query: Record<string, string> = {
-		org: shell.org,
-		...(mine && { owner: 'me' }),
-		...(kinds && { kinds }),
-		...(project && { project })
-	};
-	const budgetSearch = month && /^\d{4}-\d{2}$/.test(month) ? `?month=${month}` : '';
-	const [feed, budget] = await Promise.all([
-		flock(`/api/v1/feed?${new URLSearchParams(query)}`).then((r) => r.json() as Promise<FeedPage>),
-		flock(`/api/v1/orgs/${encodeURIComponent(shell.org)}/budget${budgetSearch}`).then(
-			(r) => r.json() as Promise<Budget>
-		)
-	]);
-	return { org: shell.org, now, thisMonth, feed, budget, query, mine, kinds, project };
+	if (!shell.org) return { org: null };
+	const to = new URLSearchParams();
+	if (url.searchParams.get('feed') === 'mine') to.set('runs', 'mine');
+	for (const key of ['project', 'month']) {
+		const value = url.searchParams.get(key);
+		if (value) to.set(key, value);
+	}
+	const search = to.size ? `?${to}` : '';
+	redirect(307, `${entityHref(shell.org)}${search}`);
 };
 
 export const actions: Actions = {

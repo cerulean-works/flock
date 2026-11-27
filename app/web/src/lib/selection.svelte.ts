@@ -49,6 +49,13 @@ export class Selection {
 		this.selected = this.all ? new Set() : new Set(this.keys);
 	};
 
+	/**
+	 * The rows a row's menu acts on (its ⋯ or a right-click): the selection when the row is one
+	 * of several checked, as on the runs table; the row alone otherwise.
+	 */
+	targetsFor = (key: string): readonly string[] =>
+		this.selected.size > 1 && this.selected.has(key) ? this.chosen : [key];
+
 	/** Open a dialog on some rows: those checked, or one row from its menu. */
 	act = (action: RowAction, targets: readonly string[] = this.chosen) => {
 		if (!targets.length) return;

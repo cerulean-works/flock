@@ -6,11 +6,13 @@
 		variants: {
 			variant: {
 				default: 'bg-muted',
-				line: 'gap-1 bg-transparent'
+				// Underline tabs (the default everywhere): 36px tall, so in a 36px bar the active tab's line
+				// lands on the bar's bottom rule.
+				line: 'gap-4 rounded-none bg-transparent p-0 group-data-horizontal/tabs:h-9'
 			}
 		},
 		defaultVariants: {
-			variant: 'default'
+			variant: 'line'
 		}
 	});
 
@@ -23,7 +25,7 @@
 
 	let {
 		ref = $bindable(null),
-		variant = 'default',
+		variant = 'line',
 		class: className,
 		...restProps
 	}: TabsPrimitive.ListProps & {

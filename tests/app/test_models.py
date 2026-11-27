@@ -1411,7 +1411,7 @@ def test_model_names_have_folders(flock: S3Flock) -> None:
     moved = api.patch(scoped.url("top"), {"name": "eval/top"})
     assert moved.status == 200 and moved.json()["model"] == "flock/eval/top"
 
-    # Paging: models first, then folders.
+    # Paging: folders first, then models.
     paged: list[str] = []
     cursor = None
     monkey = Models.PAGE
@@ -1419,12 +1419,12 @@ def test_model_names_have_folders(flock: S3Flock) -> None:
         Models.PAGE = 1
         while True:
             page = api.get(MODELS, folder="eval", **({"cursor": cursor} if cursor else {})).json()
-            paged += [m["name"] for m in page["models"]] + [f["path"] for f in page["folders"]]
+            paged += [f["path"] for f in page["folders"]] + [m["name"] for m in page["models"]]
             if (cursor := page["cursor"]) is None:
                 break
     finally:
         Models.PAGE = monkey
-    assert paged == ["eval/olmo2-1b", "eval/top", "eval/sweeps"]
+    assert paged == ["eval/sweeps", "eval/olmo2-1b", "eval/top"]
 
 
 def test_a_project_s_models(flock: S3Flock) -> None:

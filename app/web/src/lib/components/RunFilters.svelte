@@ -3,24 +3,24 @@
 	import BracketsIcon from '@lucide/svelte/icons/brackets';
 	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import UserIcon from '@lucide/svelte/icons/user';
 	import XIcon from '@lucide/svelte/icons/x';
+
+	import MenuSearch from './MenuSearch.svelte';
+	import { columnLabel } from '#lib/workspace/columns.ts';
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
-	import type { ColumnKind, RunQuery, RunState } from '#lib/types.ts';
+	import type { ColumnDef, ColumnKind, RunQuery, RunState } from '#lib/types.ts';
 	import {
 		countConditions,
 		describeFilters,
 		isGroup,
 		opLabel,
 		opsFor,
-		ownedBy,
 		parseValue,
-		setOwner,
 		UNARY,
 		valueText,
 		type FilterMatch,
@@ -32,6 +32,10 @@
 	import { getWorkspace, type Workspace } from '#lib/workspace/workspace.svelte.ts';
 	import Autocomplete, { type AutocompleteOption } from './Autocomplete.svelte';
 	import FormError from './FormError.svelte';
+	import ColumnFilterPanel from './ColumnFilterPanel.svelte';
+	import { columnFilterProps } from '#lib/workspace/column-filter.ts';
+	import { columnFilterKind } from '#lib/workspace/filters.ts';
+	import { runValues } from '#lib/data/run-values.svelte.ts';
 
 	interface Props {
 		/**
@@ -42,31 +46,21 @@
 		columns?: { key: string; kind?: ColumnKind }[];
 		people?: People;
 		onapply?: (filters: RunFilter[]) => void;
-		/** Without the "My runs" button. */
-		noMine?: boolean;
-		/** An icon button, its filters counted in a badge (a group's crowded toolbar). */
-		compact?: boolean;
 	}
 
-	let {
-		filters,
-		columns: given,
-		people: givenPeople,
-		onapply,
-		noMine = false,
-		compact = false
-	}: Props = $props();
+	let { filters, columns: given, people: givenPeople, onapply }: Props = $props();
 
 	// The workspace's, unless the caller edits its own filters (there is no workspace then).
 	// svelte-ignore state_referenced_locally
 	const ws = onapply ? null : getWorkspace();
 	const applied = $derived(filters ?? ws?.page.query.filters ?? []);
 	const people = $derived<People>(givenPeople ?? ws?.people ?? new Map());
-	const known = $derived<{ key: string; kind?: ColumnKind }[]>(given ?? ws?.meta.columns ?? []);
+	const known = $derived<
+		{ key: string; kind?: ColumnKind; label?: string; group?: ColumnDef['group'] }[]
+	>(given ?? ws?.meta.columns ?? []);
 	const count = $derived(countConditions(applied));
-	/** Who is looking: "My runs" keeps the runs they logged. */
-	const me = $derived(page.data.shell?.me?.id);
-	const mine = $derived(me != null && ownedBy(applied, me));
+	/** Who is looking: their runs' owner reads as Me. */
+	const me = $derived(page.data.shell?.me?.id as number | undefined);
 
 	const STATES: RunState[] = ['running', 'preempting', 'finished', 'failed', 'crashed'];
 
@@ -134,7 +128,12 @@
 	 * the top level: `any` of several filters travels as one group.
 	 */
 	function onOpenChange(o: boolean) {
-		if (!o) return;
+		if (!o) {
+			mode = 'pick';
+			field = null;
+			find = '';
+			return;
+		}
 		error = null;
 		const [only] = applied;
 		const top =
@@ -233,7 +232,133 @@
 		open = false;
 		show(root.match === 'any' && filters.length > 1 ? [{ match: 'any', filters }] : filters);
 	}
+
+	/**
+	 * Linear's way in (D: audit P2): the Filter button lists the fields by the names the table
+	 * shows; picking one asks for its value, and picking or entering that applies at once. The
+	 * builder (groups, and/or) stays a step away, as Advanced, and is where a chip opens.
+	 */
+	let mode = $state<'pick' | 'build'>('pick');
+	let field = $state<string | null>(null);
+	let find = $state('');
+	let findInput = $state<HTMLInputElement | null>(null);
+
+	const fieldName = (c: (typeof known)[number]) =>
+		c.label && c.group ? columnLabel({ label: c.label, group: c.group }) : c.key;
+	const fields = $derived.by(() => {
+		const q = find.trim().toLowerCase();
+		return known
+			.map((c) => ({ key: c.key, name: fieldName(c), kind: c.kind }))
+			.filter((c) => !q || c.name.toLowerCase().includes(q) || c.key.toLowerCase().includes(q));
+	});
+
+	function pickField(key: string) {
+		field = key;
+	}
+
+	/** The listed columns' values with counts: the page's runs, or the project's. */
+	const listed = $derived(
+		known.filter((c) => columnFilterKind(c.key, c.kind) === 'values').map((c) => c.key)
+	);
+	const counted = $derived(
+		open && page.params.entity && page.params.project
+			? runValues(page.params.entity, page.params.project, listed, ws?.group)
+			: {}
+	);
+	const fieldProps = (key: string) =>
+		columnFilterProps(
+			known.find((c) => c.key === key) ?? { key },
+			fieldName(known.find((c) => c.key === key) ?? { key }),
+			applied,
+			counted,
+			people,
+			me,
+			show
+		);
+
+	/** F, or the palette: the field list, to add a condition. */
+	export function pick() {
+		mode = 'pick';
+		field = null;
+		find = '';
+		open = true;
+		onOpenChange(true);
+	}
+
+	/** A chip under the view bar opens the filters as built, to change or regroup them. */
+	export function edit() {
+		mode = 'build';
+		open = true;
+		onOpenChange(true);
+	}
 </script>
+
+<!-- The field list, then the field's value: one step each, applied on the pick. -->
+{#snippet picker()}
+	{#if field == null}
+		<MenuSearch
+			bind:ref={findInput}
+			bind:value={find}
+			placeholder="Search columns…"
+			label="Search columns"
+			onkeydown={(e) => {
+				if (e.key === 'Enter' && fields.length) {
+					e.preventDefault();
+					void pickField(fields[0].key);
+				}
+			}}
+		/>
+		<ul class="max-h-72 overflow-y-auto p-1" aria-label="Fields">
+			{#each fields as f (f.key)}
+				<li>
+					<button
+						type="button"
+						class="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none hover:bg-muted focus-visible:bg-muted"
+						onclick={() => pickField(f.key)}
+					>
+						<span class="min-w-0 flex-1 truncate">{f.name}</span>
+					</button>
+				</li>
+			{:else}
+				<li class="px-2 py-2 text-[13px] text-muted-foreground">No column matches</li>
+			{/each}
+		</ul>
+		<div class="flex items-center border-t border-divider p-1">
+			{#if count}
+				<Button
+					variant="quiet"
+					size="bar"
+					onclick={() => {
+						open = false;
+						show([]);
+					}}
+				>
+					Clear all
+				</Button>
+			{/if}
+			<span class="flex-1"></span>
+			<Button
+				variant="quiet"
+				size="bar"
+				{@attach hint('Groups of conditions, joined by and or or')}
+				onclick={() => {
+					mode = 'build';
+					onOpenChange(true);
+				}}
+			>
+				Advanced
+			</Button>
+		</div>
+	{:else}
+		{#key field}
+			<ColumnFilterPanel
+				{...fieldProps(field)}
+				onclose={() => (open = false)}
+				onback={() => (field = null)}
+			/>
+		{/key}
+	{/if}
+{/snippet}
 
 <!-- The word joining a level's items, the top level's or a group's: picked on the second,
      repeated on the rest. -->
@@ -349,113 +474,84 @@
 	</div>
 {/snippet}
 
-{#if me != null && !noMine}
-	<Button
-		variant={mine ? 'secondary' : 'outline'}
-		aria-pressed={mine}
-		{@attach hint(mine ? 'Show everyone’s runs' : 'Show only the runs you logged')}
-		onclick={() => show(setOwner(applied, me, !mine))}
-	>
-		<UserIcon /> My runs
-	</Button>
-{/if}
-
 <div class="flex items-center">
 	<Popover.Root bind:open {onOpenChange}>
 		<Popover.Trigger>
 			{#snippet child({ props })}
-				{#if compact}
-					<Button
-						{...props}
-						variant={count ? 'secondary' : 'outline'}
-						size="icon"
-						class="relative"
-						aria-label={count ? `Filter runs, ${count} applied` : 'Filter runs'}
-						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
-					>
-						<ListFilterIcon />
-						{#if count}
-							<span
-								class="absolute -top-1.5 -right-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] leading-none font-medium text-primary-foreground tabular-nums"
-								aria-hidden="true"
-							>
-								{count}
-							</span>
-						{/if}
-					</Button>
-				{:else}
-					<Button
-						{...props}
-						variant={count ? 'secondary' : 'outline'}
-						class={count ? 'rounded-r-none' : ''}
-						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
-					>
-						<ListFilterIcon /> Filter
-						{#if count}
-							<span class="tabular-nums">{count}</span>
-						{/if}
-					</Button>
-				{/if}
+				<Button
+					{...props}
+					variant={count ? 'quiet-on' : 'quiet'}
+					size="icon-bar"
+					class="relative"
+					aria-label={count ? `Filter runs, ${count} applied` : 'Filter runs'}
+					{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter  F')}
+				>
+					<ListFilterIcon />
+					{#if count}
+						<span
+							class="absolute -top-1 -right-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-primary px-1 text-[10px] leading-none font-medium text-primary-foreground tabular-nums"
+							aria-hidden="true"
+						>
+							{count}
+						</span>
+					{/if}
+				</Button>
 			{/snippet}
 		</Popover.Trigger>
 		<Popover.Content
 			bind:ref={content}
-			align="start"
-			class="w-[min(38rem,calc(100vw-2rem))] p-3"
+			align="end"
+			collisionPadding={16}
+			class={mode === 'pick' ? 'w-72 gap-0 p-0 text-[13px]' : 'w-[min(38rem,calc(100vw-2rem))] p-3'}
 			onOpenAutoFocus={(e) => {
+				e.preventDefault();
+				if (mode === 'pick') {
+					findInput?.focus();
+					return;
+				}
 				// Only a blank filter starts in its column, listing the columns; otherwise the
 				// list would cover the filters being edited.
-				e.preventDefault();
 				const [first] = root.items;
 				if (root.items.length === 1 && !isDraftGroup(first) && !first.key) {
 					void focusColumn(first.id);
 				} else content?.focus();
 			}}
 		>
-			<form class="grid gap-3" onsubmit={apply} novalidate>
-				{@render items(root, undefined)}
-				<FormError {error} />
-				<div class="flex items-center gap-1">
-					<Button variant="ghost" size="sm" onclick={() => addCondition(root)}>
-						<PlusIcon /> Add condition
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						{@attach hint('Conditions that hold together, or any one of them')}
-						onclick={addGroup}
-					>
-						<BracketsIcon /> Add group
-					</Button>
-					<span class="flex-1"></span>
-					{#if count}
-						<Button
-							variant="ghost"
-							size="sm"
-							onclick={() => {
-								open = false;
-								show([]);
-							}}
-						>
-							Clear all
+			{#if mode === 'pick'}
+				{@render picker()}
+			{:else}
+				<form class="grid gap-3" onsubmit={apply} novalidate>
+					{@render items(root, undefined)}
+					<FormError {error} />
+					<div class="flex items-center gap-1">
+						<Button variant="quiet" size="bar" onclick={() => addCondition(root)}>
+							<PlusIcon /> Add condition
 						</Button>
-					{/if}
-					<Button type="submit" size="sm">Apply</Button>
-				</div>
-			</form>
+						<Button
+							variant="quiet"
+							size="bar"
+							{@attach hint('Conditions that hold together, or any one of them')}
+							onclick={addGroup}
+						>
+							<BracketsIcon /> Add group
+						</Button>
+						<span class="flex-1"></span>
+						{#if count}
+							<Button
+								variant="quiet"
+								size="bar"
+								onclick={() => {
+									open = false;
+									show([]);
+								}}
+							>
+								Clear all
+							</Button>
+						{/if}
+						<Button type="submit" size="sm">Apply</Button>
+					</div>
+				</form>
+			{/if}
 		</Popover.Content>
 	</Popover.Root>
-	<!-- Compact, the filters are cleared from their popover (Clear all). -->
-	{#if count && !compact}
-		<Button
-			variant="secondary"
-			size="icon"
-			class="rounded-l-none border-l border-background"
-			aria-label="Clear filters"
-			{@attach hint('Clear filters')}
-			onclick={() => show([])}
-		>
-			<XIcon />
-		</Button>
-	{/if}
 </div>

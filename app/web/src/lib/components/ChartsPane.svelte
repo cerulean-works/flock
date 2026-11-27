@@ -9,7 +9,6 @@
 	import { prefersReducedMotion } from 'svelte/motion';
 	import type { ResolvedPathname } from '$app/types';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
-	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { pageStart, ROWS_MAX, ROWS_MIN } from '#lib/workspace/layout.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
@@ -455,7 +454,7 @@
 	     takes only their columns, so small sections share a row (lr | train | val); the rest
 	     span it. -->
 	<div
-		class={[`relative grid ${TRACKS} gap-x-3 gap-y-2`, ws.dragging && 'pointer-events-none']}
+		class={[`relative grid ${TRACKS} gap-x-3`, ws.dragging && 'pointer-events-none']}
 		bind:this={list}
 		{@attach observeColumns}
 	>
@@ -505,25 +504,25 @@
 					</button>
 					<Button
 						variant="ghost"
-						class="mr-auto -ml-2.5 h-8 min-w-0 shrink gap-2 px-2.5 aria-expanded:bg-transparent hover:aria-expanded:bg-muted"
+						class="mr-auto -ml-2 h-7 min-w-0 shrink gap-1.5 rounded-md px-2 aria-expanded:bg-transparent hover:aria-expanded:bg-muted"
 						onclick={() => ws.toggleSection(sec.key)}
 						aria-expanded={open}
 					>
 						<ChevronDownIcon
 							class={['text-muted-foreground transition-transform', !open && '-rotate-90']}
 						/>
-						<h2 class="truncate text-[22px] font-normal tracking-[-0.01em]" title={sec.key}>
+						<h2 class="truncate text-[13px] font-medium" title={sec.key}>
 							{sec.key}
 						</h2>
-						<Badge variant="secondary" class="text-muted-foreground">{count}</Badge>
+						<span class="text-[13px] font-normal text-muted-foreground tabular-nums">{count}</span>
 					</Button>
 					{#if open && count > per}
 						<span class="mr-1 text-[13px] text-muted-foreground tabular-nums">
 							{from + 1}–{from + slice.length} of {count}
 						</span>
 						<Button
-							variant="ghost"
-							size="icon-sm"
+							variant="quiet"
+							size="icon-bar"
 							aria-label="Previous panels"
 							disabled={from === 0}
 							onclick={() => showFrom(sec.key, from - per)}
@@ -531,8 +530,8 @@
 							<ChevronLeftIcon />
 						</Button>
 						<Button
-							variant="ghost"
-							size="icon-sm"
+							variant="quiet"
+							size="icon-bar"
 							aria-label="Next panels"
 							disabled={from + per >= count}
 							onclick={() => showFrom(sec.key, from + per)}
@@ -543,7 +542,7 @@
 				</header>
 				{#if open}
 					<div
-						class={['relative grid gap-3 pt-3 pb-2', !packed && TRACKS, moving && 'hidden']}
+						class={['relative grid gap-3 pt-3 pb-4', !packed && TRACKS, moving && 'hidden']}
 						style:grid-template-columns={packed ? `repeat(${span}, minmax(0, 1fr))` : null}
 						data-grid
 					>

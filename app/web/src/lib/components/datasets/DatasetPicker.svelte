@@ -184,7 +184,6 @@
 			bind:active
 			{loading}
 			{error}
-			verb={rows[active]?.dataset === null ? 'open' : 'pick'}
 			{onpick}
 			onup={at ? () => load(parentOf(at)) : undefined}
 			onback={start !== null && at !== start ? () => load(start ?? '') : undefined}

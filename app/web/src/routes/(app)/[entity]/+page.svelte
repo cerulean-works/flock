@@ -1,35 +1,103 @@
 <script lang="ts">
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
+	import FilterChip from '#lib/components/FilterChip.svelte';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
+	import ColumnFilter, { type FilterValue } from '#lib/components/ColumnFilter.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
+	import BudgetPanel from '#lib/components/home/BudgetPanel.svelte';
+	import type { Column } from '#lib/components/DataTable.svelte';
 	import LatestRuns from '#lib/components/home/LatestRuns.svelte';
 	import PublicOrg from '#lib/components/home/PublicOrg.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
-	import SegmentedNav from '#lib/components/SegmentedNav.svelte';
 	import WandbKeyCreator from '#lib/components/WandbKeyCreator.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { page } from '$app/state';
-	import { pollFeed } from '#lib/data/feed.svelte.ts';
+	import { goto } from '$app/navigation';
+	import { pollFeed, RUN_STATES, type RunFilters } from '#lib/data/feed.svelte.ts';
 	import { wandbSnippet } from '#lib/snippets.ts';
-	import { count } from '#lib/utils.ts';
-	import { orgHref, withParam } from '#lib/workspace/url.ts';
+	import { valuesChip } from '#lib/workspace/filters.ts';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
 
 	$effect(() => pollFeed());
 
-	const running = $derived(data.shell.projects.reduce((n, p) => n + p.active_run_count, 0));
-	// Nothing logged yet: how to log the first run, instead of an empty table.
-	const fresh = $derived(!data.mine && !data.project && !data.feed?.items.length);
+	// The columns that filter the list, by column id, and the URL param each sets.
+	const FILTERED: Record<string, { key: keyof RunFilters; label: string }> = {
+		owner: { key: 'owner', label: 'Owner' },
+		project: { key: 'project', label: 'Project' },
+		state: { key: 'state', label: 'State' },
+		group: { key: 'group', label: 'Group' },
+		job: { key: 'job_type', label: 'Job type' },
+		gpus: { key: 'gpu', label: 'GPUs' }
+	};
+	const filtering = $derived(Object.values(data.filters).some((v) => v.length));
 
-	const TABS = [
-		['', 'Everyone'],
-		['mine', 'Mine']
-	] as const;
+	// Nothing logged yet: how to log the first run, instead of an empty table.
+	const fresh = $derived(!filtering && !data.feed?.items.length);
+
+	function setParams(changes: Record<string, string | null>) {
+		const url = new URL(page.url.href);
+		for (const [key, value] of Object.entries(changes)) {
+			if (value === null) url.searchParams.delete(key);
+			else url.searchParams.set(key, value);
+		}
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- this page, other params
+		void goto(url, { replace: true, reset: false });
+	}
+	function setFilter(key: keyof RunFilters, values: string[]) {
+		setParams({
+			[key]: values.length ? values.join(',') : null,
+			// Home's old "my runs" link folds into the Owner filter.
+			...(key === 'owner' && { runs: null })
+		});
+	}
+
+	const person = (id: string) => data.members.find((m) => String(m.id) === id);
+	const named = (key: keyof RunFilters, value: string) =>
+		key === 'owner'
+			? value === 'me'
+				? 'Me'
+				: (person(value)?.name ?? `Someone (${value})`)
+			: key === 'state'
+				? (RUN_STATES.find((s) => s.value === value)?.label ?? value)
+				: value;
+
+	/** A column's choices, with how many of the org's runs have each. */
+	function valuesOf(key: keyof RunFilters): FilterValue[] {
+		const facets = data.facets?.[key] ?? [];
+		if (key === 'state') {
+			const runs = (...states: string[]) =>
+				facets.filter((f) => states.includes(String(f.value))).reduce((n, f) => n + f.runs, 0);
+			return RUN_STATES.map((st) => ({
+				value: st.value,
+				label: st.label,
+				count: st.value === 'failed' ? runs('failed', 'crashed') : runs('finished'),
+				dot: st.value === 'failed' ? 'bg-state-failed' : 'bg-state-finished'
+			}));
+		}
+		const values = facets.map((f) => {
+			const value = String(f.value);
+			const who = key === 'owner' ? person(value) : undefined;
+			return { value, label: named(key, value), count: f.runs, person: who };
+		});
+		return key === 'owner' ? [{ value: 'me', label: 'Me' }, ...values] : values;
+	}
+
+	// The filters in effect, one chip each, under the page's header.
+	const chips = $derived(
+		Object.values(FILTERED)
+			.filter(({ key }) => data.filters[key].length)
+			.map(({ key, label }) => ({
+				parts: valuesChip(
+					label,
+					data.filters[key].map((v) => named(key, v))
+				),
+				clear: () => setFilter(key, [])
+			}))
+	);
 
 	let creating = $state(false);
 </script>
@@ -39,45 +107,48 @@
 </svelte:head>
 
 {#snippet actions()}
-	<Button variant="ghost" href={orgHref(params.entity)}>
-		<SettingsIcon /> <span class="max-sm:sr-only">Settings</span>
-	</Button>
-	<Button variant="outline" onclick={() => (creating = true)}>
-		<PlusIcon /> <span class="max-sm:sr-only">New project</span>
-	</Button>
+	<!-- The org's month: one line here, its breakdown on request (on a phone, above the list). -->
+	{#if data.budget}
+		<BudgetPanel
+			budget={data.budget}
+			thisMonth={data.thisMonth}
+			admin={data.shell.access === 'admin'}
+			class="max-sm:hidden"
+		/>
+	{/if}
 {/snippet}
 
-<!-- The feed's own controls, under the title once there are runs to show. -->
-{#snippet feedControls()}
-	<FeedFilters projects={data.shell.projects.map((p) => p.name)} project={data.project} />
-	<SegmentedNav
-		label="Show"
-		items={TABS.map(([key, label]) => ({
-			href: withParam(page.url, 'runs', key || null),
-			label,
-			current: (key === 'mine') === data.mine
-		}))}
-	/>
+{#snippet head(c: Column)}
+	<!-- The slurm dashboard's header: the label, then a funnel that shows on hover and stays,
+	     filled, while the column filters the list. The list is newest first: Updated carries
+	     the arrow (it can't sort by other columns). -->
+	{@const f = FILTERED[c.id]}
+	<span class="group/h flex w-full items-center gap-1.5">
+		<span class={['min-w-0 flex-1 truncate', c.align === 'end' && 'text-right']}>{c.label}</span>
+		{#if c.id === 'started'}
+			<span class="grid size-4 flex-none place-items-center">
+				<ArrowDownIcon class="size-3 text-foreground" aria-label="newest first" />
+			</span>
+		{/if}
+		{#if f}
+			<ColumnFilter
+				label={f.label}
+				active={data.filters[f.key].length > 0}
+				values={valuesOf(f.key)}
+				selected={data.filters[f.key]}
+				onselect={(values) => setFilter(f.key, values)}
+				onclear={() => setFilter(f.key, [])}
+			/>
+		{/if}
+	</span>
 {/snippet}
 
 <ListPage
-	title={data.org.display_name}
-	heading={fresh || data.outside ? undefined : 'Latest runs'}
-	controls={fresh || data.outside ? undefined : feedControls}
+	title={data.outside ? data.org.display_name : 'Runs'}
 	actions={data.outside ? undefined : actions}
 >
 	{#snippet subtitle()}
-		{#if data.outside || running}
-			<span class="inline-flex items-center gap-x-4">
-				{#if data.outside}<span>Public projects</span>{/if}
-				{#if running}
-					<span class="inline-flex items-center gap-1.5 text-state-running">
-						<span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
-						{count(running, 'run')} running
-					</span>
-				{/if}
-			</span>
-		{/if}
+		{#if data.outside}<span>Public projects</span>{/if}
 	{/snippet}
 
 	{#if data.outside}
@@ -117,16 +188,34 @@
 		</EmptyState>
 	{:else}
 		{@const feed = data.feed}
+		{#if data.budget}
+			<BudgetPanel
+				budget={data.budget}
+				thisMonth={data.thisMonth}
+				admin={data.shell.access === 'admin'}
+				class="mx-3 mt-2 sm:hidden"
+			/>
+		{/if}
+		{#if chips.length}
+			<!-- The filters in effect, one chip each, as on project Runs; the cross drops one. -->
+			<div
+				class="flex min-h-9 flex-wrap items-center gap-1.5 border-b border-divider py-1 pr-4 pl-5"
+				aria-label="Filters"
+				role="group"
+			>
+				{#each chips as chip (chip.parts.label)}
+					<FilterChip parts={chip.parts} onremove={chip.clear} />
+				{/each}
+			</div>
+		{/if}
 		{#key JSON.stringify(data.query)}
 			<LatestRuns
 				first={() => feed}
 				query={data.query}
 				now={data.now}
-				empty={data.project
-					? `No runs in ${data.project}${data.mine ? ' by you' : ''} yet.`
-					: data.mine
-						? 'You haven’t logged any runs here yet.'
-						: 'No runs yet.'}
+				mine={data.mine}
+				{head}
+				empty={filtering ? 'No runs match these filters.' : 'No runs yet.'}
 			/>
 		{/key}
 	{/if}

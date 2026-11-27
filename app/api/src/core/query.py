@@ -579,3 +579,50 @@ async def cells(
     for run_pk, key, num, txt, obj, int_only in records:
         out[key][index[run_pk]] = values.decode(num, txt, obj, int_only)
     return out
+
+
+# How many runs have each value of keys $3 among runs $2 of project $1: a list counts each
+# element it holds, numbers and strings themselves, other objects their JSON text.
+_VALUE_COUNTS = """
+    SELECT v.key, v.num, coalesce(v.txt, e.elem), count(DISTINCT v.run_pk)::int
+    FROM run_values v
+    LEFT JOIN LATERAL (
+        SELECT a.elem FROM jsonb_array_elements_text(v.obj) a(elem)
+        WHERE jsonb_typeof(v.obj) = 'array'
+        UNION ALL
+        SELECT v.obj #>> '{}' WHERE jsonb_typeof(v.obj) <> 'array'
+    ) e ON v.obj IS NOT NULL
+    WHERE v.project_pk = $1 AND v.run_pk = ANY($2) AND v.key = ANY($3)
+        AND (v.obj IS NULL OR e.elem IS NOT NULL)
+    GROUP BY 1, 2, 3
+"""
+
+
+async def value_counts(
+    conn: asyncpg.Pool | asyncpg.Connection,
+    project_pk: int,
+    selection: Selection,
+    keys: Sequence[str],
+    limit: int = 200,
+) -> dict[str, list[dict[str, Any]]]:
+    """Per key, each value the selected runs have and how many have it, most first (then by
+    value), at most ``limit`` of them. A list's elements count one by one (``tags``)."""
+    names = [canonical(key) for key in keys]
+    out: dict[str, list[dict[str, Any]]] = {key: [] for key in keys}
+    if not names:
+        return out
+    records, _ = await selection.runs(conn, project_pk)
+    pks = [record[0] for record in records]
+    if not pks:
+        return out
+    found: dict[str, list[dict[str, Any]]] = {name: [] for name in names}
+    for key, num, text, runs in await conn.fetch(_VALUE_COUNTS, project_pk, pks, names):
+        if num is not None and not math.isfinite(num):
+            continue
+        value: Any = text if num is None else int(num) if float(num).is_integer() else num
+        found[key].append({"value": value, "runs": runs})
+    for key, name in zip(keys, names, strict=True):
+        counted = found[name]
+        counted.sort(key=lambda v: (-v["runs"], str(v["value"])))
+        out[key] = counted[:limit]
+    return out

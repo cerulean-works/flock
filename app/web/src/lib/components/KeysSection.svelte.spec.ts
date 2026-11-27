@@ -45,7 +45,6 @@ beforeEach(() => resetApp('http://flock.test/account'));
 describe('the keys tabs', () => {
 	it('shows the wandb keys first, with what they are for', async () => {
 		render(KeysSection, props);
-		await expect.element(page.getByRole('heading', { name: 'Keys' })).toBeVisible();
 		await expect.element(tab('wandb')).toHaveAttribute('aria-selected', 'true');
 		await expect.element(tab('S3')).toHaveAttribute('aria-selected', 'false');
 		await expect.element(page.getByText(/^Use these keys with the wandb SDK/)).toBeVisible();

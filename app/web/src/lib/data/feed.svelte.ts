@@ -4,17 +4,22 @@ import type { FeedItem, FeedPage } from '#lib/types.ts';
 /** What feed pages depend on: polling invalidates it. */
 export const FEED = 'flock:feed';
 
-/** What a feed can be narrowed to, as its `?kinds=` param: Flock's feed kinds. */
-export const FEED_KINDS = [
-	['run_started', 'Runs started'],
-	['run_finished', 'Runs finished'],
-	['run_failed,run_crashed', 'Failed or crashed'],
-	['project_created', 'New projects']
+/**
+ * The runs table's State filter (`?state=`): runs that ended so, as the feed kinds that say it.
+ * A run still going has no kind of its own, so there's no "Running" here.
+ */
+export const RUN_STATES = [
+	{ value: 'finished', label: 'Finished', kinds: 'run_finished' },
+	{ value: 'failed', label: 'Failed or crashed', kinds: 'run_failed,run_crashed' }
 ] as const;
 
-/** A `?kinds=` param the feed offers, else null for everything. */
-export const feedKinds = (param: string | null) =>
-	FEED_KINDS.find(([k]) => k === param)?.[0] ?? null;
+/** The org runs list's column filters, each a comma list in the URL: `?owner=me,12&state=failed`. */
+export const RUN_FILTERS = ['owner', 'project', 'state', 'group', 'job_type', 'gpu'] as const;
+export type RunFilters = Record<(typeof RUN_FILTERS)[number], string[]>;
+
+/** A `?state=` the table offers, else null for every run. */
+export const runStateKinds = (param: string | null) =>
+	RUN_STATES.find((s) => s.value === param) ?? null;
 
 /** The feed isn't pushed: re-run the page's load this often while the tab is visible. */
 export function pollFeed(ms = 30_000) {

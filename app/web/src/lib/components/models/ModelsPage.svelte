@@ -1,10 +1,6 @@
 <script lang="ts">
-	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import Page from '#lib/components/Page.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
-	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
-	import { Button } from '#lib/components/ui/button/index.js';
+	import { headerTrail } from '#lib/storage.ts';
 	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
 	import HFImportRows from '#lib/components/imports/HFImportRows.svelte';
 	import { nameOf, scopeCrumbs } from '#lib/datasets.ts';
@@ -34,7 +30,8 @@
 		scopeCrumbs(scope, shell.orgName ?? scope.org, 'Models', data.path, modelsHref)
 	);
 	// The subtitle's trail, under the title "Models": an org's leaves out its own "Models".
-	const subtrail = $derived(scope.project === null ? trail.slice(1) : trail);
+	// Models › folders: without the org's crumb, or the project's, which the header leads with.
+	const subtrail = $derived(trail.filter((_, i) => i !== (scope.project === null ? 1 : 0)));
 	// Members and admins import from Hugging Face (D124); the imports show in their folder.
 	const writer = $derived(shell.access === 'admin' || shell.access === 'member');
 	const imports = $derived(new HFImportList(scope.org));
@@ -45,6 +42,8 @@
 		return writer ? new Selection() : undefined;
 	});
 	const projects = $derived(shell.projects.map((p) => p.name));
+	// The header leads with the org (and project) by itself: Models › folders, the last the title.
+	const header = $derived(headerTrail(subtrail, 'Models'));
 </script>
 
 <svelte:head>
@@ -55,39 +54,18 @@
 	>
 </svelte:head>
 
-{#snippet trailLine()}<Breadcrumbs crumbs={subtrail} />{/snippet}
-
-<!-- One filled action (the import), with the quieter one beside it. -->
+<!-- Quiet actions, as on every header. -->
 {#snippet actions()}
 	<NewFolderButton {scope} path={data.path} />
 	<HFImportButton {scope} kind="model" list={imports} />
 {/snippet}
 
-<!-- While models are checked (D130): what to do with them. -->
-{#snippet selected()}
-	{#if selection}
-		<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
-			<FolderInputIcon /> Move
-		</Button>
-		<Button
-			variant="outline"
-			size="sm"
-			class="text-destructive"
-			onclick={() => selection.act('delete')}
-		>
-			<Trash2Icon /> Delete
-		</Button>
-	{/if}
-{/snippet}
-
 {#if data.kind === 'folder'}
 	<ListPage
-		title="Models"
-		heading="All models"
-		location={subtrail.length ? trailLine : undefined}
+		title={header.title}
+		trail={header.trail}
+		org={false}
 		actions={writer ? actions : undefined}
-		{selection}
-		{selected}
 	>
 		<!-- Imports writing into this folder, over its listing. -->
 		<div class="px-5 has-[li]:pt-4">
@@ -105,19 +83,14 @@
 		{/key}
 	</ListPage>
 {:else}
-	<!-- A model: its own title, version picker and tabs, at Home's width. -->
-	<Page width="home">
-		{#if trail.length}
-			<div class="pt-5"><Breadcrumbs crumbs={trail} /></div>
-		{/if}
-		{#key data.path}
-			<ModelView
-				{scope}
-				info={data.info}
-				version={data.version}
-				requested={data.requested}
-				now={data.now}
-			/>
-		{/key}
-	</Page>
+	{#key data.path}
+		<ModelView
+			{scope}
+			trail={header.trail}
+			info={data.info}
+			version={data.version}
+			requested={data.requested}
+			now={data.now}
+		/>
+	{/key}
 {/if}

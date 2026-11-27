@@ -30,7 +30,12 @@
 </script>
 
 <!-- The page's one filled action. "HF" keeps it short; the hover text spells it out. -->
-<Button {@attach hint('Import from Hugging Face')} onclick={() => (open = true)}>
+<Button
+	variant="quiet"
+	size="bar"
+	{@attach hint('Import from Hugging Face')}
+	onclick={() => (open = true)}
+>
 	<DownloadIcon /><span class="max-sm:sr-only">Import from HF</span>
 </Button>
 {#if kind === 'dataset'}

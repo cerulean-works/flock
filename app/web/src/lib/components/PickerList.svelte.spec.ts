@@ -61,9 +61,6 @@ describe('PickerList', () => {
 
 	it('goes up a folder on Backspace only in an empty box, and back a level on Escape', async () => {
 		const { onup, onback, box } = folders();
-		await expect.element(screen.getByText('⌫ up a folder')).toBeVisible();
-		await expect.element(screen.getByText('esc back')).toBeVisible();
-
 		await box.fill('a');
 		await userEvent.keyboard('{Backspace}');
 		expect(onup).not.toHaveBeenCalled(); // it deleted the letter
@@ -71,6 +68,16 @@ describe('PickerList', () => {
 		await userEvent.keyboard('{Backspace}');
 		expect(onup).toHaveBeenCalledOnce();
 
+		await userEvent.keyboard('{Escape}');
+		expect(onback).toHaveBeenCalledOnce();
+	});
+
+	it('clears the box on Escape first, then goes back a level', async () => {
+		const { onback, box } = folders();
+		await box.fill('be');
+		await userEvent.keyboard('{Escape}');
+		await expect.element(box).toHaveValue('');
+		expect(onback).not.toHaveBeenCalled();
 		await userEvent.keyboard('{Escape}');
 		expect(onback).toHaveBeenCalledOnce();
 	});

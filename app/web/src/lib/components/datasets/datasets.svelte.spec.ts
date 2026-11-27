@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { page as screen } from 'vitest/browser';
+import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
 import { app, goto, invalidateAll, resetApp } from '#lib/testing/app.svelte.ts';
@@ -67,7 +67,7 @@ describe('FolderView', () => {
 		cursor: 'next'
 	};
 
-	it('lists datasets, then folders, then files, and loads more pages', async () => {
+	it('lists folders, then datasets, then files, and loads more pages below what is shown', async () => {
 		const calls = serve({
 			'/api/datasets/acme/at': () => ({
 				...folder,
@@ -87,7 +87,7 @@ describe('FolderView', () => {
 			[
 				...document.querySelectorAll('[role="rowgroup"] [role="row"] [role="cell"]:first-child')
 			].map((td) => td.textContent!.trim());
-		expect(names()).toEqual(['mmlu', 'deep/', 'notes.md']);
+		expect(names()).toEqual(['deep', 'mmlu', 'notes.md']);
 		// (Version and size columns show on wider screens.)
 		await expect.element(screen.getByText('v12')).toBeInTheDocument();
 		await expect.element(screen.getByText('2.0 KB')).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe('FolderView', () => {
 			'/storage/acme/flock-datasets/eval/notes.md'
 		);
 		await screen.getByRole('button', { name: 'Load more' }).click();
-		await vi.waitFor(() => expect(names()).toEqual(['mmlu', 'old', 'deep/', 'notes.md']));
+		await vi.waitFor(() => expect(names()).toEqual(['deep', 'mmlu', 'notes.md', 'old']));
 		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval&cursor=next&details=true');
 		await expect.element(screen.getByText('Unknown')).toBeInTheDocument();
 		await expect.element(screen.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
@@ -239,21 +239,29 @@ describe('DatasetView', () => {
 
 	it('shows the header numbers, the actions and a newer version', async () => {
 		serve({ '/api/datasets/acme/readme': () => ({ text: '# MMLU', truncated: false }) });
+		await screen.viewport(1280, 800);
 		view();
 		await expect.element(screen.getByRole('heading', { name: 'mmlu', level: 1 })).toBeVisible();
 		await expect.element(screen.getByText('1,234')).toBeVisible();
 		await expect.element(screen.getByText('5.0 MB')).toBeVisible();
 		await expect.element(screen.getByText('s3://flock-datasets/eval/mmlu')).not.toBeInTheDocument();
-		await expect.element(screen.getByText('New version available.')).toBeVisible();
-		expect(
-			screen.getByRole('link', { name: 'View version 5' }).element().getAttribute('href')
-		).toBe('/datasets/acme/eval/mmlu?version=5');
+		expect(screen.getByRole('link', { name: 'v5 available' }).element().getAttribute('href')).toBe(
+			'/datasets/acme/eval/mmlu?version=5'
+		);
+		// The version's numbers are in the properties pane, which ] hides.
+		await expect.element(screen.getByRole('complementary', { name: 'Properties' })).toBeVisible();
+		await userEvent.keyboard(']');
+		await expect
+			.element(screen.getByRole('complementary', { name: 'Properties' }))
+			.not.toBeInTheDocument();
+		await userEvent.keyboard(']');
+		await expect.element(screen.getByRole('complementary', { name: 'Properties' })).toBeVisible();
 		// The README is the default tab.
-		await expect.element(screen.getByRole('heading', { name: 'MMLU' })).toBeVisible();
+		await expect.element(screen.getByRole('heading', { name: 'MMLU', exact: true })).toBeVisible();
 		await expect.element(screen.getByRole('tab', { name: 'Viewer' })).toBeVisible();
-		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
-		// Reaching the files and deleting are in the overflow menu.
+		// Renaming, reaching the files and deleting are in the overflow menu.
 		await screen.getByRole('button', { name: 'More dataset actions' }).click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Rename…' })).toBeVisible();
 		expect(
 			screen.getByRole('menuitem', { name: 'Browse files' }).element().getAttribute('href')
 		).toBe('/storage/acme/flock-datasets/eval/mmlu/');
@@ -277,7 +285,7 @@ describe('DatasetView', () => {
 		expect(code).toContain('"aws_access_key_id": "YOUR_ACCESS_KEY_ID",');
 		expect(code).toContain('"allow_http": "true",');
 		expect(dialog.getByRole('link', { name: 'account page' }).element().getAttribute('href')).toBe(
-			'/account#s3-keys'
+			'/account?keys=s3#keys'
 		);
 	});
 
@@ -288,19 +296,15 @@ describe('DatasetView', () => {
 		await expect.element(screen.getByRole('heading', { name: 'MMLU' })).toBeVisible();
 		await expect.element(screen.getByText('license: odc-by')).not.toBeInTheDocument();
 		await expect.element(screen.getByText('import', { exact: true })).toHaveClass('hljs-keyword');
-		// This version's numbers sit beside it.
-		await expect.element(screen.getByRole('rowheader', { name: 'Rows' })).toBeVisible();
+		// This version's numbers sit beside it, in the properties pane.
+		await expect.element(screen.getByText('Rows', { exact: true })).toBeVisible();
 	});
 
 	it('says when there is no README', async () => {
 		serve({ '/api/datasets/acme/readme': () => Response.json({ message: 'no' }, { status: 404 }) });
 		view();
 		await expect
-			.element(
-				screen.getByText(
-					'This dataset has no README. Add a README.md to its folder to describe it.'
-				)
-			)
+			.element(screen.getByText('No README. Add a README.md to its folder to describe it.'))
 			.toBeVisible();
 	});
 
@@ -346,31 +350,16 @@ describe('DatasetView', () => {
 		expect(calls[0].url).toBe(
 			'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=50&limit=50'
 		);
-		// Pages 1, 2 (this one) and 3, then the last.
-		const pages = screen.getByRole('navigation', { name: 'Row pages' }).getByRole('button');
-		expect(pages.all().map((b) => b.element().textContent!.trim())).toEqual([
-			'Previous',
-			'1',
-			'2',
-			'3',
-			'25',
-			'Next'
-		]);
-		await expect
-			.element(screen.getByRole('button', { name: 'Page 2', exact: true }))
-			.toHaveAttribute('aria-current', 'page');
+		// The floating pager: the rows shown of how many, and the pages either side.
+		const nav = screen.getByRole('navigation', { name: 'Row pages' });
+		await expect.element(nav).toHaveTextContent(/51–51\s*of 1,234/);
 		await screen.getByRole('button', { name: 'Next page' }).click();
 		expect(goto).toHaveBeenLastCalledWith(
 			'/datasets/acme/eval/mmlu?version=3&tab=rows&offset=100',
 			{ reset: false }
 		);
-		await screen.getByRole('button', { name: 'Page 25' }).click();
-		expect(goto).toHaveBeenLastCalledWith(
-			'/datasets/acme/eval/mmlu?version=3&tab=rows&offset=1200',
-			{ reset: false }
-		);
-		await screen.getByRole('button', { name: 'Page 1', exact: true }).click();
-		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=3&tab=rows', {
+		await screen.getByRole('button', { name: 'Previous page' }).click();
+		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=3&tab=rows&offset=50', {
 			reset: false
 		});
 
@@ -379,7 +368,7 @@ describe('DatasetView', () => {
 		await screen.getByRole('checkbox').nth(1).click();
 		await vi.waitFor(() =>
 			expect(calls.at(-1)!.url).toBe(
-				'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=0&limit=50&columns=id'
+				'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=50&limit=50&columns=id'
 			)
 		);
 	});
@@ -498,16 +487,16 @@ describe('DatasetView', () => {
 		await expect.element(list.getByText('latest')).toBeVisible();
 		// It opens on the version shown, checked.
 		await expect
-			.element(list.getByRole('option', { name: /Version 3/ }))
+			.element(list.getByRole('option', { name: /\bv3\b/ }))
 			.toHaveAttribute('aria-selected', 'true');
-		await list.getByRole('option', { name: /Version 2/ }).click();
+		await list.getByRole('option', { name: /\bv2\b/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=2', { reset: false });
 		await screen.getByRole('button', { name: /Version 3/ }).click();
 		// Opening focuses the search box; a search narrows the list to the tag.
 		const search = screen.getByRole('combobox', { name: 'Search versions' });
 		await expect.element(search).toHaveFocus();
 		await search.fill('best');
-		await screen.getByRole('option', { name: /^best/ }).click();
+		await screen.getByRole('option', { name: /best/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=best', {
 			reset: false
 		});
@@ -518,20 +507,23 @@ describe('DatasetView', () => {
 			'/api/datasets/acme/versions': () => versions,
 			'/api/datasets/acme/info': () => info
 		});
+		await screen.viewport(1280, 800);
 		view('http://flock.test/datasets/acme/eval/mmlu?version=3&tab=versions');
 		await expect.element(screen.getByText('more rows')).toBeVisible();
 		await expect.element(screen.getByText('+10 rows').first()).toBeVisible();
 		expect(
 			screen.getByRole('link', { name: 'View version 4' }).element().getAttribute('href')
 		).toBe('/datasets/acme/eval/mmlu?version=4&tab=versions');
+		// A tag's × takes no room until the tag is hovered.
+		await screen.getByText('v1.0', { exact: true }).hover();
 		await expect.element(screen.getByRole('button', { name: 'Remove the tag v1.0' })).toBeVisible();
-		const current = document.querySelector('tr[aria-current="true"]');
+		const current = document.querySelector('[role="row"][aria-current="true"]');
 		expect(current?.textContent).toContain('v1.0');
 		// The commit message reads as text; other properties keep their keys.
 		await expect.element(screen.getByText('__lance_commit_message')).not.toBeInTheDocument();
 		await expect.element(screen.getByText('flock.source')).toBeVisible();
 		// Adding a tag sits in the row's menu, and removing one warns first.
-		await screen.getByRole('button', { name: 'Version 5 actions' }).click();
+		await screen.getByRole('button', { name: 'Actions for Version 5' }).click();
 		await expect.element(screen.getByRole('menuitem', { name: 'Add tag…' })).toBeVisible();
 	});
 
@@ -642,8 +634,8 @@ describe('a dataset’s visibility', () => {
 
 	it('isn’t offered to members', async () => {
 		view('member', false);
-		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
 		await more().click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Rename…' })).toBeVisible();
 		await expect.element(screen.getByRole('menuitem', { name: 'Access in S3' })).toBeVisible();
 		await expect
 			.element(screen.getByRole('menuitem', { name: 'Make public…' }))
@@ -663,7 +655,7 @@ describe('a dataset’s visibility', () => {
 		await screen.getByRole('tab', { name: 'Versions' }).click();
 		await expect.element(screen.getByLabelText('View version 4')).toBeVisible();
 		await expect
-			.element(screen.getByRole('button', { name: 'Version 4 actions' }))
+			.element(screen.getByRole('button', { name: 'Actions for Version 4' }))
 			.not.toBeInTheDocument();
 	});
 });
@@ -714,6 +706,9 @@ describe('CellView', () => {
 	});
 });
 
+/** The ⋯ button a one-field form opens under. */
+const menuButton = () => document.body.appendChild(document.createElement('button'));
+
 describe('the dialogs', () => {
 	it('deletes after the path is typed, then goes to the nearest folder left', async () => {
 		const calls = serve({
@@ -751,9 +746,12 @@ describe('the dialogs', () => {
 					: { path: 'eval/mmlu' }
 		});
 		render(RenameDialog, {
-			open: true,
-			scope: { org: 'acme', project: null },
-			path: 'scratch/mmlu'
+			props: {
+				open: true,
+				anchor: menuButton(),
+				scope: { org: 'acme', project: null },
+				path: 'scratch/mmlu'
+			}
 		});
 		await expect
 			.element(
@@ -788,11 +786,14 @@ describe('the dialogs', () => {
 		});
 		const ontagged = vi.fn();
 		render(TagDialog, {
-			open: true,
-			scope: { org: 'acme', project: null },
-			path: 'eval/mmlu',
-			version: 7,
-			ontagged
+			props: {
+				open: true,
+				anchor: menuButton(),
+				scope: { org: 'acme', project: null },
+				path: 'eval/mmlu',
+				version: 7,
+				ontagged
+			}
 		});
 		await screen.getByLabelText('Name').fill('123');
 		await screen.getByRole('button', { name: 'Add tag' }).click();

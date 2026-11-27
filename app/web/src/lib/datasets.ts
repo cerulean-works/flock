@@ -224,6 +224,19 @@ export function tagError(name: string): string | null {
 export const daysLeft = (expiresAt: number, now: number) =>
 	Math.max(0, Math.ceil((expiresAt - now) / 86_400));
 
+/**
+ * A float stored as float32 at its shortest decimal (D8): 2.6500000953674316 reads 2.65, the
+ * float32 nearest 2.65. A value float32 can't hold exactly is a float64's, and stays as it is.
+ */
+export function shortFloat(x: number): number {
+	if (!Number.isFinite(x) || Number.isInteger(x) || Math.fround(x) !== x) return x;
+	for (let p = 1; p < 17; p++) {
+		const d = Number(x.toPrecision(p));
+		if (Math.fround(d) === x) return d;
+	}
+	return x;
+}
+
 /** A cell as one line of text, for titles and the cells that are only text. */
 export function cellText(cell: Cell): string {
 	switch (cell.k) {

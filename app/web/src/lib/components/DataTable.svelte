@@ -11,10 +11,15 @@
 		 * columns fit by default; the others fill.
 		 */
 		size?: 'fit' | 'fill';
+		/**
+		 * The column's grid track as written (`6rem`, `minmax(12rem,2fr)`), in place of `size`:
+		 * for tables stacked on one page whose columns line up, such as a run's suites and tasks.
+		 */
+		width?: string;
 		/** Right-aligned, for numbers and times. */
 		align?: 'end';
 		/** Shown from this window width up; always shown when omitted. */
-		from?: 'sm' | 'md' | 'lg';
+		from?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 		/** The header says nothing: for a column whose content explains itself. */
 		quiet?: boolean;
 	}
@@ -29,6 +34,9 @@
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
 	import RowCheckbox from '#lib/components/RowCheckbox.svelte';
+	import RowMenu from '#lib/components/RowMenu.svelte';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import { listKeys } from '#lib/keys.svelte.ts';
 	import type { Selection } from '#lib/selection.svelte.ts';
 
 	interface Props {
@@ -48,8 +56,15 @@
 		selectable?: (row: T) => boolean;
 		/** The row's name, for its checkbox's label and the row's own (screen readers). */
 		name?: (row: T) => string;
-		/** A ⋯ menu after the last column. */
+		/** The row this page is showing (a detail page's version): marked for screen readers. */
+		current?: (row: T) => boolean;
+		/**
+		 * A row's menu items (`RowMenuItems`): shown from a ⋯ over the row's end, and at the
+		 * pointer on a right-click, as on the runs table.
+		 */
 		menu?: Snippet<[T]>;
+		/** The rows with a menu (every row by default). */
+		hasMenu?: (row: T) => boolean;
 		/** Rows with one line of content are shorter. */
 		dense?: boolean;
 		/** In place of the rows when there are none. */
@@ -58,6 +73,8 @@
 		footer?: Snippet;
 		/** The table's name, for screen readers. */
 		label?: string;
+		/** A header cell's content, in place of its label: a column that filters, say. */
+		head?: Snippet<[Column]>;
 	}
 
 	let {
@@ -69,11 +86,14 @@
 		selection = null,
 		selectable = () => true,
 		name = key,
+		current,
 		menu,
+		hasMenu = () => true,
 		dense = false,
 		empty,
 		footer,
-		label
+		label,
+		head
 	}: Props = $props();
 
 	// The grid's tracks at each width, from the columns shown there: an edge on each side, so
@@ -81,10 +101,10 @@
 	// Every row shares the table's columns (a subgrid), so a column is as wide as its widest
 	// value in any row, as a real table's would be. Tailwind reads the variables from fixed
 	// class names, so any set of columns works without new classes.
-	const BREAKPOINTS = ['base', 'sm', 'md', 'lg'] as const;
-	const RANK = { base: 0, sm: 1, md: 2, lg: 3 };
+	const BREAKPOINTS = ['base', 'sm', 'md', 'lg', 'xl', '2xl'] as const;
+	const RANK = { base: 0, sm: 1, md: 2, lg: 3, xl: 4, '2xl': 5 };
 	const fits = (c: Column) => (c.size ?? (c.align === 'end' ? 'fit' : 'fill')) === 'fit';
-	const track = (c: Column) => (fits(c) ? 'minmax(6rem,max-content)' : 'minmax(0,auto)');
+	const track = (c: Column) => c.width ?? (fits(c) ? 'minmax(6rem,max-content)' : 'minmax(0,auto)');
 	const tracks = $derived(
 		Object.fromEntries(
 			BREAKPOINTS.map((at) => [
@@ -101,10 +121,59 @@
 	/** The first column starts with a slot for the icon or the checkbox. */
 	const slotted = $derived(!!lead || !!selection);
 	const ROW = 'col-span-full grid grid-cols-subgrid items-center';
-	const SHOWN = { sm: 'hidden sm:block', md: 'hidden md:block', lg: 'hidden lg:block' };
+	const SHOWN = {
+		sm: 'hidden sm:block',
+		md: 'hidden md:block',
+		lg: 'hidden lg:block',
+		xl: 'hidden xl:block',
+		'2xl': 'hidden 2xl:block'
+	};
+	// The first column shown at a width starts after the edge track, whichever it is there (a
+	// column shown only from `sm` up hands that place to the next on a phone).
+	const START = {
+		base: 'col-start-2',
+		sm: 'sm:col-start-2',
+		md: 'md:col-start-2',
+		lg: 'lg:col-start-2',
+		xl: 'xl:col-start-2',
+		'2xl': '2xl:col-start-2'
+	};
+	const AUTO = {
+		base: 'col-start-auto',
+		sm: 'sm:col-start-auto',
+		md: 'md:col-start-auto',
+		lg: 'lg:col-start-auto',
+		xl: 'xl:col-start-auto',
+		'2xl': '2xl:col-start-auto'
+	};
+	const firsts = $derived(
+		BREAKPOINTS.map((at) => columns.find((c) => RANK[c.from ?? 'base'] <= RANK[at])?.id)
+	);
+	const startClass = (c: Column) =>
+		BREAKPOINTS.map((at, k) => {
+			const first = firsts[k] === c.id;
+			const before = k > 0 && firsts[k - 1] === c.id;
+			if (first && !before) return START[at];
+			if (!first && before) return AUTO[at];
+			return false;
+		});
+	// A right-click on a row opens its menu where the pointer is (the runs table's way).
+	// Raw: the row kept as given, so `menuAt.row === row` finds it (a proxy would not be).
+	let menuAt = $state.raw<{ x: number; y: number; row: T } | null>(null);
+	let menuOpen = $state(false);
+	function oncontextmenu(e: MouseEvent) {
+		if (!menu) return;
+		const el = (e.target as Element).closest<HTMLElement>('[data-row]');
+		const row = el ? rows[Number(el.dataset.row)] : undefined;
+		if (row === undefined || !hasMenu(row)) return;
+		e.preventDefault();
+		menuAt = { x: e.clientX, y: e.clientY, row };
+		menuOpen = true;
+	}
+
 	const cellClass = (c: Column, i: number) => [
 		'min-w-0',
-		i === 0 && 'col-start-2',
+		i === 0 ? 'col-start-2' : startClass(c),
 		c.from && SHOWN[c.from],
 		c.align === 'end' && 'text-right tabular-nums'
 	];
@@ -114,19 +183,24 @@
 	The full-page table: a sticky header and full-bleed rows across the page, as on an org's
 	runs, datasets, models and storage. Pages lay it in a `ListPage`; only the cells are theirs.
 -->
+<!-- Escape clears the rows checked (D130), unless a dialog or menu takes it. -->
+<svelte:window onkeydown={(e) => selection?.onkeydown(e)} />
+
 <div
-	class="group/table grid grid-cols-(--cols-base) gap-x-5 text-[13.5px] sm:grid-cols-(--cols-sm) md:grid-cols-(--cols-md) lg:grid-cols-(--cols-lg)"
+	class="group/table grid grid-cols-(--cols-base) gap-x-5 text-[13px] sm:grid-cols-(--cols-sm) md:grid-cols-(--cols-md) lg:grid-cols-(--cols-lg) xl:grid-cols-(--cols-xl) 2xl:grid-cols-(--cols-2xl)"
 	role="table"
 	aria-label={label}
 	style:--cols-base={tracks.base}
 	style:--cols-sm={tracks.sm}
 	style:--cols-md={tracks.md}
 	style:--cols-lg={tracks.lg}
+	style:--cols-xl={tracks.xl}
+	style:--cols-2xl={tracks['2xl']}
 >
 	<div
 		class={[
 			ROW,
-			'sticky top-0 z-2 h-10 border-b bg-background text-xs font-medium text-muted-foreground'
+			'sticky top-0 z-2 h-9 border-b border-divider bg-background text-xs font-medium text-muted-foreground'
 		]}
 		role="row"
 	>
@@ -137,26 +211,41 @@
 			>
 				{#if i === 0 && slotted}
 					<span class="relative z-1 flex size-4 flex-none items-center justify-center">
-						{#if selection}<RowCheckbox {selection} />{/if}
+						{#if selection && rows.length}<RowCheckbox {selection} />{/if}
 					</span>
 				{/if}
-				{#if c.quiet}<span class="sr-only">{c.label}</span>{:else}{c.label}{/if}
+				{#if c.quiet}<span class="sr-only">{c.label}</span>{:else if head}{@render head(
+						c
+					)}{:else}{c.label}{/if}
 			</span>
 		{/each}
 	</div>
-	<div class="col-span-full grid grid-cols-subgrid" role="rowgroup">
-		{#each rows as row (key(row))}
+	<div
+		class="col-span-full grid grid-cols-subgrid"
+		role="rowgroup"
+		{@attach listKeys()}
+		{oncontextmenu}
+	>
+		{#each rows as row, index (key(row))}
 			{@const on = !!selection?.has(key(row))}
+			{@const pointed = menuOpen && menuAt?.row === row}
 			<div
 				class={[
 					ROW,
 					'group/row relative border-b border-divider',
-					dense ? 'min-h-11 py-1.5' : 'min-h-14 py-2.5',
-					on ? 'bg-selection/45' : 'hover:bg-muted'
+					dense ? 'min-h-9 py-1' : 'min-h-9 py-1.5',
+					pointed
+						? 'bg-muted'
+						: on
+							? 'bg-selection/45'
+							: 'hover:bg-muted data-cursor:bg-muted data-cursor:shadow-[inset_2px_0_0_var(--ring)]'
 				]}
+				data-keyrow
+				data-row={index}
 				role="row"
 				aria-label={name(row)}
 				aria-selected={selection ? on : undefined}
+				aria-current={current?.(row) ? 'true' : undefined}
 			>
 				{#each columns as c, i (c.id)}
 					{#if i === 0 && slotted}
@@ -186,20 +275,31 @@
 							<div class="min-w-0 flex-1">{@render cell(row, c.id)}</div>
 						</div>
 					{:else}
-						<div class={cellClass(c, i)} role="cell">{@render cell(row, c.id)}</div>
+						<!-- The last cell gives way to the row's menu, which takes its place on hover. -->
+						{@const under = menu && hasMenu(row) && i === columns.length - 1}
+						<div
+							class={[
+								cellClass(c, i),
+								under &&
+									'group-focus-within/row:invisible group-hover/row:invisible group-has-data-[state=open]/row:invisible pointer-coarse:invisible'
+							]}
+							role="cell"
+						>
+							{@render cell(row, c.id)}
+						</div>
 					{/if}
 				{/each}
-				{#if menu}
+				{#if menu && hasMenu(row)}
 					<!--
 						Over the row's end rather than in a column of its own, so every table's last
 						column ends at the page's edge. Shown on hover, focus or while open; always on
-						touch screens, where it sits in the edge without a backdrop.
+						touch screens.
 					-->
 					<span
-						class="absolute inset-y-0 right-0 z-1 flex items-center bg-linear-to-r from-transparent to-muted to-30% pr-6 pl-10 opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:bg-none pointer-coarse:pr-0.5 pointer-coarse:pl-0 pointer-coarse:opacity-100"
+						class="absolute inset-y-0 right-0 z-1 flex items-center pr-6 opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:bg-none pointer-coarse:pr-0.5 pointer-coarse:pl-0 pointer-coarse:opacity-100"
 						role="cell"
 					>
-						{@render menu(row)}
+						<RowMenu name={name(row)}>{@render menu(row)}</RowMenu>
 					</span>
 				{/if}
 			</div>
@@ -212,6 +312,21 @@
 		{/each}
 	</div>
 </div>
+{#if menu && menuAt}
+	{@const at = menuAt}
+	<DropdownMenu.Root bind:open={menuOpen}>
+		<!-- Where the right-click was: the menu opens from that point. -->
+		<DropdownMenu.Trigger
+			class="pointer-events-none fixed size-px opacity-0"
+			style="left: {at.x}px; top: {at.y}px"
+			tabindex={-1}
+			aria-label="Actions for {name(at.row)}"
+		/>
+		<DropdownMenu.Content align="start" sideOffset={2} class="w-48">
+			{@render menu(at.row)}
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
+{/if}
 {#if footer}
 	<div class="flex items-center gap-3 pt-4 pr-7 pl-5">{@render footer()}</div>
 {/if}

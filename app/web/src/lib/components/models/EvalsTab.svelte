@@ -9,6 +9,7 @@
 	import type { Scope } from '#lib/scope.ts';
 	import type { ModelEvalRun, ModelVersionDetail } from '#lib/types.ts';
 	import { runHref } from '#lib/workspace/url.ts';
+	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	let { scope, version }: { scope: Scope; version: ModelVersionDetail } = $props();
@@ -48,27 +49,28 @@
 </script>
 
 {#if !version.evals?.length}
-	<div class="max-w-[68ch] bg-card px-4 py-6 text-[13px] text-muted-foreground">
-		<p>No eval runs have scored this version yet.</p>
-		<p class="mt-1">
-			Score it with <code class="font-mono text-[0.95em] text-foreground"
-				>flock eval run --model {ref} --suite base_easy --wandb-project model-evals --out results</code
-			>.
-		</p>
+	<!-- The empty pages' look: a muted line, then the command in a code block to copy. -->
+	<div class="grid max-w-[68ch] gap-3 text-[13px] text-muted-foreground">
+		<p>No eval runs have scored this version yet. Score it with:</p>
+		<CopyBlock
+			code="flock eval run --model {ref} --suite base_easy --wandb-project model-evals --out results"
+			lang="bash"
+			label="Copy command"
+			wrap
+		/>
 	</div>
 {:else if failed}
-	<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
+	<p class="text-[13px] text-destructive" role="alert">{failed}</p>
 {:else if runs === null}
 	<Skeleton />
 {:else if !runs.length}
-	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">
-		The eval runs of this version can’t be read.
-	</p>
+	<p class="text-[13px] text-muted-foreground">The eval runs of this version can’t be read.</p>
 {:else}
 	<div class="mb-3 flex min-h-9 items-center gap-3 text-[13px] text-muted-foreground">
 		{#if pair.length === 2}
 			<Button
-				variant="outline"
+				variant="quiet"
+				size="bar"
 				data-sveltekit-preload-data="tap"
 				href={compareHref(pair[0].entity, pair[0].project, pair[0].id, pair[1].path)}
 			>
@@ -81,7 +83,7 @@
 	<div class="overflow-x-auto">
 		<table class="w-full border-collapse text-[13px]">
 			<thead>
-				<tr class="h-10 border-b text-left text-xs text-muted-foreground">
+				<tr class="h-9 border-b border-divider text-left text-xs text-muted-foreground">
 					<th class="px-2 font-medium">Score</th>
 					{#each runs as run (run.path)}
 						<th class="px-2 text-right font-medium whitespace-nowrap">

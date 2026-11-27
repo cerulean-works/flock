@@ -1,7 +1,8 @@
 <script lang="ts" module>
-	export const ROW_H = 40;
-	export const HEAD_H = 40;
-	export const BAND_H = 26;
+	export const ROW_H = 36;
+	export const HEAD_H = 36;
+	/** No band over the header: a group shows as a divider, and its name on hover. */
+	export const BAND_H = 0;
 
 	/** What the table shows: every column, the names beside the charts, or both side by side. */
 	export type TableMode = 'table' | 'visualize' | 'charts';
@@ -12,9 +13,11 @@
 	/** Kinds whose columns fit their content (up to their default width); others keep it. */
 	const FITTED = new Set(['num', 'duration', 'str', 'bool', 'json']);
 	const MIN_W = 64;
-	/** A cell's padding (px-3 each side), and room for the header's sort arrow. */
+	/** A cell's padding (px-3 each side), and room for the header's sort arrow and funnel. */
 	const PAD = 24;
-	const ARROW = 14;
+	const ARROW = 46;
+	/** The Best by column's trophy and arrow, beside them. */
+	const TROPHY = 24;
 	/** Rows measured per page: enough to see its widest values, cheap on long pages. */
 	const SAMPLE = 200;
 
@@ -33,11 +36,13 @@
 <script lang="ts">
 	import GripHorizontalIcon from '@lucide/svelte/icons/grip-horizontal';
 	import { untrack } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
+	import { STATE_DOT } from '#lib/data/run-values.svelte.ts';
 	import { hint } from '#lib/hint.svelte.ts';
 	import { page as appPage } from '$app/state';
 	import { prefetchRunPage } from '#lib/data/cache.ts';
 	import { columnGroups } from '#lib/data/snapshot.ts';
-	import type { ColumnDef, ColumnGroupSpan, RunQuery } from '#lib/types.ts';
+	import type { ColumnDef, ColumnGroupSpan, RunQuery, SortOrder } from '#lib/types.ts';
 	import {
 		dateTime,
 		duration,
@@ -47,22 +52,34 @@
 		relativeTime
 	} from '#lib/utils.ts';
 	import {
+		columnLabel,
 		LOCKED_COLUMNS,
 		columnDrops,
 		columnTree,
 		listDrops,
 		nearestGap
 	} from '#lib/workspace/columns.ts';
-	import { writeFilters } from '#lib/workspace/filters.ts';
+	import { columnFilterKind, writeFilters, type RunFilter } from '#lib/workspace/filters.ts';
+	import { columnFilterProps } from '#lib/workspace/column-filter.ts';
+	import { runValues } from '#lib/data/run-values.svelte.ts';
 	import { moveKey } from '#lib/workspace/layout.ts';
-	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
+	import { DEFAULT_ORDER, DEFAULT_SORT, applyRunQuery, runHref } from '#lib/workspace/url.ts';
+	import { layerOpen, typing } from '#lib/keys.svelte.ts';
+	import { goto } from '$app/navigation';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import Avatar from './Avatar.svelte';
+	import ColumnFilter from './ColumnFilter.svelte';
+	import HeaderMenu from './HeaderMenu.svelte';
+	import BestMark from './groups/BestMark.svelte';
+	import { isInternalKey, type BestOrder } from '#lib/groups.ts';
 	import ColumnResizer from './ColumnResizer.svelte';
 	import RunEye from './RunEye.svelte';
 	import RunMenu from './RunMenu.svelte';
+	import RunMenuItems from './RunMenuItems.svelte';
+	import NewGroupForm from './groups/NewGroupForm.svelte';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import StateBadge from './StateBadge.svelte';
 
 	interface Props {
@@ -82,9 +99,32 @@
 		onprimaryorder?: (keys: string[]) => void;
 		/** In Visualize, above the charts rather than beside them. */
 		stacked?: boolean;
+		/**
+		 * **Best by** on the headers (a group's page, D217): a trophy on the column runs are ranked
+		 * by, and on hover on any other numeric summary column, to make it the one.
+		 */
+		best?: {
+			key: string | null;
+			order: BestOrder | null;
+			source?: string;
+			onchange: (key: string, order: BestOrder) => void;
+			/** Read-only: the trophy shows where it is, and changes nothing. */
+			disabled?: boolean;
+		} | null;
 	}
 
-	let { mode, nameW, primary = null, onprimaryorder, stacked = false }: Props = $props();
+	let {
+		mode,
+		nameW,
+		primary = null,
+		onprimaryorder,
+		stacked = false,
+		best = null
+	}: Props = $props();
+
+	/** A column that can rank runs: a number the run summarised, not one Flock keeps. */
+	const rankable = (col: ColumnDef) =>
+		col.kind === 'num' && col.key.startsWith('summary.') && !isInternalKey(col.key);
 
 	const ws = getWorkspace();
 	const runs = $derived(ws.page.runs);
@@ -93,8 +133,26 @@
 	const selectable = $derived(mode !== 'charts' && !readonly);
 	/** The charts are beside the table: hovering a row focuses its run there. */
 	const charting = $derived(mode !== 'table');
-	/** Columns beside the names: every one, or none beside the charts alone. */
-	const wide = $derived(mode !== 'charts');
+	/**
+	 * On a phone the table is a list (org Runs' way): each run's name, cut in the middle so its
+	 * ending shows, over its state and when it last changed; no columns beside it.
+	 */
+	const phone = new MediaQuery('(max-width: 639px)');
+	const compact = $derived(phone.current && mode !== 'charts');
+	/** Columns beside the names: every one, or none beside the charts alone (or on a phone). */
+	const wide = $derived(mode !== 'charts' && !compact);
+	/** A row's height: two lines in the phone's list. */
+	const rowH = $derived(compact ? 52 : ROW_H);
+	/** The Updated column, for the phone's second line. */
+	const updatedCol = $derived(ws.meta.columns.findIndex((c) => c.key === 'updated_at'));
+	/** A name in two parts, the end kept whole when the name is cut: `mix-w0.6-c0.…` `-s2-v2`. */
+	function nameParts(name: string): [string, string] {
+		const parts = name.split('-');
+		const tail = parts.length > 2 ? `-${parts.slice(-2).join('-')}` : '';
+		return tail && tail.length < name.length - 3
+			? [name.slice(0, name.length - tail.length), tail]
+			: [name, ''];
+	}
 
 	/** The suggested keys, in the order last dragged into here, until the page gives others. */
 	let primaryKeys = $derived(primary);
@@ -130,9 +188,16 @@
 			col.group === 'summary' &&
 			columns.slice(0, primaryCount).some((o) => o !== col && o.label === col.label)
 				? col.key
-				: col.label
+				: columnLabel(col)
 		)
 	);
+	/** Which group (Suggested, Run, Config, Summary) each shown column is in, for its header. */
+	const groupOf = $derived.by(() => {
+		const out: { label: string; first: boolean }[] = [];
+		for (const g of groups)
+			for (let c = g.start; c < g.end; c++) out[c] = { label: g.label, first: c === g.start };
+		return out;
+	});
 	const groups = $derived.by((): (Omit<ColumnGroupSpan, 'key'> & { key: string })[] => {
 		if (!primaryCount) return columnGroups(columns);
 		const rest = columnGroups(columns.slice(primaryCount)).map((g) => ({
@@ -159,7 +224,7 @@
 		return columns.map((col, c) => {
 			if (!f || !FITTED.has(col.kind)) return col.width;
 			let w = textWidth(labels[c], f.head) ?? col.width;
-			w += ARROW;
+			w += ARROW + (best?.key === col.key ? TROPHY : 0);
 			const rows = Math.min(page.runs.length, SAMPLE);
 			for (let r = 0; r < rows; r++) {
 				const text = untrack(() => cellText(c, r));
@@ -212,13 +277,22 @@
 	);
 	// The sticky header covers the top of the viewport, so body rows are visible over
 	// [scrollY, scrollY + viewH - header height] in body coordinates.
-	const rowStart = $derived(Math.max(0, Math.floor(scrollY / ROW_H) - OVERSCAN_ROWS));
+	const rowStart = $derived(Math.max(0, Math.floor(scrollY / rowH) - OVERSCAN_ROWS));
 	const rowEnd = $derived(
-		Math.min(runs.length, Math.ceil((scrollY + viewH - HEAD_H - BAND_H) / ROW_H) + OVERSCAN_ROWS)
+		Math.min(runs.length, Math.ceil((scrollY + viewH - HEAD_H - BAND_H) / rowH) + OVERSCAN_ROWS)
 	);
 
 	const visibleCols = $derived(range(colStart, colEnd));
 	const visibleRows = $derived(range(rowStart, rowEnd));
+
+	/** Columns run on past the table's right edge: a fade there says so. */
+	const cutRight = $derived(wide && mode === 'table' && scrollX + viewW < nameW + totalW - 1);
+
+	/** A time cell's date and time, for its hover. */
+	function timeAt(c: number, r: number) {
+		const v = ws.page.num[shown[c]]?.[r];
+		return typeof v === 'number' ? dateTime(v) : undefined;
+	}
 
 	function onscroll() {
 		if (!scroller) return;
@@ -285,7 +359,8 @@
 		const v = nums ? nums[r] : ws.page.text[i]?.[r];
 		if (typeof v === 'number') {
 			if (col.kind === 'time')
-				return col.key === 'created_at' ? relativeTime(v, ws.meta.now) : dateTime(v);
+				// Relative in lists (Nov 24); the date itself on hover.
+				return relativeTime(v, ws.meta.now);
 			if (col.kind === 'duration') return duration(v);
 			return formatIn(i)(v);
 		}
@@ -315,6 +390,13 @@
 		};
 	}
 
+	/** The URL sorted by a column one way, from the header's menu. */
+	function sortHrefIn(key: string, order: SortOrder) {
+		const params = new URLSearchParams(appPage.url.search);
+		applyRunQuery(params, { ...query, page: 1, sort: key, order });
+		return ws.href(params);
+	}
+
 	function sortHref(key: string) {
 		const params = new URLSearchParams(appPage.url.search);
 		applyRunQuery(params, sortQuery(key));
@@ -330,6 +412,28 @@
 		);
 	}
 	const leaveSort = () => clearTimeout(intent);
+
+	// ------------------------------------------------------------------------------------------
+	// Filtering from the headers: each column's funnel adds or replaces that column's condition,
+	// the others stay. Listed columns show their values with how many runs have each.
+
+	const listed = $derived(
+		ws.meta.columns.filter((c) => columnFilterKind(c.key, c.kind) === 'values').map((c) => c.key)
+	);
+	const counted = $derived(
+		wide ? runValues(ws.meta.entity, ws.meta.project, listed, ws.group) : {}
+	);
+	const me = $derived(appPage.data.shell?.me?.id as number | undefined);
+
+	function filterWith(filters: RunFilter[]) {
+		const params = new URLSearchParams(appPage.url.search);
+		applyRunQuery(params, { ...query, filters, page: 1 });
+		ws.selected.clear();
+		void goto(ws.href(params), { reset: false });
+	}
+
+	const filterOf = (c: number) =>
+		columnFilterProps(columns[c], labels[c], query.filters, counted, ws.people, me, filterWith);
 
 	// ------------------------------------------------------------------------------------------
 	// Moving columns: a header dragged sideways lands in the gap nearest the pointer. Suggested
@@ -477,6 +581,19 @@
 		if (charting) ws.hover = null;
 	}
 
+	/** A right-click's row and where it was: the row's menu opens there, at the cursor. */
+	let menuAt = $state<{ x: number; y: number; row: number } | null>(null);
+	let menuOpen = $state(false);
+
+	function oncontextmenu(e: MouseEvent) {
+		if (readonly) return;
+		const r = rowFromEvent(e);
+		if (r == null) return;
+		e.preventDefault();
+		menuAt = { x: e.clientX, y: e.clientY, row: r };
+		menuOpen = true;
+	}
+
 	/** The column last jumped to, marked for a moment so the eye finds it. */
 	let jumped = $state<string | null>(null);
 	let unmark: ReturnType<typeof setTimeout> | undefined;
@@ -500,8 +617,101 @@
 	const allSelected = $derived(runs.length > 0 && ws.selectedRows.length === runs.length);
 	const allShown = $derived(ws.visible.length === runs.length);
 	const someShown = $derived(ws.visible.length > 0);
-	const first = $derived((query.page - 1) * ws.meta.pageSize);
+
+	/**
+	 * The keyboard's row (j and k, or the arrows once there is one): Enter opens it, x selects it,
+	 * Esc lets go. The pointer takes over as soon as it moves over the table.
+	 */
+	let cursor = $state<number | null>(null);
+
+	function reveal(r: number) {
+		if (!scroller) return;
+		const top = r * rowH;
+		const bottom = top + rowH + HEAD_H + BAND_H;
+		// The floating pager covers the table's foot: keep the row above it.
+		const foot = 72;
+		if (top < scroller.scrollTop) scroller.scrollTop = top;
+		else if (bottom > scroller.scrollTop + scroller.clientHeight - foot)
+			scroller.scrollTop = bottom - scroller.clientHeight + foot;
+	}
+
+	function onkeydown(e: KeyboardEvent) {
+		if (e.defaultPrevented || typing(e) || layerOpen() || !runs.length) return;
+		const down = e.key === 'j' || (cursor != null && e.key === 'ArrowDown');
+		const up = e.key === 'k' || (cursor != null && e.key === 'ArrowUp');
+		if (down || up) {
+			e.preventDefault();
+			const at = cursor == null ? 0 : cursor + (down ? 1 : -1);
+			cursor = Math.max(0, Math.min(runs.length - 1, at));
+			reveal(cursor);
+		} else if (cursor != null && e.key === 'Enter') {
+			e.preventDefault();
+			void goto(runHref(ws.meta.entity, ws.meta.project, runs[cursor].id));
+		} else if (cursor != null && e.key === 'x' && selectable) {
+			ws.toggleSelected(cursor);
+		} else if (cursor != null && e.key === 'Escape' && !ws.selected.size) {
+			cursor = null;
+		}
+	}
 </script>
+
+<svelte:window {onkeydown} />
+
+<!-- A header's menu: its sort (↑ or ↓ while the table sorts by it, a faint ↕ on hover
+     otherwise) and, on a group's page, Best by. A click on the label sorts at once. -->
+{#snippet sortMenu(key: string, label: string, col: ColumnDef | null)}
+	{@const ranks = !!best && !!col && rankable(col) && !best.disabled}
+	<HeaderMenu
+		{label}
+		sort={{
+			dir: query.sort === key ? query.order : null,
+			onsort: (order) => void goto(sortHrefIn(key, order), { reset: false }),
+			onclear:
+				query.sort === key && key !== DEFAULT_SORT
+					? () => void goto(sortHrefIn(DEFAULT_SORT, DEFAULT_ORDER), { reset: false })
+					: undefined
+		}}
+		best={ranks && best
+			? {
+					active: best.key === key,
+					order: best.order,
+					onbest: (order) => best?.onchange(key, order)
+				}
+			: null}
+	/>
+{/snippet}
+
+<!-- A header's sort menu and filter, side by side. -->
+{#snippet controls(c: number, col: ColumnDef)}
+	<span class="flex flex-none items-center">
+		{@render sortMenu(col.key, labels[c], col)}
+		{#if wide}
+			<ColumnFilter {...filterOf(c)} />
+		{/if}
+	</span>
+{/snippet}
+
+<!-- A number's header: a sort or filter in use keeps its place before the name; the ones that
+     only show on hover, focus or touch sit over the cell's leading edge, so the name, which ends
+     where its values do, neither moves nor loses letters when they appear. -->
+{#snippet numberControls(c: number, col: ColumnDef)}
+	{@const filter = wide ? filterOf(c) : null}
+	{@const sorting = query.sort === col.key}
+	{#if sorting || filter?.active}
+		<span class="flex flex-none items-center">
+			{#if sorting}{@render sortMenu(col.key, labels[c], col)}{/if}
+			{#if filter?.active}<ColumnFilter {...filter} />{/if}
+		</span>
+	{/if}
+	{#if !sorting || (filter && !filter.active)}
+		<span
+			class="absolute inset-y-0 left-0 z-1 flex items-center bg-background pr-1 pl-1.5 transition-colors duration-500 group-hover/h:bg-muted after:pointer-events-none after:absolute after:inset-y-0 after:left-full after:w-3 after:bg-linear-to-r after:from-background after:to-transparent after:opacity-0 group-focus-within/h:after:opacity-100 group-hover/h:after:from-muted group-hover/h:after:opacity-100 pointer-coarse:after:opacity-100"
+		>
+			{#if !sorting}{@render sortMenu(col.key, labels[c], col)}{/if}
+			{#if filter && !filter.active}<ColumnFilter {...filter} />{/if}
+		</span>
+	{/if}
+{/snippet}
 
 <!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across;
      above them (stacked), it spans the page and is as tall as `--table-h`. -->
@@ -518,39 +728,21 @@
 	]}
 	bind:this={scroller}
 	{onscroll}
+	onpointermove={() => (cursor = null)}
 	{@attach measure}
-	style:--name-w="{nameW}px"
-	style:--row-h="{ROW_H}px"
+	style:--name-w={compact ? '100%' : `min(${nameW}px, 55vw)`}
+	style:--row-h="{rowH}px"
 >
-	<div class="sticky top-0 z-3 bg-background" style:width="{nameW + totalW}px">
-		<div class="relative flex" style:height="{BAND_H}px">
-			<!-- The name column's divider runs up through the band, drawn the same way (its last
-			     pixel); later groups' dividers sit on the same pixel as the header's. -->
-			<div
-				class="sticky left-0 z-2 w-(--name-w) flex-none bg-background shadow-[inset_-1px_0_0_var(--divider)]"
-			></div>
-			{#if wide}
-				{#each groups as g (g.key)}
-					<div
-						class={[
-							'absolute inset-y-0 text-xs text-muted-foreground',
-							g.start > 0 && 'border-l border-divider'
-						]}
-						style:left="{nameW + offsets[g.start] - (g.start > 0 ? 1 : 0)}px"
-						style:width="{offsets[g.end] - offsets[g.start]}px"
-					>
-						<span class="sticky left-[calc(var(--name-w)+12px)] inline-block px-3 pt-1.5">
-							{g.label} <span class="ml-0.5 text-faint">{g.end - g.start}</span>
-						</span>
-					</div>
-				{/each}
-			{/if}
-		</div>
+	<div
+		class="sticky top-0 z-3 bg-background"
+		style:width={compact ? '100%' : `${nameW + totalW}px`}
+	>
 		<div
 			class="header flex items-stretch border-b text-xs font-medium text-muted-foreground"
 			style:height="{HEAD_H}px"
 		>
-			<div class={[NAME_CELL, 'bg-background']}>
+			<!-- Above the headers that scroll under it, and their controls. -->
+			<div class={[NAME_CELL, 'z-4 bg-background']}>
 				{#if selectable}
 					<Checkbox
 						checked={allSelected}
@@ -569,24 +761,24 @@
 					label={allShown ? 'Hide all runs in charts' : 'Show all runs in charts'}
 					onclick={() => ws.toggleAll()}
 				/>
-				<a
-					class="flex h-full items-center gap-1 text-foreground"
-					href={sortHref('name')}
-					data-sveltekit-preload-data="tap"
-					onpointerenter={() => hoverSort('name')}
-					onpointerleave={leaveSort}
-				>
-					Name
-					{#if query.sort === 'name'}<span class="arrow">{query.order === 'asc' ? '↑' : '↓'}</span
-						>{/if}
-				</a>
-				<span class="ml-auto font-normal whitespace-nowrap text-faint">
-					{#if !wide}
-						{ws.visible.length} of {runs.length} plotted
-					{:else}
-						{first + 1}–{first + runs.length} of {ws.page.total}
-					{/if}
+				<span class="group/h flex h-full items-center gap-1">
+					<a
+						class="flex h-full items-center"
+						href={sortHref('name')}
+						data-sveltekit-preload-data="tap"
+						onpointerenter={() => hoverSort('name')}
+						onpointerleave={leaveSort}
+					>
+						Name
+					</a>
+					{@render sortMenu('name', 'Name', null)}
 				</span>
+				<!-- How many runs the charts show; the pager alone counts the table's rows. -->
+				{#if !wide && charting}
+					<span class="ml-auto font-normal whitespace-nowrap text-faint">
+						{ws.visible.length} of {runs.length} plotted
+					</span>
+				{/if}
 			</div>
 			<div class="flex-none" style:width="{offsets[colStart]}px"></div>
 			{#each visibleCols as c (c)}
@@ -597,6 +789,7 @@
 				<div
 					class={[
 						'hcell group/h relative flex flex-none items-center px-3 transition-colors duration-500 select-none',
+						wide && c > 0 && groupOf[c]?.first && 'shadow-[inset_1px_0_0_var(--divider)]',
 						drag?.c === c ? 'opacity-40' : !drag && 'hover:bg-muted',
 						jumped === col.key && 'bg-selection/60'
 					]}
@@ -611,20 +804,28 @@
 							<GripHorizontalIcon class="size-3.5" />
 						</span>
 					{/if}
+					<!-- The name, then its sort and filter beside it: after it on text columns, before
+					     it on numbers, whose names end where their values do. -->
+					{#if isNumeric(col)}<span class="flex-1"></span>{/if}
+					{#if isNumeric(col)}{@render numberControls(c, col)}{/if}
 					<a
-						class={['flex size-full min-w-0 items-center gap-1', isNumeric(col) && 'justify-end']}
+						class={['flex h-full min-w-0 items-center gap-1.5', isNumeric(col) && 'pl-1']}
 						href={sortHref(col.key)}
-						{@attach hint(grabbable ? `${col.key} (click to sort, drag to move)` : col.key)}
+						{@attach hint(
+							`${groupOf[c] ? `${groupOf[c].label} · ` : ''}${col.key}${grabbable ? ' (click to sort, drag to move)' : ''}`
+						)}
 						draggable="false"
 						data-sveltekit-preload-data="tap"
 						onpointerenter={() => hoverSort(col.key)}
 						onpointerleave={leaveSort}
 					>
-						<span class="label truncate">{labels[c]}</span>
-						{#if query.sort === col.key}<span class="arrow text-foreground"
-								>{query.order === 'asc' ? '↑' : '↓'}</span
-							>{/if}
+						<span class="label min-w-0 truncate">{labels[c]}</span>
+						{#if best?.key === col.key}
+							<BestMark order={best.order} source={best.source} />
+						{/if}
 					</a>
+					{#if !isNumeric(col)}{@render controls(c, col)}{/if}
+					{#if !isNumeric(col)}<span class="flex-1"></span>{/if}
 					<ColumnResizer
 						width={widths[c]}
 						onresize={(w) => (widthOverrides = { ...widthOverrides, [col.key]: w })}
@@ -650,7 +851,7 @@
 			<!-- The header, following the pointer. -->
 			<div
 				class={[
-					'pointer-events-none absolute z-1 flex items-center gap-1 rounded-md bg-popover px-3 text-xs font-medium text-foreground shadow-lg ring-1 ring-foreground/15',
+					'pointer-events-none absolute z-4 flex items-center gap-1 rounded-md bg-popover px-3 text-xs font-medium text-foreground shadow-lg ring-1 ring-foreground/15',
 					isNumeric(col) && 'justify-end'
 				]}
 				style:top="{BAND_H + 4}px"
@@ -666,10 +867,11 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="body relative"
-		style:height="{runs.length * ROW_H}px"
-		style:width="{nameW + totalW}px"
+		style:height="{runs.length * rowH}px"
+		style:width={compact ? '100%' : `${nameW + totalW}px`}
 		{onpointerover}
 		{onpointerleave}
+		{oncontextmenu}
 	>
 		{#if wide && primaryCount}
 			<div
@@ -688,14 +890,16 @@
 			{@const shown = !ws.hidden.has(run.id)}
 			{@const pinned = ws.pinned === r}
 			{@const selected = selectable && ws.selected.has(run.id)}
-			{@const focused = charting && ws.focus === r}
+			{@const focused =
+				(charting && ws.focus === r) || cursor === r || (menuOpen && menuAt?.row === r)}
 			<div
 				class={[
-					'row group/row absolute inset-x-0 flex h-(--row-h) items-stretch border-b border-divider tabular-nums',
-					focused ? 'bg-muted' : selected ? 'bg-selection/45' : 'hover:bg-muted'
+					'row group/row absolute inset-x-0 flex h-(--row-h) items-stretch border-b border-divider text-[13px] tabular-nums',
+					focused ? 'bg-muted' : selected ? 'bg-selection/45' : 'hover:bg-muted',
+					cursor === r && 'shadow-[inset_2px_0_0_var(--ring)]'
 				]}
 				data-row={r}
-				style:top="{r * ROW_H}px"
+				style:top="{r * rowH}px"
 			>
 				<div
 					class={[
@@ -723,29 +927,41 @@
 						onclick={() => ws.toggleRun(r)}
 					/>
 					<!-- Loads on tap: hovering rows (charts follow them) shouldn't fetch run pages. -->
-					<a
-						class={[
-							'run-name min-w-0 flex-1 truncate underline-offset-3 hover:text-link hover:underline',
-							charting && !shown ? 'text-faint' : 'text-foreground'
-						]}
-						href={runHref(ws.meta.entity, ws.meta.project, run.id)}
-						data-sveltekit-preload-data="tap"
-						{@attach hint(ws.nameOf(r))}
-					>
-						{ws.nameOf(r)}
-					</a>
-					{#if pinned}<Badge variant="secondary" class="text-muted-foreground">Pinned</Badge>{/if}
-					{#if ws.isLive(r)}
-						<Badge
-							variant="secondary"
-							class="live bg-state-running/10 text-state-running"
-							{@attach hint('Running')}
+					{#if compact}
+						{@const [head, tail] = nameParts(ws.nameOf(r))}
+						{@const state = ws.stateOf(r)}
+						{@const at = ws.page.num[updatedCol]?.[r]}
+						<a
+							class="run-name flex min-w-0 flex-1 flex-col justify-center gap-0.5 text-foreground"
+							aria-label={ws.nameOf(r)}
+							href={runHref(ws.meta.entity, ws.meta.project, run.id)}
+							data-sveltekit-preload-data="tap"
 						>
-							<span class="size-1.5 animate-live rounded-full bg-current motion-reduce:animate-none"
-							></span>
-							Live
-						</Badge>
+							<span class="flex min-w-0" title={ws.nameOf(r)}>
+								<span class="truncate">{head}</span><span class="flex-none">{tail}</span>
+							</span>
+							<span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+								<span class={['size-1.5 flex-none rounded-full', STATE_DOT[state] ?? 'bg-faint']}
+								></span>
+								<span class="capitalize">{state}</span>
+								{#if typeof at === 'number'}<span aria-hidden="true">·</span>
+									{relativeTime(at, ws.meta.now)}{/if}
+							</span>
+						</a>
+					{:else}
+						<a
+							class={[
+								'run-name min-w-0 flex-1 truncate underline-offset-3 hover:text-link hover:underline',
+								charting && !shown ? 'text-faint' : 'text-foreground'
+							]}
+							href={runHref(ws.meta.entity, ws.meta.project, run.id)}
+							data-sveltekit-preload-data="tap"
+							{@attach hint(ws.nameOf(r))}
+						>
+							{ws.nameOf(r)}
+						</a>
 					{/if}
+					{#if pinned}<Badge variant="secondary" class="text-muted-foreground">Pinned</Badge>{/if}
 					{#if !readonly}<RunMenu row={r} />{/if}
 				</div>
 				<div class="flex-none" style:width="{offsets[colStart]}px"></div>
@@ -760,12 +976,12 @@
 						style:width="{widths[c]}px"
 					>
 						{#if col.kind === 'state'}
-							<StateBadge state={ws.stateOf(r)} />
+							<StateBadge state={ws.stateOf(r)} dotOnPhone />
 						{:else if col.kind === 'user'}
 							{@const id = userAt(c, r)}
 							{@const person = id == null ? undefined : ws.people.get(id)}
 							{#if person}
-								<Avatar name={person.name} src={person.avatar_url} class="mr-2 size-5 text-[9px]" />
+								<Avatar name={person.name} src={person.avatar_url} class="mr-2 size-4 text-[8px]" />
 								<span class="truncate" {@attach hint(person.email)}>{person.name}</span>
 							{:else if id == null}
 								<span class="text-faint">–</span>
@@ -777,7 +993,9 @@
 							{@const text = cellText(c, r)}
 							<span
 								class={['truncate', text === '–' && 'text-faint']}
-								{@attach hint(col.kind === 'str' ? text : undefined)}>{text}</span
+								{@attach hint(
+									col.kind === 'str' ? text : col.kind === 'time' ? timeAt(c, r) : undefined
+								)}>{text}</span
 							>
 						{/if}
 					</div>
@@ -786,3 +1004,29 @@
 		{/each}
 	</div>
 </div>
+
+<!-- New group… from a row's menu opens this, which outlives the menu. -->
+{#if !readonly}<NewGroupForm {ws} />{/if}
+
+{#if menuAt}
+	<DropdownMenu.Root bind:open={menuOpen}>
+		<!-- Where the right-click was: the menu opens from that point. -->
+		<DropdownMenu.Trigger
+			class="pointer-events-none fixed size-px opacity-0"
+			style="left: {menuAt.x}px; top: {menuAt.y}px"
+			tabindex={-1}
+			aria-label="Actions for {ws.nameOf(menuAt.row)}"
+		/>
+		<DropdownMenu.Content align="start" sideOffset={2} class="w-48">
+			<RunMenuItems row={menuAt.row} />
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
+{/if}
+
+{#if cutRight}
+	<!-- Over the table's right edge, under its scrollbar: more columns that way. -->
+	<div
+		class="pointer-events-none absolute top-0 right-0 bottom-0 z-4 w-10 bg-linear-to-l from-background to-transparent"
+		aria-hidden="true"
+	></div>
+{/if}

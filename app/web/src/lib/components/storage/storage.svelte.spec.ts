@@ -74,10 +74,10 @@ describe('ObjectBrowser', () => {
 			[...document.querySelectorAll('[role=rowgroup] [role=row]')].map((r) =>
 				r.querySelector('[role=cell]:first-child a')!.textContent!.trim()
 			);
-		expect(rows()).toEqual(['v1/', 'a.txt', 'b.json', 'c.png']);
+		expect(rows()).toEqual(['v1', 'a.txt', 'b.json', 'c.png']);
 		await expect.element(page.getByText('2.0 KB')).toBeInTheDocument();
 		await page.getByRole('button', { name: 'Load more' }).click();
-		await vi.waitFor(() => expect(rows()).toEqual(['v1/', 'a.txt', 'b.json', 'c.png', 'd.md']));
+		await vi.waitFor(() => expect(rows()).toEqual(['v1', 'a.txt', 'b.json', 'c.png', 'd.md']));
 		expect(calls[0].url).toBe(
 			'/api/storage/acme/data/objects?prefix=runs%2F&limit=200&cursor=next'
 		);
@@ -94,7 +94,8 @@ describe('ObjectBrowser', () => {
 			})
 		});
 		render(ObjectBrowser, { org: 'acme', bucket: 'data', prefix: 'runs/', listing, now: 0 });
-		await page.getByRole('textbox', { name: 'Filter by name prefix' }).fill('b');
+		await page.getByRole('button', { name: 'Search by prefix' }).click();
+		await page.getByRole('searchbox', { name: 'Search by prefix' }).fill('b');
 		await vi.waitFor(() =>
 			expect(document.querySelectorAll('[role=rowgroup] [role=row]').length).toBe(1)
 		);
@@ -111,10 +112,12 @@ describe('ObjectBrowser', () => {
 		await userEvent.keyboard('{Shift>}');
 		await page.getByRole('checkbox', { name: 'Select b.json' }).click();
 		await userEvent.keyboard('{/Shift}');
-		await expect.element(page.getByText('3 selected')).toBeVisible();
-		// Download is for one object; folders are deleted with what's in them.
-		await expect.element(page.getByRole('button', { name: 'Download' })).not.toBeInTheDocument();
-		await page.getByRole('toolbar').getByRole('button', { name: 'Delete' }).click();
+		// A checked row's menu acts on every row checked: no Download, which is for one file;
+		// folders are deleted with what's in them.
+		await page.getByRole('button', { name: 'Actions for a.txt' }).click();
+		await expect.element(page.getByText('3 items', { exact: true })).toBeVisible();
+		await expect.element(page.getByRole('menuitem', { name: 'Download' })).not.toBeInTheDocument();
+		await page.getByRole('menuitem', { name: 'Delete 3 items…' }).click();
 		const dialog = page.getByRole('alertdialog');
 		await expect.element(dialog.getByText('Delete 2 objects and 1 folder?')).toBeVisible();
 		await dialog.getByRole('button', { name: 'Delete' }).click();
@@ -151,11 +154,9 @@ describe('ObjectBrowser in flock-models', () => {
 		expect(page.getByRole('link', { name: 'Models' }).element().getAttribute('href')).toBe(
 			'/models/acme'
 		);
-		await page.getByRole('checkbox', { name: 'Select config.json' }).click();
-		await expect.element(page.getByRole('button', { name: 'Download' })).toBeVisible();
-		await expect
-			.element(page.getByRole('toolbar').getByRole('button', { name: 'Delete' }))
-			.not.toBeInTheDocument();
+		await page.getByRole('button', { name: 'Actions for config.json' }).click();
+		await expect.element(page.getByRole('menuitem', { name: 'Download' })).toBeVisible();
+		await expect.element(page.getByRole('menuitem', { name: /Delete/ })).not.toBeInTheDocument();
 	});
 });
 
@@ -177,7 +178,7 @@ describe('ObjectBrowser in -projects/ (D169)', () => {
 		const { unmount } = render(ObjectBrowser, { ...props, bucket: 'flock-datasets' });
 		const link = page.getByRole('link', { name: 'pretrain in Datasets' });
 		expect(link.element().getAttribute('href')).toBe('/acme/pretrain/datasets');
-		await expect.element(page.getByText('9/')).toBeVisible();
+		await expect.element(page.getByText('9', { exact: true })).toBeVisible();
 		expect(page.getByRole('link', { name: /old/ }).query()).toBeNull();
 		unmount();
 		render(ObjectBrowser, { ...props, bucket: 'flock-models' });
@@ -195,7 +196,7 @@ describe('ObjectBrowser in -projects/ (D169)', () => {
 			now: 0,
 			projects
 		});
-		await expect.element(page.getByText('412/')).toBeVisible();
+		await expect.element(page.getByText('412', { exact: true })).toBeVisible();
 		expect(page.getByRole('link', { name: /pretrain/ }).query()).toBeNull();
 	});
 });

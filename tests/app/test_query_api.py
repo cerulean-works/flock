@@ -370,6 +370,21 @@ def test_columns_and_paging(table_api: Client) -> None:
     assert [c["name"] for c in found] == ["config.amp"]
 
 
+def test_run_values_count_each_value(api: Client) -> None:
+    api.create_run("p", "r1", config={"opt": "adam", "lr": 0.1, "amp": True}, tags=["a", "b"])
+    api.create_run("p", "r2", config={"opt": "adam", "lr": 0.2}, tags=["a"])
+    api.create_run("p", "r3", config={"opt": "sgd", "lr": 0.1, "amp": False})
+    url = "/api/v1/projects/flock/p/runs/values"
+    found = api.get(url, keys="config.opt,tags,config.lr,config.amp,nope").json()["values"]
+    assert found["config.opt"] == [{"value": "adam", "runs": 2}, {"value": "sgd", "runs": 1}]
+    assert found["tags"] == [{"value": "a", "runs": 2}, {"value": "b", "runs": 1}]
+    assert found["config.lr"] == [{"value": 0.1, "runs": 2}, {"value": 0.2, "runs": 1}]
+    assert found["config.amp"] == [{"value": "false", "runs": 1}, {"value": "true", "runs": 1}]
+    assert found["nope"] == []
+    narrowed = api.get(url, keys="config.opt", filter='{"tags": "a"}').json()["values"]
+    assert narrowed["config.opt"] == [{"value": "adam", "runs": 2}]
+
+
 def test_long_strings_and_lists_are_kept_and_filtered(api: Client) -> None:
     """Values too long to index (0013) are stored, filtered and sorted like short ones."""
     long_text = "x" * 3000 + "".join(f"{i:04d}" for i in range(2000))  # 11 kB, varied

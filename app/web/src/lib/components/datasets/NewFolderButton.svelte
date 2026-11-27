@@ -22,8 +22,13 @@
 	/** Where the folder shown is in the bucket: a project's are under `-projects/` (D160). */
 	let prefix = $state('');
 	let pending = $state(false);
+	let button = $state<HTMLElement | null>(null);
 
 	async function show() {
+		if (open) {
+			open = false;
+			return;
+		}
 		if (scope.project === null) {
 			prefix = path ? `${path}/` : '';
 			open = true;
@@ -46,11 +51,18 @@
 	}
 </script>
 
-<Button variant="ghost" disabled={pending} onclick={show}>
+<Button
+	variant={open ? 'quiet-on' : 'quiet'}
+	size="bar"
+	disabled={pending}
+	bind:ref={button}
+	onclick={show}
+>
 	<FolderPlusIcon /> <span class="max-sm:sr-only">New folder</span>
 </Button>
 <CreateFolderDialog
 	bind:open
+	anchor={button}
 	org={scope.org}
 	bucket={DATASETS_BUCKET}
 	{prefix}

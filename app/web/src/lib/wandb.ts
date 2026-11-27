@@ -1,4 +1,5 @@
 import { invalidate } from '$app/navigation';
+import type { OrgImport as Job } from './types.ts';
 import { formText } from './utils.ts';
 
 /** What the org page's load depends on: polling invalidates it while an import runs. */
@@ -45,4 +46,18 @@ export function wandbImport(
 	if (base_url && !/^https?:\/\/\S+$/.test(base_url))
 		return { error: 'Enter the W&B server as an http(s) URL' };
 	return { value: { entity: chosen, api_key, ...(base_url ? { base_url } : {}) } };
+}
+
+/** How long an import that stopped short stays on show, for someone to resume it. */
+const ATTENTION = 3 * 86_400;
+
+/**
+ * Whether the import is worth showing: while it runs, or for a few days after it failed or was
+ * interrupted. A finished or cancelled import leaves nothing behind.
+ */
+export function importShown(job: Job | null, now: number): job is Job {
+	if (!job) return false;
+	if (job.state === 'running') return true;
+	if (job.state !== 'failed' && job.state !== 'interrupted') return false;
+	return now - (job.finished_at ?? job.started_at) < ATTENTION;
 }

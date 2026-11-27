@@ -10,46 +10,51 @@
  * the site's paper. Panels are the site's flat tint (ink at 4% over the canvas); nothing is
  * beige, textured or warm. Host Grotesk is loaded from Google Fonts in app.html. Dark is a
  * neutral near-black, chosen on the account page or following the system (#lib/theme.ts).
+ *
+ * Two planes, as in Linear's reset: the sidebar is the base surface (a faint grey, or the
+ * darkest graphite), and the content sits one step lifted (white, or a step lighter). Greys,
+ * rules and surfaces carry almost no blue; the ink keeps its navy, a shade deeper.
  */
 :root {
 	color-scheme: light;
 	--radius: 0.5rem;
 
-	--background: #ffffff; /* Canvas: pure white */
-	--foreground: #172a50; /* Ink */
+	--background: #ffffff; /* Content plane: pure white */
+	--foreground: #1a1c21; /* Ink: neutral, no navy cast */
 	--card: #f6f7f8; /* Panel: ink 4% over white, the site's card tint. Chart and log panels */
-	--card-foreground: #172a50;
+	--card-foreground: #1a1c21;
 	--popover: #ffffff;
-	--popover-foreground: #172a50;
+	--popover-foreground: #1a1c21;
 	--primary: #145a9a; /* Reading blue: small functional emphasis (switches, sliders, checks) */
 	--primary-foreground: #ffffff;
-	--secondary: #eff0f3; /* Panel hover: ink 7% over white */
-	--secondary-foreground: #172a50;
-	--muted: #eff0f3; /* hover and quiet surfaces */
-	--muted-foreground: #4b5d79; /* Slate */
-	--accent: #eff0f3;
-	--accent-foreground: #172a50;
+	--secondary: #eeeff1; /* Panel hover: ink 7% over white */
+	--secondary-foreground: #1a1c21;
+	--muted: #eeeff1; /* hover and quiet surfaces */
+	--muted-foreground: #5f6470; /* Slate: neutral grey */
+	--accent: #eeeff1;
+	--accent-foreground: #1a1c21;
 	--destructive: #c0392f;
-	--border: #cdd3db; /* Quiet rule */
-	--input: #cdd3db;
+	--border: #d3d6db; /* Quiet rule */
+	--input: #d3d6db;
 	--ring: #1768af; /* Focus blue */
 	--chart-1: #2a78d6;
 	--chart-2: #eb6834;
 	--chart-3: #1baf7a;
 	--chart-4: #eda100;
 	--chart-5: #e87ba4;
-	--sidebar: #ffffff;
-	--sidebar-foreground: #172a50;
+	--sidebar: #f7f7f8; /* Base plane, behind the content */
+	--sidebar-foreground: #1a1c21;
 	--sidebar-primary: #145a9a;
 	--sidebar-primary-foreground: #ffffff;
-	--sidebar-accent: #eff0f3;
-	--sidebar-accent-foreground: #172a50;
-	--sidebar-border: #cdd3db;
+	--sidebar-accent: #ebecee; /* hover and the current row, on the base plane */
+	--sidebar-accent-foreground: #1a1c21;
+	--sidebar-border: #d3d6db;
 	--sidebar-ring: #1768af;
 
 	/* Cerulean roles shadcn has no slot for. */
-	--faint: #7b88a0; /* tertiary text: counts, empty cells */
-	--divider: #e6e9ee; /* row and section dividers, lighter than a rule */
+	--subtle: #3b3f47; /* secondary text, a step under the ink: header actions */
+	--faint: #7f838b; /* tertiary text: counts, empty cells */
+	--divider: #e8e9ec; /* row and section dividers, lighter than a rule */
 	--selection: #cce7fb; /* Selection wash */
 	--link: #145a9a;
 	--deep: #102c60;
@@ -85,34 +90,35 @@
 	 */
 	color-scheme: dark;
 
-	--background: #0f1012; /* Canvas */
-	--foreground: #e8eaed;
-	--card: #17181b; /* Panel */
-	--card-foreground: #e8eaed;
-	--popover: #1b1c20; /* Menus and dialogs sit a step above the page */
-	--popover-foreground: #e8eaed;
+	--background: #17181b; /* Content plane, a step above the sidebar */
+	--foreground: #eceef1;
+	--card: #1e1f23; /* Panel */
+	--card-foreground: #eceef1;
+	--popover: #232428; /* Menus and dialogs sit a step above the page */
+	--popover-foreground: #eceef1;
 	--primary: #7ab4f5;
 	--primary-foreground: #0f1012;
-	--secondary: #222428; /* Panel hover */
-	--secondary-foreground: #e8eaed;
-	--muted: #222428;
-	--muted-foreground: #a0a6b0;
-	--accent: #222428;
-	--accent-foreground: #e8eaed;
+	--secondary: #27292d; /* Panel hover */
+	--secondary-foreground: #eceef1;
+	--muted: #27292d;
+	--muted-foreground: #a3a8b0;
+	--accent: #27292d;
+	--accent-foreground: #eceef1;
 	--destructive: #f07167;
 	--border: #33363c;
 	--input: #33363c;
 	--ring: #7ab4f5;
-	--sidebar: #0f1012;
-	--sidebar-foreground: #e8eaed;
+	--sidebar: #0e0f11; /* Base plane */
+	--sidebar-foreground: #eceef1;
 	--sidebar-primary: #7ab4f5;
 	--sidebar-primary-foreground: #0f1012;
-	--sidebar-accent: #222428;
-	--sidebar-accent-foreground: #e8eaed;
+	--sidebar-accent: #1d1e22;
+	--sidebar-accent-foreground: #eceef1;
 	--sidebar-border: #33363c;
 	--sidebar-ring: #7ab4f5;
+	--subtle: #c8cbd1;
 	--faint: #6e747e;
-	--divider: #24262b;
+	--divider: #2a2c30;
 	--selection: #1e3a5f;
 	--link: #85bcf7;
 	--deep: #24406f;
@@ -175,6 +181,7 @@
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-ring: var(--sidebar-ring);
 
+	--color-subtle: var(--subtle);
 	--color-faint: var(--faint);
 	--color-divider: var(--divider);
 	--color-selection: var(--selection);
@@ -199,7 +206,7 @@
 	--radius-3xl: calc(var(--radius) * 2.2);
 	--radius-4xl: calc(var(--radius) * 2.6);
 
-	/* Pulse on the dot of running runs. */
+	/* Pulse on the one live mark in the page header; every other live dot is still. */
 	--animate-live: live 1.6s ease-out infinite;
 	/* Full-screen panel opening. */
 	--animate-enter: enter 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);

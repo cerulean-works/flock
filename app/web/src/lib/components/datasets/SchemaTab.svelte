@@ -11,12 +11,12 @@
 
 <!-- The columns as a tree, the dataset's details and its schema metadata (D91). -->
 <div class="grid gap-8">
-	<section aria-labelledby="schema-columns">
-		<h2 id="schema-columns" class="text-lg tracking-[-0.01em]">Columns</h2>
+	<!-- The list tables' look (Gate 2): 12px muted labels, rows and rules to the page's edges. -->
+	<section aria-label="Columns">
 		<div
-			class="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem] gap-3 border-b pb-1.5 text-xs text-muted-foreground"
+			class="sticky top-0 z-1 grid h-9 grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem] items-center gap-5 border-b border-divider bg-background px-5 text-xs font-medium text-muted-foreground"
 		>
-			<span>Name</span>
+			<span>Column</span>
 			<span>Type</span>
 			<span>Nulls</span>
 		</div>
@@ -27,8 +27,8 @@
 		</ul>
 	</section>
 
-	<section aria-labelledby="schema-details">
-		<h2 id="schema-details" class="text-lg tracking-[-0.01em]">Details</h2>
+	<section class="px-5" aria-labelledby="schema-details">
+		<h2 id="schema-details" class="text-[13px] font-medium">Details</h2>
 		<dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-[13px]">
 			<dt class="text-muted-foreground">Data storage version</dt>
 			<dd class="font-mono text-[12.5px]">{info.details.data_storage_version}</dd>
@@ -62,8 +62,8 @@
 		{/if}
 	</section>
 
-	<section aria-labelledby="schema-metadata">
-		<h2 id="schema-metadata" class="text-lg tracking-[-0.01em]">Schema metadata</h2>
+	<section class="px-5" aria-labelledby="schema-metadata">
+		<h2 id="schema-metadata" class="text-[13px] font-medium">Schema metadata</h2>
 		{#if metadata.length}
 			<dl class="mt-2 grid gap-2 text-[13px]">
 				{#each metadata as [key, value] (key)}

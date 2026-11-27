@@ -20,7 +20,9 @@ const data = {
 	feed: { items: [], next_cursor: null },
 	query: { org: 'acme', kinds: 'run_started', limit: '50' },
 	mine: false,
-	project: null,
+	filters: { owner: [], project: [], state: [], group: [], job_type: [], gpu: [] },
+	members: [],
+	facets: null,
 	now: 1_790_000_000
 };
 
@@ -71,7 +73,9 @@ describe('the org’s page from outside it', () => {
 		feed: null,
 		query: {},
 		mine: false,
-		project: null,
+		filters: { owner: [], project: [], state: [], group: [], job_type: [], gpu: [] },
+		members: [],
+		facets: null,
 		now: 1_790_000_000
 	};
 

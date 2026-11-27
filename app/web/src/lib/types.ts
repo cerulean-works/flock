@@ -1065,6 +1065,13 @@ export interface FeedItem {
 	description?: string | null;
 }
 
+/** What an org's runs can be filtered by (`GET /orgs/{org}/run-facets`): per field, each
+ * value and how many runs have it, most first. Owners are user ids, projects names. */
+export type RunFacets = Record<
+	'owner' | 'project' | 'state' | 'group' | 'job_type' | 'gpu',
+	{ value: string | number; runs: number }[]
+>;
+
 export interface FeedPage {
 	items: FeedItem[];
 	/** The cursor of the next page; null on the last. */

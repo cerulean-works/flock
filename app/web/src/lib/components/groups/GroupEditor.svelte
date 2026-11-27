@@ -1,12 +1,14 @@
 <script lang="ts">
-	import SearchIcon from '@lucide/svelte/icons/search';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import XIcon from '@lucide/svelte/icons/x';
-	import { onMount } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto, invalidate } from '$app/navigation';
+	import FilterChip from '#lib/components/FilterChip.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import RunFilters from '#lib/components/RunFilters.svelte';
+	import { hint } from '#lib/hint.svelte.ts';
 	import StateBadge from '#lib/components/StateBadge.svelte';
+	import BarSearch from '#lib/components/BarSearch.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
@@ -52,22 +54,17 @@
 	} from '#lib/groups.ts';
 	import type { Owner } from '#lib/types.ts';
 	import { count, formatNumber, formatValue } from '#lib/utils.ts';
-	import {
-		describeFilters,
-		isGroup,
-		opLabel,
-		UNARY,
-		valueText,
-		type RunFilter
-	} from '#lib/workspace/filters.ts';
+	import { chipParts, isGroup, type RunFilter } from '#lib/workspace/filters.ts';
 	import { runHref } from '#lib/workspace/url.ts';
 	import AssistantPanel, { type Entry } from './AssistantPanel.svelte';
-	import BestByPicker from './BestByPicker.svelte';
+	import HeaderMenu from '#lib/components/HeaderMenu.svelte';
+	import { columnLabel } from '#lib/workspace/columns.ts';
+	import BestMark from './BestMark.svelte';
 	import DeleteGroupDialog from './DeleteGroupDialog.svelte';
 	import { INFO_COLUMNS, suggestPrompts } from './editor.ts';
 
 	/**
-	 * The create page and the edit dialog (D223): every run of the project, ticked in or out of
+	 * The create and edit pages (D223): every run of the project, ticked in or out of
 	 * the group.
 	 * Filters tick the runs they match (on a new group) or offer them as new matches (on a saved
 	 * one, D216); hand ticks win over both. The assistant (D224) sets the same filters and ticks,
@@ -87,10 +84,8 @@
 		prefill?: { runs: string[]; filters: RunFilter[]; name: string | null };
 		/** Opened from **N new matches**: they come first. */
 		fresh?: boolean;
-		/** In a dialog: **Cancel** calls this rather than leaving the page. */
-		oncancel?: () => void;
-		/** In a dialog: called once an edit is saved, rather than going to the group's page. */
-		onsaved?: () => void;
+		/** At the view bar's start: the ways to make a group (Auto, Manual) on the create page. */
+		tabs?: Snippet;
 	}
 
 	let {
@@ -103,8 +98,7 @@
 		group = null,
 		prefill = { runs: [], filters: [], name: null },
 		fresh = false,
-		oncancel,
-		onsaved
+		tabs
 	}: Props = $props();
 
 	// The draft starts from the props once; later loads (a sidebar change) don't reset it.
@@ -444,8 +438,7 @@
 				});
 				await invalidate(GROUPS);
 				toast.success(`Saved ${trimmed}`);
-				if (onsaved) onsaved();
-				else await goto(groupHref(entity, project, group.id));
+				await goto(groupHref(entity, project, group.id));
 			}
 		} catch (err) {
 			toast.error(err instanceof GroupsError ? err.message : 'Couldn’t save the group');
@@ -463,10 +456,33 @@
 			.map((key) => ({ key, kind: columnKind(key, runs.data[key] ?? []) }))
 	);
 	const kindOf = (key: string) => filterColumns.find((c) => c.key === key)?.kind;
-	const chipText = (f: RunFilter): string =>
-		isGroup(f)
-			? `(${describeFilters([f], kindOf, false, peopleMap)})`
-			: `${displayKey(f.key)} ${opLabel(f.op)}${UNARY.has(f.op) ? '' : ` ${valueText(f.value, kindOf(f.key), peopleMap)}`}`;
+	/** The draft's counts, those that aren't zero, with their rows' tint. */
+	const tallies = $derived(
+		(editing
+			? [
+					{ n: total, label: count(total, 'run'), swatch: '' },
+					{ n: kept, label: `${kept} already in`, swatch: 'bg-state-running/40' },
+					{ n: toAdd, label: `${toAdd} to add`, swatch: 'bg-state-finished/50' },
+					{ n: counts.out, label: `${counts.out} to drop`, swatch: 'bg-muted-foreground/30' },
+					{
+						n: newMatches.length,
+						label: count(newMatches.length, 'new match', 'new matches'),
+						swatch: 'bg-state-preempting/60'
+					},
+					{ n: counts.dropped, label: `${counts.dropped} dropped`, swatch: '' },
+					{ n: unseen, label: `${count(unseen, 'older member')} not listed`, swatch: '' }
+				]
+			: [
+					{
+						n: counts.filter,
+						label: `${counts.filter} match filters`,
+						swatch: 'bg-state-running/40'
+					},
+					{ n: counts.hand, label: `${counts.hand} by hand`, swatch: 'bg-state-finished/50' },
+					{ n: counts.out, label: `${counts.out} left out`, swatch: 'bg-muted-foreground/30' }
+				]
+		).filter((t) => t.n > 0)
+	);
 
 	const LOOK_ROW: Record<Look, string> = {
 		filter: 'bg-state-running/6',
@@ -481,13 +497,32 @@
 	const NAME_W = 260;
 	const COL_W = 104;
 	const columns = $derived([
-		{ key: 'state', label: 'state', w: 112, num: false },
+		// Labelled as the Runs page labels them.
+		{ key: 'state', label: columnLabel({ label: 'state', group: 'info' }), w: 112, num: false },
 		// W&B's group only when some run has one: a column of dashes says nothing.
 		...(rows.some((r) => r.group != null && r.group !== '')
-			? [{ key: 'group', label: 'group', w: 132, num: false }]
+			? [
+					{
+						key: 'group',
+						label: columnLabel({ label: 'group', group: 'info' }),
+						w: 132,
+						num: false
+					}
+				]
 			: []),
-		...varies.map((k) => ({ key: k, label: displayKey(k), w: COL_W, num: false })),
-		...(bestKey ? [{ key: '$best', label: metricLabel(bestKey), w: 112, num: true }] : [])
+		// Numbers right-aligned under their header, as on the group's own page.
+		...varies.map((k) => ({
+			key: k,
+			label: displayKey(k),
+			w: COL_W,
+			num:
+				rows.some((r) => typeof r.cells[k] === 'number') &&
+				rows.every((r) => r.cells[k] == null || typeof r.cells[k] === 'number')
+		})),
+		// Best by (D217): its column, or an empty one to pick it from while it's unset.
+		...(bestKey || summaryKeys.length
+			? [{ key: '$best', label: bestKey ? metricLabel(bestKey) : 'Best by', w: 128, num: true }]
+			: [])
 	]);
 	// The table fills its pane: each column's width is its least, and they share what's left,
 	// so a few columns read as a table rather than a strip cut off mid-row.
@@ -505,121 +540,140 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
-	<header class="flex-none">
-		<!-- As PageHeader's workspace rows, with the name editable in the title (D225). -->
-		<div class="box-content flex h-10 items-center gap-x-3 pt-5 pr-7 pb-3 pl-5">
+	<PageHeader
+		title={name.trim() || 'New group'}
+		trail={[{ label: 'Groups', href: groupsHref(entity, project) }]}
+		phoneTrail={false}
+	>
+		{#snippet leading()}
 			<span
-				class="size-3.5 flex-none rounded-[4px] {group
-					? ''
-					: 'border-[1.5px] border-dashed border-faint'}"
+				class={['size-3 rounded-[3px]', !group && 'border-[1.5px] border-dashed border-faint']}
 				style:background={group?.color}
 				aria-hidden="true"
 			></span>
-			<label class="min-w-0 flex-1">
+		{/snippet}
+		{#snippet heading()}
+			<!-- The name, edited in place: the trail's last step (D225). -->
+			<label class="flex min-w-0 max-sm:flex-1">
 				<span class="sr-only">Group name</span>
 				<input
-					class="-ml-[0.045em] w-full min-w-0 truncate rounded-md bg-transparent text-[34px] leading-10 font-normal tracking-[-0.025em] outline-none placeholder:text-faint hover:bg-muted/60 focus-visible:bg-muted/60 {BUTTON_FOCUS}"
+					class="-mx-1 field-sizing-content h-6 max-w-80 min-w-24 truncate rounded px-1 text-[13px] leading-5 font-medium text-foreground shadow-[inset_0_-1px_0_var(--border)] outline-none placeholder:text-faint hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:shadow-none {BUTTON_FOCUS}"
+					aria-label="Group name"
 					value={name}
 					oninput={(e) => (typed = e.currentTarget.value)}
 					placeholder="New group"
 					maxlength={200}
 				/>
 			</label>
+		{/snippet}
+		{#snippet actions()}
+			<!-- What the group would be, by how each run came to be in or out (D223): one muted
+			     line, each count's square the tint of its rows. -->
+			<p
+				class="flex min-w-0 items-center gap-x-3 truncate text-[13px] text-muted-foreground tabular-nums max-md:hidden"
+				role="status"
+			>
+				{#each tallies as t (t.label)}
+					<span class="flex flex-none items-center gap-1.5">
+						{#if t.swatch}<span class="size-2 rounded-[2px] {t.swatch}"></span>{/if}
+						{t.label}
+					</span>
+				{/each}
+				{#if newMatches.length}
+					<button
+						type="button"
+						class="flex-none rounded-sm text-link hover:underline {BUTTON_FOCUS}"
+						onclick={addAll}
+					>
+						Add all
+					</button>
+				{/if}
+			</p>
 			{#if group}
 				<Button
-					variant="ghost"
-					size="icon"
-					class="text-muted-foreground hover:text-destructive"
+					variant="quiet"
+					size="icon-bar"
+					class="hover:text-destructive"
 					aria-label="Delete group"
-					title="Delete group (its runs stay)"
+					{@attach hint('Delete group (its runs stay)')}
 					onclick={() => (confirmDelete = true)}
 				>
 					<Trash2Icon />
 				</Button>
 			{/if}
-			{#if oncancel}
-				<Button variant="outline" onclick={oncancel}>Cancel</Button>
-			{:else}
-				<Button
-					variant="outline"
-					href={group ? groupHref(entity, project, group.id) : groupsHref(entity, project)}
-				>
-					Cancel
-				</Button>
-			{/if}
-			<Button disabled={saving || !name.trim() || (!group && total === 0)} onclick={save}>
-				{group ? 'Save' : `Create group · ${count(total, 'run')}`}
-			</Button>
-		</div>
-		<div class="flex h-12 items-center gap-2 border-b pr-7 pl-5">
-			<label
-				class="flex h-8 w-48 min-w-0 flex-none items-center gap-2 rounded-lg border border-input bg-background px-2.5 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
+			<Button
+				variant="quiet"
+				size="bar"
+				href={group ? groupHref(entity, project, group.id) : groupsHref(entity, project)}
 			>
-				<SearchIcon class="size-4 flex-none text-muted-foreground" />
-				<input
-					bind:value={search}
-					type="search"
-					class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint [&::-webkit-search-cancel-button]:hidden"
-					placeholder="Search runs"
-					aria-label="Search runs by name or id"
-					autocomplete="off"
-					spellcheck="false"
-				/>
-			</label>
-			<RunFilters
-				{filters}
-				columns={filterColumns}
-				people={peopleMap}
-				onapply={(next) => void setFilters(next)}
-			/>
-			<!-- The filters in effect, as chips; each can be taken off. -->
-			<div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
-				{#if rawFilter}
-					<span
-						class="truncate rounded-md bg-muted px-2 py-0.5 font-mono text-[12px]"
-						title="This filter can’t be edited here; setting filters replaces it"
-					>
-						{JSON.stringify(rawFilter)}
-					</span>
-				{/if}
-				{#each filters as f, i (i)}
-					<span
-						class="inline-flex flex-none items-center gap-1 rounded-md bg-state-running/10 py-0.5 pr-0.5 pl-2 font-mono text-[12px] text-deep"
-					>
-						{chipText(f)}
-						<button
-							type="button"
-							class="grid size-4 place-items-center rounded text-muted-foreground hover:text-foreground {BUTTON_FOCUS}"
-							aria-label="Remove {chipText(f)}"
-							onclick={() => void setFilters(filters.filter((_, j) => j !== i))}
-						>
-							<XIcon class="size-3" />
-						</button>
-					</span>
-				{/each}
-			</div>
-			<BestByPicker
-				key={bestKey}
-				order={best?.order ?? groupList?.best_order ?? null}
-				keys={summaryKeys}
-				title={best ? 'This group’s own setting' : 'The project’s setting'}
-				onchange={(key, order) => (best = { key, order })}
-			/>
+				Cancel
+			</Button>
+			<Button
+				size="bar"
+				disabled={saving || !name.trim() || (!group && total === 0)}
+				onclick={save}
+			>
+				{group ? 'Save' : `Create · ${count(total, 'run')}`}
+			</Button>
+		{/snippet}
+		{#snippet toolbar()}
+			<!-- Tabs at the left and the icons at the right, as on the group's own page. -->
+			{#if tabs}
+				{@render tabs()}
+				<span class="mx-2 h-4 w-px bg-divider" aria-hidden="true"></span>
+			{/if}
 			<Tabs.Root value={view} onValueChange={(v) => (view = v as 'all' | 'in')}>
 				<Tabs.List aria-label="Show">
 					<Tabs.Trigger value="all">All runs · {rows.length}</Tabs.Trigger>
 					<Tabs.Trigger value="in">In group · {counts.in}</Tabs.Trigger>
 				</Tabs.List>
 			</Tabs.Root>
+			<span class="flex-1"></span>
+			<BarSearch bind:value={search} things="runs" />
+			<RunFilters
+				{filters}
+				columns={filterColumns}
+				people={peopleMap}
+				onapply={(next) => void setFilters(next)}
+			/>
+		{/snippet}
+	</PageHeader>
+	{#if rawFilter || filters.length}
+		<!-- The group's rule, one chip per condition; the cross drops one. Not a filter on the
+		     list below: All runs lists every run, ticked or not. -->
+		<div
+			class="flex min-h-9 flex-none flex-wrap items-center gap-1.5 border-b border-divider py-1 pr-4 pl-5"
+			aria-label="The group’s rule"
+			role="group"
+		>
+			<span
+				class="mr-1 text-xs text-muted-foreground"
+				{@attach hint('Runs matching this join the group; All runs still lists every run')}
+				>Rule</span
+			>
+			{#if rawFilter}
+				<span
+					class="h-6 truncate rounded-md bg-muted px-2 py-0.5 font-mono text-[12px] leading-5"
+					{@attach hint('This filter can’t be edited here; setting filters replaces it')}
+				>
+					{JSON.stringify(rawFilter)}
+				</span>
+			{/if}
+			{#each filters as f, i (i)}
+				<FilterChip
+					parts={chipParts(f, { label: displayKey, kind: kindOf, people: peopleMap })}
+					onremove={() => void setFilters(filters.filter((_, j) => j !== i))}
+				/>
+			{/each}
 		</div>
-	</header>
+	{/if}
 
 	<div class="flex min-h-0 flex-1">
 		<main class="flex min-w-0 flex-1 flex-col">
 			<div class="relative min-h-0 flex-1">
 				<div class="absolute inset-0 overflow-auto overscroll-contain text-[13px]">
 					<div
-						class="sticky top-0 z-3 flex h-10 items-stretch border-b bg-background text-xs font-medium text-muted-foreground"
+						class="sticky top-0 z-3 flex h-9 items-stretch border-b bg-background text-xs font-medium text-muted-foreground"
 						style:min-width="{tableW}px"
 					>
 						<div class={[NAME_CELL, 'bg-background']} style:width="{NAME_W}px">
@@ -634,11 +688,34 @@
 						</div>
 						{#each columns as c (c.key)}
 							<div
-								class={[CELL, c.num && 'justify-end']}
+								class={[CELL, c.num && 'group/h justify-end gap-1']}
 								style:flex="1 0 {c.w}px"
 								title={c.key.startsWith('$') ? undefined : c.key}
 							>
-								<span class="truncate">{c.label}</span>
+								<span class={['truncate', c.key === '$best' && !bestKey && 'text-faint']}
+									>{c.label}</span
+								>
+								{#if c.key === '$best'}
+									{@const order = best?.order ?? groupList?.best_order ?? null}
+									{#if bestKey}
+										<BestMark
+											{order}
+											source={best ? 'this group’s own setting' : 'the project’s setting'}
+										/>
+									{/if}
+									<HeaderMenu
+										label={c.label}
+										best={{
+											active: !!bestKey,
+											order,
+											onbest: (o) => {
+												if (bestKey) best = { key: bestKey, order: o };
+											},
+											keys: summaryKeys.filter((k) => k !== bestKey),
+											onpick: (k) => (best = { key: k, order: order ?? 'asc' })
+										}}
+									/>
+								{/if}
 							</div>
 						{/each}
 					</div>
@@ -648,7 +725,7 @@
 						{@const struck = look === 'out' || look === 'dropped'}
 						<div
 							class={[
-								'group/row flex h-10 items-stretch border-b border-divider tabular-nums',
+								'group/row flex h-9 items-stretch border-b border-divider tabular-nums',
 								LOOK_ROW[look]
 							]}
 							style:min-width="{tableW}px"
@@ -687,7 +764,7 @@
 						</div>
 					{/each}
 					{#if shown.length > limit}
-						<div class="flex h-10 items-center pl-4" style:min-width="{tableW}px">
+						<div class="flex h-9 items-center pl-4" style:min-width="{tableW}px">
 							<button
 								type="button"
 								class="sticky left-4 text-xs text-link hover:underline"
@@ -706,57 +783,6 @@
 					{/if}
 				</div>
 			</div>
-			<!-- What the group would be, by how each run came to be in or out (D223). -->
-			<footer
-				class="flex min-h-11 flex-none flex-wrap items-center gap-x-4 gap-y-1 border-t border-divider px-5 py-2 text-[13px]"
-				role="status"
-			>
-				<strong class="font-semibold">{count(total, 'run')} in group</strong>
-				{#if editing}
-					<span class="flex items-center gap-1.5">
-						<span class="size-2 rounded-[2px] bg-state-running/40"></span>
-						{kept} kept
-					</span>
-					{#if toAdd}
-						<span class="flex items-center gap-1.5">
-							<span class="size-2 rounded-[2px] bg-state-finished/50"></span>
-							{toAdd} to add
-						</span>
-					{/if}
-					{#if counts.out}
-						<span class="flex items-center gap-1.5 text-muted-foreground">
-							<span class="size-2 rounded-[2px] bg-muted"></span>{counts.out} to drop
-						</span>
-					{/if}
-					{#if newMatches.length}
-						<span class="flex items-center gap-1.5">
-							<span class="size-2 rounded-[2px] bg-state-preempting/60"></span>
-							{newMatches.length}
-							{newMatches.length === 1 ? 'new match' : 'new matches'}
-						</span>
-						<Button variant="outline" size="xs" onclick={addAll}>Add all</Button>
-					{/if}
-					{#if counts.dropped}
-						<span class="text-muted-foreground">{counts.dropped} dropped</span>
-					{/if}
-					{#if unseen}
-						<span class="text-muted-foreground">{count(unseen, 'older member')} not listed</span>
-					{/if}
-				{:else}
-					<span class="flex items-center gap-1.5">
-						<span class="size-2 rounded-[2px] bg-state-running/40"></span>{counts.filter} match filters
-					</span>
-					<span class="flex items-center gap-1.5">
-						<span class="size-2 rounded-[2px] bg-state-finished/50"></span>{counts.hand} added by hand
-					</span>
-					<span class="flex items-center gap-1.5 text-muted-foreground">
-						<span class="size-2 rounded-[2px] bg-muted"></span>{counts.out} left out by hand
-					</span>
-					<span class="ml-auto text-xs text-muted-foreground">
-						Runs that match later are offered as new matches. Nothing joins by itself.
-					</span>
-				{/if}
-			</footer>
 		</main>
 		{#if assistant}
 			<AssistantPanel
@@ -772,5 +798,5 @@
 </div>
 
 {#if group}
-	<DeleteGroupDialog bind:open={confirmDelete} {entity} {project} {group} ondeleted={oncancel} />
+	<DeleteGroupDialog bind:open={confirmDelete} {entity} {project} {group} />
 {/if}

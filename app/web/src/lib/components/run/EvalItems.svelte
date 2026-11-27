@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
+	import { SCROLL_FADE, scrollFade } from '#lib/scroll-fade.ts';
 	import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
 	import ArrowDownWideNarrowIcon from '@lucide/svelte/icons/arrow-down-wide-narrow';
 	import FlameIcon from '@lucide/svelte/icons/flame';
@@ -15,7 +16,9 @@
 	import ItemChoiceRow from './ItemChoiceRow.svelte';
 	import ItemsMap from './ItemsMap.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { signedMargin, typedIn } from '#lib/evals.ts';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import { docIdParts, shownQuestion, signedMargin, tokenNote, typedIn } from '#lib/evals.ts';
 	import type {
 		EvalItem,
 		ItemKeep,
@@ -55,6 +58,8 @@
 		fallback?: Snippet<[string, ItemKeep]>;
 		/** On a `home` page: the table's box spans the page, from under the text to its edges. */
 		bleed?: boolean;
+		/** A heading over the list (one run's Items), the score beside it in muted type. */
+		title?: string;
 		/** Where a link left the list; a part that doesn't fit these tasks or keeps is ignored. */
 		view?: ItemsView;
 		/** Told the list's state whenever the reader changes it, so the page's link can follow. */
@@ -71,11 +76,13 @@
 		keeps,
 		fallback,
 		bleed = false,
+		title,
 		view = {},
 		onview
 	}: Props = $props();
 
-	const SIZE = 20;
+	// Items to a page; the pager's menu changes it.
+	let perPage = $state(20);
 	const HEATS: { heat: TokenHeat; label: string; hint: string }[] = [
 		{ heat: 'surprisal', label: 'Surprisal', hint: 'Darker: the run found the token less likely' },
 		{ heat: 'rank', label: 'Rank', hint: 'Darker: more tokens the run found likelier' },
@@ -103,7 +110,7 @@
 	);
 	let sort = $state<'margin' | 'doc'>(untrack(() => view.sort ?? 'margin'));
 	// A page past what Flock reads (an offset of 2^31) is past the last: the last one shows.
-	let at = $state(untrack(() => Math.min(view.page ?? 1, Math.floor(2 ** 31 / SIZE) + 1)));
+	let at = $state(untrack(() => Math.min(view.page ?? 1, Math.floor(2 ** 31 / perPage) + 1)));
 	let found = $state<ItemsPage | null>(null);
 	// Kept while the next page loads, so the pager (and the focus on it) stays.
 	let total = $state<number | null>(null);
@@ -119,14 +126,25 @@
 	let tokens = $state<ItemTokens | null>(null);
 	let heat = $state<TokenHeat>('surprisal');
 	// The heat shown and the one a click turns to; A against B needs two runs.
-	const tint = $derived.by(() => {
-		const offered = HEATS.filter((h) => other || h.heat !== 'versus');
-		const at = Math.max(
-			0,
-			offered.findIndex((h) => h.heat === heat)
-		);
-		return { now: offered[at], next: offered[(at + 1) % offered.length] };
-	});
+	const heats = $derived(HEATS.filter((h) => other || h.heat !== 'versus'));
+	const tint = $derived(heats.find((h) => h.heat === heat) ?? heats[0]);
+	const ORDERS = $derived([
+		{
+			sort: 'margin' as const,
+			label: 'Margin',
+			hint: other
+				? 'The biggest gap between the runs’ margins first'
+				: 'The surest first, right or wrong'
+		},
+		{ sort: 'doc' as const, label: 'Doc order', hint: 'The dataset’s order' }
+	]);
+	function setSort(to: 'margin' | 'doc') {
+		if (to === sort) return;
+		sort = to;
+		at = 1;
+		open = null;
+		tell();
+	}
 	// Where j, k or a square's dot land once the page they turned to arrives, and whether they open
 	// it. Only that page's answer lands there: any other change of view drops it.
 	let landing: {
@@ -156,8 +174,14 @@
 			widths[k as Column] = readWidth(w, cookies.get(w.cookie));
 	});
 	const DELTA_W = 64;
+	// The Question column takes what the others leave, down to its least width; past that the
+	// table scrolls sideways.
 	const tableWidth = $derived(
-		widths.doc + widths.question + widths.gold + widths.run * sides.length + (other ? DELTA_W : 0)
+		widths.doc +
+			ITEM_W.question.min +
+			widths.gold +
+			widths.run * sides.length +
+			(other ? DELTA_W : 0)
 	);
 	// Doc, question, gold, a column per run, Δ with two, and the filler.
 	const columns = $derived(4 + sides.length + (other ? 1 : 0));
@@ -171,7 +195,7 @@
 	const taskChoices = $derived(
 		tasks.filter((t) => t.task.toLowerCase().includes(taskQuery.trim().toLowerCase()))
 	);
-	const pages = $derived(Math.max(1, Math.ceil((total ?? 0) / SIZE)));
+	const pages = $derived(Math.max(1, Math.ceil((total ?? 0) / perPage)));
 
 	// Every change the reader makes ends here, so the page's link follows it. Untracked: the page
 	// writes its URL, and an effect that read it back would loop (027 D195).
@@ -205,8 +229,8 @@
 			task,
 			keep,
 			sort,
-			offset: String((at - 1) * SIZE),
-			limit: String(SIZE),
+			offset: String((at - 1) * perPage),
+			limit: String(perPage),
 			...(other ? { with: other } : {})
 		}).toString()
 	);
@@ -232,7 +256,7 @@
 				total = page.total;
 				// A link past the last page (the docs changed since) shows the last one.
 				if (!page.items.length && page.total && at > 1) {
-					at = Math.ceil(page.total / SIZE);
+					at = Math.ceil(page.total / perPage);
 					tell();
 					return;
 				}
@@ -323,7 +347,7 @@
 	// A square's dot: its task and cell, in the default order, at the page that holds the doc, the
 	// doc open; the focus moves to its row once the page arrives.
 	function openAt(to: string, cell: ItemKeep, index: number, id: string) {
-		const page = Math.floor(index / SIZE) + 1;
+		const page = Math.floor(index / perPage) + 1;
 		const shown = task === to && keep === cell && sort === 'margin' && at === page && found;
 		open = id;
 		if (shown) {
@@ -340,11 +364,14 @@
 		tell();
 	}
 
-	// After the rows render: the doc's toggle takes the focus, which scrolls it into view.
+	// After the rows render: the doc's toggle takes the focus, scrolled into view clear of the
+	// floating pager (its bottom scroll margin).
 	function focus(id: string) {
-		void tick().then(() =>
-			root?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id)}"]`)?.focus()
-		);
+		void tick().then(() => {
+			const toggle = root?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id)}"]`);
+			toggle?.focus({ preventScroll: true });
+			toggle?.scrollIntoView({ block: 'nearest' });
+		});
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -383,7 +410,7 @@
 		const { right = 0, all = 0 } = counts;
 		// Two runs' scores and flips are the counts table's, under the list (D202).
 		if (other || !all) return null;
-		return `${(right / all).toFixed(4)}: ${right} of ${all} docs right`;
+		return `${(100 * (right / all)).toFixed(1)}% · ${right} of ${all} right`;
 	});
 
 	// The tint's full strength: the page's largest margin.
@@ -397,11 +424,14 @@
 
 <!-- A column heading with the handle that resizes its column. -->
 <!-- The text truncates, not the cell, so the handle on its edge isn't clipped. -->
-{#snippet head(text: string, column: Column | null)}
-	<th class="relative px-2 py-1.5 text-left font-medium">
+<!-- Right of the Question column, which takes the width the others leave, a column's handle
+     sits on its left edge: that is the edge that moves as it widens. -->
+{#snippet head(text: string, column: Column | null, edge: 'left' | 'right' = 'right')}
+	<th class="relative h-9 px-3 text-left font-medium">
 		<span class="block truncate">{text}</span>
 		{#if column}
 			<ResizeHandle
+				{edge}
 				value={widths[column]}
 				bounds={ITEM_W[column]}
 				label="Resize the {text} column"
@@ -414,59 +444,41 @@
 
 <svelte:window {onkeydown} />
 
-<div class="grid gap-3" bind:this={root}>
-	<div class="flex flex-wrap items-center gap-2">
-		<PickerField
-			bind:open={picking}
-			onOpenChange={(next) => {
-				if (!next) return;
-				taskQuery = '';
-				taskActive = Math.max(
-					0,
-					tasks.findIndex((t) => t.task === task)
-				);
-			}}
-			aria-label="Task: {task}"
-			class="h-7 max-w-80 min-w-56 font-mono text-[12.5px]"
+<div class="grid grid-cols-[minmax(0,1fr)] gap-3" bind:this={root}>
+	{#if title}
+		<h2 id="items-title" class="flex items-baseline gap-2 text-[15px] font-medium">
+			{title}
+			{#if summary}<span class="text-[13px] font-normal text-muted-foreground tabular-nums"
+					>{summary}</span
+				>{/if}
+		</h2>
+	{/if}
+	<!-- One 36px row: the keeps as underline tabs, whose line lands on the table's top rule; the
+	     task and the order quiet at the right. -->
+	<!-- On a phone the task and order take a row above, so every keep shows in full and its line
+	     still lands on the table's rule. -->
+	<div
+		class={[
+			'flex h-9 min-w-0 items-center gap-2 max-sm:h-auto max-sm:flex-wrap max-sm:gap-0',
+			!other && '-mb-3',
+			bleed && 'bleed px-5'
+		]}
+	>
+		<!-- On a narrow page the keeps scroll sideways; the controls keep their room. -->
+		<div
+			class="flex h-full min-w-0 shrink [scrollbar-width:none] items-center gap-4 overflow-x-auto max-sm:h-9 max-sm:w-full max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] max-sm:pr-4"
+			role="radiogroup"
+			aria-label="Docs shown"
 		>
-			<span class="min-w-0 flex-1 truncate">{task}</span>
-			{#snippet list()}
-				<PickerList
-					options={taskChoices}
-					key={(t) => t.task}
-					current={(t) => t.task === task}
-					noun="tasks"
-					label="Search tasks"
-					placeholder="Search tasks…"
-					class="max-h-96"
-					bind:query={taskQuery}
-					bind:active={taskActive}
-					onpick={(t) => {
-						picking = false;
-						if (t.task === task) return;
-						task = t.task;
-						at = 1;
-						total = null;
-						open = null; // doc ids repeat across tasks
-						tell();
-					}}
-				>
-					{#snippet row(t: (typeof tasks)[number])}
-						<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{t.task}</span>
-						<span class="text-xs text-muted-foreground tabular-nums">{t.counts[keep] ?? ''}</span>
-					{/snippet}
-				</PickerList>
-			{/snippet}
-		</PickerField>
-		<div class="flex flex-wrap gap-1" role="radiogroup" aria-label="Docs shown">
 			{#each keeps as k (k.keep)}
 				<button
 					type="button"
 					role="radio"
 					aria-checked={k.keep === keep}
 					class={[
-						'rounded-md border px-2.5 py-1 text-[13px] hover:bg-muted aria-checked:border-ring aria-checked:bg-accent',
-						lifted === k.keep && 'bg-muted'
+						'relative flex h-full flex-none items-center gap-1.5 px-0.5 text-[13px] font-medium whitespace-nowrap text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset aria-checked:text-foreground',
+						'after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 after:transition-opacity aria-checked:after:opacity-100',
+						lifted === k.keep && 'text-foreground'
 					]}
 					onmouseenter={() => (lifted = k.keep)}
 					onmouseleave={() => (lifted = null)}
@@ -480,45 +492,114 @@
 					}}
 				>
 					{k.label}
-					<span class="ml-1 text-muted-foreground tabular-nums">{counts[k.keep] ?? ''}</span>
+					<span class="font-normal text-muted-foreground tabular-nums">{counts[k.keep] ?? ''}</span>
 				</button>
 			{/each}
 		</div>
-		<!-- What an opened doc's tokens are tinted by, for every doc of the list: each click the
-		     next, as the order's button turns. -->
-		<Button
-			variant="ghost"
-			size="sm"
-			class="ml-auto text-muted-foreground"
-			{@attach hint(`Tokens: ${tint.now.hint}. Click for ${tint.next.label}.`)}
-			onclick={() => (heat = tint.next.heat)}
+		<div
+			class="ml-auto flex flex-none items-center gap-0.5 max-sm:order-first max-sm:h-9 max-sm:w-full"
 		>
-			<FlameIcon />
-			{tint.now.label}
-		</Button>
-		<Button
-			variant="ghost"
-			size="sm"
-			class="text-muted-foreground"
-			{@attach hint(
-				sort === 'margin'
-					? other
-						? 'The biggest gap between the runs’ margins first'
-						: 'The surest first, right or wrong'
-					: 'The dataset’s order'
-			)}
-			onclick={() => {
-				sort = sort === 'margin' ? 'doc' : 'margin';
-				at = 1;
-				open = null;
-				tell();
-			}}
-		>
-			{#if sort === 'margin'}<ArrowDownWideNarrowIcon />{:else}<ArrowDownUpIcon />{/if}
-			{sort === 'margin' ? 'Margin' : 'Doc order'}
-		</Button>
+			<PickerField
+				bind:open={picking}
+				onOpenChange={(next) => {
+					if (!next) return;
+					taskQuery = '';
+					taskActive = Math.max(
+						0,
+						tasks.findIndex((t) => t.task === task)
+					);
+				}}
+				aria-label="Task: {task}"
+				class="h-7 w-auto max-w-60 gap-1 rounded-md border-0 bg-transparent px-2 text-[13px] text-subtle hover:bg-muted data-[state=open]:bg-muted max-sm:max-w-28 dark:bg-transparent [&>svg]:size-3.5"
+			>
+				<span class="min-w-0 truncate">{task}</span>
+				{#snippet list()}
+					<PickerList
+						options={taskChoices}
+						key={(t) => t.task}
+						current={(t) => t.task === task}
+						noun="tasks"
+						label="Search tasks"
+						placeholder="Search tasks…"
+						class="max-h-96"
+						bind:query={taskQuery}
+						bind:active={taskActive}
+						onpick={(t) => {
+							picking = false;
+							if (t.task === task) return;
+							task = t.task;
+							at = 1;
+							total = null;
+							open = null; // doc ids repeat across tasks
+							tell();
+						}}
+					>
+						{#snippet row(t: (typeof tasks)[number])}
+							<span class="min-w-0 flex-1 truncate">{t.task}</span>
+							<span class="text-xs text-muted-foreground tabular-nums">{t.counts[keep] ?? ''}</span>
+						{/snippet}
+					</PickerList>
+				{/snippet}
+			</PickerField>
+			<!-- Two settings, each naming itself and its value; a menu holds the choices, so the
+			     labels never change under the pointer. -->
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						<Button {...props} variant="quiet" size="bar" aria-label="Tint: {tint.label}">
+							<FlameIcon />
+							<span class="max-sm:sr-only"
+								><span class="text-muted-foreground">Tint</span> {tint.label}</span
+							>
+							<ChevronDownIcon class="size-3.5" />
+						</Button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end" class="w-72">
+					<DropdownMenu.Group>
+						<DropdownMenu.Label>Tint an opened doc's tokens by</DropdownMenu.Label>
+						<DropdownMenu.RadioGroup value={heat} onValueChange={(v) => (heat = v as TokenHeat)}>
+							{#each heats as h (h.heat)}
+								<DropdownMenu.RadioItem value={h.heat} {@attach hint(h.hint)}
+									>{h.label}</DropdownMenu.RadioItem
+								>
+							{/each}
+						</DropdownMenu.RadioGroup>
+					</DropdownMenu.Group>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						{@const order = ORDERS.find((o) => o.sort === sort) ?? ORDERS[0]}
+						<Button {...props} variant="quiet" size="bar" aria-label="Order: {order.label}">
+							{#if sort === 'margin'}<ArrowDownWideNarrowIcon />{:else}<ArrowDownUpIcon />{/if}
+							<span class="max-sm:sr-only"
+								><span class="text-muted-foreground">Order</span> {order.label}</span
+							>
+							<ChevronDownIcon class="size-3.5" />
+						</Button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end" class="w-60">
+					<DropdownMenu.Group>
+						<DropdownMenu.Label>Order the docs by</DropdownMenu.Label>
+						<DropdownMenu.RadioGroup
+							value={sort}
+							onValueChange={(v) => setSort(v as 'margin' | 'doc')}
+						>
+							{#each ORDERS as o (o.sort)}
+								<DropdownMenu.RadioItem value={o.sort} {@attach hint(o.hint)}
+									>{o.label}</DropdownMenu.RadioItem
+								>
+							{/each}
+						</DropdownMenu.RadioGroup>
+					</DropdownMenu.Group>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+		</div>
 	</div>
-	{#if summary}
+	{#if summary && !title}
 		<p class="text-xs text-muted-foreground tabular-nums">{summary}</p>
 	{/if}
 
@@ -544,9 +625,12 @@
 		<!-- As wide as its box, the Question column taking what the others leave; never narrower
 		     than the columns as the reader dragged them, past which it scrolls sideways. With
 		     `bleed` the box spans the page, edge to edge, as the dataset rows do. -->
-		<div class={['overflow-x-auto', bleed && 'bleed']}>
+		<div class={['relative overflow-x-auto', SCROLL_FADE, bleed && 'bleed']} {@attach scrollFade}>
 			<table
-				class="w-full table-fixed border-t border-divider text-[13px]"
+				class={[
+					'w-full table-fixed border-t border-divider text-[13px]',
+					bleed && '[&_tr>*:first-child]:pl-5'
+				]}
 				style:min-width="{tableWidth}px"
 			>
 				<colgroup>
@@ -562,12 +646,16 @@
 				<thead class="border-b text-xs text-muted-foreground">
 					<tr>
 						{@render head('Doc', 'doc')}
-						{@render head('Question', 'question')}
-						{@render head('Gold', 'gold')}
+						{@render head('Question', null)}
+						{@render head('Gold', 'gold', 'left')}
 						<!-- The runs share one width: only the first has a handle, so an edge moves
 						     with the pointer. -->
-						{#each sides as side, i (side)}{@render head(side, i === 0 ? 'run' : null)}{/each}
-						{#if other}<th class="px-2 py-1.5 text-right font-medium">Δ</th>{/if}
+						{#each sides as side, i (side)}{@render head(
+								side,
+								i === 0 ? 'run' : null,
+								'left'
+							)}{/each}
+						{#if other}<th class="h-9 px-3 text-right font-medium">Δ</th>{/if}
 						<th></th>
 					</tr>
 				</thead>
@@ -577,19 +665,30 @@
 						<!-- The open row's whole item, once it has come. -->
 						{@const item = shown && detail?.id === row.id ? detail : null}
 						{@const m = row.runs.map((r) => r.margin)}
+						{@const [lead, tail] = docIdParts(row.id)}
 						<!-- With a row open, the closed ones fade back so it reads on its own; hovering one brings it
 						     forward again. -->
+						<!-- A click anywhere on the row opens it, as its doc id's button does (the keys' way). -->
 						<tr
+							onclick={(e) => {
+								const t = e.target as Element;
+								if (t.closest('button, a, input') || window.getSelection()?.toString()) return;
+								toggle(row.id);
+							}}
 							class={[
-								'align-top transition-opacity hover:bg-muted/50 has-[:focus-visible]:bg-muted/50',
+								'group/item cursor-pointer align-top transition-opacity hover:bg-muted/50 has-[[data-item]:focus-visible]:bg-muted',
 								!shown && 'border-b border-divider',
 								opened && !shown && 'opacity-40 focus-within:opacity-100 hover:opacity-100'
 							]}
 						>
-							<td class="px-2 py-1.5">
+							<!-- j and k move a fill and an edge bar, as the runs table's cursor does. -->
+							<td
+								class="px-3 py-1.5 group-has-[[data-item]:focus-visible]/item:shadow-[inset_2px_0_0_var(--ring)]"
+							>
 								<button
 									type="button"
-									class="flex max-w-full items-center gap-1 font-mono text-[12px]"
+									class="flex max-w-full scroll-mb-20 items-center gap-1 font-mono text-[12px] outline-none"
+									aria-label={row.id}
 									aria-expanded={shown}
 									data-item={row.id}
 									onclick={() => toggle(row.id)}
@@ -597,25 +696,28 @@
 									<ChevronRightIcon
 										class={['size-3.5 flex-none transition-transform', shown && 'rotate-90']}
 									/>
-									<span class="truncate" {@attach hint(row.id)}>{row.id}</span>
+									<!-- Cut in the middle: the tail that tells docs apart always shows. -->
+									<span class="flex min-w-0" {@attach hint(row.id)}
+										><span class="truncate">{lead}</span><span class="flex-none">{tail}</span></span
+									>
 								</button>
 							</td>
-							<td class="px-2 py-1.5">
+							<td class="px-3 py-1.5">
 								<!-- Opened, the whole question as scored; closed, the part that varies. -->
 								<span class={['whitespace-pre-wrap', !item && 'line-clamp-2']}
-									>{item ? (item.question ?? '') : row.text}</span
+									>{shownQuestion(item ? (item.question ?? '') : row.text)}</span
 								>
 							</td>
-							<td class="px-2 py-1.5"><span class="line-clamp-2">{row.gold_text}</span></td>
+							<td class="px-3 py-1.5"><span class="line-clamp-2">{row.gold_text}</span></td>
 							{#each row.runs as answer, side (side)}
 								<td
-									class="px-2 py-1.5"
+									class="px-3 py-1.5"
 									{@attach hint(
 										`Gold choice’s probability ${(100 * answer.gold_prob).toFixed(1)}%`
 									)}
 								>
 									<!-- Right or wrong by the icon's shape, then what the run picked. -->
-									<span class="flex items-start gap-1.5">
+									<span class="flex items-start gap-2">
 										{#if answer.correct}
 											<CheckIcon class="mt-0.5 size-3.5 flex-none text-state-finished" />
 										{:else}
@@ -638,7 +740,7 @@
 								</td>
 							{/each}
 							{#if other}
-								<td class="px-2 py-1.5 text-right font-mono text-[12px] tabular-nums">
+								<td class="px-3 py-1.5 text-right font-mono text-[12px] tabular-nums">
 									{m[0] != null && m[1] != null ? signedMargin(m[0] - m[1]) : '–'}
 								</td>
 							{/if}
@@ -655,13 +757,15 @@
 									delta={!!other}
 									{tokens}
 									{heat}
-									notes={tokens?.runs.map((r) => r.note && refused({ message: r.note }, 0))}
+									notes={tokens?.runs.map(
+										(r) => r.note && tokenNote(refused({ message: r.note }, 0))
+									)}
 								/>
 							{/each}
 						{:else if shown}
 							<tr class="border-b border-divider">
 								<td></td>
-								<td colspan={columns - 1} class="px-2 py-1.5 text-muted-foreground">
+								<td colspan={columns - 1} class="px-3 py-1.5 text-muted-foreground">
 									{#if detailRefusal}
 										<span role="alert">No text for this doc: {detailRefusal}</span>
 									{:else}
@@ -682,8 +786,8 @@
 		<PageNumbers
 			current={at}
 			{pages}
-			first={(at - 1) * SIZE + 1}
-			last={Math.min(at * SIZE, total)}
+			first={(at - 1) * perPage + 1}
+			last={Math.min(at * perPage, total)}
 			{total}
 			label="Item pages"
 			ongo={(p) => {
@@ -691,12 +795,16 @@
 				open = null;
 				tell();
 			}}
+			size={perPage}
+			sizes={[20, 50, 100]}
+			sizeLabel="Items per page"
+			onsize={(n) => {
+				// The page holding the first item shown.
+				at = Math.floor(((at - 1) * perPage) / n) + 1;
+				perPage = n;
+				open = null;
+				tell();
+			}}
 		/>
-	{/if}
-	<!-- The keys, named as the pickers name theirs. -->
-	{#if found?.items.length}
-		<p class="flex gap-3 text-[11px] text-muted-foreground" aria-hidden="true">
-			<span>j k move</span><span>↵ o open</span><span>esc close</span>
-		</p>
 	{/if}
 </div>

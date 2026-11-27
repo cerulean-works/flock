@@ -7,6 +7,7 @@
 	import type { RunFile } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
 	import Skeleton from '#lib/components/Skeleton.svelte';
+	import DataTable, { ROW_LINK, type Column } from '#lib/components/DataTable.svelte';
 
 	interface Props {
 		/** `/api/projects/…/runs/{run}/files` */
@@ -31,10 +32,38 @@
 	// A file of the dashboard's API, not a page.
 	const fileUrl = (name: string) =>
 		`${url}/${name.split('/').map(encodeURIComponent).join('/')}` as ResolvedPathname;
+
+	const columns: Column[] = [
+		{ id: 'name', label: 'Name' },
+		{ id: 'size', label: 'Size', align: 'end' },
+		{ id: 'updated', label: 'Updated', align: 'end', from: 'sm' }
+	];
 </script>
 
-<!-- On the page's left gutter, as the other tabs are; kept to a width a list of files reads at. -->
-<div class="absolute inset-0 overflow-y-auto">
+{#snippet cell(f: RunFile, id: string)}
+	{#if id === 'name'}
+		<!-- The link covers the row. Plain text and images open; anything else downloads. -->
+		<a
+			class={[ROW_LINK, 'block truncate font-mono text-[12.5px]']}
+			href={fileUrl(f.name)}
+			target="_blank"
+			rel="noopener"
+			data-sveltekit-reload
+			{@attach hint(f.name)}>{f.name}</a
+		>
+	{:else if id === 'size'}
+		<span class="text-muted-foreground">{bytes(f.size)}</span>
+	{:else}
+		<span class="text-muted-foreground" {@attach hint(dateTime(f.updated_at))}
+			>{relativeTime(f.updated_at, now)}</span
+		>
+	{/if}
+{/snippet}
+
+{#snippet lead()}<FileIcon />{/snippet}
+
+<!-- The list tables' look, as a model's files: full-bleed rows under a sticky header. -->
+<div class="@container absolute inset-0 overflow-y-auto pb-16">
 	{#if failed}
 		<EmptyState tone="error">Couldn’t load the run’s files</EmptyState>
 	{:else if !files}
@@ -42,46 +71,6 @@
 	{:else if !files.length}
 		<EmptyState>No files uploaded</EmptyState>
 	{:else}
-		<div class="px-5 pt-5 pb-16">
-			<div class="border-t border-divider">
-				<table class="w-full text-[13.5px]">
-					<thead class="border-b text-xs text-muted-foreground">
-						<tr>
-							<th class="px-3 py-2 text-left font-medium">Name</th>
-							<th class="w-28 px-3 py-2 text-right font-medium">Size</th>
-							<th class="w-36 px-3 py-2 text-right font-medium">Updated</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each files as f (f.name)}
-							<tr class="relative border-b border-divider last:border-0 hover:bg-muted">
-								<td class="px-3 py-2">
-									<!-- The link covers the row. Plain text and images open; anything else downloads. -->
-									<a
-										class="flex min-w-0 items-center gap-2 font-mono text-[12.5px] after:absolute after:inset-0 hover:text-link"
-										href={fileUrl(f.name)}
-										target="_blank"
-										rel="noopener"
-										data-sveltekit-reload
-									>
-										<FileIcon class="size-4 flex-none text-muted-foreground" />
-										<span class="truncate">{f.name}</span>
-									</a>
-								</td>
-								<td class="px-3 py-2 text-right text-muted-foreground tabular-nums"
-									>{bytes(f.size)}</td
-								>
-								<td
-									class="px-3 py-2 text-right text-muted-foreground"
-									{@attach hint(dateTime(f.updated_at))}
-								>
-									{relativeTime(f.updated_at, now)}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		</div>
+		<DataTable {columns} rows={files} key={(f) => f.name} {cell} {lead} dense label="Files" />
 	{/if}
 </div>
