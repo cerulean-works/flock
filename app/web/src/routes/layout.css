@@ -52,6 +52,7 @@
 	--sidebar-ring: #1768af;
 
 	/* Cerulean roles shadcn has no slot for. */
+	--subtle: #2f405c; /* secondary text, a step under the ink: header actions */
 	--faint: #7d8696; /* tertiary text: counts, empty cells */
 	--divider: #e8e9ec; /* row and section dividers, lighter than a rule */
 	--selection: #cce7fb; /* Selection wash */
@@ -115,6 +116,7 @@
 	--sidebar-accent-foreground: #eceef1;
 	--sidebar-border: #33363c;
 	--sidebar-ring: #7ab4f5;
+	--subtle: #c8cbd1;
 	--faint: #6e747e;
 	--divider: #2a2c30;
 	--selection: #1e3a5f;
@@ -179,6 +181,7 @@
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-ring: var(--sidebar-ring);
 
+	--color-subtle: var(--subtle);
 	--color-faint: var(--faint);
 	--color-divider: var(--divider);
 	--color-selection: var(--selection);

@@ -18,10 +18,10 @@
 				destructive:
 					'bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30',
 				link: 'text-primary underline-offset-4 hover:underline',
-				// The view bar's controls (Linear's): borderless, muted text and icon, a filled chip
-				// only while on.
+				// The view bar's and header's controls (Linear's): borderless, text a step under the ink
+				// (above the muted crumbs and column labels), icons muted, a filled chip only while on.
 				quiet:
-					'font-normal text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground',
+					'font-normal text-subtle [&_svg]:text-muted-foreground hover:bg-muted hover:text-foreground hover:[&_svg]:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground aria-expanded:[&_svg]:text-foreground',
 				'quiet-on':
 					'bg-muted font-normal text-foreground hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_6%)] aria-expanded:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_6%)]'
 			},
