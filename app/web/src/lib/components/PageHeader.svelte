@@ -40,6 +40,8 @@
 		 * trail starts at the tab (the sidebar's foot already names the org).
 		 */
 		org?: boolean;
+		/** `workspace` only: in place of the title's text, the trail's last step (a name to edit). */
+		heading?: Snippet;
 	}
 
 	let {
@@ -54,7 +56,8 @@
 		crumbs,
 		description,
 		trail = [],
-		org: withOrg = true
+		org: withOrg = true,
+		heading
 	}: Props = $props();
 
 	// Where the page is, Linear-style: org / project / … / title, each step a link.
@@ -66,6 +69,8 @@
 		...(project && title !== project ? [{ label: project, href: projectHref(org!, project) }] : []),
 		...trail
 	]);
+	/** No crumbs before the title (the org's included): a top-level page. */
+	const alone = $derived(!steps.length && !(withOrg && org && orgName && title !== orgName));
 	const CRUMB =
 		'min-w-0 truncate rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50';
 </script>
@@ -127,8 +132,8 @@
 				!toolbar && 'border-b border-divider'
 			]}
 		>
-			<!-- On one baseline, at one size: the title is the crumbs' 13px, set apart only by
-			     weight and colour. Icons and chevrons centre themselves. -->
+			<!-- On one baseline: after crumbs the title is their 13px, set apart only by weight and
+			     colour. Icons and chevrons centre themselves. -->
 			<nav aria-label="Breadcrumbs" class="flex min-w-0 items-baseline gap-1.5">
 				{#if withOrg && org && orgName && title !== orgName}
 					<a
@@ -163,8 +168,13 @@
 						{@render leading()}
 					</div>
 				{/if}
+				<!-- A title on its own (a top-level page) is the wordmark's 16px, at its own weight;
+				     after crumbs it keeps their 13px. -->
 				<h1
-					class="min-w-0 truncate text-[13px] leading-5 font-medium text-foreground"
+					class={[
+						'min-w-0 truncate leading-5 font-medium text-foreground',
+						alone ? 'text-[16px] tracking-[-0.015em]' : 'text-[13px]'
+					]}
 					{@attach hint(subtitleTitle ?? title)}
 				>
 					{title}
