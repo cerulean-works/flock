@@ -191,15 +191,16 @@
 	}>();
 </script>
 
-<div class="bleed grid gap-3">
+<!-- The list tables' look (Gate 2): 12px muted labels, rows and rules to the page's edges. -->
+<div class="grid gap-3">
 	{#if !shown.length}
-		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Pick a column to show.</p>
+		<p class="px-5 pt-5 text-[13px] text-muted-foreground">Pick a column to show.</p>
 	{:else if failed}
-		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
+		<p class="px-5 pt-5 text-[13px] text-destructive" role="alert">{failed}</p>
 	{:else if !rows}
-		<Skeleton count={10} />
+		<div class="px-5 pt-5"><Skeleton count={10} /></div>
 	{:else if !rows.rows.length}
-		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">
+		<p class="px-5 pt-5 text-[13px] text-muted-foreground">
 			{rows.total ? 'No rows on this page.' : 'This version has no rows.'}
 		</p>
 	{:else}
@@ -208,24 +209,24 @@
 			     the columns that wrap, or to a filler when none do. -->
 			<table class="w-full border-collapse text-[13px]" bind:this={table}>
 				<thead>
-					<tr class="border-b text-left text-xs text-muted-foreground">
-						<th class="w-px px-2 py-2 font-medium">#</th>
+					<tr class="h-9 border-b border-divider text-left text-xs text-muted-foreground">
+						<th class="w-px py-2 pr-2 pl-5 font-medium">#</th>
 						{#each rows.columns as column, j (column.name)}
 							{@const cap = capOf(j)}
 							<!-- Headers stay on one line: one that wrapped would make the whole row taller.
 							     A capped column cuts its header short instead. -->
 							<th
 								class={[
-									'px-2 py-2 font-medium whitespace-nowrap',
+									'px-2 py-2 font-medium whitespace-nowrap last:pr-5',
 									(cap !== null || !wraps[j]) && 'w-px'
 								]}
 								style:min-width={cap === null ? undefined : `${cap + PAD}px`}
 								style:max-width={cap === null ? undefined : `${cap + PAD}px`}
 							>
 								<div class="truncate" {@attach hint(`${column.name} ${column.type}`)}>
-									<span class="text-foreground">{column.name}</span>
+									<span>{column.name}</span>
 									<span
-										class="ml-1 inline-block truncate align-bottom font-mono text-[11px] font-normal"
+										class="ml-1 inline-block truncate align-bottom font-mono text-[11px] font-normal text-faint"
 										style:max-width="{TYPE_MAX}px">{column.type}</span
 									>
 								</div>
@@ -245,7 +246,7 @@
 							]}
 							onclick={(e) => onrowclick(e, n, row)}
 						>
-							<td class="px-2 py-1.5 text-muted-foreground tabular-nums">
+							<td class="py-1.5 pr-2 pl-5 text-muted-foreground tabular-nums">
 								<button
 									class="rounded-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
 									aria-expanded={open}
@@ -260,7 +261,7 @@
 								{@const cap = capOf(j)}
 								<td
 									class={[
-										'px-2 py-1.5',
+										'px-2 py-1.5 last:pr-5',
 										cap !== null
 											? 'w-px wrap-anywhere'
 											: wraps[j]
@@ -290,16 +291,18 @@
 				</tbody>
 			</table>
 		</div>
-		<PageNumbers
-			{current}
-			{pages}
-			first={offset + 1}
-			{last}
-			{total}
-			label="Row pages"
-			ongo={(p) => go((p - 1) * size)}
-			onstep={(step) => go(Math.max(0, offset + step * size))}
-		/>
+		<div class="px-5">
+			<PageNumbers
+				{current}
+				{pages}
+				first={offset + 1}
+				{last}
+				{total}
+				label="Row pages"
+				ongo={(p) => go((p - 1) * size)}
+				onstep={(step) => go(Math.max(0, offset + step * size))}
+			/>
+		</div>
 	{/if}
 </div>
 

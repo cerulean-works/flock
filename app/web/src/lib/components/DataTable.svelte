@@ -49,6 +49,8 @@
 		selectable?: (row: T) => boolean;
 		/** The row's name, for its checkbox's label and the row's own (screen readers). */
 		name?: (row: T) => string;
+		/** The row this page is showing (a detail page's version): marked for screen readers. */
+		current?: (row: T) => boolean;
 		/** A ⋯ menu after the last column. */
 		menu?: Snippet<[T]>;
 		/** Rows with one line of content are shorter. */
@@ -70,6 +72,7 @@
 		selection = null,
 		selectable = () => true,
 		name = key,
+		current,
 		menu,
 		dense = false,
 		empty,
@@ -161,6 +164,7 @@
 				role="row"
 				aria-label={name(row)}
 				aria-selected={selection ? on : undefined}
+				aria-current={current?.(row) ? 'true' : undefined}
 			>
 				{#each columns as c, i (c.id)}
 					{#if i === 0 && slotted}

@@ -155,6 +155,7 @@
 	tabsLabel="Model"
 	{controls}
 	properties={tab === 'overview' && version ? properties : undefined}
+	flush={tab === 'versions' || (tab === 'files' && !!version)}
 >
 	{#if tab === 'versions'}
 		<VersionsTab

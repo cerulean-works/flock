@@ -522,14 +522,17 @@ describe('DatasetView', () => {
 			'/api/datasets/acme/versions': () => versions,
 			'/api/datasets/acme/info': () => info
 		});
+		await screen.viewport(1280, 800);
 		view('http://flock.test/datasets/acme/eval/mmlu?version=3&tab=versions');
 		await expect.element(screen.getByText('more rows')).toBeVisible();
 		await expect.element(screen.getByText('+10 rows').first()).toBeVisible();
 		expect(
 			screen.getByRole('link', { name: 'View version 4' }).element().getAttribute('href')
 		).toBe('/datasets/acme/eval/mmlu?version=4&tab=versions');
+		// A tag's × takes no room until the tag is hovered.
+		await screen.getByText('v1.0', { exact: true }).hover();
 		await expect.element(screen.getByRole('button', { name: 'Remove the tag v1.0' })).toBeVisible();
-		const current = document.querySelector('tr[aria-current="true"]');
+		const current = document.querySelector('[role="row"][aria-current="true"]');
 		expect(current?.textContent).toContain('v1.0');
 		// The commit message reads as text; other properties keep their keys.
 		await expect.element(screen.getByText('__lance_commit_message')).not.toBeInTheDocument();

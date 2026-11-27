@@ -33,6 +33,8 @@
 		controls?: Snippet;
 		/** The properties pane: right of the content, above it on a phone. `]` hides it. */
 		properties?: Snippet;
+		/** The content runs to the edges, as a full-page table does: no gutter or top padding. */
+		flush?: boolean;
 		/** The content, the part that scrolls. */
 		children: Snippet;
 	}
@@ -50,6 +52,7 @@
 		tabsLabel,
 		controls,
 		properties,
+		flush = false,
 		children
 	}: Props = $props();
 
@@ -138,7 +141,8 @@
 		{/if}
 		<main
 			class={[
-				'@container relative min-w-0 flex-1 px-5 pt-5 pb-16 md:overflow-y-auto',
+				'@container relative min-w-0 flex-1 pb-16 md:overflow-y-auto',
+				!flush && 'px-5 pt-5',
 				properties && 'max-md:flex-none'
 			]}
 		>
