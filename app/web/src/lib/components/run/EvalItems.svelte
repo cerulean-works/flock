@@ -15,6 +15,8 @@
 	import ItemChoiceRow from './ItemChoiceRow.svelte';
 	import ItemsMap from './ItemsMap.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import { signedMargin, typedIn } from '#lib/evals.ts';
 	import type {
 		EvalItem,
@@ -122,14 +124,25 @@
 	let tokens = $state<ItemTokens | null>(null);
 	let heat = $state<TokenHeat>('surprisal');
 	// The heat shown and the one a click turns to; A against B needs two runs.
-	const tint = $derived.by(() => {
-		const offered = HEATS.filter((h) => other || h.heat !== 'versus');
-		const at = Math.max(
-			0,
-			offered.findIndex((h) => h.heat === heat)
-		);
-		return { now: offered[at], next: offered[(at + 1) % offered.length] };
-	});
+	const heats = $derived(HEATS.filter((h) => other || h.heat !== 'versus'));
+	const tint = $derived(heats.find((h) => h.heat === heat) ?? heats[0]);
+	const ORDERS = $derived([
+		{
+			sort: 'margin' as const,
+			label: 'Margin',
+			hint: other
+				? 'The biggest gap between the runs’ margins first'
+				: 'The surest first, right or wrong'
+		},
+		{ sort: 'doc' as const, label: 'Doc order', hint: 'The dataset’s order' }
+	]);
+	function setSort(to: 'margin' | 'doc') {
+		if (to === sort) return;
+		sort = to;
+		at = 1;
+		open = null;
+		tell();
+	}
 	// Where j, k or a square's dot land once the page they turned to arrives, and whether they open
 	// it. Only that page's answer lands there: any other change of view drops it.
 	let landing: {
@@ -504,37 +517,62 @@
 					</PickerList>
 				{/snippet}
 			</PickerField>
-			<!-- What an opened doc's tokens are tinted by, for every doc of the list: each click the
-			     next, as the order's button turns. -->
-			<Button
-				variant="quiet"
-				size="bar"
-				{@attach hint(`Tokens: ${tint.now.hint}. Click for ${tint.next.label}.`)}
-				onclick={() => (heat = tint.next.heat)}
-			>
-				<FlameIcon />
-				<span class="max-sm:sr-only">{tint.now.label}</span>
-			</Button>
-			<Button
-				variant="quiet"
-				size="bar"
-				{@attach hint(
-					sort === 'margin'
-						? other
-							? 'The biggest gap between the runs’ margins first'
-							: 'The surest first, right or wrong'
-						: 'The dataset’s order'
-				)}
-				onclick={() => {
-					sort = sort === 'margin' ? 'doc' : 'margin';
-					at = 1;
-					open = null;
-					tell();
-				}}
-			>
-				{#if sort === 'margin'}<ArrowDownWideNarrowIcon />{:else}<ArrowDownUpIcon />{/if}
-				<span class="max-sm:sr-only">{sort === 'margin' ? 'Margin' : 'Doc order'}</span>
-			</Button>
+			<!-- Two settings, each naming itself and its value; a menu holds the choices, so the
+			     labels never change under the pointer. -->
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						<Button {...props} variant="quiet" size="bar" aria-label="Tint: {tint.label}">
+							<FlameIcon />
+							<span class="max-sm:sr-only"
+								><span class="text-muted-foreground">Tint</span> {tint.label}</span
+							>
+							<ChevronDownIcon class="size-3.5" />
+						</Button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end" class="w-72">
+					<DropdownMenu.Group>
+						<DropdownMenu.Label>Tint an opened doc's tokens by</DropdownMenu.Label>
+						<DropdownMenu.RadioGroup value={heat} onValueChange={(v) => (heat = v as TokenHeat)}>
+							{#each heats as h (h.heat)}
+								<DropdownMenu.RadioItem value={h.heat} {@attach hint(h.hint)}
+									>{h.label}</DropdownMenu.RadioItem
+								>
+							{/each}
+						</DropdownMenu.RadioGroup>
+					</DropdownMenu.Group>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						{@const order = ORDERS.find((o) => o.sort === sort) ?? ORDERS[0]}
+						<Button {...props} variant="quiet" size="bar" aria-label="Order: {order.label}">
+							{#if sort === 'margin'}<ArrowDownWideNarrowIcon />{:else}<ArrowDownUpIcon />{/if}
+							<span class="max-sm:sr-only"
+								><span class="text-muted-foreground">Order</span> {order.label}</span
+							>
+							<ChevronDownIcon class="size-3.5" />
+						</Button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end" class="w-60">
+					<DropdownMenu.Group>
+						<DropdownMenu.Label>Order the docs by</DropdownMenu.Label>
+						<DropdownMenu.RadioGroup
+							value={sort}
+							onValueChange={(v) => setSort(v as 'margin' | 'doc')}
+						>
+							{#each ORDERS as o (o.sort)}
+								<DropdownMenu.RadioItem value={o.sort} {@attach hint(o.hint)}
+									>{o.label}</DropdownMenu.RadioItem
+								>
+							{/each}
+						</DropdownMenu.RadioGroup>
+					</DropdownMenu.Group>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
 		</div>
 	</div>
 	{#if summary && !title}
