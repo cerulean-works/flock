@@ -236,6 +236,7 @@
 				shown
 				active={fullscreen == null}
 				beside={false}
+				pack={false}
 				{panelHref}
 				onfullscreen={openPanel}
 			/>
