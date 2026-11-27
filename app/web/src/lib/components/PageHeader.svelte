@@ -127,8 +127,8 @@
 				!toolbar && 'border-b border-divider'
 			]}
 		>
-			<!-- On one baseline: the crumbs are 13px and the title 14px, so centring their boxes
-			     would set the crumbs a pixel high. Icons and chevrons centre themselves. -->
+			<!-- On one baseline, at one size: the title is the crumbs' 13px, set apart only by
+			     weight and colour. Icons and chevrons centre themselves. -->
 			<nav aria-label="Breadcrumbs" class="flex min-w-0 items-baseline gap-1.5">
 				{#if withOrg && org && orgName && title !== orgName}
 					<a
@@ -164,7 +164,7 @@
 					</div>
 				{/if}
 				<h1
-					class="min-w-0 truncate text-[14px] leading-5 font-medium text-foreground"
+					class="min-w-0 truncate text-[13px] leading-5 font-medium text-foreground"
 					{@attach hint(subtitleTitle ?? title)}
 				>
 					{title}
