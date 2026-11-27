@@ -65,8 +65,12 @@
 	}: Props = $props();
 
 	const shown = $derived(!!properties && pane.open);
-	/** The phone's Details row, open: for this page only. */
+	/** The phone's Details row, open: for this page only. A tab change folds it, so the tab shows. */
 	let details = $state(false);
+	$effect.pre(() => {
+		void tab;
+		details = false;
+	});
 
 	function onkeydown(e: KeyboardEvent) {
 		if (!properties || e.key !== ']' || e.defaultPrevented || typing(e) || layerOpen()) return;
@@ -135,16 +139,46 @@
 		actions={headerActions}
 		toolbar={tabs ? bar : undefined}
 	/>
-	<div class="flex min-h-0 flex-1 max-md:flex-col">
+	<div class="relative flex min-h-0 flex-1 max-md:flex-col">
+		{#if properties && !pane.open}
+			<!-- Hidden, the pane comes back from the page's right edge, as the collapsed sidebar
+			     opens from its own. -->
+			<button
+				type="button"
+				tabindex="-1"
+				aria-hidden="true"
+				class="group/edge absolute inset-y-0 right-0 z-10 hidden w-[5px] cursor-w-resize outline-none md:block"
+				{@attach hint('Click to open  ]')}
+				onclick={() => (pane.open = true)}
+			>
+				<span
+					class="absolute inset-y-0 right-0 w-px bg-transparent transition-colors group-hover/edge:bg-border"
+				></span>
+			</button>
+		{/if}
 		{#if properties}
 			<aside
 				aria-label="Properties"
 				class={[
-					'flex-none md:order-last md:w-70 md:overflow-y-auto md:border-l md:border-divider',
+					'relative flex-none md:order-last md:w-70 md:border-l md:border-divider',
 					'max-md:border-b max-md:border-divider',
 					!shown && 'md:hidden'
 				]}
 			>
+				<!-- Its left edge closes it, as a click on the sidebar's edge closes the sidebar: the same
+				     7px target and hover line. `]` and the view bar's toggle are its keyboard ways. -->
+				<button
+					type="button"
+					tabindex="-1"
+					aria-hidden="true"
+					class="group/edge absolute inset-y-0 -left-[4px] z-10 hidden w-[7px] cursor-e-resize outline-none md:block"
+					{@attach hint('Click to collapse  ]')}
+					onclick={() => (pane.open = false)}
+				>
+					<span
+						class="absolute inset-y-0 left-[3px] w-px bg-transparent transition-colors group-hover/edge:bg-border"
+					></span>
+				</button>
 				<!-- On a phone the pane folds into one row above the content, so the content leads. -->
 				<button
 					type="button"
@@ -169,7 +203,7 @@
 				<div
 					id="detail-properties"
 					class={[
-						'px-5 py-4 max-md:max-h-[55dvh] max-md:overflow-y-auto max-md:pt-0',
+						'px-5 py-4 max-md:max-h-[55dvh] max-md:overflow-y-auto max-md:pt-0 md:h-full md:overflow-y-auto',
 						!details && 'max-md:hidden'
 					]}
 				>

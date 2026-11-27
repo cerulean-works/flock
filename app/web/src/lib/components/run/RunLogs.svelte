@@ -528,7 +528,7 @@
 	>
 		{#if searching || q}
 			<label
-				class="flex h-7 w-56 min-w-0 items-center gap-1.5 rounded-md bg-muted/60 pr-0.5 pl-2 focus-within:ring-3 focus-within:ring-ring/50 max-sm:w-40"
+				class="flex h-7 w-56 min-w-0 items-center gap-1.5 rounded-md bg-muted/60 pr-0.5 pl-2 focus-within:ring-3 focus-within:ring-ring/50 max-sm:w-28"
 			>
 				<SearchIcon class="size-3.5 flex-none text-muted-foreground" />
 				<input
