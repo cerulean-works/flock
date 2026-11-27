@@ -548,6 +548,7 @@
 		{/snippet}
 		{#snippet toolbar()}
 			<BestByPicker
+				quiet
 				key={cmp.best_key}
 				order={cmp.best_order}
 				keys={data.summaryKeys}

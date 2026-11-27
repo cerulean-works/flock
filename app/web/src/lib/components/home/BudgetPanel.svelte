@@ -2,18 +2,13 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import CoinsIcon from '@lucide/svelte/icons/coins';
-	import CpuIcon from '@lucide/svelte/icons/cpu';
-	import FolderIcon from '@lucide/svelte/icons/folder';
-	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import { page } from '$app/state';
-	import Avatar from '#lib/components/Avatar.svelte';
-	import MetaItem from '#lib/components/MetaItem.svelte';
-	import MetaRow from '#lib/components/MetaRow.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Popover from '#lib/components/ui/popover/index.js';
 	import type { Budget } from '#lib/types.ts';
 	import { count, gpus, hours, money, monthName, shiftMonth } from '#lib/utils.ts';
-	import { orgHref, projectHref, withParam } from '#lib/workspace/url.ts';
+	import { orgHref, projectHref, runHref, withParam } from '#lib/workspace/url.ts';
 
 	interface Props {
 		budget: Budget;
@@ -21,137 +16,165 @@
 		thisMonth: string;
 		/** Admins set the budget and prices, and manage deleted projects. */
 		admin: boolean;
+		/** Where it shows: in the header (hidden on phones) or above the feed (phones only). */
+		class?: string;
 	}
 
-	let { budget, thisMonth, admin }: Props = $props();
+	let { budget, thisMonth, admin, class: className }: Props = $props();
 
-	/** The breakdown lists the costliest projects only. */
+	/** The breakdown lists the costliest projects and runs only. */
 	const TOP_PROJECTS = 5;
+	const TOP_RUNS = 3;
 
 	const fmt = $derived((v: number) => money(v, budget.currency));
 
 	const used = $derived(budget.budget ? budget.spent / budget.budget : 0);
 	const over = $derived(budget.remaining != null && budget.remaining < 0);
+	const near = $derived(!over && used >= 0.8);
 	// Static class strings, so Tailwind sees each one.
 	const tone = $derived(
-		over || used >= 1 ? 'bg-state-failed' : used >= 0.8 ? 'bg-state-preempting' : 'bg-link'
+		over || used >= 1 ? 'bg-state-failed' : near ? 'bg-state-preempting' : 'bg-link'
 	);
 	const maxCost = $derived(Math.max(...budget.projects.map((p) => p.cost), 0));
 	const current = $derived(budget.month === thisMonth);
-	let expanded = $state(false);
+	const set = $derived(budget.budget != null && budget.remaining != null);
+	let open = $state(false);
 
 	const monthHref = (month: string) =>
 		withParam(page.url, 'month', month === thisMonth ? null : month);
 </script>
 
-<section aria-labelledby="budget-title" class="grid grid-cols-1 gap-6">
-	<!-- The same 40px band as the activity's heading beside it. -->
-	<div class="flex h-10 items-center gap-1">
-		<h2 id="budget-title" class="flex-1 text-[22px] tracking-[-0.01em]">Budget</h2>
-		<Button
-			variant="ghost"
-			size="icon-sm"
-			class="text-muted-foreground"
-			href={monthHref(shiftMonth(budget.month, -1))}
-			data-sveltekit-noscroll
-			aria-label="Previous month"
-			{@attach hint('Previous month')}
-		>
-			<ChevronLeftIcon />
-		</Button>
-		<span class="w-28 text-center text-[13px] text-muted-foreground tabular-nums">
-			{monthName(budget.month)}
-		</span>
-		<Button
-			variant="ghost"
-			size="icon-sm"
-			class={['text-muted-foreground', current && 'pointer-events-none opacity-40']}
-			href={current ? undefined : monthHref(shiftMonth(budget.month, 1))}
-			data-sveltekit-noscroll
-			aria-label="Next month"
-			{@attach hint('Next month')}
-			aria-disabled={current}
-		>
-			<ChevronRightIcon />
-		</Button>
-	</div>
-
-	<div class="grid gap-2">
-		{#if budget.budget != null && budget.remaining != null}
-			<!-- The caption stays whole: beside the amount when it fits, under it when it doesn't. -->
-			<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-				<span
-					class={[
-						'text-[34px] leading-none tracking-[-0.025em] tabular-nums',
-						over && 'text-destructive'
-					]}
-				>
-					{fmt(Math.abs(budget.remaining))}
-				</span>
-				<span class="whitespace-nowrap text-muted-foreground">
-					{over ? 'over' : 'left'} of {fmt(budget.budget)}
-				</span>
-			</p>
-			<div
-				class="h-1.5 overflow-hidden rounded-full bg-muted"
-				role="meter"
-				aria-label="Budget used"
-				aria-valuemin={0}
-				aria-valuemax={100}
-				aria-valuenow={Math.round(used * 100)}
+<!-- The month's budget as one line in the header; the breakdown opens beside it on request.
+     The line turns amber from 80% used and red when over, so a warning needs no click. -->
+<Popover.Root bind:open>
+	<Popover.Trigger>
+		{#snippet child({ props })}
+			<Button
+				{...props}
+				variant={open ? 'quiet-on' : 'quiet'}
+				size="bar"
+				class={[
+					'tabular-nums',
+					className,
+					over ? 'text-destructive' : near && 'text-state-preempting'
+				]}
+				{@attach hint(`Budget, ${monthName(budget.month)}`)}
 			>
-				<div class={['h-full rounded-full', tone]} style:width="{Math.min(100, used * 100)}%"></div>
-			</div>
-			<MetaRow>
-				<MetaItem icon={CoinsIcon}>{fmt(budget.spent)} spent</MetaItem>
-				<MetaItem icon={CpuIcon}>{hours(budget.gpu_hours)} GPU hours</MetaItem>
-			</MetaRow>
-		{:else}
-			<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-				<span class="text-[34px] leading-none tracking-[-0.025em] tabular-nums">
-					{fmt(budget.spent)}
-				</span>
-				<span class="text-muted-foreground">spent</span>
-			</p>
-			<MetaRow>
-				<MetaItem icon={CpuIcon}>{hours(budget.gpu_hours)} GPU hours</MetaItem>
-				<span>
-					No monthly budget{#if admin}.
+				{#if set}
+					{fmt(Math.abs(budget.remaining!))}
+					{over ? 'over' : 'left'}
+				{:else}
+					{fmt(budget.spent)} spent
+				{/if}
+				{#if !current}<span class="text-muted-foreground">· {monthName(budget.month)}</span>{/if}
+				<ChevronDownIcon class={['transition-transform', open && 'rotate-180']} />
+			</Button>
+		{/snippet}
+	</Popover.Trigger>
+	<Popover.Content
+		align="end"
+		collisionPadding={16}
+		class="grid w-[min(20rem,calc(100vw-2rem))] grid-cols-1 gap-5 p-4 text-[13px]"
+		aria-labelledby="budget-title"
+	>
+		<div class="-mt-1 -mr-1 flex h-7 items-center gap-1">
+			<!-- The whole workspace's, whatever the feed shows. -->
+			<h2 id="budget-title" class="min-w-0 flex-1 truncate font-medium text-muted-foreground">
+				Budget · {page.data.shell?.orgName ?? budget.org}
+			</h2>
+			<Button
+				variant="quiet"
+				size="icon-bar"
+				href={monthHref(shiftMonth(budget.month, -1))}
+				data-sveltekit-noscroll
+				aria-label="Previous month"
+				{@attach hint('Previous month')}
+			>
+				<ChevronLeftIcon />
+			</Button>
+			<span class="w-26 text-center text-muted-foreground tabular-nums"
+				>{monthName(budget.month)}</span
+			>
+			<Button
+				variant="quiet"
+				size="icon-bar"
+				class={current ? 'pointer-events-none opacity-40' : undefined}
+				href={current ? undefined : monthHref(shiftMonth(budget.month, 1))}
+				data-sveltekit-noscroll
+				aria-label="Next month"
+				{@attach hint('Next month')}
+				aria-disabled={current}
+			>
+				<ChevronRightIcon />
+			</Button>
+		</div>
+
+		<div class="grid gap-2">
+			{#if set}
+				<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+					<span
+						class={[
+							'text-[24px] leading-none tracking-[-0.02em] tabular-nums',
+							over && 'text-destructive'
+						]}
+					>
+						{fmt(Math.abs(budget.remaining!))}
+					</span>
+					<span class="whitespace-nowrap text-muted-foreground">
+						{over ? 'over' : 'left'} of {fmt(budget.budget!)}
+					</span>
+				</p>
+				<div
+					class="h-1 overflow-hidden rounded-full bg-muted"
+					role="meter"
+					aria-label="Budget used"
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuenow={Math.round(used * 100)}
+				>
+					<div
+						class={['h-full rounded-full', tone]}
+						style:width="{Math.min(100, used * 100)}%"
+					></div>
+				</div>
+				<p class="text-muted-foreground tabular-nums">
+					{fmt(budget.spent)} spent · {hours(budget.gpu_hours)} GPU hours
+				</p>
+			{:else}
+				<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+					<span class="text-[24px] leading-none tracking-[-0.02em] tabular-nums">
+						{fmt(budget.spent)}
+					</span>
+					<span class="text-muted-foreground">spent</span>
+				</p>
+				<p class="text-muted-foreground tabular-nums">
+					{hours(budget.gpu_hours)} GPU hours · No monthly budget{#if admin}.
 						<a class="text-link hover:underline" href={orgHref(budget.org, 'budget')}>Set one</a
 						>{/if}
-				</span>
-			</MetaRow>
-		{/if}
-	</div>
+				</p>
+			{/if}
+			{#if budget.excluded.projects}
+				<p class="text-muted-foreground">
+					Leaves out {fmt(budget.excluded.cost)} of {count(
+						budget.excluded.projects,
+						'deleted project'
+					)}.
+					{#if admin}<a
+							class="text-link hover:underline"
+							href={orgHref(budget.org, 'deleted-projects')}>Manage</a
+						>{/if}
+				</p>
+			{/if}
+		</div>
 
-	{#if budget.excluded.projects}
-		<p class="-mt-4 text-[13px] text-muted-foreground">
-			Leaves out {fmt(budget.excluded.cost)} of {count(
-				budget.excluded.projects,
-				'deleted project'
-			)}.
-			{#if admin}<a class="text-link hover:underline" href={orgHref(budget.org, 'deleted-projects')}
-					>Manage</a
-				>{/if}
-		</p>
-	{/if}
-
-	<!-- Narrow windows show the totals first, and the breakdown on request. -->
-	<Button
-		variant="ghost"
-		size="sm"
-		class="-mt-3 justify-self-start px-0 text-muted-foreground hover:bg-transparent xl:hidden"
-		aria-expanded={expanded}
-		onclick={() => (expanded = !expanded)}
-	>
-		{expanded ? 'Hide breakdown' : 'Show breakdown'}
-	</Button>
-	<div class={['grid grid-cols-1 gap-6', !expanded && 'hidden xl:grid']}>
 		<div>
 			<h3 class="text-xs font-medium text-muted-foreground">By project</h3>
-			<ul class="mt-2">
+			<ul class="mt-1">
 				{#each budget.projects.slice(0, TOP_PROJECTS) as p (p.project)}
-					<li class="py-2">
+					<li
+						class="py-1.5"
+						{@attach hint(`${hours(p.gpu_hours)} GPU hours, ${count(p.runs, 'run')}`)}
+					>
 						<div class="flex items-baseline gap-2">
 							{#if p.project}
 								<a
@@ -164,30 +187,23 @@
 								<a
 									class="min-w-0 flex-1 truncate text-muted-foreground hover:text-link"
 									href={orgHref(budget.org, 'deleted-projects')}
-									{@attach hint('Manage the spend of deleted projects')}
 								>
 									Deleted projects
 								</a>
 							{:else}
 								<span class="min-w-0 flex-1 truncate text-muted-foreground">Deleted projects</span>
 							{/if}
-							<span class="tabular-nums">{fmt(p.cost)}</span>
+							<span class="text-muted-foreground tabular-nums">{fmt(p.cost)}</span>
 						</div>
-						<div class="mt-1.5 h-1 rounded-full bg-muted">
+						<div class="mt-1 h-0.5 rounded-full bg-muted">
 							<div
-								class="h-full rounded-full bg-link/70"
+								class="h-full rounded-full bg-link/60"
 								style:width="{maxCost ? (p.cost / maxCost) * 100 : 0}%"
 							></div>
 						</div>
-						<MetaRow class="mt-1.5 gap-x-4 text-xs">
-							<MetaItem icon={CpuIcon}>{hours(p.gpu_hours)} GPU-hr</MetaItem>
-							<MetaItem icon={ActivityIcon}>{count(p.runs, 'run')}</MetaItem>
-						</MetaRow>
 					</li>
 				{:else}
-					<li class="py-1.5 text-[13px] text-muted-foreground">
-						No GPU time in {monthName(budget.month)}.
-					</li>
+					<li class="py-1.5 text-muted-foreground">No GPU time in {monthName(budget.month)}.</li>
 				{/each}
 			</ul>
 			{#if budget.projects.length > TOP_PROJECTS}
@@ -199,46 +215,25 @@
 
 		{#if budget.top_runs.length}
 			<div>
-				<h3 class="text-xs font-medium text-muted-foreground">Most expensive runs</h3>
+				<h3 class="text-xs font-medium text-muted-foreground">Top runs</h3>
 				<ol class="mt-1">
-					{#each budget.top_runs as run (`${run.project}/${run.id}`)}
+					{#each budget.top_runs.slice(0, TOP_RUNS) as run (`${run.project}/${run.id}`)}
 						{@const hardware = gpus(run.gpu_type, run.gpu_count)}
-						<!-- Three columns, each centred on the row: who, which run, and what it cost. -->
-						<li class="flex items-center gap-3 border-b border-divider py-2.5 last:border-0">
-							<span class="flex-none" {@attach hint(run.owner?.name)}>
-								<Avatar
-									name={run.owner?.name ?? '?'}
-									src={run.owner?.avatar_url}
-									class="size-7 text-[10px]"
-								/>
-							</span>
-							<div class="min-w-0 flex-1">
-								<a
-									class="block truncate hover:text-link"
-									href={projectHref(run.entity, run.project)}
-								>
-									{run.display_name ?? run.id}
-								</a>
-								<MetaRow class="mt-0.5 flex-nowrap text-xs">
-									<MetaItem icon={FolderIcon} class="min-w-0 truncate">{run.project}</MetaItem>
-								</MetaRow>
-							</div>
-							<div class="flex-none pl-2 text-right">
-								<p class="font-medium tabular-nums">{fmt(run.cost)}</p>
-								<p
-									class="mt-0.5 text-xs text-muted-foreground tabular-nums"
-									{@attach hint(
-										hardware ? `${hardware}, ${hours(run.gpu_hours)} GPU hours` : undefined
-									)}
-								>
-									{hours(run.gpu_hours)}
-									{run.gpu_type ?? 'GPU'}-hr
-								</p>
-							</div>
+						<li class="flex items-baseline gap-2 py-1.5">
+							<a
+								class="min-w-0 flex-1 truncate hover:text-link"
+								href={runHref(run.entity, run.project, run.id)}
+								{@attach hint(
+									`${run.project}${run.owner ? `, ${run.owner.name}` : ''}${hardware ? `, ${hardware}` : ''}, ${hours(run.gpu_hours)} GPU hours`
+								)}
+							>
+								{run.display_name ?? run.id}
+							</a>
+							<span class="text-muted-foreground tabular-nums">{fmt(run.cost)}</span>
 						</li>
 					{/each}
 				</ol>
 			</div>
 		{/if}
-	</div>
-</section>
+	</Popover.Content>
+</Popover.Root>

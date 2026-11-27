@@ -206,7 +206,7 @@ describe('what this browser keeps for a project', () => {
 			true,
 			false,
 			'_step',
-			2
+			12 // every row: sections scroll rather than page
 		]);
 		// A weight of 0 is kept as picked, not turned into no smoothing.
 		ws.smoothing = { type: 'ema', param: 0 };

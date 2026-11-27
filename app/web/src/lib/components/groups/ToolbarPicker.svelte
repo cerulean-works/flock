@@ -31,12 +31,7 @@
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger {disabled}>
 		{#snippet child({ props })}
-			<Button
-				{...props}
-				variant="outline"
-				class="gap-1.5 pr-2 font-normal text-muted-foreground"
-				{title}
-			>
+			<Button {...props} variant="quiet" size="bar" class="gap-1.5" {title}>
 				{label}
 				<span
 					class={[

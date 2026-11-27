@@ -5,13 +5,16 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import UserIcon from '@lucide/svelte/icons/user';
 	import XIcon from '@lucide/svelte/icons/x';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import { columnLabel } from '#lib/workspace/columns.ts';
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
-	import type { ColumnKind, RunQuery, RunState } from '#lib/types.ts';
+	import type { ColumnDef, ColumnKind, RunQuery, RunState } from '#lib/types.ts';
 	import {
 		countConditions,
 		describeFilters,
@@ -62,7 +65,9 @@
 	const ws = onapply ? null : getWorkspace();
 	const applied = $derived(filters ?? ws?.page.query.filters ?? []);
 	const people = $derived<People>(givenPeople ?? ws?.people ?? new Map());
-	const known = $derived<{ key: string; kind?: ColumnKind }[]>(given ?? ws?.meta.columns ?? []);
+	const known = $derived<
+		{ key: string; kind?: ColumnKind; label?: string; group?: ColumnDef['group'] }[]
+	>(given ?? ws?.meta.columns ?? []);
 	const count = $derived(countConditions(applied));
 	/** Who is looking: "My runs" keeps the runs they logged. */
 	const me = $derived(page.data.shell?.me?.id);
@@ -134,7 +139,12 @@
 	 * the top level: `any` of several filters travels as one group.
 	 */
 	function onOpenChange(o: boolean) {
-		if (!o) return;
+		if (!o) {
+			mode = 'pick';
+			field = null;
+			find = '';
+			return;
+		}
 		error = null;
 		const [only] = applied;
 		const top =
@@ -233,7 +243,218 @@
 		open = false;
 		show(root.match === 'any' && filters.length > 1 ? [{ match: 'any', filters }] : filters);
 	}
+
+	/**
+	 * Linear's way in (D: audit P2): the Filter button lists the fields by the names the table
+	 * shows; picking one asks for its value, and picking or entering that applies at once. The
+	 * builder (groups, and/or) stays a step away, as Advanced, and is where a chip opens.
+	 */
+	let mode = $state<'pick' | 'build'>('pick');
+	let field = $state<string | null>(null);
+	let find = $state('');
+	let pickOp = $state<FilterOp>('eq');
+	let pickText = $state('');
+	let findInput = $state<HTMLInputElement | null>(null);
+	let valueInput = $state<HTMLInputElement | null>(null);
+
+	const fieldName = (c: (typeof known)[number]) =>
+		c.label && c.group ? columnLabel({ label: c.label, group: c.group }) : c.key;
+	const fields = $derived.by(() => {
+		const q = find.trim().toLowerCase();
+		return known
+			.map((c) => ({ key: c.key, name: fieldName(c), kind: c.kind }))
+			.filter((c) => !q || c.name.toLowerCase().includes(q) || c.key.toLowerCase().includes(q));
+	});
+
+	async function pickField(key: string) {
+		field = key;
+		const ops = opsFor(kindOf(key));
+		pickOp = ops[0].op;
+		pickText = '';
+		error = null;
+		await tick();
+		valueInput?.focus();
+	}
+
+	/** Adds the condition picked to those in effect, which hold together with it. */
+	function add(value: string | null) {
+		if (!field) return;
+		let condition: RunFilter;
+		if (UNARY.has(pickOp)) condition = { key: field, op: pickOp, value: null };
+		else {
+			const parsed = parseValue(value ?? pickText, kindOf(field), people);
+			if ('error' in parsed) {
+				error = parsed.error;
+				return;
+			}
+			condition = { key: field, op: pickOp, value: parsed.value };
+		}
+		open = false;
+		show([...applied, condition]);
+	}
+
+	/** F, or the palette: the field list, to add a condition. */
+	export function pick() {
+		mode = 'pick';
+		field = null;
+		find = '';
+		open = true;
+		onOpenChange(true);
+	}
+
+	/** A chip under the view bar opens the filters as built, to change or regroup them. */
+	export function edit() {
+		mode = 'build';
+		open = true;
+		onOpenChange(true);
+	}
 </script>
+
+<!-- The field list, then the field's value: one step each, applied on the pick. -->
+{#snippet picker()}
+	{#if field == null}
+		<div class="flex items-center gap-2 border-b border-divider px-2.5">
+			<SearchIcon class="size-4 flex-none text-muted-foreground" />
+			<input
+				bind:this={findInput}
+				bind:value={find}
+				class="h-9 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
+				placeholder="Filter by…"
+				aria-label="Field to filter by"
+				onkeydown={(e) => {
+					if (e.key === 'Enter' && fields.length) {
+						e.preventDefault();
+						void pickField(fields[0].key);
+					}
+				}}
+			/>
+		</div>
+		<ul class="max-h-72 overflow-y-auto p-1" aria-label="Fields">
+			{#each fields as f (f.key)}
+				<li>
+					<button
+						type="button"
+						class="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none hover:bg-muted focus-visible:bg-muted"
+						onclick={() => pickField(f.key)}
+					>
+						<span class="min-w-0 flex-1 truncate">{f.name}</span>
+						{#if f.kind}<span class="text-xs text-faint">{KINDS[f.kind]}</span>{/if}
+					</button>
+				</li>
+			{:else}
+				<li class="px-2 py-2 text-[13px] text-muted-foreground">No such field</li>
+			{/each}
+		</ul>
+		<div class="flex items-center border-t border-divider p-1">
+			{#if count}
+				<Button
+					variant="quiet"
+					size="bar"
+					onclick={() => {
+						open = false;
+						show([]);
+					}}
+				>
+					Clear all
+				</Button>
+			{/if}
+			<span class="flex-1"></span>
+			<Button
+				variant="quiet"
+				size="bar"
+				{@attach hint('Groups of conditions, joined by and or or')}
+				onclick={() => {
+					mode = 'build';
+					onOpenChange(true);
+				}}
+			>
+				Advanced
+			</Button>
+		</div>
+	{:else}
+		{@const kind = kindOf(field)}
+		{@const ops = opsFor(kind)}
+		{@const options = (kind && suggestions[kind]) || []}
+		<div class="flex h-9 items-center gap-1 border-b border-divider px-1">
+			<Button
+				variant="quiet"
+				size="icon-bar"
+				aria-label="Back to the fields"
+				onclick={() => {
+					field = null;
+					error = null;
+				}}
+			>
+				<ArrowLeftIcon />
+			</Button>
+			<span class="min-w-0 flex-1 truncate text-[13px] font-medium">
+				{fieldName(known.find((c) => c.key === field) ?? { key: field })}
+			</span>
+			<Select.Root type="single" value={pickOp} onValueChange={(v) => (pickOp = v as FilterOp)}>
+				<Select.Trigger
+					class="h-7! gap-1 border-0 bg-transparent px-2 text-[13px] text-muted-foreground shadow-none hover:bg-muted dark:bg-transparent"
+					aria-label="Condition"
+				>
+					{ops.find((o) => o.op === pickOp)?.label ?? opLabel(pickOp)}
+				</Select.Trigger>
+				<Select.Content>
+					{#each ops as o (o.op)}
+						<Select.Item value={o.op} label={o.label}>{o.label}</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+		{#if UNARY.has(pickOp)}
+			<div class="p-1">
+				<Button variant="quiet" size="bar" class="w-full justify-start" onclick={() => add(null)}>
+					Add “{ops.find((o) => o.op === pickOp)?.label ?? opLabel(pickOp)}”
+				</Button>
+			</div>
+		{:else}
+			<div class="p-2">
+				<input
+					bind:this={valueInput}
+					bind:value={pickText}
+					class="h-8 w-full rounded-md bg-muted px-2 text-[13px] outline-none placeholder:text-faint focus-visible:ring-3 focus-visible:ring-ring/50"
+					placeholder={kind === 'time'
+						? 'YYYY-MM-DD'
+						: kind === 'num' || kind === 'duration'
+							? 'Number'
+							: kind === 'user'
+								? 'Email'
+								: 'Value'}
+					aria-label="Value"
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.preventDefault();
+							add(null);
+						}
+					}}
+				/>
+				{#if error}<p class="mt-1.5 text-xs text-destructive">{error}</p>{/if}
+			</div>
+			{#if options.length}
+				{@const q = pickText.trim().toLowerCase()}
+				<ul class="max-h-60 overflow-y-auto border-t border-divider p-1" aria-label="Values">
+					{#each options.filter((o) => !q || o.value.toLowerCase().includes(q) || o.hint
+								?.toLowerCase()
+								.includes(q)) as o (o.value)}
+						<li>
+							<button
+								type="button"
+								class="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none hover:bg-muted focus-visible:bg-muted"
+								onclick={() => add(o.value)}
+							>
+								<span class="min-w-0 flex-1 truncate">{o.hint ?? o.value}</span>
+								{#if o.hint}<span class="truncate text-xs text-faint">{o.value}</span>{/if}
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		{/if}
+	{/if}
+{/snippet}
 
 <!-- The word joining a level's items, the top level's or a group's: picked on the second,
      repeated on the rest. -->
@@ -351,7 +572,8 @@
 
 {#if me != null && !noMine}
 	<Button
-		variant={mine ? 'secondary' : 'outline'}
+		variant={mine ? 'quiet-on' : 'quiet'}
+		size="bar"
 		aria-pressed={mine}
 		{@attach hint(mine ? 'Show everyone’s runs' : 'Show only the runs you logged')}
 		onclick={() => show(setOwner(applied, me, !mine))}
@@ -367,11 +589,13 @@
 				{#if compact}
 					<Button
 						{...props}
-						variant={count ? 'secondary' : 'outline'}
-						size="icon"
+						variant={count ? 'quiet-on' : 'quiet'}
+						size="icon-bar"
 						class="relative"
 						aria-label={count ? `Filter runs, ${count} applied` : 'Filter runs'}
-						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
+						{@attach hint(
+							count ? describeFilters(applied, kindOf, true, people) : 'Filter runs  F'
+						)}
 					>
 						<ListFilterIcon />
 						{#if count}
@@ -386,9 +610,11 @@
 				{:else}
 					<Button
 						{...props}
-						variant={count ? 'secondary' : 'outline'}
-						class={count ? 'rounded-r-none' : ''}
-						{@attach hint(count ? describeFilters(applied, kindOf, true, people) : 'Filter runs')}
+						variant={count ? 'quiet-on' : 'quiet'}
+						size="bar"
+						{@attach hint(
+							count ? describeFilters(applied, kindOf, true, people) : 'Filter runs  F'
+						)}
 					>
 						<ListFilterIcon /> Filter
 						{#if count}
@@ -400,62 +626,58 @@
 		</Popover.Trigger>
 		<Popover.Content
 			bind:ref={content}
-			align="start"
-			class="w-[min(38rem,calc(100vw-2rem))] p-3"
+			align="end"
+			collisionPadding={16}
+			class={mode === 'pick' ? 'w-72 gap-0 p-0' : 'w-[min(38rem,calc(100vw-2rem))] p-3'}
 			onOpenAutoFocus={(e) => {
+				e.preventDefault();
+				if (mode === 'pick') {
+					findInput?.focus();
+					return;
+				}
 				// Only a blank filter starts in its column, listing the columns; otherwise the
 				// list would cover the filters being edited.
-				e.preventDefault();
 				const [first] = root.items;
 				if (root.items.length === 1 && !isDraftGroup(first) && !first.key) {
 					void focusColumn(first.id);
 				} else content?.focus();
 			}}
 		>
-			<form class="grid gap-3" onsubmit={apply} novalidate>
-				{@render items(root, undefined)}
-				<FormError {error} />
-				<div class="flex items-center gap-1">
-					<Button variant="ghost" size="sm" onclick={() => addCondition(root)}>
-						<PlusIcon /> Add condition
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						{@attach hint('Conditions that hold together, or any one of them')}
-						onclick={addGroup}
-					>
-						<BracketsIcon /> Add group
-					</Button>
-					<span class="flex-1"></span>
-					{#if count}
-						<Button
-							variant="ghost"
-							size="sm"
-							onclick={() => {
-								open = false;
-								show([]);
-							}}
-						>
-							Clear all
+			{#if mode === 'pick'}
+				{@render picker()}
+			{:else}
+				<form class="grid gap-3" onsubmit={apply} novalidate>
+					{@render items(root, undefined)}
+					<FormError {error} />
+					<div class="flex items-center gap-1">
+						<Button variant="quiet" size="bar" onclick={() => addCondition(root)}>
+							<PlusIcon /> Add condition
 						</Button>
-					{/if}
-					<Button type="submit" size="sm">Apply</Button>
-				</div>
-			</form>
+						<Button
+							variant="quiet"
+							size="bar"
+							{@attach hint('Conditions that hold together, or any one of them')}
+							onclick={addGroup}
+						>
+							<BracketsIcon /> Add group
+						</Button>
+						<span class="flex-1"></span>
+						{#if count}
+							<Button
+								variant="quiet"
+								size="bar"
+								onclick={() => {
+									open = false;
+									show([]);
+								}}
+							>
+								Clear all
+							</Button>
+						{/if}
+						<Button type="submit" size="sm">Apply</Button>
+					</div>
+				</form>
+			{/if}
 		</Popover.Content>
 	</Popover.Root>
-	<!-- Compact, the filters are cleared from their popover (Clear all). -->
-	{#if count && !compact}
-		<Button
-			variant="secondary"
-			size="icon"
-			class="rounded-l-none border-l border-background"
-			aria-label="Clear filters"
-			{@attach hint('Clear filters')}
-			onclick={() => show([])}
-		>
-			<XIcon />
-		</Button>
-	{/if}
 </div>
