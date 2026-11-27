@@ -319,10 +319,13 @@
 	>
 		<!-- The pair, as two quiet pickers: A against B. -->
 		{#snippet toolbar()}
-			<div class="flex min-w-0 items-center gap-1">
-				<span class="flex min-w-0 shrink">{@render side('A', data.a, diff?.a)}</span>
+			<!-- Each side at most half the bar: a long name for A never squeezes B out. -->
+			<div class="flex min-w-0 flex-1 items-center gap-1">
+				<span class="flex max-w-[calc(50%-1rem)] min-w-0">{@render side('A', data.a, diff?.a)}</span
+				>
 				<span class="flex-none text-[13px] text-muted-foreground">vs</span>
-				<span class="flex min-w-0 shrink">{@render side('B', data.b, diff?.b)}</span>
+				<span class="flex max-w-[calc(50%-1rem)] min-w-0">{@render side('B', data.b, diff?.b)}</span
+				>
 			</div>
 		{/snippet}
 	</PageHeader>

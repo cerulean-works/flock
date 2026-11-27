@@ -455,10 +455,18 @@
 	{/if}
 	<!-- One 36px row: the keeps as underline tabs, whose line lands on the table's top rule; the
 	     task and the order quiet at the right. -->
-	<div class={['flex h-9 min-w-0 items-center gap-2', !other && '-mb-3', bleed && 'bleed px-5']}>
+	<!-- On a phone the task and order take a row above, so every keep shows in full and its line
+	     still lands on the table's rule. -->
+	<div
+		class={[
+			'flex h-9 min-w-0 items-center gap-2 max-sm:h-auto max-sm:flex-wrap max-sm:gap-0',
+			!other && '-mb-3',
+			bleed && 'bleed px-5'
+		]}
+	>
 		<!-- On a narrow page the keeps scroll sideways; the controls keep their room. -->
 		<div
-			class="flex h-full min-w-0 shrink [scrollbar-width:none] items-center gap-4 overflow-x-auto max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] max-sm:pr-4"
+			class="flex h-full min-w-0 shrink [scrollbar-width:none] items-center gap-4 overflow-x-auto max-sm:h-9 max-sm:w-full max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] max-sm:pr-4"
 			role="radiogroup"
 			aria-label="Docs shown"
 		>
@@ -488,7 +496,9 @@
 				</button>
 			{/each}
 		</div>
-		<div class="ml-auto flex flex-none items-center gap-0.5">
+		<div
+			class="ml-auto flex flex-none items-center gap-0.5 max-sm:order-first max-sm:h-9 max-sm:w-full"
+		>
 			<PickerField
 				bind:open={picking}
 				onOpenChange={(next) => {
@@ -658,9 +668,15 @@
 						{@const [lead, tail] = docIdParts(row.id)}
 						<!-- With a row open, the closed ones fade back so it reads on its own; hovering one brings it
 						     forward again. -->
+						<!-- A click anywhere on the row opens it, as its doc id's button does (the keys' way). -->
 						<tr
+							onclick={(e) => {
+								const t = e.target as Element;
+								if (t.closest('button, a, input') || window.getSelection()?.toString()) return;
+								toggle(row.id);
+							}}
 							class={[
-								'group/item align-top transition-opacity hover:bg-muted/50 has-[[data-item]:focus-visible]:bg-muted',
+								'group/item cursor-pointer align-top transition-opacity hover:bg-muted/50 has-[[data-item]:focus-visible]:bg-muted',
 								!shown && 'border-b border-divider',
 								opened && !shown && 'opacity-40 focus-within:opacity-100 hover:opacity-100'
 							]}

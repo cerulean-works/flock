@@ -97,16 +97,18 @@
 					style:width={percent(answer.prob[choice])}
 				></span>
 			</span>
-			<span
-				class={['mt-1 block text-[11px]', picked ? 'text-foreground' : 'text-muted-foreground']}
-				aria-hidden="true">{said}</span
-			>
-			{#if choice === 0 && notes[side]}
-				<!-- No tokens for this run: why, behind an icon. -->
-				<span class="mt-1 flex text-muted-foreground">
-					<InfoHint label="Why {sides[side]} has no tokens">{notes[side]}</InfoHint>
-				</span>
-			{/if}
+			<!-- With no tokens for this run, why sits behind an icon at the numbers' end, so the first
+			     choice is as tall as the rest. -->
+			<span class="mt-1 flex items-center gap-1 text-[11px]">
+				<span class={picked ? 'text-foreground' : 'text-muted-foreground'} aria-hidden="true"
+					>{said}</span
+				>
+				{#if choice === 0 && notes[side]}
+					<span class="flex text-muted-foreground">
+						<InfoHint label="Why {sides[side]} has no tokens">{notes[side]}</InfoHint>
+					</span>
+				{/if}
+			</span>
 			{#if own}
 				<!-- The tokens as this run cut the choice; a dot where its tokenizer couldn't name one.
 				     Hover one for its numbers. -->

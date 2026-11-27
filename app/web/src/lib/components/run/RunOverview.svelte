@@ -93,12 +93,12 @@
 				<summary
 					class="-mx-2 flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md px-2 text-[13px] select-none hover:bg-muted/60 [&::-webkit-details-marker]:hidden"
 				>
+					<ChevronRightIcon
+						class="size-3.5 flex-none text-muted-foreground transition-transform group-open/list:rotate-90"
+					/>
+					<span class="font-medium">{title}</span>
+					<span class="text-muted-foreground tabular-nums">{all.length}</span>
 					{#if q == null}
-						<ChevronRightIcon
-							class="size-3.5 flex-none text-muted-foreground transition-transform group-open/list:rotate-90"
-						/>
-						<span class="font-medium">{title}</span>
-						<span class="text-muted-foreground tabular-nums">{all.length}</span>
 						<button
 							type="button"
 							class="-mr-1 ml-auto grid size-6 place-items-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -111,50 +111,55 @@
 						>
 							<SearchIcon class="size-3.5" />
 						</button>
-					{:else}
-						<!-- In the summary: a click or Space mustn't toggle the list. -->
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<span
-							class="flex min-w-0 flex-1"
-							id="find-{title}"
-							onclick={(e) => e.preventDefault()}
-							onkeydown={(e) => e.key === ' ' && e.stopPropagation()}
-							onkeyup={(e) => e.key === ' ' && e.preventDefault()}
-						>
-							<BarSearch
-								bind:value={() => queries[title] ?? '', (v) => (queries[title] = v)}
-								things="{title.toLowerCase()} keys"
-								open
-								slash={false}
-								onclose={() => closeSearch(title)}
-							>
-								{#snippet trailing()}
-									<span class="flex-none pr-1.5 text-xs text-muted-foreground tabular-nums"
-										>{rows.length}</span
-									>
-								{/snippet}
-							</BarSearch>
-						</span>
 					{/if}
 				</summary>
-				<dl class="pt-1 pb-1 font-mono text-[12px] leading-6">
+				<!-- Under the list's name, which stays: what's searched and how many keys it holds. -->
+				{#if q != null}
+					<div class="pt-1" id="find-{title}">
+						<BarSearch
+							bind:value={() => queries[title] ?? '', (v) => (queries[title] = v)}
+							things="{title.toLowerCase()} keys"
+							open
+							slash={false}
+							onclose={() => closeSearch(title)}
+						>
+							{#snippet trailing()}
+								<span class="flex-none pr-1.5 text-xs text-muted-foreground tabular-nums"
+									>{rows.length}</span
+								>
+							{/snippet}
+						</BarSearch>
+					</div>
+				{/if}
+				<!-- Keys take what the longest needs, up to two fifths; values the rest. -->
+				<dl
+					class="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3 pt-1 pb-1 font-mono text-[12px] leading-6"
+				>
 					{#each rows as [key, value] (key)}
 						{@const shown = formatValue(value)}
-						<!-- Copy on hover at the row's end, as the Details rows do; the full value. -->
+						<!-- Copy on hover over the value's end (the full value): the value keeps the room. -->
 						<div
-							class="group/prop -mx-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 rounded px-2 hover:bg-muted"
+							class="group/prop col-span-2 -mx-2 grid grid-cols-subgrid rounded px-2 hover:bg-muted"
 						>
 							<dt class="truncate text-muted-foreground" {@attach hint(key)}>{key}</dt>
-							<dd class="flex min-w-0 items-center justify-end gap-1">
+							<dd class="relative flex min-w-0 items-center justify-end">
 								<span
 									class={['truncate tabular-nums', shown === '–' && 'text-faint']}
 									{@attach hint(exact(value))}>{shown}</span
 								>
-								{#if shown !== '–'}{@render copy(exact(value), `Copy ${key}`)}{/if}
+								{#if shown !== '–'}
+									<span
+										class="absolute inset-y-0 right-0 flex items-center bg-muted pl-1 opacity-0 group-hover/prop:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100"
+									>
+										{@render copy(exact(value), `Copy ${key}`)}
+									</span>
+								{/if}
 							</dd>
 						</div>
 					{:else}
-						<p class="py-1 font-sans text-[13px] text-muted-foreground">No matching keys</p>
+						<p class="col-span-2 py-1 font-sans text-[13px] text-muted-foreground">
+							No matching keys
+						</p>
 					{/each}
 				</dl>
 			</details>
@@ -206,7 +211,8 @@
 	{#if run.runtime}<Property label="Runtime">{duration(run.runtime)}</Property>{/if}
 	<Property label="Logged by">
 		{#if owner}
-			<span class="flex min-w-0 items-center gap-2">
+			<!-- On the name's baseline, as every row: the avatar centres itself beside it. -->
+			<span class="flex min-w-0 items-baseline gap-2">
 				<Avatar
 					name={owner.name}
 					src={owner.avatar_url}
@@ -226,8 +232,7 @@
 	{/if}
 	{#if run.gpu_hours}
 		<Property label="GPU hours">
-			{hours(run.gpu_hours)}
-			{#if currency && run.cost != null}<span class="text-muted-foreground"
+			{hours(run.gpu_hours)}{#if currency && run.cost != null}<span class="text-muted-foreground"
 					>&nbsp;· {money(run.cost, currency)}</span
 				>{/if}
 		</Property>

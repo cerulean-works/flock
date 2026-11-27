@@ -86,11 +86,12 @@
 
 	// Suites over tasks, column for column: a suite's score sits above its tasks' scores. Both
 	// tables share these tracks; a suite's dataset column stays empty.
-	const NAME_W = 'minmax(10rem,3fr)';
+	// Names take what they need first (as far as the page lets them); the dataset the rest.
+	const NAME_W = 'minmax(10rem,max-content)';
 	const SCORE_W = '5.5rem';
 	const METRIC_W = '8.5rem';
 	const COUNT_W = '5.5rem';
-	const DATASET_W = 'minmax(0,4fr)';
+	const DATASET_W = 'minmax(0,1fr)';
 	const CUT_W = '6rem';
 	const suiteColumns = $derived<Column[]>([
 		{ id: 'name', label: 'Suite', width: NAME_W },

@@ -3,11 +3,9 @@
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
 	import ChevronsDownIcon from '@lucide/svelte/icons/chevrons-down';
-	import ClockIcon from '@lucide/svelte/icons/clock';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import DownloadIcon from '@lucide/svelte/icons/download';
-	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
-	import TextWrapIcon from '@lucide/svelte/icons/text-wrap';
+	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
 	import { onMount, tick, untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import { toast } from 'svelte-sonner';
@@ -510,7 +508,9 @@
 		return pieces(l.spans, tokenize(l.text), marks, l.dim);
 	}
 
-	const levelsShown = $derived(LEVEL_KEYS.filter((k) => !hidden.includes(k)).length);
+	/** The levels this log has (and any hidden one), in order: the menu lists only these. */
+	const present = $derived(LEVEL_KEYS.filter((k) => counts[k] > 0 || hidden.includes(k)));
+	const levelsShown = $derived(present.filter((k) => !hidden.includes(k)).length);
 	const laterCount = $derived(Math.max(0, known - first - lines.length));
 </script>
 
@@ -572,74 +572,63 @@
 			{/snippet}
 		</BarSearch>
 
+		<!-- How the lines show, in one menu as a view's Display: the levels shown (only those the
+		     log has), the timestamps, wrapping. Lit while it hides levels. -->
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
 					<Button
 						{...props}
 						variant={hidden.length ? 'quiet-on' : 'quiet'}
-						size="bar"
-						{@attach hint('Filter by level')}
+						size="icon-bar"
+						aria-label={hidden.length
+							? `Display, ${levelsShown} of ${present.length} levels shown`
+							: 'Display'}
+						{@attach hint(
+							hidden.length
+								? `Display: ${levelsShown} of ${present.length} levels shown`
+								: 'Display'
+						)}
 					>
-						<ListFilterIcon />
-						<span class="max-sm:sr-only"
-							>{levelsShown === LEVEL_KEYS.length ? 'All levels' : `${levelsShown} levels`}</span
-						>
-					</Button>
-				{/snippet}
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="end" class="w-48">
-				<DropdownMenu.Group>
-					<DropdownMenu.Label>Levels</DropdownMenu.Label>
-					{#each LEVEL_KEYS as k (k)}
-						<DropdownMenu.CheckboxItem
-							checked={!hidden.includes(k)}
-							onCheckedChange={(on) => toggleLevel(k, on)}
-						>
-							<span
-								class={[
-									'size-2 flex-none rounded-full',
-									k === 'error'
-										? 'bg-ansi-red'
-										: k === 'warning'
-											? 'bg-ansi-yellow'
-											: k === 'info'
-												? 'bg-ansi-blue'
-												: 'bg-faint'
-								]}
-							></span>
-							{LEVEL_LABEL[k]}
-							<span class="ml-auto text-xs text-muted-foreground tabular-nums">
-								{counts[k].toLocaleString('en-US')}
-							</span>
-						</DropdownMenu.CheckboxItem>
-					{/each}
-				</DropdownMenu.Group>
-				{#if hidden.length}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item onSelect={() => ((hidden = []), remember())}>
-						Show all levels
-					</DropdownMenu.Item>
-				{/if}
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
-
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger>
-				{#snippet child({ props })}
-					<Button
-						{...props}
-						variant="quiet"
-						size="bar"
-						class={bar ? 'max-sm:hidden' : undefined}
-						{@attach hint('Timestamps')}
-					>
-						<ClockIcon />
-						<span class="max-sm:hidden">{STAMPS.find((s) => s.value === stamps)?.label}</span>
+						<SlidersHorizontalIcon />
 					</Button>
 				{/snippet}
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content align="end" class="w-56">
+				{#if present.length > 1}
+					<DropdownMenu.Group>
+						<DropdownMenu.Label>Levels</DropdownMenu.Label>
+						{#each present as k (k)}
+							<DropdownMenu.CheckboxItem
+								checked={!hidden.includes(k)}
+								onCheckedChange={(on) => toggleLevel(k, on)}
+							>
+								<span
+									class={[
+										'size-2 flex-none rounded-full',
+										k === 'error'
+											? 'bg-ansi-red'
+											: k === 'warning'
+												? 'bg-ansi-yellow'
+												: k === 'info'
+													? 'bg-ansi-blue'
+													: 'bg-faint'
+									]}
+								></span>
+								{LEVEL_LABEL[k]}
+								<span class="ml-auto text-xs text-muted-foreground tabular-nums">
+									{counts[k].toLocaleString('en-US')}
+								</span>
+							</DropdownMenu.CheckboxItem>
+						{/each}
+						{#if hidden.length}
+							<DropdownMenu.Item onSelect={() => ((hidden = []), remember())}>
+								<span class="size-4" aria-hidden="true"></span> Show all levels
+							</DropdownMenu.Item>
+						{/if}
+					</DropdownMenu.Group>
+					<DropdownMenu.Separator />
+				{/if}
 				<DropdownMenu.Group>
 					<DropdownMenu.Label>Timestamps</DropdownMenu.Label>
 					<DropdownMenu.RadioGroup
@@ -651,20 +640,15 @@
 						{/each}
 					</DropdownMenu.RadioGroup>
 				</DropdownMenu.Group>
+				<DropdownMenu.Separator />
+				<DropdownMenu.CheckboxItem
+					checked={wrap}
+					onCheckedChange={(on) => ((wrap = on), remember())}
+				>
+					Wrap long lines
+				</DropdownMenu.CheckboxItem>
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
-
-		<Button
-			variant={wrap ? 'quiet-on' : 'quiet'}
-			size="icon-bar"
-			class={bar ? 'max-sm:hidden' : undefined}
-			{@attach hint(wrap ? 'Don’t wrap long lines' : 'Wrap long lines')}
-			aria-label="Wrap long lines"
-			aria-pressed={wrap}
-			onclick={() => ((wrap = !wrap), remember())}
-		>
-			<TextWrapIcon />
-		</Button>
 		{#if live}
 			<Button
 				variant={following ? 'quiet-on' : 'quiet'}

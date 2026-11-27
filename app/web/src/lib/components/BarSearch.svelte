@@ -59,6 +59,7 @@
 
 	const label = $derived(placeholder.replace(/…$/, ''));
 	let input = $state<HTMLInputElement>();
+	let trigger = $state<HTMLElement | null>(null);
 	const shown = $derived(open || opened || !!value);
 
 	/** Opens the field and puts the cursor in it, its text selected. */
@@ -75,10 +76,15 @@
 		onclear?.();
 	}
 
-	function close() {
+	/** Escape on an empty field: back to the icon, which keeps the focus (Linear's way). */
+	async function close() {
+		const back = !open;
 		opened = false;
-		input?.blur();
+		if (!back) input?.blur();
 		onclose?.();
+		if (!back) return;
+		await tick();
+		trigger?.focus();
 	}
 
 	function keydown(e: KeyboardEvent) {
@@ -86,7 +92,7 @@
 		if (e.defaultPrevented || e.key !== 'Escape') return;
 		e.stopPropagation();
 		if (value) clear();
-		else close();
+		else void close();
 	}
 
 	function onwindowkey(e: KeyboardEvent) {
@@ -103,6 +109,7 @@
 
 {#if !shown}
 	<Button
+		bind:ref={trigger}
 		variant="quiet"
 		size="icon-bar"
 		aria-label={label}
@@ -114,7 +121,7 @@
 {:else}
 	<label
 		class={[
-			'flex h-7 min-w-0 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2 focus-within:ring-3 focus-within:ring-ring/50',
+			'flex h-7 min-w-0 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2 focus-within:ring-1 focus-within:ring-ring/40',
 			open ? 'w-full' : 'w-52',
 			className
 		]}

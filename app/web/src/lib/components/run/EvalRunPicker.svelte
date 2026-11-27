@@ -285,10 +285,11 @@
 						onclick={() => pick(r)}
 					>
 						<CheckIcon class={['size-3.5 flex-none', !current && 'invisible']} />
-						<!-- The name comes first and keeps its room; the model gives way. -->
-						<span class="max-w-[75%] flex-none truncate">{r.display_name ?? r.id}</span>
+						<!-- Three columns: the name takes the room, the model and the age one width each, so
+						     every row's model starts at one x. -->
+						<span class="min-w-0 flex-1 truncate">{r.display_name ?? r.id}</span>
 						<span
-							class="min-w-0 flex-1 truncate text-right text-muted-foreground"
+							class="w-32 flex-none truncate text-muted-foreground max-sm:hidden"
 							{@attach hint(r.model ?? undefined)}>{shortModel(r.model)}</span
 						>
 						<span class="w-14 flex-none text-right text-xs text-faint"
