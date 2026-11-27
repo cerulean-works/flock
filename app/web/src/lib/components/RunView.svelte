@@ -467,7 +467,10 @@
 								: 'Table and charts side by side  V\nClick again to stack them'
 						)}
 					>
-						{#if stacked}<Rows2Icon />{:else}<Columns2Icon />{/if}
+						<!-- The layout mark only while Visualize is open, where a second click flips it. -->
+						{#if view === 'visualize'}
+							{#if stacked}<Rows2Icon />{:else}<Columns2Icon />{/if}
+						{/if}
 						Visualize
 					</Tabs.Trigger>
 					<Tabs.Trigger value="charts" {@attach hint('Charts  C')}>Charts</Tabs.Trigger>
