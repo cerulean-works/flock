@@ -28,7 +28,13 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Crumb } from '#lib/storage.ts';
 	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
-	import { chipParts, describeFilters } from '#lib/workspace/filters.ts';
+	import {
+		chipParts,
+		chipRow,
+		describeFilters,
+		joinChips,
+		type RunFilter
+	} from '#lib/workspace/filters.ts';
 	import { columnLabel } from '#lib/workspace/columns.ts';
 	import FilterChip from '#lib/components/FilterChip.svelte';
 	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
@@ -398,17 +404,28 @@
 		void goto(ws.href(params), { reset: false });
 	}
 
-	/** The filters without the one at `i`, from the first page. */
-	function dropFilter(i: number) {
+	/** The filters as chips, and whether the row matches all of them or any. */
+	const row = $derived(chipRow(ws.page.query.filters));
+
+	/** The run query with other filters, from the first page. */
+	function setFilters(filters: RunFilter[]) {
 		const params = new URLSearchParams(page.url.search);
-		applyRunQuery(params, {
-			...ws.page.query,
-			filters: ws.page.query.filters.filter((_, j) => j !== i),
-			page: 1
-		});
+		applyRunQuery(params, { ...ws.page.query, filters, page: 1 });
 		ws.selected.clear();
 		void goto(ws.href(params), { reset: false });
 	}
+
+	/** The chips without the one at `i`, joined as before. */
+	const dropFilter = (i: number) =>
+		setFilters(
+			joinChips(
+				row.chips.filter((_, j) => j !== i),
+				row.match
+			)
+		);
+
+	/** Every chip joined the other way: and becomes or, or becomes and. */
+	const flipMatch = () => setFilters(joinChips(row.chips, row.match === 'all' ? 'any' : 'all'));
 
 	const narrowed = $derived(!!ws.page.query.search || ws.page.query.filters.length > 0);
 
@@ -581,7 +598,23 @@
 					onremove={dropSearch}
 				/>
 			{/if}
-			{#each ws.page.query.filters as f, i (i)}
+			{#each row.chips as f, i (i)}
+				{#if i > 0}
+					<!-- How the chips join; a click switches every joiner, and the row with them. -->
+					<button
+						type="button"
+						class="rounded px-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+						aria-label={row.match === 'all'
+							? 'Runs match all filters. Match any instead'
+							: 'Runs match any filter. Match all instead'}
+						{@attach hint(
+							row.match === 'all' ? 'Match any filter instead' : 'Match all filters instead'
+						)}
+						onclick={flipMatch}
+					>
+						{row.match === 'all' ? 'and' : 'or'}
+					</button>
+				{/if}
 				<FilterChip
 					parts={chipParts(f, { label: labelOf, kind: kindOf, people: ws.people, me })}
 					onclick={() => filterControl?.edit()}

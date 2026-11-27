@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ColumnKind } from '#lib/types.ts';
 import {
+	chipRow,
+	joinChips,
 	chipParts,
 	countConditions,
 	describeFilters,
@@ -399,5 +401,39 @@ describe('chipParts', () => {
 				names
 			)
 		).toEqual({ label: '', op: '', value: 'config.lr < 0.01 or name is a' });
+	});
+});
+
+describe('the chip row', () => {
+	const state = { key: 'state', op: 'eq', value: 'running' } as const;
+	const owner = { key: 'owner', op: 'eq', value: 7 } as const;
+	const lr = { key: 'config.lr', op: 'gte', value: 0.0003 } as const;
+
+	it('joins top-level filters with and', () => {
+		expect(chipRow([state, lr])).toEqual({ chips: [state, lr], match: 'all' });
+		expect(chipRow([])).toEqual({ chips: [], match: 'all' });
+	});
+
+	it('reads one any group of several chips as the chips joined with or', () => {
+		expect(chipRow([{ match: 'any', filters: [state, owner, lr] }])).toEqual({
+			chips: [state, owner, lr],
+			match: 'any'
+		});
+	});
+
+	it("keeps one column's values as one chip", () => {
+		const values = {
+			match: 'any' as const,
+			filters: [state, { ...state, value: 'failed' }]
+		};
+		expect(chipRow([values])).toEqual({ chips: [values], match: 'all' });
+	});
+
+	it('writes a row back as filters, and round-trips', () => {
+		expect(joinChips([state, lr], 'all')).toEqual([state, lr]);
+		expect(joinChips([state, lr], 'any')).toEqual([{ match: 'any', filters: [state, lr] }]);
+		expect(joinChips([state], 'any')).toEqual([state]);
+		const any = joinChips([state, owner], 'any');
+		expect(joinChips(chipRow(any).chips, 'all')).toEqual([state, owner]);
 	});
 });

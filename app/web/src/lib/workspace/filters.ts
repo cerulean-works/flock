@@ -388,6 +388,35 @@ const ownedByColumn = (f: RunFilter, key: string) =>
 	isValuesOf(f, key) ||
 	(isOn(f, key) && ['eq', 'gt', 'gte', 'lt', 'lte', 'contains'].includes(f.op));
 
+/** Whether a group is one column's values (`State is any of A, B`): one chip, not a row of them. */
+const isOneColumn = (f: RunFilterGroup) => {
+	const [first] = f.filters;
+	return !!first && !isGroup(first) && isValuesOf(f, first.key);
+};
+
+/**
+ * The filters in effect as a row of chips and how they join. The row matches all of them, or
+ * any of them when the filters are one `any` group of several chips; anything else (a group the
+ * advanced editor nested) is a chip of its own.
+ */
+export function chipRow(filters: readonly RunFilter[]): { chips: RunFilter[]; match: FilterMatch } {
+	const [only] = filters;
+	if (
+		filters.length === 1 &&
+		isGroup(only) &&
+		only.match === 'any' &&
+		only.filters.length > 1 &&
+		!isOneColumn(only)
+	)
+		return { chips: [...only.filters], match: 'any' };
+	return { chips: [...filters], match: 'all' };
+}
+
+/** The filters for a row of chips joined by `match` (what `chipRow` reads back). */
+export function joinChips(chips: readonly RunFilter[], match: FilterMatch): RunFilter[] {
+	return match === 'any' && chips.length > 1 ? [{ match: 'any', filters: [...chips] }] : [...chips];
+}
+
 /** A date-and-time field's text for a time in seconds, in local time. */
 export function localDateTime(seconds: number): string {
 	const d = new Date(seconds * 1000);
