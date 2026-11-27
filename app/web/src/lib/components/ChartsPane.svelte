@@ -454,7 +454,7 @@
 	     takes only their columns, so small sections share a row (lr | train | val); the rest
 	     span it. -->
 	<div
-		class={[`relative grid ${TRACKS} gap-x-3 gap-y-2`, ws.dragging && 'pointer-events-none']}
+		class={[`relative grid ${TRACKS} gap-x-3`, ws.dragging && 'pointer-events-none']}
 		bind:this={list}
 		{@attach observeColumns}
 	>
@@ -542,7 +542,7 @@
 				</header>
 				{#if open}
 					<div
-						class={['relative grid gap-3 pt-3 pb-2', !packed && TRACKS, moving && 'hidden']}
+						class={['relative grid gap-3 pt-3 pb-4', !packed && TRACKS, moving && 'hidden']}
 						style:grid-template-columns={packed ? `repeat(${span}, minmax(0, 1fr))` : null}
 						data-grid
 					>
