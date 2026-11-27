@@ -459,7 +459,7 @@
 	};
 
 	const TOKEN_COLOR: Record<TokenKind, string> = {
-		number: 'text-ansi-cyan',
+		number: 'text-foreground',
 		key: 'text-muted-foreground',
 		string: 'text-ansi-green',
 		time: 'text-faint',
