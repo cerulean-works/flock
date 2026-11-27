@@ -26,8 +26,11 @@ export function typing(e: KeyboardEvent): boolean {
 
 /** A dialog, menu or list box is open, and takes the keys itself. */
 export function layerOpen(): boolean {
+	// One closing (still animating out) has let go: a key pressed right after closing ⌘K counts.
 	return !!document.querySelector(
-		'[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
+		['dialog', 'alertdialog', 'menu', 'listbox']
+			.map((r) => `[role="${r}"]:not([data-state="closed"])`)
+			.join(', ')
 	);
 }
 

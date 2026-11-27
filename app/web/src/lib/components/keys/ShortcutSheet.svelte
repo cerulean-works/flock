@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Keys from '#lib/components/Keys.svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 
 	import { page } from '$app/state';
@@ -57,18 +58,7 @@
 					<dl class="grid grid-cols-[1fr_auto] gap-y-1 text-[13px]">
 						{#each keys as [key, what] (key)}
 							<dt>{what}</dt>
-							<dd class="flex justify-end gap-1">
-								{#each key.split(/\s+/) as k, i (i)}
-									{#if k === 'then'}
-										<span class="text-xs text-muted-foreground">then</span>
-									{:else}
-										<kbd
-											class="grid h-5 min-w-5 place-items-center rounded border border-border px-1 font-sans text-[11px] text-muted-foreground"
-											>{k}</kbd
-										>
-									{/if}
-								{/each}
-							</dd>
+							<dd class="flex justify-end"><Keys keys={key} size="md" /></dd>
 						{/each}
 					</dl>
 				</section>
