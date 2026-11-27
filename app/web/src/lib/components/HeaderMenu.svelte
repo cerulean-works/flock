@@ -129,9 +129,7 @@
 							placeholder="Search columns…"
 							label="Search summary columns"
 							bind:value={query}
-							onkeydown={(e) => {
-								if (e.key !== 'Escape' && e.key !== 'Tab') e.stopPropagation();
-							}}
+							menu
 						/>
 						<div class="max-h-64 overflow-y-auto p-1">
 							{#each others.slice(0, SHOWN) as k (k)}

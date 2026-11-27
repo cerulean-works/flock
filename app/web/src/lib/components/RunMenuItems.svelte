@@ -74,14 +74,7 @@
 			<DropdownMenu.SubTrigger><a.icon /> {a.label}</DropdownMenu.SubTrigger>
 			<DropdownMenu.SubContent class="w-60 p-0" sideOffset={6}>
 				{#if groups?.length}
-					<MenuSearch
-						placeholder="Search groups…"
-						label="Search groups"
-						bind:value={query}
-						onkeydown={(e) => {
-							if (e.key !== 'Escape' && e.key !== 'Tab') e.stopPropagation();
-						}}
-					/>
+					<MenuSearch placeholder="Search groups…" label="Search groups" bind:value={query} menu />
 					<div class="max-h-64 overflow-y-auto p-1">
 						{#each matches as g (g.id)}
 							<DropdownMenu.Item onSelect={() => void addTo(g)}>

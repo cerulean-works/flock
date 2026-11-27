@@ -67,4 +67,35 @@ describe('HeaderMenu', () => {
 			.toBeVisible();
 		expect(screen.getByRole('menuitemradio', { name: 'Sort ascending' }).query()).toBeNull();
 	});
+
+	it("a submenu's search takes focus, keeps typed letters and hands ArrowDown to its list", async () => {
+		const onpick = vi.fn();
+		render(HeaderMenu, {
+			label: 'Loss',
+			best: {
+				active: true,
+				order: 'asc',
+				onbest: vi.fn(),
+				keys: ['summary.val/loss', 'summary.acc', 'summary.acc_top5'],
+				onpick
+			}
+		});
+		await open('Loss options');
+		const sub = screen.getByRole('menuitem', { name: 'Rank by another column' });
+		(sub.element() as HTMLElement).focus();
+		await userEvent.keyboard('{ArrowRight}');
+		const search = screen.getByRole('textbox', { name: 'Search summary columns' });
+		await expect.poll(() => document.activeElement).toBe(search.element());
+		// Letters filter here rather than jump between items.
+		await userEvent.keyboard('acc');
+		await expect.element(search).toHaveValue('acc');
+		await expect.poll(() => document.activeElement).toBe(search.element());
+		await userEvent.keyboard('{ArrowDown}');
+		const first = document.activeElement as HTMLElement;
+		expect(first.getAttribute('role')).toBe('menuitem');
+		expect(first.textContent).toMatch(/acc/);
+		// ArrowUp on the first item comes back to the field.
+		await userEvent.keyboard('{ArrowUp}');
+		await expect.poll(() => document.activeElement).toBe(search.element());
+	});
 });

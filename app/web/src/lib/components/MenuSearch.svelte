@@ -19,6 +19,11 @@
 		before?: Snippet;
 		/** The row's own classes. */
 		class?: string;
+		/**
+		 * Inside a menu (a submenu's top row): takes focus when the menu opens, keeps typed keys
+		 * from the menu's typeahead, ArrowDown goes to the first item and ArrowUp on it comes back.
+		 */
+		menu?: boolean;
 	}
 
 	let {
@@ -28,13 +33,52 @@
 		onback,
 		before,
 		class: row,
+		menu = false,
 		onkeydown,
 		...rest
 	}: Props = $props();
 
+	/** The menu around the field, and its first item that can be chosen. */
+	const menuOf = (el: HTMLElement) => el.closest<HTMLElement>('[role=menu]');
+	const firstItem = (m: HTMLElement | null) =>
+		m?.querySelector<HTMLElement>(
+			'[role=menuitem]:not([data-disabled]),[role=menuitemcheckbox]:not([data-disabled]),[role=menuitemradio]:not([data-disabled])'
+		) ?? null;
+
+	/** In a menu: focus once it has opened (after the menu's own focus on its first item). */
+	function inMenu(input: HTMLInputElement) {
+		if (!menu) return;
+		const frame = requestAnimationFrame(() => input.focus());
+		const m = menuOf(input);
+		// ArrowUp on the first item comes back to the field, before the menu takes the key.
+		const up = (e: KeyboardEvent) => {
+			if (e.key !== 'ArrowUp' || e.target !== firstItem(m)) return;
+			e.preventDefault();
+			e.stopPropagation();
+			input.focus();
+		};
+		m?.addEventListener('keydown', up, true);
+		return () => {
+			cancelAnimationFrame(frame);
+			m?.removeEventListener('keydown', up, true);
+		};
+	}
+
 	function keydown(e: KeyboardEvent & { currentTarget: EventTarget & HTMLInputElement }) {
 		onkeydown?.(e);
-		if (e.defaultPrevented || e.isComposing || e.key !== 'Escape') return;
+		if (e.defaultPrevented || e.isComposing) return;
+		if (menu && e.key === 'ArrowDown') {
+			const item = firstItem(menuOf(e.currentTarget));
+			if (item) {
+				e.preventDefault();
+				e.stopPropagation();
+				item.focus();
+			}
+			return;
+		}
+		// Keys typed here stay here: the menu would take letters and arrows for its typeahead.
+		if (menu && e.key !== 'Escape' && e.key !== 'Tab') e.stopPropagation();
+		if (e.key !== 'Escape') return;
 		if (value) {
 			// Before the popover or menu around it sees the key and closes.
 			e.preventDefault();
@@ -55,6 +99,7 @@
 	<input
 		bind:this={ref}
 		bind:value
+		{@attach inMenu}
 		aria-label={label}
 		spellcheck="false"
 		autocomplete="off"
