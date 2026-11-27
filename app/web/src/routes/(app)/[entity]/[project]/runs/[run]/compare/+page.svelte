@@ -383,7 +383,7 @@
 								of the doc where it has none. Counts only: no test of significance.
 							</InfoHint>
 						</h2>
-						<div class="overflow-x-auto">
+						<div class="relative overflow-x-auto">
 							<table class="w-full min-w-[66rem] table-fixed border-t border-divider">
 								{@render columns()}
 								<thead class="border-b text-xs text-muted-foreground">
@@ -474,7 +474,7 @@
 							<h2 id="not-compared" class="mb-2 text-[15px] font-medium">
 								{diff.not_compared.length} tasks not compared
 							</h2>
-							<div class="overflow-x-auto">
+							<div class="relative overflow-x-auto">
 								<table class="w-full min-w-[66rem] table-fixed border-t border-divider">
 									{@render columns()}
 									<tbody>

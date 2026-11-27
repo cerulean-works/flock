@@ -417,7 +417,7 @@
 
 <svelte:window {onkeydown} />
 
-<div class="grid gap-3" bind:this={root}>
+<div class="grid grid-cols-[minmax(0,1fr)] gap-3" bind:this={root}>
 	{#if title}
 		<h2 id="items-title" class="flex items-baseline gap-2 text-[15px] font-medium">
 			{title}
@@ -563,7 +563,7 @@
 		<!-- As wide as its box, the Question column taking what the others leave; never narrower
 		     than the columns as the reader dragged them, past which it scrolls sideways. With
 		     `bleed` the box spans the page, edge to edge, as the dataset rows do. -->
-		<div class={['overflow-x-auto', bleed && 'bleed']}>
+		<div class={['relative overflow-x-auto', bleed && 'bleed']}>
 			<table
 				class={[
 					'w-full table-fixed border-t border-divider text-[13px]',

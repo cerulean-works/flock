@@ -270,7 +270,7 @@
 						{run.display_name ?? run.id}.
 					</InfoHint>
 				</h2>
-				<div class="overflow-x-auto">
+				<div class="relative overflow-x-auto">
 					<table class="w-full min-w-[52rem] table-fixed border-t border-divider">
 						<colgroup>
 							<col class="w-[15rem]" />
