@@ -291,7 +291,7 @@
 				</tbody>
 			</table>
 		</div>
-		<div class="px-5">
+		<div class="sticky bottom-3.5 z-5 w-fit pl-4">
 			<PageNumbers
 				{current}
 				{pages}

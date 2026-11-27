@@ -350,31 +350,16 @@ describe('DatasetView', () => {
 		expect(calls[0].url).toBe(
 			'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=50&limit=50'
 		);
-		// Pages 1, 2 (this one) and 3, then the last.
-		const pages = screen.getByRole('navigation', { name: 'Row pages' }).getByRole('button');
-		expect(pages.all().map((b) => b.element().textContent!.trim())).toEqual([
-			'Previous',
-			'1',
-			'2',
-			'3',
-			'25',
-			'Next'
-		]);
-		await expect
-			.element(screen.getByRole('button', { name: 'Page 2', exact: true }))
-			.toHaveAttribute('aria-current', 'page');
+		// The floating pager: the rows shown of how many, and the pages either side.
+		const nav = screen.getByRole('navigation', { name: 'Row pages' });
+		await expect.element(nav).toHaveTextContent(/51–51\s*of 1,234/);
 		await screen.getByRole('button', { name: 'Next page' }).click();
 		expect(goto).toHaveBeenLastCalledWith(
 			'/datasets/acme/eval/mmlu?version=3&tab=rows&offset=100',
 			{ reset: false }
 		);
-		await screen.getByRole('button', { name: 'Page 25' }).click();
-		expect(goto).toHaveBeenLastCalledWith(
-			'/datasets/acme/eval/mmlu?version=3&tab=rows&offset=1200',
-			{ reset: false }
-		);
-		await screen.getByRole('button', { name: 'Page 1', exact: true }).click();
-		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=3&tab=rows', {
+		await screen.getByRole('button', { name: 'Previous page' }).click();
+		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=3&tab=rows&offset=50', {
 			reset: false
 		});
 
@@ -383,7 +368,7 @@ describe('DatasetView', () => {
 		await screen.getByRole('checkbox').nth(1).click();
 		await vi.waitFor(() =>
 			expect(calls.at(-1)!.url).toBe(
-				'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=0&limit=50&columns=id'
+				'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=50&limit=50&columns=id'
 			)
 		);
 	});
