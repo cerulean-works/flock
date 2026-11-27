@@ -648,7 +648,13 @@
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
-					<Button {...props} variant="quiet" size="bar" {@attach hint('Timestamps')}>
+					<Button
+						{...props}
+						variant="quiet"
+						size="bar"
+						class={bar ? 'max-sm:hidden' : undefined}
+						{@attach hint('Timestamps')}
+					>
 						<ClockIcon />
 						<span class="max-sm:hidden">{STAMPS.find((s) => s.value === stamps)?.label}</span>
 					</Button>
@@ -672,6 +678,7 @@
 		<Button
 			variant={wrap ? 'quiet-on' : 'quiet'}
 			size="icon-bar"
+			class={bar ? 'max-sm:hidden' : undefined}
 			{@attach hint(wrap ? 'Don’t wrap long lines' : 'Wrap long lines')}
 			aria-label="Wrap long lines"
 			aria-pressed={wrap}
@@ -698,6 +705,7 @@
 		<Button
 			variant="quiet"
 			size="icon-bar"
+			class={bar ? 'max-sm:hidden' : undefined}
 			{@attach hint('Copy the lines loaded')}
 			aria-label="Copy the lines loaded"
 			disabled={!shown.lines.length}
@@ -708,6 +716,7 @@
 		<Button
 			variant="quiet"
 			size="icon-bar"
+			class={bar ? 'max-sm:hidden' : undefined}
 			{@attach hint('Download all of it')}
 			aria-label="Download the console output"
 			disabled={downloading || !known}
