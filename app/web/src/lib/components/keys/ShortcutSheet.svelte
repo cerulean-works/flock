@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Keys from '#lib/components/Keys.svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 
 	import { page } from '$app/state';
@@ -19,15 +20,17 @@
 				...(s3
 					? ([
 							['G then D', 'Go to Datasets'],
-							['G then M', 'Go to Models']
+							['G then M', 'Go to Models'],
+							['G then S', 'Go to Storage']
 						] as [string, string][])
 					: []),
-				['G then S', 'Go to Settings']
+				['G then ,', 'Go to Settings']
 			]
 		],
 		[
 			'Lists',
 			[
+				['/', 'Search'],
 				['J  K', 'Next and previous row'],
 				['Enter', 'Open the row'],
 				['X', 'Select the row'],
@@ -38,7 +41,6 @@
 			'Runs',
 			[
 				['T  V  C', 'Table, Visualize, Charts'],
-				['/', 'Search runs'],
 				['F', 'Filter runs']
 			]
 		]
@@ -56,18 +58,7 @@
 					<dl class="grid grid-cols-[1fr_auto] gap-y-1 text-[13px]">
 						{#each keys as [key, what] (key)}
 							<dt>{what}</dt>
-							<dd class="flex justify-end gap-1">
-								{#each key.split(/\s+/) as k, i (i)}
-									{#if k === 'then'}
-										<span class="text-xs text-muted-foreground">then</span>
-									{:else}
-										<kbd
-											class="grid h-5 min-w-5 place-items-center rounded border border-border px-1 font-sans text-[11px] text-muted-foreground"
-											>{k}</kbd
-										>
-									{/if}
-								{/each}
-							</dd>
+							<dd class="flex justify-end"><Keys keys={key} size="md" /></dd>
 						{/each}
 					</dl>
 				</section>

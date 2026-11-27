@@ -25,8 +25,11 @@ describe('a new wandb key', () => {
 		async (key) => {
 			app.result = { type: 'success', status: 200, data: { key, name: 'cluster' } };
 			render(WandbKeyCreator, { named: true });
-			await page.getByLabelText('Key name').fill('cluster');
+			// A small form opens from the button, the name field focused.
 			await page.getByRole('button', { name: 'Create wandb key' }).click();
+			await expect.element(page.getByLabelText('Key name')).toHaveFocus();
+			await page.getByLabelText('Key name').fill('cluster');
+			await page.getByRole('button', { name: 'Create key' }).click();
 
 			await expect.element(page.getByLabelText('wandb key', { exact: true })).toHaveValue(key);
 			await expect.element(page.getByRole('button', { name: 'Copy wandb key' })).toBeVisible();
@@ -75,8 +78,17 @@ describe('a new S3 key', () => {
 		app.result = { type: 'success', status: 200, data: { s3Key: created } };
 		const orgs = [{ name: 'acme', display_name: 'Acme', s3_key_max_ttl: null }];
 		render(S3KeyCreator, { orgs, initialOrg: 'acme' });
-		await page.getByLabelText('Name').fill('notebook');
+		// A small form opens from the button, with the name, the org, the expiry and permissions.
 		await page.getByRole('button', { name: 'Create S3 key' }).click();
+		await expect.element(page.getByLabelText('Name')).toHaveFocus();
+		for (const label of ['Organization', 'Expires after', 'Permissions'])
+			await expect.element(page.getByLabelText(label)).toBeVisible();
+		await page.getByLabelText('Name').fill('notebook');
+		await page.getByRole('button', { name: 'Create key' }).click();
+		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		expect(app.sent.map((s) => [s.action, s.form.get('name'), s.form.get('org')])).toEqual([
+			['/account?/createS3Key', 'notebook', 'acme']
+		]);
 
 		await expect
 			.element(page.getByLabelText('Access key ID', { exact: true }))

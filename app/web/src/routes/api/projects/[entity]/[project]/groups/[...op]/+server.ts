@@ -9,7 +9,7 @@ import type { RequestHandler } from './$types';
  * routes.
  */
 const ROUTES =
-	/^(|settings|compare|suggestions|suggestions\/dismiss|assist|propose|\d+|\d+\/(runs\/query|columns|new|primary))$/;
+	/^(|settings|compare|suggestions|suggestions\/dismiss|assist|propose|\d+|\d+\/(runs\/query|runs\/values|columns|new|primary))$/;
 
 /**
  * A project's run groups, for the group pages, the sidebar and their changes: the browser never

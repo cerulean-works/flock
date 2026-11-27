@@ -115,7 +115,7 @@
 					<DropdownMenu.Item class={ROW}>
 						{#snippet child({ props })}
 							<a href={orgHref(org)} {...props}>
-								<span class={SLOT}><SettingsIcon /></span> Settings and members
+								<span class={SLOT}><SettingsIcon /></span> Settings
 							</a>
 						{/snippet}
 					</DropdownMenu.Item>

@@ -73,6 +73,13 @@
 			: null
 	);
 	const onGroups = $derived(!!page.route.id?.startsWith('/(app)/[entity]/[project]/groups'));
+	/** Runs: an org's, or a project's runs (anything under a project but its groups). */
+	const onRuns = $derived(
+		!!page.route.id?.startsWith('/(app)/[entity]') &&
+			!onGroups &&
+			!page.route.id?.startsWith('/(app)/[entity]/[project]/datasets') &&
+			!page.route.id?.startsWith('/(app)/[entity]/[project]/models')
+	);
 
 	// The rail's switcher keeps home and account pages in place, like the sidebar's.
 	const stay = $derived(
@@ -84,6 +91,12 @@
 	);
 </script>
 
+<!-- Past the sidebar to the page, for the keyboard: shown on the first Tab. -->
+<a
+	href="#content"
+	class="fixed top-2 left-2 z-50 -translate-y-16 rounded-md bg-background px-3 py-1.5 text-[13px] font-medium shadow-md outline-none focus-visible:translate-y-0 focus-visible:ring-3 focus-visible:ring-ring/50"
+	>Skip to content</a
+>
 <div class="flex h-full">
 	{#if !collapsed}
 		<aside
@@ -145,28 +158,13 @@
 				<Button
 					variant="ghost"
 					size="icon-sm"
-					class={[
-						'mt-1 text-muted-foreground',
-						page.route.id === '/(app)/[entity]' && 'bg-sidebar-accent text-foreground'
-					]}
+					class={['mt-1 text-muted-foreground', onRuns && 'bg-sidebar-accent text-foreground']}
 					href={entityHref(data.shell.org)}
+					aria-current={onRuns ? 'page' : undefined}
 					aria-label="Runs"
 					{@attach hint('Runs  G then R')}
 				>
 					<ActivityIcon />
-				</Button>
-			{/if}
-			{#if groupsProject && data.shell.org}
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					class={['mt-1 text-muted-foreground', onGroups && 'bg-sidebar-accent text-foreground']}
-					href={groupsHref(data.shell.org, groupsProject)}
-					aria-label="Groups in {groupsProject}"
-					aria-current={onGroups ? 'page' : undefined}
-					title="Groups"
-				>
-					<LayersIcon />
 				</Button>
 			{/if}
 			{#if data.shell.s3 && data.shell.org && !outside}
@@ -205,9 +203,24 @@
 					]}
 					href={storageHref(data.shell.org)}
 					aria-label="Storage"
-					{@attach hint('Storage')}
+					{@attach hint('Storage  G then S')}
 				>
 					<HardDriveIcon />
+				</Button>
+			{/if}
+			{#if groupsProject && data.shell.org}
+				<!-- The project's own page, apart from the org's. -->
+				<span class="my-2 h-px w-5 bg-divider" aria-hidden="true"></span>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={['text-muted-foreground', onGroups && 'bg-sidebar-accent text-foreground']}
+					href={groupsHref(data.shell.org, groupsProject)}
+					aria-label="Groups in {groupsProject}"
+					aria-current={onGroups ? 'page' : undefined}
+					title="Groups"
+				>
+					<LayersIcon />
 				</Button>
 			{/if}
 			<div class="mt-auto py-2">
@@ -234,7 +247,7 @@
 			</div>
 		</aside>
 	{/if}
-	<div class="flex min-w-0 flex-1 flex-col">
+	<div id="content" class="flex min-w-0 flex-1 flex-col outline-none" tabindex="-1">
 		<header
 			class="flex h-11 flex-none items-center gap-2 border-b border-divider bg-sidebar px-3 md:hidden"
 		>
@@ -267,6 +280,6 @@
 <Sheet.Root bind:open={drawer}>
 	<Sheet.Content side="left" class="w-72 gap-0 p-0" showCloseButton={false}>
 		<Sheet.Title class="sr-only">Navigation</Sheet.Title>
-		<Sidebar {...sidebar} />
+		<Sidebar {...sidebar} drawer oncollapse={() => (drawer = false)} />
 	</Sheet.Content>
 </Sheet.Root>

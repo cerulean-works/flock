@@ -46,11 +46,9 @@
 		return untrack(() => {
 			const row = ws.rowsOf(d.ids)[0];
 			if (row === undefined) return null;
-			const tags = ws.cell(row, 'tags');
 			return {
 				id: d.ids[0],
 				name: ws.nameOf(row),
-				tags: Array.isArray(tags) ? tags.join(', ') : '',
 				group: text(ws.cell(row, 'group')),
 				jobType: text(ws.cell(row, 'job_type')),
 				notes: text(ws.cell(row, 'notes'))
@@ -84,17 +82,6 @@
 						placeholder={run.id}
 						autocomplete="off"
 					/>
-				</div>
-				<div class="grid gap-2">
-					<Label for="run-tags">Tags</Label>
-					<Input
-						id="run-tags"
-						name="tags"
-						value={run.tags}
-						placeholder="e.g., baseline, lr-sweep"
-						autocomplete="off"
-					/>
-					<p class="text-xs text-muted-foreground">Separate tags with commas or spaces.</p>
 				</div>
 				<div class="grid grid-cols-2 gap-3">
 					<div class="grid gap-2">

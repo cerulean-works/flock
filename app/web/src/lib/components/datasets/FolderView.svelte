@@ -1,12 +1,15 @@
 <script lang="ts">
+	import { accountHref } from '#lib/settings.ts';
 	import { hint } from '#lib/hint.svelte.ts';
+	import OriginMark from './OriginMark.svelte';
 	import type { Scope } from '#lib/scope.ts';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { untrack } from 'svelte';
+	import { toast } from 'svelte-sonner';
+	import { bucketCall } from '#lib/storage.ts';
 	import { invalidateAll } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import {
 		DATASETS_BUCKET,
@@ -20,12 +23,12 @@
 	} from '#lib/datasets.ts';
 	import { datasetSnippet } from '#lib/snippets.ts';
 	import type { Selection } from '#lib/selection.svelte.ts';
-	import type { DatasetFolder, DeleteResult, MoveResult } from '#lib/types.ts';
-	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
+	import type { DatasetFolder, DeleteResult, MoveResult, Presigned } from '#lib/types.ts';
+	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
 	import EmptyState from '../EmptyState.svelte';
 	import DataTable, { type Column, ROW_LINK } from '../DataTable.svelte';
-	import RowMenu from '../RowMenu.svelte';
+	import RowMenuItems from '../RowMenuItems.svelte';
 	import DeleteDatasetsDialog from './DeleteDatasetsDialog.svelte';
 	import MoveDatasetsDialog from './MoveDatasetsDialog.svelte';
 	import ForkDialog from './ForkDialog.svelte';
@@ -40,20 +43,22 @@
 		folder: DatasetFolder;
 		now: number;
 		/**
-		 * Rows checked, for members and admins (D130), whose rows also get a menu (D133). The
-		 * page shows the selection bar, whose actions open this listing's dialogs.
+		 * Rows checked, for members and admins (D130), whose rows also get a menu (D133): a
+		 * checked row's menu acts on every row checked.
 		 */
 		selection?: Selection;
+		/** Blend these datasets (the page's blend dialog). */
+		onblend?: (paths: readonly string[]) => void;
 		/** The org's projects, for the Move dialog's scope picker (D166). */
 		projects?: readonly string[];
 	}
 
-	let { scope, path, folder, now, selection, projects = [] }: Props = $props();
+	let { scope, path, folder, now, selection, onblend, projects = [] }: Props = $props();
 	/** The ⋯ menu a rename opened from. */
 	let renameAnchor = $state<HTMLElement | null>(null);
 
-	// The server's first page, then pages loaded here with "Load more". Datasets come first in
-	// each page, then folders, then files (D87).
+	// The server's first page, then pages loaded here with "Load more". Folders come first, then
+	// datasets, then files, as every list has them.
 	let datasets = $derived(folder.datasets);
 	let folders = $derived(folder.folders);
 	let files = $derived(folder.files);
@@ -75,7 +80,16 @@
 		size?: number | null;
 		updated?: number | null;
 	}
-	const rows = $derived<Row[]>([
+	// Each page is listed as loaded, its folders first: a later page only ever adds rows below
+	// the ones shown, never above them. `order` holds the keys shown before the latest page.
+	let order = $state<string[]>([]);
+	const listed = $derived<Row[]>([
+		...folders.map((f) => ({
+			kind: 'folder' as const,
+			key: f.path,
+			name: f.name,
+			href: datasetsHref(scope, f.path)
+		})),
 		...datasets.map((d) => ({
 			kind: 'dataset' as const,
 			key: d.path,
@@ -86,12 +100,6 @@
 			size: d.size,
 			updated: d.updated_at
 		})),
-		...folders.map((f) => ({
-			kind: 'folder' as const,
-			key: f.path,
-			name: f.name,
-			href: datasetsHref(scope, f.path)
-		})),
 		...files.map((f) => ({
 			kind: 'file' as const,
 			key: `o:${f.key}`,
@@ -101,17 +109,26 @@
 			updated: f.last_modified
 		}))
 	]);
+	const rows = $derived.by(() => {
+		if (!order.length) return listed;
+		const at = new Map(order.map((k, i) => [k, i]));
+		const before = listed.filter((r) => at.has(r.key));
+		before.sort((a, b) => at.get(a.key)! - at.get(b.key)!);
+		return [...before, ...listed.filter((r) => !at.has(r.key))];
+	});
 	const ICONS = { dataset: DatabaseIcon, folder: FolderIcon, file: FileIcon };
-	// Version and size show from small windows up.
-	const COLUMNS: Column[] = [
+	// Version and size show from small windows up. A level of folders alone (the root) has none of
+	// them to show, so it lists names only rather than three empty columns.
+	const ALL_COLUMNS: Column[] = [
 		{ id: 'name', label: 'Name' },
 		{ id: 'version', label: 'Version', from: 'sm', align: 'end' },
 		{ id: 'size', label: 'Size', from: 'sm', align: 'end' },
 		{ id: 'updated', label: 'Updated', align: 'end' }
 	];
+	const COLUMNS = $derived(datasets.length || files.length ? ALL_COLUMNS : ALL_COLUMNS.slice(0, 1));
 
 	// Datasets and folders can be checked; loose files can't (D130).
-	const keys = $derived([...datasets.map((d) => d.path), ...folders.map((f) => f.path)]);
+	const keys = $derived(rows.filter((r) => r.kind !== 'file').map((r) => r.key));
 	$effect.pre(() => {
 		if (selection) selection.keys = keys;
 	});
@@ -164,6 +181,7 @@
 			const page = await datasetCall<DatasetFolder>(
 				datasetsApi(scope, 'at', { path, cursor, details: 'true' })
 			);
+			order = rows.map((r) => r.key);
 			datasets = [...datasets, ...page.datasets];
 			folders = [...folders, ...page.folders];
 			files = [...files, ...page.files];
@@ -172,6 +190,18 @@
 			failed = (e as Error).message;
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function download(key: string) {
+		try {
+			const { url } = await bucketCall<Presigned>(scope.org, DATASETS_BUCKET, 'presign', {
+				method: 'get',
+				key
+			});
+			window.location.assign(url!);
+		} catch (e) {
+			toast.error((e as Error).message);
 		}
 	}
 </script>
@@ -196,7 +226,7 @@
 				key from your
 				<a
 					class="text-link underline-offset-3 hover:underline"
-					href="{resolve('/(app)/account')}#s3-keys">account page</a
+					href={accountHref('keys', { keys: 's3' })}>account page</a
 				>.
 			</span>
 		{/snippet}
@@ -211,7 +241,8 @@
 		{selection}
 		selectable={(row) => row.kind !== 'file'}
 		name={(row) => row.name}
-		menu={selection ? rowMenu : undefined}
+		menu={rowMenu}
+		hasMenu={(row) => row.kind === 'file' || !!selection}
 		empty={nothing}
 		footer={cursor || failed ? pager : undefined}
 	>
@@ -228,10 +259,8 @@
 					>
 						{row.name}
 					</a>
-					{#if row.origin}
-						<span class="flex-none rounded bg-muted px-1.5 text-[11px] text-muted-foreground">
-							{row.origin}
-						</span>
+					{#if row.origin === 'blend' || row.origin === 'fork'}
+						<OriginMark origin={row.origin} />
 					{/if}
 				</span>
 			{:else if column === 'version'}
@@ -255,16 +284,28 @@
 {#snippet nothing()}This folder is empty.{/snippet}
 
 {#snippet rowMenu(row: Row)}
-	{#if selection && row.kind !== 'file'}
-		<RowMenu
-			name={row.name}
+	{#if row.kind === 'file'}
+		<!-- A loose file isn't the list's to check or move (D130), but downloads as Storage's do. -->
+		<RowMenuItems ondownload={() => download(row.key.slice(2))} />
+	{:else if selection}
+		{@const on = selection.targetsFor(row.key)}
+		{@const sets = on.filter((k) => !folderPaths.has(k))}
+		<RowMenuItems
+			many={on.length < 2
+				? null
+				: sets.length === on.length
+					? count(on.length, 'dataset')
+					: sets.length
+						? count(on.length, 'item')
+						: count(on.length, 'folder')}
 			onfork={row.kind === 'dataset' ? () => selection.act('fork', [row.key]) : undefined}
 			onrename={() => {
 				renameAnchor = openMenuTrigger();
 				selection.act('rename', [row.key]);
 			}}
-			onmove={() => selection.act('move', [row.key])}
-			ondelete={() => selection.act('delete', [row.key])}
+			onblend={onblend && sets.length ? () => onblend(sets) : undefined}
+			onmove={() => selection.act('move', on)}
+			ondelete={() => selection.act('delete', on)}
 		/>
 	{/if}
 {/snippet}

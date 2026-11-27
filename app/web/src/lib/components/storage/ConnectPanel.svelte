@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { accountHref } from '#lib/settings.ts';
 	import CopyBlock from '../CopyBlock.svelte';
 	import CopyButton from '../CopyButton.svelte';
 
@@ -65,7 +65,7 @@
 		You can create one on your
 		<a
 			class="text-link underline-offset-3 hover:underline"
-			href="{resolve('/(app)/account')}#s3-keys">account page</a
+			href={accountHref('keys', { keys: 's3' })}>account page</a
 		>.
 	</p>
 </div>

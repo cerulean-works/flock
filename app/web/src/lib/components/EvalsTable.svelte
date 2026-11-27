@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
+	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
+	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { page as appPage } from '$app/state';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -19,10 +21,15 @@
 	const readonly = $derived(appPage.data.shell?.access === 'public');
 	const table = $derived(view.table);
 
-	// Every suite column starts as wide as the others, so the table reads evenly; a long name
-	// wraps to two lines and shows whole on hover. Each edge drags, as in the runs table.
+	// Every suite column starts wide enough for its name (up to 240px), so a name isn't cut while
+	// the page has room; a longer one shows whole on hover. Each edge drags, as in the runs table.
 	let widths = $state.raw<Readonly<Record<string, number>>>({});
-	const widthOf = (suite: string) => widths[suite] ?? 128;
+	const widthOf = (suite: string) =>
+		widths[suite] ??
+		Math.max(
+			128,
+			Math.min(240, suiteLabel(suite, table.columns[suite]?.scale ?? null).name.length * 7 + 56)
+		);
 
 	let scroller = $state<HTMLDivElement>();
 	/** Open the suites above a suite's column, then scroll it to just past the run names. */
@@ -48,7 +55,11 @@
 		return out;
 	});
 
-	const arrow = (key: string) => (view.sort?.key === key ? (view.sort.best ? '↓' : '↑') : '');
+	/** The way a column sorts the table, or null when another does. */
+	const sorted = (key: string) =>
+		view.sort?.key === key ? (view.sort.best ? 'desc' : 'asc') : null;
+	/** Only when a band names something: otherwise the headers start at the top. */
+	const banded = $derived(bands.some((b) => b.span > 1 || b.named));
 
 	const SCALES = {
 		accuracy: 'accuracy',
@@ -59,6 +70,13 @@
 	const scale = (s: Scale | null) => (s === null ? 'scale unknown' : SCALES[s]);
 	const meanRank = (rank: number | null) => (rank === null ? '–' : rank.toFixed(1));
 </script>
+
+<!-- The sort's arrow, the icon every table's header uses. -->
+{#snippet arrowOf(key: string)}
+	{#if sorted(key) === 'desc'}<ArrowDownIcon
+			class="size-3"
+		/>{:else if sorted(key) === 'asc'}<ArrowUpIcon class="size-3" />{/if}
+{/snippet}
 
 <!-- A number column's header: its name on one line, its scale or count on the next, both centered
      over the numbers, with slots either side as wide as a cell's rank, the right one holding the
@@ -72,7 +90,9 @@
 	>
 		<span class="w-4 flex-none"></span>
 		<span class="min-w-0 truncate">{name}</span>
-		<span class="w-4 flex-none pl-1 text-left text-foreground">{arrow(key)}</span>
+		<span class="grid w-4 flex-none place-items-center pl-1 text-foreground"
+			>{@render arrowOf(key)}</span
+		>
 	</button>
 	<div class="relative flex h-5 items-center justify-center text-[11px] text-faint">
 		{@render open?.()}
@@ -89,21 +109,23 @@
 	{:else}
 		<table class="border-collapse text-[13px] tabular-nums">
 			<thead class="sticky top-0 z-2 bg-background">
-				<tr class="text-xs text-muted-foreground">
-					<th class="sticky left-0 z-1 bg-background"></th>
-					<th></th>
-					{#each bands as band (band.key)}
-						<th
-							colspan={band.span}
-							class="h-6.5 border-l border-divider px-3 pt-1.5 text-left font-normal whitespace-nowrap"
-						>
-							{#if band.span > 1 || band.named}
-								{band.group}
-								{#if band.span > 1}<span class="ml-0.5 text-faint">{band.span}</span>{/if}
-							{/if}
-						</th>
-					{/each}
-				</tr>
+				{#if banded}
+					<tr class="text-xs text-muted-foreground">
+						<th class="sticky left-0 z-1 bg-background"></th>
+						<th></th>
+						{#each bands as band (band.key)}
+							<th
+								colspan={band.span}
+								class="h-6.5 border-l border-divider px-3 pt-1.5 text-left font-normal whitespace-nowrap"
+							>
+								{#if band.span > 1 || band.named}
+									{band.group}
+									{#if band.span > 1}<span class="ml-0.5 text-faint">{band.span}</span>{/if}
+								{/if}
+							</th>
+						{/each}
+					</tr>
+				{/if}
 				<tr class="border-b text-xs text-muted-foreground">
 					<th
 						class="sticky left-0 z-1 min-w-64 bg-background px-4 pb-6.5 text-left align-bottom font-medium"
@@ -114,7 +136,9 @@
 							class="font-medium hover:text-foreground"
 							onclick={() => view.sortBy('name')}
 						>
-							Run <span class="text-foreground">{arrow('name')}</span>
+							<span class="inline-flex items-center gap-1"
+								>Run <span class="text-foreground">{@render arrowOf('name')}</span></span
+							>
 						</button>
 					</th>
 					<th class="w-32 border-r border-divider px-3 py-1.5 align-bottom font-normal">
@@ -162,7 +186,7 @@
 			<tbody>
 				{#each view.rows as row (row.row)}
 					{@const run = ws.page.runs[row.row]}
-					<tr class="h-10 border-b border-divider hover:bg-muted">
+					<tr class="h-9 border-b border-divider hover:bg-muted">
 						<th scope="row" class="sticky left-0 z-1 bg-background px-4 text-left font-normal">
 							<span class="flex items-center gap-2.5">
 								{#if !readonly}

@@ -224,6 +224,22 @@ async def list_columns(
 # ---------------------------------------------------------------------- runs table
 
 
+@public.get("/projects/{entity}/{project}/runs/values")
+async def run_values(
+    project: ReadableProjectDep,
+    store: StoreDep,
+    keys: Annotated[str, Query(description="comma separated columns, e.g. state,owner,tags")],
+    filter: Annotated[str | None, Query(description="Mongo-style filter as JSON")] = None,
+) -> Response:
+    """Each value of ``keys`` the runs have (those ``filter`` selects), and how many runs have
+    it, most first: what a column of the runs table can be filtered to. A list's elements count
+    one by one."""
+    selection = RunSelection(filter=filter).selection()
+    names = [key.strip() for key in keys.split(",") if key.strip()][:32]
+    counted = await query.value_counts(store.db.pool, project.pk, selection, names)
+    return JSONResponse({"values": counted})
+
+
 @public.get("/projects/{entity}/{project}/runs")
 async def get_runs(
     project: ReadableProjectDep,

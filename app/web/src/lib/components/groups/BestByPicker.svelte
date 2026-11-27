@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import TrophyIcon from '@lucide/svelte/icons/trophy';
+	import MenuSearch from '#lib/components/MenuSearch.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { bestLabel, bestWords, isInternalKey, metricLabel, type BestOrder } from '#lib/groups.ts';
@@ -20,6 +21,8 @@
 		quiet?: boolean;
 		/** Which edge of the button the menu lines up with. */
 		align?: 'start' | 'end';
+		/** Its words while nothing is picked. */
+		placeholder?: string;
 	}
 
 	let {
@@ -30,7 +33,8 @@
 		disabled = false,
 		title,
 		quiet = false,
-		align = 'start'
+		align = 'start',
+		placeholder
 	}: Props = $props();
 
 	let query = $state('');
@@ -56,7 +60,9 @@
 			>
 				<TrophyIcon />
 				<span class="sr-only">Best by</span>
-				<span class="max-w-48 truncate font-medium text-foreground">{bestLabel(key, order)}</span>
+				<span class="max-w-48 truncate font-medium text-foreground"
+					>{key ? bestLabel(key, order) : (placeholder ?? bestLabel(key, order))}</span
+				>
 				<ChevronDownIcon class="text-muted-foreground" />
 			</Button>
 		{/snippet}
@@ -76,12 +82,14 @@
 		<DropdownMenu.Group>
 			<DropdownMenu.Label>Summary column</DropdownMenu.Label>
 			<!-- Typing here filters the columns; keys go to the input, not the menu's typeahead. -->
-			<input
-				class="mx-1 mb-1 h-7 w-[calc(100%-0.5rem)] rounded-md border border-input bg-background px-2 text-[13px] outline-none placeholder:text-faint focus-visible:border-ring"
-				placeholder="Find a column"
-				aria-label="Find a summary column"
+			<MenuSearch
+				class="-mx-1 mb-1 border-t"
+				placeholder="Search columns…"
+				label="Search summary columns"
 				bind:value={query}
-				onkeydown={(e) => e.stopPropagation()}
+				onkeydown={(e) => {
+					if (e.key !== 'Escape' && e.key !== 'Tab') e.stopPropagation();
+				}}
 			/>
 			<div class="max-h-64 overflow-y-auto">
 				<DropdownMenu.RadioGroup

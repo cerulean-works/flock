@@ -60,8 +60,15 @@ export const load: LayoutServerLoad = async ({ params, cookies, locals }) => {
 	// A super admin sees every organization: with none, the server's setup is halfway (the
 	// account was made, its first workspace not yet), and resumes.
 	if (me?.is_superadmin && listedOrgs.size === 0) redirect(303, '/setup');
-	const org = known ?? me?.default_org ?? null;
-	const projects = listed ?? (org ? await listProjects(org) : []);
+	// An org in the address that doesn't exist (a 404 is on its way) isn't shown as one: the
+	// sidebar stays on the viewer's own. Signed in, `/orgs` lists those they can see (all of
+	// them for a super admin), and others show themselves to outsiders.
+	const member = !!known && !!me?.orgs.some((o) => o.name === known);
+	const outsider =
+		known && signedIn && !member && !listedOrgs.has(known) ? await outsideView(known) : null;
+	const real = !known || !signedIn || member || listedOrgs.has(known) || !!outsider || !!seen;
+	const org = (real ? known : null) ?? me?.default_org ?? null;
+	const projects = (real ? listed : null) ?? (org ? await listProjects(org) : []);
 
 	// A super admin can open an org they aren't in: it's listed too while they're in it.
 	const visiting = org && me?.is_superadmin && !me.orgs.some((o) => o.name === org);
@@ -81,7 +88,8 @@ export const load: LayoutServerLoad = async ({ params, cookies, locals }) => {
 	const current = orgs.find((o) => o.name === org);
 	const access: Access = me?.is_superadmin ? 'admin' : (current?.role ?? 'public');
 	// Signed in, but not in this org: how it shows itself to outsiders.
-	const outside = org && !current ? (seen ?? (signedIn ? await outsideView(org) : null)) : null;
+	const outside =
+		org && !current ? (seen ?? outsider ?? (signedIn ? await outsideView(org) : null)) : null;
 	return {
 		shell: {
 			/** Who the pages act as: the signed-in user; null for a signed-out visitor. */

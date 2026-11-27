@@ -4,6 +4,7 @@
 	import { datasetsHref } from '#lib/datasets.ts';
 	import { layerOpen, typing } from '#lib/keys.svelte.ts';
 	import { modelsHref } from '#lib/models.ts';
+	import { storageHref } from '#lib/storage.ts';
 	import { entityHref, orgHref } from '#lib/workspace/url.ts';
 	import CommandPalette from './CommandPalette.svelte';
 	import ShortcutSheet from './ShortcutSheet.svelte';
@@ -24,10 +25,12 @@
 	function destination(key: string): string | null {
 		if (!org) return null;
 		if (key === 'r') return entityHref(org);
-		if (key === 's') return orgHref(org);
+		// Settings on Linear's key, so S is Storage's beside D and M.
+		if (key === ',') return orgHref(org);
 		if (!page.data.shell?.s3) return null;
 		if (key === 'd') return datasetsHref(org);
 		if (key === 'm') return modelsHref(org);
+		if (key === 's') return storageHref(org);
 		return null;
 	}
 

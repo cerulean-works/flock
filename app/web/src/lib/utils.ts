@@ -159,7 +159,7 @@ function expo(v: number, digits: number) {
 		.replace('e+', 'e');
 }
 
-/** General-purpose number for table cells and readouts. */
+/** General-purpose number for table cells and readouts: 4 significant figures (the full value goes in a hint or a copy). */
 export function formatNumber(v: number): string {
 	if (Number.isNaN(v)) return '–';
 	if (!Number.isFinite(v)) return v > 0 ? '∞' : '-∞';
@@ -167,7 +167,7 @@ export function formatNumber(v: number): string {
 	const a = Math.abs(v);
 	if (Number.isInteger(v) && a < 1e15) return group(String(v));
 	if (a >= 1e9 || a < 1e-4) return expo(v, 3);
-	const s = String(+v.toPrecision(5));
+	const s = String(+v.toPrecision(4));
 	const dot = s.indexOf('.');
 	return dot === -1 ? group(s) : group(s.slice(0, dot)) + s.slice(dot);
 }

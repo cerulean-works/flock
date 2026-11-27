@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { accountHref } from '#lib/settings.ts';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { datasetUri, pyString, readSnippet } from '#lib/datasets.ts';
 	import type { Scope } from '#lib/scope.ts';
@@ -64,7 +64,7 @@
 			You can create S3 keys on your
 			<a
 				class="text-link underline-offset-3 hover:underline"
-				href="{resolve('/(app)/account')}#s3-keys">account page</a
+				href={accountHref('keys', { keys: 's3' })}>account page</a
 			>.
 		</p>
 	</Dialog.Content>

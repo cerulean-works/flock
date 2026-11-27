@@ -108,7 +108,7 @@
 						<li class={[GRID, 'min-h-11 border-b border-divider py-1.5']}>
 							<Input
 								name="new_type"
-								class="h-8 max-sm:col-span-2"
+								class="h-8"
 								placeholder="Add a GPU, e.g., H200"
 								aria-label="GPU type to price"
 								autocomplete="off"
@@ -116,7 +116,8 @@
 								maxlength={64}
 								bind:value={newType}
 							/>
-							<span></span>
+							<!-- On a phone the type and its price share the row. -->
+							<span class="hidden sm:block"></span>
 							<span class="hidden sm:block"></span>
 							<Input
 								name="new_rate"

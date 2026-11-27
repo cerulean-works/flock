@@ -6,18 +6,22 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { enhance } from '$app/forms';
 	import KeysSection from '#lib/components/KeysSection.svelte';
-	import ProfileHeader from '#lib/components/ProfileHeader.svelte';
+	import ProfileSettings from '#lib/components/ProfileSettings.svelte';
+	import SettingsPage from '#lib/components/SettingsPage.svelte';
+	import SettingsSection from '#lib/components/SettingsSection.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
+	import { ACCOUNT_SECTIONS, settingsTarget } from '#lib/settings.ts';
 	import type { Theme } from '#lib/theme.ts';
 	import { setTheme } from '#lib/theme.svelte.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
-	import Page from '#lib/components/Page.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+
+	const label = (slug: string) => ACCOUNT_SECTIONS.find((s) => s.slug === slug)?.label ?? slug;
 
 	const revocation = new Mutation({ success: () => 'Machine signed out', toastErrors: true });
 	const defaultOrg = new Mutation<{ org: string }>({
@@ -41,15 +45,18 @@
 	<title>Account · Flock</title>
 </svelte:head>
 
-<Page width="home">
-	<!-- One column for every section, so text, forms and lists share an edge. -->
-	<div class="mx-auto max-w-3xl">
-		<ProfileHeader profile={data.profile} />
-
-		<section class="mt-10">
-			<h2 class="text-2xl tracking-[-0.01em]">Organizations</h2>
+<SettingsPage title="Account" target={(hash) => settingsTarget(hash, 'account')}>
+	<SettingsSection id="profile" title={label('profile')}>
+		<ProfileSettings profile={data.profile} />
+	</SettingsSection>
+	<SettingsSection
+		id="organizations"
+		title={label('organizations')}
+		count={data.profile.orgs.length}
+	>
+		<section>
 			{#if data.profile.orgs.length}
-				<ul class="mt-3 border-t border-divider">
+				<ul class="border-t border-divider">
 					{#each data.profile.orgs as org (org.name)}
 						<li class="flex h-12 items-center gap-3 border-b border-divider">
 							<a
@@ -61,7 +68,7 @@
 								{org.role === 'admin' ? 'Admin' : 'Member'}
 							</Badge>
 							{#if org.name === data.profile.default_org}
-								<span class="text-xs text-muted-foreground">
+								<span class="ml-auto text-xs text-muted-foreground">
 									default for <code class="font-mono">wandb.init</code>
 								</span>
 							{:else}
@@ -88,36 +95,37 @@
 					{/each}
 				</ul>
 			{:else}
-				<p class="mt-3 text-muted-foreground">None yet.</p>
+				<p class="text-muted-foreground">None yet.</p>
 			{/if}
 		</section>
-
+	</SettingsSection>
+	<SettingsSection id="keys" title={label('keys')}>
 		<KeysSection
 			keys={data.keys}
 			s3={data.s3}
 			defaultOrg={data.profile.default_org}
 			now={data.now}
 		/>
-
-		<section class="mt-10">
-			<h2 class="text-2xl tracking-[-0.01em]">Command line sign-ins</h2>
-			<p class="mt-2 text-muted-foreground">
+	</SettingsSection>
+	<SettingsSection id="sign-ins" title={label('sign-ins')}>
+		<section>
+			<p class="text-muted-foreground">
 				Machines signed in with <code class="font-mono text-[0.9em]">flock login</code>.
 			</p>
-			<table class="mt-4 w-full table-fixed border-collapse text-[13.5px]">
+			<table class="mt-4 w-full table-fixed border-collapse text-[13px]">
 				<thead>
-					<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
-						<th class="pr-2 font-medium">Machine</th>
-						<th class="hidden w-40 px-2 font-medium sm:table-cell">Signed in</th>
-						<th class="w-40 px-2 font-medium">Last used</th>
+					<tr class="h-9 border-b border-divider text-left text-xs text-muted-foreground">
+						<th class="pr-2 font-normal">Machine</th>
+						<th class="hidden w-40 px-2 font-normal sm:table-cell">Signed in</th>
+						<th class="w-32 px-2 font-normal">Last used</th>
 						<th class="w-12"><span class="sr-only">Revoke</span></th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each data.cliSessions as session (session.id)}
 						{@const name = session.name || 'Unnamed machine'}
-						<tr class="h-12 border-b border-divider">
-							<td class="truncate pr-2 font-medium">{name}</td>
+						<tr class="h-11 border-b border-divider">
+							<td class="truncate pr-2">{name}</td>
 							<td class="hidden px-2 text-muted-foreground sm:table-cell">
 								{dateTime(session.created_at)}
 							</td>
@@ -143,7 +151,7 @@
 							</td>
 						</tr>
 					{:else}
-						<tr class="h-12 border-b border-divider">
+						<tr class="h-11 border-b border-divider">
 							<td colspan="4" class="pr-2 text-muted-foreground">
 								None yet. Run <code class="font-mono text-[0.9em]">flock login</code> to sign in from
 								a terminal.
@@ -153,10 +161,10 @@
 				</tbody>
 			</table>
 		</section>
-
-		<section class="mt-10">
-			<h2 class="text-2xl tracking-[-0.01em]">Appearance</h2>
-			<p class="mt-2 text-muted-foreground">
+	</SettingsSection>
+	<SettingsSection id="appearance" title={label('appearance')}>
+		<section>
+			<p class="text-muted-foreground">
 				System follows your computer’s light or dark setting. It’s saved in this browser.
 			</p>
 			<div
@@ -182,5 +190,5 @@
 				{/each}
 			</div>
 		</section>
-	</div>
-</Page>
+	</SettingsSection>
+</SettingsPage>

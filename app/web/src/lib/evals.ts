@@ -184,6 +184,25 @@ export const withItemsView = (url: { pathname: string; search: string }, view: I
 export const signedMargin = (m: number | null) =>
 	m === null ? '–' : `${m > 0 ? '+' : m < 0 ? '−' : ''}${Math.abs(m).toFixed(2)}`;
 
+/** A question as the items show it: without the "Answer:" cue the prompt ends with. */
+export const shownQuestion = (text: string) => text.replace(/\s*Answer:\s*$/, '');
+
+/**
+ * A doc id cut for its column: the part that truncates and the tail that always shows, so
+ * `hellaswag-0123` reads `hella…-0123` when narrow.
+ */
+export function docIdParts(id: string): [string, string] {
+	const cut = id.lastIndexOf('-');
+	return cut > 0 ? [id.slice(0, cut), id.slice(cut)] : [id, ''];
+}
+
+/**
+ * Why a run has no token texts, in the page's words: a failed fetch of the tokenizer (an HTTP
+ * error from its hub) says only that its source is unavailable.
+ */
+export const tokenNote = (note: string) =>
+	/https?:\/\/|huggingface|\b[45]\d\d\b/i.test(note) ? 'Source unavailable' : note;
+
 /**
  * Whether a key belongs to what it was typed in, not to a page's shortcuts: a field, a select or
  * list, a menu, a dialog or editable text.

@@ -67,7 +67,7 @@ describe('FolderView', () => {
 		cursor: 'next'
 	};
 
-	it('lists datasets, then folders, then files, and loads more pages', async () => {
+	it('lists folders, then datasets, then files, and loads more pages below what is shown', async () => {
 		const calls = serve({
 			'/api/datasets/acme/at': () => ({
 				...folder,
@@ -87,7 +87,7 @@ describe('FolderView', () => {
 			[
 				...document.querySelectorAll('[role="rowgroup"] [role="row"] [role="cell"]:first-child')
 			].map((td) => td.textContent!.trim());
-		expect(names()).toEqual(['mmlu', 'deep', 'notes.md']);
+		expect(names()).toEqual(['deep', 'mmlu', 'notes.md']);
 		// (Version and size columns show on wider screens.)
 		await expect.element(screen.getByText('v12')).toBeInTheDocument();
 		await expect.element(screen.getByText('2.0 KB')).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe('FolderView', () => {
 			'/storage/acme/flock-datasets/eval/notes.md'
 		);
 		await screen.getByRole('button', { name: 'Load more' }).click();
-		await vi.waitFor(() => expect(names()).toEqual(['mmlu', 'old', 'deep', 'notes.md']));
+		await vi.waitFor(() => expect(names()).toEqual(['deep', 'mmlu', 'notes.md', 'old']));
 		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval&cursor=next&details=true');
 		await expect.element(screen.getByText('Unknown')).toBeInTheDocument();
 		await expect.element(screen.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
@@ -285,7 +285,7 @@ describe('DatasetView', () => {
 		expect(code).toContain('"aws_access_key_id": "YOUR_ACCESS_KEY_ID",');
 		expect(code).toContain('"allow_http": "true",');
 		expect(dialog.getByRole('link', { name: 'account page' }).element().getAttribute('href')).toBe(
-			'/account#s3-keys'
+			'/account?keys=s3#keys'
 		);
 	});
 
@@ -487,9 +487,9 @@ describe('DatasetView', () => {
 		await expect.element(list.getByText('latest')).toBeVisible();
 		// It opens on the version shown, checked.
 		await expect
-			.element(list.getByRole('option', { name: /Version 3/ }))
+			.element(list.getByRole('option', { name: /\bv3\b/ }))
 			.toHaveAttribute('aria-selected', 'true');
-		await list.getByRole('option', { name: /Version 2/ }).click();
+		await list.getByRole('option', { name: /\bv2\b/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=2', { reset: false });
 		await screen.getByRole('button', { name: /Version 3/ }).click();
 		// Opening focuses the search box; a search narrows the list to the tag.
@@ -523,7 +523,7 @@ describe('DatasetView', () => {
 		await expect.element(screen.getByText('__lance_commit_message')).not.toBeInTheDocument();
 		await expect.element(screen.getByText('flock.source')).toBeVisible();
 		// Adding a tag sits in the row's menu, and removing one warns first.
-		await screen.getByRole('button', { name: 'Version 5 actions' }).click();
+		await screen.getByRole('button', { name: 'Actions for Version 5' }).click();
 		await expect.element(screen.getByRole('menuitem', { name: 'Add tag…' })).toBeVisible();
 	});
 
@@ -655,7 +655,7 @@ describe('a dataset’s visibility', () => {
 		await screen.getByRole('tab', { name: 'Versions' }).click();
 		await expect.element(screen.getByLabelText('View version 4')).toBeVisible();
 		await expect
-			.element(screen.getByRole('button', { name: 'Version 4 actions' }))
+			.element(screen.getByRole('button', { name: 'Actions for Version 4' }))
 			.not.toBeInTheDocument();
 	});
 });

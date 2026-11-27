@@ -1,7 +1,7 @@
 <script lang="ts">
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
-	import XIcon from '@lucide/svelte/icons/x';
+	import FilterChip from '#lib/components/FilterChip.svelte';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import ColumnFilter, { type FilterValue } from '#lib/components/ColumnFilter.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -17,6 +17,7 @@
 	import { goto } from '$app/navigation';
 	import { pollFeed, RUN_STATES, type RunFilters } from '#lib/data/feed.svelte.ts';
 	import { wandbSnippet } from '#lib/snippets.ts';
+	import { valuesChip } from '#lib/workspace/filters.ts';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
@@ -90,7 +91,10 @@
 		Object.values(FILTERED)
 			.filter(({ key }) => data.filters[key].length)
 			.map(({ key, label }) => ({
-				label: `${label}: ${data.filters[key].map((v) => named(key, v)).join(', ')}`,
+				parts: valuesChip(
+					label,
+					data.filters[key].map((v) => named(key, v))
+				),
 				clear: () => setFilter(key, [])
 			}))
 	);
@@ -119,10 +123,12 @@
 	     filled, while the column filters the list. The list is newest first: Updated carries
 	     the arrow (it can't sort by other columns). -->
 	{@const f = FILTERED[c.id]}
-	<span class={['group/h flex w-full items-center gap-1', c.align === 'end' && 'justify-end']}>
-		<span class="truncate">{c.label}</span>
+	<span class="group/h flex w-full items-center gap-1.5">
+		<span class={['min-w-0 flex-1 truncate', c.align === 'end' && 'text-right']}>{c.label}</span>
 		{#if c.id === 'started'}
-			<ArrowDownIcon class="size-3 flex-none text-foreground" aria-label="newest first" />
+			<span class="grid size-4 flex-none place-items-center">
+				<ArrowDownIcon class="size-3 text-foreground" aria-label="newest first" />
+			</span>
 		{/if}
 		{#if f}
 			<ColumnFilter
@@ -191,24 +197,14 @@
 			/>
 		{/if}
 		{#if chips.length}
-			<!-- The filters in effect, one chip each (the project Runs' look); the cross drops one. -->
+			<!-- The filters in effect, one chip each, as on project Runs; the cross drops one. -->
 			<div
 				class="flex min-h-9 flex-wrap items-center gap-1.5 border-b border-divider py-1 pr-4 pl-5"
 				aria-label="Filters"
 				role="group"
 			>
-				{#each chips as chip (chip.label)}
-					<span class="inline-flex h-6 max-w-80 items-center rounded-md bg-muted text-xs">
-						<span class="min-w-0 truncate py-0.5 pr-1 pl-2">{chip.label}</span>
-						<button
-							type="button"
-							class="grid h-6 w-6 flex-none place-items-center rounded-r-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-							aria-label="Remove filter {chip.label}"
-							onclick={chip.clear}
-						>
-							<XIcon class="size-3" />
-						</button>
-					</span>
+				{#each chips as chip (chip.parts.label)}
+					<FilterChip parts={chip.parts} onremove={chip.clear} />
 				{/each}
 			</div>
 		{/if}

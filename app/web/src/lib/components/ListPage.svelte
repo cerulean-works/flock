@@ -3,8 +3,6 @@
 	import type { HTMLAttributes } from 'svelte/elements';
 	import Page from '#lib/components/Page.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
-	import SelectionBar from '#lib/components/SelectionBar.svelte';
-	import type { Selection } from '#lib/selection.svelte.ts';
 	import type { Crumb } from '#lib/storage.ts';
 
 	interface Props extends HTMLAttributes<HTMLElement> {
@@ -25,9 +23,6 @@
 		location?: Snippet;
 		/** The toolbar's right side: filters, views, a URI to copy. */
 		controls?: Snippet;
-		/** While rows are checked, the toolbar's left side is the selection and these actions. */
-		selection?: Selection | null;
-		selected?: Snippet;
 		/** The list, or what stands in for it (an empty state). */
 		children: Snippet;
 	}
@@ -42,19 +37,14 @@
 		heading,
 		location,
 		controls,
-		selection = null,
-		selected,
 		children,
 		...main
 	}: Props = $props();
 
-	const selecting = $derived(!!selection?.size && !!selected);
 	// Without a heading or a place to name, the controls need no row of their own: they join the
 	// header's actions.
-	const inline = $derived(!heading && !location && !selecting && !!controls);
-	const toolbar = $derived(
-		heading || location || selecting || (controls && !inline) ? bar : undefined
-	);
+	const inline = $derived(!heading && !location && !!controls);
+	const toolbar = $derived(heading || location || (controls && !inline) ? bar : undefined);
 </script>
 
 <!--
@@ -64,9 +54,7 @@
 -->
 {#snippet bar()}
 	<div class="flex min-w-0 items-center">
-		{#if selecting && selection && selected}
-			<SelectionBar {selection}>{@render selected()}</SelectionBar>
-		{:else if location}
+		{#if location}
 			{@render location()}
 		{:else if heading}
 			<h2 class="text-[13px] font-medium whitespace-nowrap max-sm:sr-only">{heading}</h2>

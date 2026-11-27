@@ -11,32 +11,26 @@
 </script>
 
 <script lang="ts">
-	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
-	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
-	import PinIcon from '@lucide/svelte/icons/pin';
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import TagIcon from '@lucide/svelte/icons/tag';
 	import ClipboardCheckIcon from '@lucide/svelte/icons/clipboard-check';
 	import Columns2Icon from '@lucide/svelte/icons/columns-2';
 	import Rows2Icon from '@lucide/svelte/icons/rows-2';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import XIcon from '@lucide/svelte/icons/x';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-	import type { Snippet } from 'svelte';
+	import type { ComponentProps, Snippet } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ResolvedPathname } from '$app/types';
-	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
-	import { compareHref } from '#lib/evals.ts';
 	import { EvalsView } from '#lib/evals-view.svelte.ts';
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Crumb } from '#lib/storage.ts';
 	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
-	import { describeFilters } from '#lib/workspace/filters.ts';
+	import { chipParts, describeFilters } from '#lib/workspace/filters.ts';
+	import { columnLabel } from '#lib/workspace/columns.ts';
+	import FilterChip from '#lib/components/FilterChip.svelte';
 	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
 	import { keyboard } from '#lib/keys.svelte.ts';
 	import {
@@ -45,8 +39,9 @@
 		type ProjectView
 	} from '#lib/workspace/project-view.svelte.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
+	import { MediaQuery } from 'svelte/reactivity';
 	import ChartsPane from './ChartsPane.svelte';
-	import ColumnsMenu from './ColumnsMenu.svelte';
+	import ViewSettings, { type DisplaySetting } from './ViewSettings.svelte';
 	import DeleteRunsDialog from './DeleteRunsDialog.svelte';
 	import EditRunDialog from './EditRunDialog.svelte';
 	import EmptyState from './EmptyState.svelte';
@@ -57,12 +52,10 @@
 	import PageHeader from './PageHeader.svelte';
 	import Pager from './Pager.svelte';
 	import PanelEditor from './PanelEditor.svelte';
-	import PlotSettings from './PlotSettings.svelte';
 	import ResizeHandle from './ResizeHandle.svelte';
 	import RunFilters from './RunFilters.svelte';
 	import RunSearch from './RunSearch.svelte';
 	import RunsTable from './RunsTable.svelte';
-	import TagRunsDialog from './TagRunsDialog.svelte';
 
 	/**
 	 * A page of runs with the Runs page's tools: the table, the charts, or both side by side,
@@ -84,8 +77,6 @@
 		chartTools?: Snippet;
 		/** At the toolbar's right end, before the charts' own controls. */
 		trailing?: Snippet;
-		/** Filter and Columns as icon buttons, for a toolbar with more in it (a group's). */
-		compactTools?: boolean;
 		/** The view a URL that names none opens in. */
 		initialView: ProjectView;
 		/** Whether a view picked here is the one the next project opens in (the Runs page). */
@@ -107,12 +98,14 @@
 		tableH?: number;
 		/** Outside the org: read-only, with no run actions (D116). */
 		readonly: boolean;
-		/** Whether the filters offer "My runs" (not among a group's few runs). */
-		mine?: boolean;
 		/** Whether the table offers its Evals preset (the Runs page). */
 		evalPreset?: boolean;
 		/** Whether the preset is on until the viewer turns it off (a group of eval runs). */
 		evalsFirst?: boolean;
+		/** Best by on the table's headers (a group's page; see RunsTable). */
+		best?: ComponentProps<typeof RunsTable>['best'];
+		/** How the runs are drawn (a group's Group by, Color by, …), atop the view's settings. */
+		display?: DisplaySetting[];
 	}
 
 	let {
@@ -125,7 +118,6 @@
 		actions,
 		chartTools,
 		trailing,
-		compactTools = false,
 		initialView,
 		remember = false,
 		primary = null,
@@ -137,9 +129,10 @@
 		stacked: savedStacked = false,
 		tableH: savedTableH = TABLE_H.initial,
 		readonly,
-		mine = true,
 		evalPreset = false,
-		evalsFirst = false
+		evalsFirst = false,
+		best = null,
+		display = []
 	}: Props = $props();
 
 	const ws = getWorkspace();
@@ -361,9 +354,12 @@
 		const { entity, project } = ws.meta;
 		keyboard.runs = ws.page.runs.map((r, i) => ({
 			label: ws.nameOf(i),
-			href: runHref(entity, project, r.id)
+			href: runHref(entity, project, r.id),
+			project
 		}));
-		return () => (keyboard.runs = []);
+		return () => {
+			keyboard.runs = [];
+		};
 	});
 
 	// Keep the neighbouring pages warm so paging is instant. Runs in idle time after hydration
@@ -383,13 +379,24 @@
 
 	let table = $state<RunsTable>();
 
-	const focusLabel = $derived(ws.focus == null ? '' : ws.page.runs[ws.focus].name);
-	const focusPinned = $derived(ws.focus != null && ws.pinned === ws.focus && ws.hover == null);
-
 	/** The runs shown are a search's or a filter's, not all of the page's. */
 	let more = $state(false);
 	let filterControl = $state<{ edit: () => void; pick: () => void } | null>(null);
 	const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
+	/** A column as its header names it, for the chips. */
+	const labelOf = (key: string) => {
+		const col = ws.meta.columns.find((c) => c.key === key);
+		return col ? columnLabel(col) : key;
+	};
+	const me = $derived(page.data.shell?.me?.id as number | undefined);
+
+	/** The search dropped, from the first page (its chip on a phone, where the field hides). */
+	function dropSearch() {
+		const params = new URLSearchParams(page.url.search);
+		applyRunQuery(params, { ...ws.page.query, search: '', page: 1 });
+		ws.selected.clear();
+		void goto(ws.href(params), { reset: false });
+	}
 
 	/** The filters without the one at `i`, from the first page. */
 	function dropFilter(i: number) {
@@ -416,10 +423,15 @@
 	const tableShown = $derived(view !== 'charts');
 	const chartsShown = $derived(view !== 'table');
 	/** Runs are picked in the table: the toolbar is their actions'. */
-	const selecting = $derived(tableShown && ws.selectedRows.length > 0 && !readonly);
 	/** Where the charts start: past the names, or past the table beside them. */
-	const below = $derived(view === 'visualize' && stacked);
-	const paneLeft = $derived(below ? 0 : view === 'visualize' ? shownTableW : nameW);
+	/** A phone: Visualize always stacks, and Charts takes the whole width, without the names. */
+	const phone = new MediaQuery('(max-width: 639px)');
+	const below = $derived(view === 'visualize' && (stacked || phone.current));
+	const paneLeft = $derived(
+		below ? 0 : view === 'visualize' ? shownTableW : phone.current ? 0 : nameW
+	);
+	/** The phone's row of controls under the bar, whose room the page below makes. */
+	let moreH = $state(0);
 </script>
 
 <svelte:window {onkeydown} />
@@ -431,11 +443,7 @@
 >
 	<PageHeader {title} {trail} {subtitleTitle} {leading} {badges} {subtitle} {actions}>
 		{#snippet toolbar()}
-			<Tabs.Root
-				value={view}
-				onValueChange={(v) => setView(v as ProjectView)}
-				class={selecting ? 'max-sm:hidden' : undefined}
-			>
+			<Tabs.Root value={view} onValueChange={(v) => setView(v as ProjectView)}>
 				<!-- No counts, so the toggle keeps its width from page to page. -->
 				<Tabs.List aria-label="View">
 					<Tabs.Trigger value="table" {@attach hint('Table  T')}>Table</Tabs.Trigger>
@@ -467,55 +475,21 @@
 			</Tabs.Root>
 			<span class="flex-1"></span>
 
-			{#if selecting}
-				<span
-					class="selection-count mr-1 text-[13px] font-medium whitespace-nowrap tabular-nums"
-					role="status"
-				>
-					{ws.selectedRows.length} selected
-				</span>
-				<!-- Two eval runs, doc by doc (025 D185): not offered for a run known not to be one. A
-				pair without results files reaches the page, which says why. -->
-				{#if ws.selectedRows.length === 2 && ws.selectedRows.every( (r) => [undefined, 'eval'].includes(ws.cell(r, 'job_type') as string | undefined) )}
-					{@const [a, b] = ws.selectedRows.map((r) => ws.page.runs[r].id)}
-					<Button
-						variant="quiet"
-						size="bar"
-						data-sveltekit-preload-data="tap"
-						href={compareHref(
-							ws.meta.entity,
-							ws.meta.project,
-							a,
-							`${ws.meta.entity}/${ws.meta.project}/${b}`
-						)}
-					>
-						<GitCompareArrowsIcon /> <span class="max-sm:sr-only">Compare items</span>
-					</Button>
-				{/if}
-				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('tag')}
-					><TagIcon /> <span class="max-sm:sr-only">Tags</span></Button
-				>
-				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('move')}>
-					<FolderInputIcon /> <span class="max-sm:sr-only">Move</span>
-				</Button>
+			<!-- Before the icons: its words change width (Show / Hide), so the icons stay put. -->
+			{#if evalsShown && evalsView.others}
+				{@const others = `${evalsView.others === 1 ? '1 run' : `${evalsView.others} runs`} scored on other settings`}
 				<Button
 					variant="quiet"
 					size="bar"
-					class="hover:text-destructive"
-					onclick={() => ws.openDialog('delete')}
+					aria-label="{evalsView.showOther ? 'Hide' : 'Show'} {others}"
+					onclick={() => (evalsView.showOther = !evalsView.showOther)}
 				>
-					<Trash2Icon /> <span class="max-sm:sr-only">Delete</span>
+					<!-- Short on a phone, where the tabs need the room. -->
+					<span class="max-sm:hidden">{evalsView.showOther ? 'Hide' : 'Show'} {others}</span>
+					<span class="sm:hidden">{evalsView.showOther ? '−' : '+'}{evalsView.others} other</span>
 				</Button>
-				<Button
-					variant="quiet"
-					size="icon-bar"
-					{@attach hint('Clear selection  Esc')}
-					aria-label="Clear selection"
-					onclick={() => ws.selected.clear()}
-				>
-					<XIcon />
-				</Button>
-			{:else if ws.page.total > 0 || narrowed}
+			{/if}
+			{#if ws.page.total > 0 || narrowed}
 				<!-- On a phone the controls fold behind one button and open as a row under the bar. -->
 				<Button
 					variant={more ? 'quiet-on' : 'quiet'}
@@ -528,6 +502,7 @@
 					<EllipsisIcon />
 				</Button>
 				<div
+					bind:clientHeight={moreH}
 					class={[
 						'flex items-center gap-1',
 						more
@@ -535,99 +510,80 @@
 							: 'max-sm:hidden'
 					]}
 				>
-					<!-- With no runs yet, only the view tabs: nothing here could act. -->
-					<RunSearch />
-					<RunFilters bind:this={filterControl} noMine={!mine} compact={compactTools} />
-
-					{#if tableShown}
-						{#if hasEvals && view === 'table'}
-							<Button
-								variant={evals ? 'quiet-on' : 'quiet'}
-								size="bar"
-								aria-pressed={evals}
-								href={hrefWith(
-									evals
-										? { preset: evalsFirst ? 'off' : null, view: 'table' }
-										: { preset: evalsFirst ? null : 'evals' }
-								)}
-								data-sveltekit-replacestate
-								{@attach hint('Eval runs by suites, ranked')}
-							>
-								<ClipboardCheckIcon /> Evals
-							</Button>
-						{/if}
-						{#if evalsShown}
-							<ColumnsMenu
-								keys={evalsView.keys}
-								onjump={(key) => evalsTable?.scrollToColumn(key)}
-							/>
-						{:else}
-							<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} compact={compactTools} />
-						{/if}
-					{/if}
+					<!-- With no runs yet, only the view tabs: nothing here could act. Add panel first,
+					     so the icons after it stay put between Table and the views with charts. -->
 					{#if chartsShown}
-						<PlotSettings compact={compactTools} />
-						<!-- Named in every view, Visualize too; on a phone the icon alone. -->
-						<Button variant="quiet" size="bar" onclick={() => ws.newPanel()}>
-							<PlusIcon /> <span class="max-sm:sr-only">Add panel</span>
+						<Button
+							variant="quiet"
+							size="icon-bar"
+							aria-label="Add panel"
+							{@attach hint('Add panel')}
+							onclick={() => ws.newPanel()}
+						>
+							<PlusIcon />
 						</Button>
 					{/if}
+					<RunSearch />
+					<RunFilters bind:this={filterControl} />
+
+					{#if tableShown && hasEvals && view === 'table'}
+						<Button
+							variant={evals ? 'quiet-on' : 'quiet'}
+							size="icon-bar"
+							aria-pressed={evals}
+							aria-label="Evals"
+							href={hrefWith(
+								evals
+									? { preset: evalsFirst ? 'off' : null, view: 'table' }
+									: { preset: evalsFirst ? null : 'evals' }
+							)}
+							data-sveltekit-replacestate
+							{@attach hint('Evals: runs by suite, ranked')}
+						>
+							<ClipboardCheckIcon />
+						</Button>
+					{/if}
+					<ViewSettings
+						columns={!tableShown
+							? null
+							: evalsShown
+								? { keys: evalsView.keys, onjump: (key) => evalsTable?.scrollToColumn(key) }
+								: { onjump: (key) => table?.scrollToColumn(key) }}
+						charts={chartsShown}
+						{display}
+					/>
 				</div>
 			{/if}
-			<!-- Outside the selection's actions too: the second run to compare may be one of these. -->
-			{#if evalsShown && evalsView.others}
-				<Button
-					variant="quiet"
-					size="bar"
-					onclick={() => (evalsView.showOther = !evalsView.showOther)}
-				>
-					{evalsView.showOther ? 'Hide' : 'Show'}
-					{evalsView.others} on other settings
-				</Button>
-			{/if}
-			{#if view === 'charts' && focusLabel}
-				<Badge
-					variant="secondary"
-					class="focus-label max-w-[46%] text-muted-foreground"
-					{@attach hint(focusPinned ? `${focusLabel} (pinned)` : focusLabel)}
-				>
-					{#if focusPinned}<PinIcon aria-label="Pinned" />{/if}
-					<span class="truncate">{focusLabel}</span>
-				</Badge>
-			{/if}
 			{@render trailing?.()}
-			{#if chartsShown && chartTools && !selecting}
+			{#if chartsShown && chartTools}
 				{@render chartTools()}
 			{/if}
 		{/snippet}
 	</PageHeader>
-	{#if ws.page.query.filters.length && !selecting}
-		<!-- The filters in effect, one chip each: a click edits them, the cross drops one. -->
+	{#if more && phone.current}
+		<!-- Room for the phone's row of controls, so it covers nothing. -->
+		<div class="flex-none" style:height="{moreH}px" aria-hidden="true"></div>
+	{/if}
+	{#if ws.page.query.filters.length || (phone.current && ws.page.query.search)}
+		<!-- The filters in effect, one chip each: a click edits them, the cross drops one. On a
+		     phone, where the search field folds away, the search too. -->
 		<div
 			class="flex min-h-9 flex-none flex-wrap items-center gap-1.5 border-b border-divider py-1 pr-4 pl-5"
 			aria-label="Filters"
 			role="group"
 		>
+			{#if phone.current && ws.page.query.search}
+				<FilterChip
+					parts={{ label: 'Name', op: 'contains', value: ws.page.query.search }}
+					onremove={dropSearch}
+				/>
+			{/if}
 			{#each ws.page.query.filters as f, i (i)}
-				{@const text = describeFilters([f], kindOf, false, ws.people)}
-				<span class="inline-flex h-6 max-w-80 items-center rounded-md bg-muted text-xs">
-					<button
-						type="button"
-						class="min-w-0 truncate rounded-l-md py-0.5 pr-1 pl-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-						onclick={() => filterControl?.edit()}
-						{@attach hint(text)}
-					>
-						{text}
-					</button>
-					<button
-						type="button"
-						class="grid h-6 w-6 flex-none place-items-center rounded-r-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-						aria-label="Remove filter {text}"
-						onclick={() => dropFilter(i)}
-					>
-						<XIcon class="size-3" />
-					</button>
-				</span>
+				<FilterChip
+					parts={chipParts(f, { label: labelOf, kind: kindOf, people: ws.people, me })}
+					onclick={() => filterControl?.edit()}
+					onremove={() => dropFilter(i)}
+				/>
 			{/each}
 		</div>
 	{/if}
@@ -640,7 +596,18 @@
 		{#if evalsShown}
 			<EvalsTable bind:this={evalsTable} view={evalsView} />
 		{:else}
-			<RunsTable bind:this={table} mode={view} {nameW} {primary} {onprimaryorder} stacked={below} />
+			<!-- Charts on a phone: the charts alone, the names would leave them no room. -->
+			<div class={['contents', view === 'charts' && 'max-sm:hidden']}>
+				<RunsTable
+					bind:this={table}
+					mode={view}
+					{nameW}
+					{primary}
+					{onprimaryorder}
+					{best}
+					stacked={below}
+				/>
+			</div>
 		{/if}
 		<ChartsPane
 			shown={chartsShown}
@@ -669,7 +636,7 @@
 			<Pager />
 			<!-- On the name column's edge, above the table and the charts beside it. The Evals table
 			     sizes its own run column. -->
-			{#if !evalsShown}
+			{#if !evalsShown && !phone.current}
 				<div
 					class={['pointer-events-none absolute top-0 left-0 z-5', !below && 'bottom-0']}
 					style:width="{nameW}px"
@@ -731,7 +698,6 @@
 <PanelEditor />
 {#if !readonly}
 	<EditRunDialog />
-	<TagRunsDialog />
 	<MoveRunsDialog />
 	<DeleteRunsDialog />
 {/if}

@@ -6,7 +6,7 @@
 
 	/**
 	 * One choice of an opened eval item, a row in the items table's own columns (027): the choice
-	 * as scored, the gold mark, and each run's share bar and numbers for it, then its tokens as
+	 * as scored, the gold mark, and each run's probability bar and numbers for it, then its tokens as
 	 * that run cut them, tinted by `heat` (030).
 	 */
 	interface Props {
@@ -67,7 +67,7 @@
 			     (Winogrande) reads after it. -->
 		<span class="whitespace-pre-wrap"
 			>{#if item.contexts}<span class="text-muted-foreground">{item.contexts[choice]}</span
-				>{/if}{item.choices[choice]}</span
+				>{/if}{item.contexts ? item.choices[choice] : item.choices[choice].trimStart()}</span
 		>
 	</th>
 	<td class="px-3 py-1">
@@ -84,35 +84,31 @@
 		{@const own = tokens?.runs[side]?.choices?.[choice]}
 		<!-- The run's numbers for this choice, short enough for its column. -->
 		{@const said = [
-			answer.share ? `share ${percent(answer.share[choice])}` : null,
 			`prob ${percent(answer.prob[choice])}`,
 			`logprob ${answer.logprob[choice].toFixed(2)}`
-		]
-			.filter(Boolean)
-			.join(' · ')}
+		].join(' · ')}
 		<!-- The run's pick: its bar solid and its numbers dark, the others lighter.
 			     Right or wrong is the row's own icon, above. -->
 		<td class="px-3 py-1" aria-label="{sides[side]}{picked ? ' (its pick)' : ''}: {said}">
-			<!-- The share as a meter (reading blue, design.md): near even under a
-				     length-normalized metric, as it is. `acc_greedy` has none. -->
-			{#if answer.share}
-				<span class="block h-1.5 rounded-full bg-muted" aria-hidden="true">
-					<span
-						class={['block h-full rounded-full', picked ? 'bg-primary' : 'bg-primary/35']}
-						style:width={percent(answer.share[choice])}
-					></span>
-				</span>
-			{/if}
-			<span
-				class={['mt-1 block text-[11px]', picked ? 'text-foreground' : 'text-muted-foreground']}
-				aria-hidden="true">{said}</span
-			>
-			{#if choice === 0 && notes[side]}
-				<!-- No tokens for this run: why, behind an icon. -->
-				<span class="mt-1 flex text-muted-foreground">
-					<InfoHint label="Why {sides[side]} has no tokens">{notes[side]}</InfoHint>
-				</span>
-			{/if}
+			<!-- The probability as a meter (reading blue, design.md). -->
+			<span class="block h-1.5 rounded-full bg-muted" aria-hidden="true">
+				<span
+					class={['block h-full rounded-full', picked ? 'bg-primary' : 'bg-primary/35']}
+					style:width={percent(answer.prob[choice])}
+				></span>
+			</span>
+			<!-- With no tokens for this run, why sits behind an icon at the numbers' end, so the first
+			     choice is as tall as the rest. -->
+			<span class="mt-1 flex items-center gap-1 text-[11px]">
+				<span class={picked ? 'text-foreground' : 'text-muted-foreground'} aria-hidden="true"
+					>{said}</span
+				>
+				{#if choice === 0 && notes[side]}
+					<span class="flex text-muted-foreground">
+						<InfoHint label="Why {sides[side]} has no tokens">{notes[side]}</InfoHint>
+					</span>
+				{/if}
+			</span>
 			{#if own}
 				<!-- The tokens as this run cut the choice; a dot where its tokenizer couldn't name one.
 				     Hover one for its numbers. -->

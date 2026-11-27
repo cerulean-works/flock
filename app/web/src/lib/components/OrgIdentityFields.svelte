@@ -42,7 +42,7 @@
 			if (!edited) id = slugify(displayName);
 		}}
 		maxlength={128}
-		class={[large && 'h-10']}
+		class={[large && 'h-9']}
 		aria-invalid={invalid}
 		required
 	/>
@@ -62,7 +62,7 @@
 			edited = !!id;
 		}}
 		maxlength={128}
-		class={['font-mono text-[13px]', large && 'h-10']}
+		class={['font-mono text-[13px]', large && 'h-9']}
 		aria-invalid={invalid}
 		required
 	/>

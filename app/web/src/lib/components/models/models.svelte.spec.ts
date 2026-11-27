@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { page as screen } from 'vitest/browser';
+import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
 import { app, goto, invalidateAll, resetApp } from '#lib/testing/app.svelte.ts';
@@ -143,8 +143,8 @@ describe('ModelList', () => {
 		render(ModelList, { scope: global, path: '', folder: listing([entry]), now: NOW });
 		const link = screen.getByRole('link', { name: 'olmo2-1b' });
 		expect(link.element().getAttribute('href')).toBe('/models/acme/olmo2-1b');
-		await expect.element(screen.getByText('Version 14')).toBeInTheDocument();
-		await expect.element(screen.getByText('Version 12')).toBeVisible();
+		await expect.element(screen.getByText('v14')).toBeInTheDocument();
+		await expect.element(screen.getByText('v12')).toBeVisible();
 		await expect.element(screen.getByText('5.0 MB')).toBeInTheDocument();
 		await expect.element(screen.getByText('1h ago')).toBeVisible();
 	});
@@ -157,7 +157,7 @@ describe('ModelList', () => {
 		await expect.element(screen.getByText('flock models push ./model acme/my-model')).toBeVisible();
 	});
 
-	it('lists a project’s models by their last segment, then folders with their counts', async () => {
+	it('lists a project’s folders with their counts, then models by their last segment', async () => {
 		const scope = { org: 'acme', project: 'pretrain' };
 		const nested = { ...entry, name: 'eval/olmo2-1b', model: 'pretrain:eval/olmo2-1b' };
 		const folder = {
@@ -169,7 +169,8 @@ describe('ModelList', () => {
 		expect(model.element().getAttribute('href')).toBe('/acme/pretrain/models/eval/olmo2-1b');
 		const sub = screen.getByRole('link', { name: 'sweeps' });
 		expect(sub.element().getAttribute('href')).toBe('/acme/pretrain/models/eval/sweeps');
-		await expect.element(screen.getByText('4 models')).toBeVisible();
+		// Under Size, which shows from small windows up.
+		await expect.element(screen.getByText('4 models')).toBeInTheDocument();
 	});
 
 	it('shows how to save into the project when it has none', async () => {
@@ -385,11 +386,11 @@ describe('ModelView', () => {
 		await screen.getByRole('button', { name: /^Version 12/ }).click();
 		const list = screen.getByRole('listbox');
 		// One list of versions, newest first, each once with its names.
-		await expect.element(list.getByRole('option', { name: /Version 12.*Primary/ })).toBeVisible();
+		await expect.element(list.getByRole('option', { name: /\bv12\b.*Primary/ })).toBeVisible();
 		const numbers = list
 			.getByRole('option')
 			.all()
-			.map((i) => Number(/Version (\d+)/.exec(i.element().textContent!)![1]));
+			.map((i) => Number(/\bv(\d+)/.exec(i.element().textContent!)![1]));
 		expect(numbers).toEqual([...numbers].sort((x, y) => y - x));
 		expect(new Set(numbers).size).toBe(numbers.length);
 		// Found by a tag, it goes by the tag.
@@ -399,7 +400,7 @@ describe('ModelView', () => {
 			reset: false
 		});
 		await screen.getByRole('button', { name: /^Version 12/ }).click();
-		await screen.getByRole('option', { name: /Version 14/ }).click();
+		await screen.getByRole('option', { name: /\bv14\b/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/models/acme/olmo2-1b?version=14', { reset: false });
 	});
 
@@ -436,7 +437,7 @@ describe('ModelView', () => {
 		const primaryRow = screen.getByRole('row').filter({ hasText: 'Primary' });
 		expect(primaryRow.element().getAttribute('aria-current')).toBe('true');
 
-		await screen.getByRole('button', { name: 'Version 14 actions' }).click();
+		await screen.getByRole('button', { name: 'Actions for Version 14' }).click();
 		const menu = screen.getByRole('menu');
 		expect(
 			menu
@@ -455,7 +456,7 @@ describe('ModelView', () => {
 			[`${API}/olmo2-1b/-/primary`]: () => ({ ...detail(versions[0]), previous: 12 })
 		});
 		view('http://flock.test/models/acme/olmo2-1b?tab=versions');
-		await screen.getByRole('button', { name: 'Version 14 actions' }).click();
+		await screen.getByRole('button', { name: 'Actions for Version 14' }).click();
 		await screen.getByRole('menuitem', { name: 'Make primary' }).click();
 		const dialog = screen.getByRole('alertdialog');
 		await expect.element(dialog.getByText('Make version 14 primary?')).toBeVisible();
@@ -481,7 +482,7 @@ describe('ModelView', () => {
 	it('can’t make the primary version primary again', async () => {
 		serve({ [`${API}/olmo2-1b/-/versions`]: () => page(versions) });
 		view('http://flock.test/models/acme/olmo2-1b?tab=versions');
-		await screen.getByRole('button', { name: 'Version 12 actions' }).click();
+		await screen.getByRole('button', { name: 'Actions for Version 12' }).click();
 		await expect
 			.element(screen.getByRole('menuitem', { name: 'Make primary' }))
 			.toHaveAttribute('aria-disabled', 'true');
@@ -921,26 +922,49 @@ describe('DeletedModels', () => {
 describe('ModelRetention', () => {
 	const org = { name: 'acme', model_retention: null } as OrgInfo;
 
-	it('is off by default, and turns on with a number of versions', async () => {
+	it('is off by default, and asks how many to keep before it turns on', async () => {
 		render(ModelRetention, { org });
-		const input = screen.getByLabelText('Untagged versions to keep');
-		await expect.element(screen.getByRole('switch', { name: 'Retention' })).not.toBeChecked();
-		await expect.element(input).toBeDisabled();
-		await expect.element(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-		await screen.getByRole('switch', { name: 'Retention' }).click();
-		await input.fill('5');
-		await screen.getByRole('button', { name: 'Save' }).click();
-		expect(app.sent.map((s) => [s.action.split('?')[1], s.form.get('keep')])).toEqual([
-			['/modelRetention', '5']
-		]);
+		await expect.element(screen.getByRole('switch', { name: 'Model retention' })).not.toBeChecked();
+		// Off, the number isn't asked for: the confirm form asks it once.
+		await expect
+			.element(screen.getByLabelText('Untagged versions to keep', { exact: true }))
+			.not.toBeInTheDocument();
+		await screen.getByRole('switch', { name: 'Model retention' }).click();
+		// Nothing is sent yet, and the switch stays off until it's confirmed.
+		const dialog = screen.getByRole('dialog');
+		await expect.element(dialog.getByText('Turn on model retention')).toBeVisible();
+		await expect.element(screen.getByRole('switch', { name: 'Model retention' })).not.toBeChecked();
+		expect(app.sent).toEqual([]);
+		await dialog.getByLabelText('Untagged versions to keep', { exact: true }).fill('5');
+		await dialog.getByRole('button', { name: 'Turn on' }).click();
+		await expect
+			.poll(() => app.sent.map((s) => [s.action.split('?')[1], s.form.get('keep')]))
+			.toEqual([['/modelRetention', '5']]);
 	});
 
-	it('turns off by sending no number', async () => {
+	it('sends nothing when turning on is cancelled', async () => {
+		render(ModelRetention, { org });
+		await screen.getByRole('switch', { name: 'Model retention' }).click();
+		await screen.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+		await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
+		await expect.element(screen.getByRole('switch', { name: 'Model retention' })).not.toBeChecked();
+		expect(app.sent).toEqual([]);
+	});
+
+	it('saves a new number on Enter while on', async () => {
 		render(ModelRetention, { org: { ...org, model_retention: 20 } });
-		await expect.element(screen.getByLabelText('Untagged versions to keep')).toHaveValue(20);
-		await screen.getByRole('switch', { name: 'Retention' }).click();
-		await screen.getByRole('button', { name: 'Save' }).click();
-		expect(app.sent.map((s) => s.form.get('keep'))).toEqual(['']);
+		await screen.getByLabelText('Untagged versions to keep', { exact: true }).fill('8');
+		await userEvent.keyboard('{Enter}');
+		await expect.poll(() => app.sent.map((s) => s.form.get('keep'))).toEqual(['8']);
+	});
+
+	it('turns off at once, by sending no number', async () => {
+		render(ModelRetention, { org: { ...org, model_retention: 20 } });
+		await expect
+			.element(screen.getByLabelText('Untagged versions to keep', { exact: true }))
+			.toHaveValue(20);
+		await screen.getByRole('switch', { name: 'Model retention' }).click();
+		await expect.poll(() => app.sent.map((s) => s.form.get('keep'))).toEqual(['']);
 	});
 });
 

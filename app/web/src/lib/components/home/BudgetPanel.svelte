@@ -161,7 +161,7 @@
 					)}.
 					{#if admin}<a
 							class="text-link hover:underline"
-							href={orgHref(budget.org, 'deleted-projects')}>Manage</a
+							href={orgHref(budget.org, 'budget', 'deleted-projects')}>Manage</a
 						>{/if}
 				</p>
 			{/if}
@@ -186,7 +186,7 @@
 							{:else if admin}
 								<a
 									class="min-w-0 flex-1 truncate text-muted-foreground hover:text-link"
-									href={orgHref(budget.org, 'deleted-projects')}
+									href={orgHref(budget.org, 'budget', 'deleted-projects')}
 								>
 									Deleted projects
 								</a>

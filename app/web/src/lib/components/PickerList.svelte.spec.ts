@@ -72,6 +72,16 @@ describe('PickerList', () => {
 		expect(onback).toHaveBeenCalledOnce();
 	});
 
+	it('clears the box on Escape first, then goes back a level', async () => {
+		const { onback, box } = folders();
+		await box.fill('be');
+		await userEvent.keyboard('{Escape}');
+		await expect.element(box).toHaveValue('');
+		expect(onback).not.toHaveBeenCalled();
+		await userEvent.keyboard('{Escape}');
+		expect(onback).toHaveBeenCalledOnce();
+	});
+
 	it('shows loading, then an error as an alert, and says why nothing is listed', async () => {
 		const { view, box } = folders([]);
 		await view.rerender({ loading: true });

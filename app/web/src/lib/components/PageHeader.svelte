@@ -40,6 +40,18 @@
 		 * trail starts at the tab (the sidebar's foot already names the org).
 		 */
 		org?: boolean;
+		/** `workspace` only: in place of the title's text, the trail's last step (a name to edit). */
+		heading?: Snippet;
+		/**
+		 * `workspace` only: on a phone, the step before the title stays (where this page is).
+		 * Off, a phone shows the title alone (a name being edited gets the width).
+		 */
+		phoneTrail?: boolean;
+		/**
+		 * `workspace` only: the project leading the trail, in place of the address's (null for
+		 * none: a 404's project that doesn't exist).
+		 */
+		project?: string | null;
 	}
 
 	let {
@@ -54,18 +66,25 @@
 		crumbs,
 		description,
 		trail = [],
-		org: withOrg = true
+		org: withOrg = true,
+		heading,
+		phoneTrail = true,
+		project: projectOverride
 	}: Props = $props();
 
 	// Where the page is, Linear-style: org / project / … / title, each step a link.
 	// `entity` on the workspace pages, `org` on Datasets, Models and Storage.
 	const org = $derived(page.params.entity ?? page.params.org ?? null);
 	const orgName = $derived(page.data.shell?.orgName ?? org);
-	const project = $derived(page.params.project ?? null);
+	const project = $derived(
+		projectOverride === undefined ? (page.params.project ?? null) : projectOverride
+	);
 	const steps = $derived<Crumb[]>([
 		...(project && title !== project ? [{ label: project, href: projectHref(org!, project) }] : []),
 		...trail
 	]);
+	/** No crumbs before the title (the org's included): a top-level page. */
+	const alone = $derived(!steps.length && !(withOrg && org && orgName && title !== orgName));
 	const CRUMB =
 		'min-w-0 truncate rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50';
 </script>
@@ -127,9 +146,12 @@
 				!toolbar && 'border-b border-divider'
 			]}
 		>
-			<!-- On one baseline, at one size: the title is the crumbs' 13px, set apart only by
-			     weight and colour. Icons and chevrons centre themselves. -->
-			<nav aria-label="Breadcrumbs" class="flex min-w-0 items-baseline gap-1.5">
+			<!-- On one baseline: after crumbs the title is their 13px, set apart only by weight and
+			     colour. Icons and chevrons centre themselves. -->
+			<nav
+				aria-label="Breadcrumbs"
+				class={['flex min-w-0 items-baseline gap-1.5', !phoneTrail && 'max-sm:flex-1']}
+			>
 				{#if withOrg && org && orgName && title !== orgName}
 					<a
 						href={entityHref(org)}
@@ -149,7 +171,7 @@
 				{/if}
 				{#each steps as step, i (`${i}:${step.href}`)}
 					<!-- On a phone only the step before the title stays: where this page is. -->
-					{@const far = i < steps.length - 1 && 'max-sm:hidden'}
+					{@const far = (i < steps.length - 1 || !phoneTrail) && 'max-sm:hidden'}
 					<a href={step.href} class={[far, CRUMB]} {@attach hint(step.label)}>{step.label}</a>
 					<ChevronRightIcon
 						class={['size-3.5 flex-none self-center text-faint', far]}
@@ -163,12 +185,21 @@
 						{@render leading()}
 					</div>
 				{/if}
-				<h1
-					class="min-w-0 truncate text-[13px] leading-5 font-medium text-foreground"
-					{@attach hint(subtitleTitle ?? title)}
-				>
-					{title}
-				</h1>
+				<!-- A title on its own (a top-level page) is the wordmark's 16px, at its own weight;
+				     after crumbs it keeps their 13px. -->
+				{#if heading}
+					{@render heading()}
+				{:else}
+					<h1
+						class={[
+							'min-w-0 truncate leading-5 font-medium text-foreground',
+							alone ? 'text-[16px] tracking-[-0.015em]' : 'text-[13px]'
+						]}
+						{@attach hint(subtitleTitle ?? title)}
+					>
+						{title}
+					</h1>
+				{/if}
 				<!-- In the trail, in a box of the text's height: taller controls (a version picker, a
 				     ⋯ button) overflow it rather than stretch the trail, so the trail's marks stay
 				     centred on its text, on the org's mark's line. -->

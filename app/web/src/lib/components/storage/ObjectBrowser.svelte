@@ -1,16 +1,14 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
-	import DownloadIcon from '@lucide/svelte/icons/download';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
-	import SearchIcon from '@lucide/svelte/icons/search';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import UploadIcon from '@lucide/svelte/icons/upload';
-	import { tick, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import DataTable, { type Column, ROW_LINK } from '#lib/components/DataTable.svelte';
+	import BarSearch from '#lib/components/BarSearch.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
 	import { Selection } from '#lib/selection.svelte.ts';
 	import { PAGE, bucketCall, entries, nameOf, objectHref, s3Uri, typeLabel } from '#lib/storage.ts';
@@ -27,6 +25,7 @@
 	import { MODELS_BUCKET, modelsHref } from '#lib/models.ts';
 	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyButton from '../CopyButton.svelte';
+	import RowMenuItems from '../RowMenuItems.svelte';
 	import CreateFolderDialog from './CreateFolderDialog.svelte';
 	import DeleteObjectsDialog from './DeleteObjectsDialog.svelte';
 	import UploadList from './UploadList.svelte';
@@ -71,6 +70,12 @@
 		const tab = bucket === MODELS_BUCKET ? 'Models' : 'Datasets';
 		const href = bucket === MODELS_BUCKET ? modelsHref(scope) : datasetsHref(scope);
 		return { name, tab, href };
+	}
+
+	/** At a managed bucket's top, `-projects/` (projects' own data, D160) reads as Projects. */
+	function shownName(key: string) {
+		const managed = bucket === DATASETS_BUCKET || bucket === MODELS_BUCKET;
+		return managed && prefix === '' && key === `${PROJECTS}/` ? 'Projects' : nameOf(key);
 	}
 
 	/** flock-models changes only through `flock models push` and the Models tab (D97). */
@@ -132,14 +137,24 @@
 	$effect.pre(() => {
 		selection.keys = keys;
 	});
-	const chosenKeys = $derived(selection.chosen.filter((k) => !k.endsWith('/')));
-	const chosenFolders = $derived(selection.chosen.filter((k) => k.endsWith('/')));
+	// What the delete dialog acts on: the rows a row's menu was for, kept while it closes.
+	let doomed = $state.raw<readonly string[]>([]);
+	const doomedKeys = $derived(doomed.filter((k) => !k.endsWith('/')));
+	const doomedFolders = $derived(doomed.filter((k) => k.endsWith('/')));
+	/** A row's menu label for several rows: files, folders, or both as items. */
+	function many(keys: readonly string[]): string | null {
+		if (keys.length < 2) return null;
+		const folders = keys.filter((k) => k.endsWith('/')).length;
+		const noun = !folders ? 'file' : folders === keys.length ? 'folder' : 'item';
+		return count(keys.length, noun);
+	}
 
+	// Set widths, not the content's: going down the tree, the columns stay where they were.
 	const COLUMNS: Column[] = [
-		{ id: 'name', label: 'Name' },
-		{ id: 'type', label: 'Type', from: 'md' },
-		{ id: 'size', label: 'Size', align: 'end', from: 'sm' },
-		{ id: 'modified', label: 'Last modified', align: 'end', from: 'sm' }
+		{ id: 'name', label: 'Name', width: 'minmax(0,1fr)' },
+		{ id: 'type', label: 'Type', from: 'md', width: '7rem' },
+		{ id: 'size', label: 'Size', align: 'end', from: 'sm', width: '6rem' },
+		{ id: 'modified', label: 'Updated', align: 'end', from: 'sm', width: '7rem' }
 	];
 
 	// Uploads, and refreshing the listing once they're done.
@@ -161,8 +176,6 @@
 
 	let creatingFolder = $state(false);
 	let folderButton = $state<HTMLElement | null>(null);
-	let filtering = $state(false);
-	let filterInput = $state<HTMLInputElement>();
 	// The header leads with the org: Storage › bucket › folders, the last the title.
 	const header = $derived(headerTrail(crumbs, title));
 	let deleting = $state(false);
@@ -176,7 +189,7 @@
 			bind:ref={folderButton}
 			onclick={() => (creatingFolder = !creatingFolder)}
 		>
-			<FolderPlusIcon /> <span class="max-sm:sr-only">Create folder</span>
+			<FolderPlusIcon /> <span class="max-sm:sr-only">New folder</span>
 		</Button>
 		<Button variant="quiet" size="bar" onclick={() => picker?.click()}>
 			<UploadIcon /> <span class="max-sm:sr-only">Upload</span>
@@ -195,58 +208,16 @@
 	/>
 {/snippet}
 
-<!-- While rows are checked: what to do with them. -->
-{#snippet selected()}
-	{#if chosenKeys.length === 1 && !chosenFolders.length}
-		<Button variant="outline" size="sm" onclick={() => download(chosenKeys[0])}>
-			<DownloadIcon /> Download
-		</Button>
-	{/if}
-	{#if !readOnly}
-		<Button variant="outline" size="sm" class="text-destructive" onclick={() => (deleting = true)}>
-			<Trash2Icon /> Delete
-		</Button>
-	{/if}
-{/snippet}
-
-<!-- The folder's S3 URI to copy, and the filter: an icon until it's wanted, as on Runs. -->
+<!-- The folder's S3 URI to copy, and the search by name prefix: the bar's search, as on Runs. -->
 {#snippet controls()}
 	<!-- The trail already says where this is; the URI is for copying, named in the hint. -->
 	<CopyButton text={s3Uri(bucket, prefix)} label="Copy {s3Uri(bucket, prefix)}" />
-	{#if !filtering && !filter}
-		<Button
-			variant="quiet"
-			size="icon-bar"
-			aria-label="Filter by name prefix"
-			{@attach hint('Filter by name prefix')}
-			onclick={async () => {
-				filtering = true;
-				await tick();
-				filterInput?.focus();
-			}}
-		>
-			<SearchIcon />
-		</Button>
-	{:else}
-		<label
-			class="flex h-7 w-52 min-w-0 items-center gap-1.5 rounded-md bg-muted px-2 focus-within:ring-3 focus-within:ring-ring/50"
-		>
-			<SearchIcon class="size-4 flex-none text-muted-foreground" />
-			<input
-				bind:this={filterInput}
-				class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-				placeholder="Filter by name prefix"
-				aria-label="Filter by name prefix"
-				spellcheck="false"
-				bind:value={filter}
-				oninput={filtered}
-				onblur={() => (filtering = false)}
-				onkeydown={(e) => {
-					if (e.key === 'Escape') e.currentTarget.blur();
-				}}
-			/>
-		</label>
-	{/if}
+	<BarSearch
+		bind:value={filter}
+		things="objects"
+		placeholder="Search by prefix…"
+		oninput={filtered}
+	/>
 {/snippet}
 
 <!-- Files dropped anywhere on the listing upload into this folder; folders keep their paths. -->
@@ -256,8 +227,6 @@
 	org={false}
 	{actions}
 	{controls}
-	{selection}
-	{selected}
 	class={dragging ? 'outline-2 -outline-offset-4 outline-primary outline-dashed' : undefined}
 	aria-label="Objects in {s3Uri(bucket, prefix)}"
 	ondragenter={(e) => {
@@ -295,6 +264,8 @@
 		name={(row) => nameOf(row.key)}
 		{selection}
 		label="Objects"
+		menu={rowMenu}
+		hasMenu={(row) => !readOnly || row.kind !== 'folder'}
 		dense
 		empty={failed || loading ? undefined : none}
 		footer={failed || rows.length || cursor ? more : undefined}
@@ -312,7 +283,7 @@
 							href={objectHref(org, bucket, row.key)}
 							{@attach hint(row.key)}
 						>
-							{nameOf(row.key)}
+							{shownName(row.key)}
 						</a>
 					</span>
 					{#if link}
@@ -336,6 +307,21 @@
 		{/snippet}
 	</DataTable>
 </ListPage>
+
+<!-- A row's menu (its ⋯ or a right-click): the row's, or every row checked when it's one. -->
+{#snippet rowMenu(row: (typeof rows)[number])}
+	{@const on = selection.targetsFor(row.key)}
+	<RowMenuItems
+		many={many(on)}
+		ondownload={row.kind === 'folder' ? undefined : () => download(row.key)}
+		ondelete={readOnly
+			? undefined
+			: () => {
+					doomed = on;
+					deleting = true;
+				}}
+	/>
+{/snippet}
 
 {#snippet none()}
 	{filter
@@ -374,8 +360,8 @@
 	bind:open={deleting}
 	{org}
 	{bucket}
-	keys={chosenKeys}
-	prefixes={chosenFolders}
+	keys={doomedKeys}
+	prefixes={doomedFolders}
 	ondeleted={() => {
 		selection.clear();
 		load();

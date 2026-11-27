@@ -18,7 +18,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-	import { signedMargin, typedIn } from '#lib/evals.ts';
+	import { docIdParts, shownQuestion, signedMargin, tokenNote, typedIn } from '#lib/evals.ts';
 	import type {
 		EvalItem,
 		ItemKeep,
@@ -81,7 +81,8 @@
 		onview
 	}: Props = $props();
 
-	const SIZE = 20;
+	// Items to a page; the pager's menu changes it.
+	let perPage = $state(20);
 	const HEATS: { heat: TokenHeat; label: string; hint: string }[] = [
 		{ heat: 'surprisal', label: 'Surprisal', hint: 'Darker: the run found the token less likely' },
 		{ heat: 'rank', label: 'Rank', hint: 'Darker: more tokens the run found likelier' },
@@ -109,7 +110,7 @@
 	);
 	let sort = $state<'margin' | 'doc'>(untrack(() => view.sort ?? 'margin'));
 	// A page past what Flock reads (an offset of 2^31) is past the last: the last one shows.
-	let at = $state(untrack(() => Math.min(view.page ?? 1, Math.floor(2 ** 31 / SIZE) + 1)));
+	let at = $state(untrack(() => Math.min(view.page ?? 1, Math.floor(2 ** 31 / perPage) + 1)));
 	let found = $state<ItemsPage | null>(null);
 	// Kept while the next page loads, so the pager (and the focus on it) stays.
 	let total = $state<number | null>(null);
@@ -194,7 +195,7 @@
 	const taskChoices = $derived(
 		tasks.filter((t) => t.task.toLowerCase().includes(taskQuery.trim().toLowerCase()))
 	);
-	const pages = $derived(Math.max(1, Math.ceil((total ?? 0) / SIZE)));
+	const pages = $derived(Math.max(1, Math.ceil((total ?? 0) / perPage)));
 
 	// Every change the reader makes ends here, so the page's link follows it. Untracked: the page
 	// writes its URL, and an effect that read it back would loop (027 D195).
@@ -228,8 +229,8 @@
 			task,
 			keep,
 			sort,
-			offset: String((at - 1) * SIZE),
-			limit: String(SIZE),
+			offset: String((at - 1) * perPage),
+			limit: String(perPage),
 			...(other ? { with: other } : {})
 		}).toString()
 	);
@@ -255,7 +256,7 @@
 				total = page.total;
 				// A link past the last page (the docs changed since) shows the last one.
 				if (!page.items.length && page.total && at > 1) {
-					at = Math.ceil(page.total / SIZE);
+					at = Math.ceil(page.total / perPage);
 					tell();
 					return;
 				}
@@ -346,7 +347,7 @@
 	// A square's dot: its task and cell, in the default order, at the page that holds the doc, the
 	// doc open; the focus moves to its row once the page arrives.
 	function openAt(to: string, cell: ItemKeep, index: number, id: string) {
-		const page = Math.floor(index / SIZE) + 1;
+		const page = Math.floor(index / perPage) + 1;
 		const shown = task === to && keep === cell && sort === 'margin' && at === page && found;
 		open = id;
 		if (shown) {
@@ -363,11 +364,14 @@
 		tell();
 	}
 
-	// After the rows render: the doc's toggle takes the focus, which scrolls it into view.
+	// After the rows render: the doc's toggle takes the focus, scrolled into view clear of the
+	// floating pager (its bottom scroll margin).
 	function focus(id: string) {
-		void tick().then(() =>
-			root?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id)}"]`)?.focus()
-		);
+		void tick().then(() => {
+			const toggle = root?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id)}"]`);
+			toggle?.focus({ preventScroll: true });
+			toggle?.scrollIntoView({ block: 'nearest' });
+		});
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -451,10 +455,18 @@
 	{/if}
 	<!-- One 36px row: the keeps as underline tabs, whose line lands on the table's top rule; the
 	     task and the order quiet at the right. -->
-	<div class={['flex h-9 min-w-0 items-center gap-2', !other && '-mb-3', bleed && 'bleed px-5']}>
+	<!-- On a phone the task and order take a row above, so every keep shows in full and its line
+	     still lands on the table's rule. -->
+	<div
+		class={[
+			'flex h-9 min-w-0 items-center gap-2 max-sm:h-auto max-sm:flex-wrap max-sm:gap-0',
+			!other && '-mb-3',
+			bleed && 'bleed px-5'
+		]}
+	>
 		<!-- On a narrow page the keeps scroll sideways; the controls keep their room. -->
 		<div
-			class="flex h-full min-w-0 shrink [scrollbar-width:none] items-center gap-4 overflow-x-auto max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] max-sm:pr-4"
+			class="flex h-full min-w-0 shrink [scrollbar-width:none] items-center gap-4 overflow-x-auto max-sm:h-9 max-sm:w-full max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] max-sm:pr-4"
 			role="radiogroup"
 			aria-label="Docs shown"
 		>
@@ -484,7 +496,9 @@
 				</button>
 			{/each}
 		</div>
-		<div class="ml-auto flex flex-none items-center gap-0.5">
+		<div
+			class="ml-auto flex flex-none items-center gap-0.5 max-sm:order-first max-sm:h-9 max-sm:w-full"
+		>
 			<PickerField
 				bind:open={picking}
 				onOpenChange={(next) => {
@@ -651,19 +665,30 @@
 						<!-- The open row's whole item, once it has come. -->
 						{@const item = shown && detail?.id === row.id ? detail : null}
 						{@const m = row.runs.map((r) => r.margin)}
+						{@const [lead, tail] = docIdParts(row.id)}
 						<!-- With a row open, the closed ones fade back so it reads on its own; hovering one brings it
 						     forward again. -->
+						<!-- A click anywhere on the row opens it, as its doc id's button does (the keys' way). -->
 						<tr
+							onclick={(e) => {
+								const t = e.target as Element;
+								if (t.closest('button, a, input') || window.getSelection()?.toString()) return;
+								toggle(row.id);
+							}}
 							class={[
-								'align-top transition-opacity hover:bg-muted/50 has-[:focus-visible]:bg-muted/50',
+								'group/item cursor-pointer align-top transition-opacity hover:bg-muted/50 has-[[data-item]:focus-visible]:bg-muted',
 								!shown && 'border-b border-divider',
 								opened && !shown && 'opacity-40 focus-within:opacity-100 hover:opacity-100'
 							]}
 						>
-							<td class="px-3 py-1.5">
+							<!-- j and k move a fill and an edge bar, as the runs table's cursor does. -->
+							<td
+								class="px-3 py-1.5 group-has-[[data-item]:focus-visible]/item:shadow-[inset_2px_0_0_var(--ring)]"
+							>
 								<button
 									type="button"
-									class="flex max-w-full items-center gap-1 font-mono text-[12px]"
+									class="flex max-w-full scroll-mb-20 items-center gap-1 font-mono text-[12px] outline-none"
+									aria-label={row.id}
 									aria-expanded={shown}
 									data-item={row.id}
 									onclick={() => toggle(row.id)}
@@ -671,13 +696,16 @@
 									<ChevronRightIcon
 										class={['size-3.5 flex-none transition-transform', shown && 'rotate-90']}
 									/>
-									<span class="truncate" {@attach hint(row.id)}>{row.id}</span>
+									<!-- Cut in the middle: the tail that tells docs apart always shows. -->
+									<span class="flex min-w-0" {@attach hint(row.id)}
+										><span class="truncate">{lead}</span><span class="flex-none">{tail}</span></span
+									>
 								</button>
 							</td>
 							<td class="px-3 py-1.5">
 								<!-- Opened, the whole question as scored; closed, the part that varies. -->
 								<span class={['whitespace-pre-wrap', !item && 'line-clamp-2']}
-									>{item ? (item.question ?? '') : row.text}</span
+									>{shownQuestion(item ? (item.question ?? '') : row.text)}</span
 								>
 							</td>
 							<td class="px-3 py-1.5"><span class="line-clamp-2">{row.gold_text}</span></td>
@@ -729,7 +757,9 @@
 									delta={!!other}
 									{tokens}
 									{heat}
-									notes={tokens?.runs.map((r) => r.note && refused({ message: r.note }, 0))}
+									notes={tokens?.runs.map(
+										(r) => r.note && tokenNote(refused({ message: r.note }, 0))
+									)}
 								/>
 							{/each}
 						{:else if shown}
@@ -756,12 +786,22 @@
 		<PageNumbers
 			current={at}
 			{pages}
-			first={(at - 1) * SIZE + 1}
-			last={Math.min(at * SIZE, total)}
+			first={(at - 1) * perPage + 1}
+			last={Math.min(at * perPage, total)}
 			{total}
 			label="Item pages"
 			ongo={(p) => {
 				at = p;
+				open = null;
+				tell();
+			}}
+			size={perPage}
+			sizes={[20, 50, 100]}
+			sizeLabel="Items per page"
+			onsize={(n) => {
+				// The page holding the first item shown.
+				at = Math.floor(((at - 1) * perPage) / n) + 1;
+				perPage = n;
 				open = null;
 				tell();
 			}}

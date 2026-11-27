@@ -6,7 +6,11 @@ import type { Attachment } from 'svelte/attachments';
  */
 export const keyboard = $state<{
 	/** The runs on the page, to jump to. */
-	runs: { label: string; href: string }[];
+	runs: {
+		label: string;
+		href: string;
+		/** Where the run lives, shown beside it. */ project: string;
+	}[];
 	/** The page's views, to switch between. */
 	views: { label: string; key: string; set: () => void }[];
 	/** Opens the page's filter, when it has one. */
@@ -17,14 +21,23 @@ export const keyboard = $state<{
 export function typing(e: KeyboardEvent): boolean {
 	if (e.metaKey || e.ctrlKey || e.altKey) return true;
 	const t = e.target;
-	return t instanceof Element && !!t.closest('input, textarea, select, [contenteditable]');
+	// A field in a layer that is closing (⌘K animating out) keeps focus a moment: not typing.
+	return (
+		t instanceof Element &&
+		!!t.closest('input, textarea, select, [contenteditable]') &&
+		!t.closest('[data-state="closed"]')
+	);
 }
 
 /** A dialog, menu or list box is open, and takes the keys itself. */
 export function layerOpen(): boolean {
-	return !!document.querySelector(
-		'[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
-	);
+	// One closing (still animating out) has let go, with all inside it: a key pressed right after
+	// closing ⌘K counts.
+	return [
+		...document.querySelectorAll(
+			'[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
+		)
+	].some((el) => !el.closest('[data-state="closed"]'));
 }
 
 /**

@@ -156,11 +156,29 @@
 				></span>
 			</button>
 		{/if}
+		{#if fill}
+			<main class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+				{@render children()}
+			</main>
+		{:else}
+			<main
+				class={[
+					'@container relative min-h-0 min-w-0 flex-1 overflow-y-auto',
+					!flush && 'px-5 pt-5'
+				]}
+			>
+				<!-- The bottom room is inside, not the scroll's padding: that would hold a floating
+				     pager that far off the scroll's foot. -->
+				<div class="pb-16">{@render children()}</div>
+			</main>
+		{/if}
+		<!-- The content before the pane in the page's order, so Tab reaches it first; on a phone the
+		     pane still shows above it. -->
 		{#if properties}
 			<aside
 				aria-label="Properties"
 				class={[
-					'relative flex-none md:order-last md:w-70 md:border-l md:border-divider',
+					'relative flex-none max-md:order-first md:w-70 md:border-l md:border-divider',
 					'max-md:border-b max-md:border-divider',
 					!shown && 'md:hidden'
 				]}
@@ -210,22 +228,6 @@
 					{@render properties()}
 				</div>
 			</aside>
-		{/if}
-		{#if fill}
-			<main class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-				{@render children()}
-			</main>
-		{:else}
-			<main
-				class={[
-					'@container relative min-h-0 min-w-0 flex-1 overflow-y-auto',
-					!flush && 'px-5 pt-5'
-				]}
-			>
-				<!-- The bottom room is inside, not the scroll's padding: that would hold a floating
-				     pager that far off the scroll's foot. -->
-				<div class="pb-16">{@render children()}</div>
-			</main>
 		{/if}
 	</div>
 </Page>

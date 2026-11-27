@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import type { ColumnKind } from '#lib/types.ts';
 import {
+	chipParts,
 	countConditions,
 	describeFilters,
 	flockFilter,
 	opsFor,
-	ownedBy,
 	parseValue,
 	readFilters,
-	setOwner,
+	readColumnFilter,
+	setColumnFilter,
+	columnFilterKind,
 	valueText,
 	writeFilters,
 	type People,
@@ -192,25 +195,52 @@ describe('describing filters', () => {
 	});
 });
 
-describe('My runs', () => {
-	const alice = { key: 'owner', op: 'eq', value: 3 } as const;
+describe('column filters', () => {
+	const lr = { key: 'config.lr', op: 'lt', value: 0.1 } as const;
 
-	it('adds an owner in place of any other, and takes only its own away', () => {
-		const sam = { key: 'owner', op: 'eq', value: 4 } as const;
-		const on = setOwner([sam, ...grouped], 3, true);
-		expect(on).toEqual([alice, ...grouped]);
-		expect(ownedBy(on, 3)).toBe(true);
-		expect(ownedBy(on, 4)).toBe(false);
-		expect(setOwner(on, 3, false)).toEqual(grouped);
-		expect(setOwner([sam], 3, false)).toEqual([sam]);
+	it('lists states, people, lists and named text; ranges numbers and dates', () => {
+		expect(columnFilterKind('state', 'state')).toBe('values');
+		expect(columnFilterKind('owner', 'user')).toBe('values');
+		expect(columnFilterKind('tags', 'json')).toBe('values');
+		expect(columnFilterKind('job_type', 'str')).toBe('values');
+		expect(columnFilterKind('config.opt', 'str')).toBe('text');
+		expect(columnFilterKind('summary.loss', 'num')).toBe('range');
+		expect(columnFilterKind('created_at', 'time')).toBe('date');
 	});
 
-	it('keeps a lone group of any of several filters as it was', () => {
-		const any = [grouped[1]];
-		expect(setOwner(any, 3, true)).toEqual([alice, grouped[1]]);
-		expect(setOwner(setOwner(any, 3, true), 3, false)).toEqual(any);
-		// Owners inside groups are the viewer's own filters, not "My runs".
-		expect(ownedBy([{ match: 'any', filters: [alice, grouped[0]] }], 3)).toBe(false);
+	it('sets one value, several as any of them, and replaces only its own', () => {
+		const one = setColumnFilter([lr], 'owner', 'user', { values: ['3'] });
+		expect(one).toEqual([lr, { key: 'owner', op: 'eq', value: 3 }]);
+		const two = setColumnFilter(one, 'owner', 'user', { values: ['3', '4'] });
+		expect(two).toEqual([
+			lr,
+			{
+				match: 'any',
+				filters: [
+					{ key: 'owner', op: 'eq', value: 3 },
+					{ key: 'owner', op: 'eq', value: 4 }
+				]
+			}
+		]);
+		expect(readColumnFilter(two, 'owner', 'user')).toMatchObject({
+			values: ['3', '4'],
+			active: true
+		});
+		expect(setColumnFilter(two, 'owner', 'user')).toEqual([lr]);
+	});
+
+	it('keeps a range’s ends and text, and leaves conditions it did not set', () => {
+		const ne = { key: 'summary.loss', op: 'ne', value: 1 } as const;
+		const set = setColumnFilter([ne], 'summary.loss', 'num', { range: { min: '0.1', max: '2' } });
+		expect(set).toEqual([
+			ne,
+			{ key: 'summary.loss', op: 'gte', value: 0.1 },
+			{ key: 'summary.loss', op: 'lte', value: 2 }
+		]);
+		expect(readColumnFilter(set, 'summary.loss', 'num').range).toEqual({ min: '0.1', max: '2' });
+		const text = setColumnFilter([], 'config.opt', 'str', { text: ' adam ' });
+		expect(text).toEqual([{ key: 'config.opt', op: 'contains', value: 'adam' }]);
+		expect(readColumnFilter(text, 'config.opt', 'str').text).toBe('adam');
 	});
 });
 
@@ -294,5 +324,80 @@ describe('flockFilter', () => {
 			])
 		).toEqual({ a: { $eq: 1 } });
 		expect(flockFilter('', [{ match: 'all', filters: [] }])).toBeNull();
+	});
+});
+
+describe('chipParts', () => {
+	const kinds: Record<string, ColumnKind> = {
+		state: 'state',
+		owner: 'user',
+		tags: 'json',
+		created_at: 'time',
+		'config.lr': 'num',
+		name: 'str'
+	};
+	const names = {
+		label: (k: string) => (k === 'config.lr' ? 'lr' : k[0].toUpperCase() + k.slice(1)),
+		kind: (k: string) => kinds[k],
+		people: new Map([[7, { id: 7, name: 'Ada', avatar_url: null }]]) as unknown as People,
+		me: 3
+	};
+
+	it('reads one value as `is` and several as `is any of`, as the table writes them', () => {
+		expect(chipParts({ key: 'state', op: 'eq', value: 'finished' }, names)).toEqual({
+			label: 'State',
+			op: 'is',
+			value: 'Finished'
+		});
+		expect(
+			chipParts(
+				{
+					match: 'any',
+					filters: [
+						{ key: 'owner', op: 'eq', value: 3 },
+						{ key: 'owner', op: 'eq', value: 7 }
+					]
+				},
+				names
+			)
+		).toEqual({ label: 'Owner', op: 'is any of', value: 'Me, Ada' });
+		expect(chipParts({ key: 'tags', op: 'eq', value: 'base' }, names).op).toBe('includes');
+	});
+
+	it('words ranges, dates and text', () => {
+		expect(chipParts({ key: 'config.lr', op: 'gte', value: 0.0012346 }, names)).toEqual({
+			label: 'lr',
+			op: 'at least',
+			value: '0.001235'
+		});
+		expect(chipParts({ key: 'config.lr', op: 'lte', value: 2 }, names).op).toBe('at most');
+		const nov20 = new Date(2026, 10, 20).getTime() / 1000;
+		expect(chipParts({ key: 'created_at', op: 'gte', value: nov20 }, names).op).toBe('after');
+		expect(chipParts({ key: 'created_at', op: 'lte', value: nov20 }, names).op).toBe('before');
+		expect(chipParts({ key: 'name', op: 'contains', value: 'sweep' }, names)).toEqual({
+			label: 'Name',
+			op: 'contains',
+			value: 'sweep'
+		});
+		expect(chipParts({ key: 'name', op: 'exists', value: null }, names)).toEqual({
+			label: 'Name',
+			op: 'is set',
+			value: ''
+		});
+	});
+
+	it('gives a group built in Advanced as its text alone', () => {
+		expect(
+			chipParts(
+				{
+					match: 'any',
+					filters: [
+						{ key: 'config.lr', op: 'lt', value: 0.01 },
+						{ key: 'name', op: 'eq', value: 'a' }
+					]
+				},
+				names
+			)
+		).toEqual({ label: '', op: '', value: 'config.lr < 0.01 or name is a' });
 	});
 });

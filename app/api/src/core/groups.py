@@ -134,6 +134,17 @@ def best_by(
     return project_best
 
 
+def is_hollow(filter: Any) -> bool:
+    """Whether a filter has no condition in it: ``{}``, or ``$and`` / ``$or`` lists of such.
+    It picks no runs: a group without one is made by hand and never has new matches (D216)."""
+    if not isinstance(filter, Mapping):
+        return False
+    return all(
+        key in ("$and", "$or") and isinstance(value, list) and all(map(is_hollow, value))
+        for key, value in filter.items()
+    )
+
+
 def flatten_conditions(filters: Iterable[Any]) -> list[dict[str, Any]]:
     """The conditions (``{"key", "op", "value"}``) of the web's run filters, in order, those
     inside ``{"match", "filters"}`` groups included."""
@@ -237,9 +248,9 @@ class Groups:
     async def matching(
         conn: asyncpg.Connection | asyncpg.Pool, project_pk: int, filter: Mapping[str, Any]
     ) -> set[int]:
-        """The pks of the runs a group's filter matches; none for an empty filter (D216: a
-        group without a filter never has new matches)."""
-        if not filter:
+        """The pks of the runs a group's filter matches; none for a filter with no
+        condition (D216: a group without a filter never has new matches)."""
+        if is_hollow(filter):
             return set()
         records, _ = await query.Selection(dict(filter)).runs(conn, project_pk, columns="r.pk")
         return {record[0] for record in records}
@@ -414,7 +425,7 @@ class Groups:
         """The group's new matches (D216): runs its filter matches that are neither in it nor
         dropped, newest first, as ``(pk, name, display_name, state, created_at, total)``
         (``total``: the filter's matches, ``Selection.runs``' last column)."""
-        if not group.filter:
+        if is_hollow(group.filter):
             return []
         columns = "r.pk, r.name, r.display_name, r.state, extract(epoch FROM r.created_at)::float8"
         records, _ = await query.Selection(group.filter).runs(

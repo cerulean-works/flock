@@ -1,12 +1,13 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { Button } from '#lib/components/ui/button/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import { MAX_LIFETIMES, ephemeralChoices, fits, lifetimeLabel } from '#lib/s3.ts';
 	import type { OrgInfo } from '#lib/types.ts';
 	import FormError from './FormError.svelte';
+	import SavedTick, { AutoSave } from './SavedTick.svelte';
 
 	let { org }: { org: OrgInfo } = $props();
 
@@ -22,7 +23,11 @@
 	const changed = $derived(
 		max !== key(org.s3_key_max_ttl) || ephemeral !== String(org.s3_ephemeral_ttl)
 	);
-	const mutation = new Mutation({ success: () => 'Key lifetimes saved' });
+	// Each choice saves as it's made (G4).
+	const saving = new AutoSave();
+	const mutation = new Mutation({ done: saving.saved });
+	let form = $state<HTMLFormElement>();
+	const save = () => void tick().then(() => saving.save(form, changed));
 </script>
 
 <p class="mt-2 text-muted-foreground">
@@ -30,13 +35,19 @@
 	themselves, so they can be short-lived. Keys made on the account page last up to the maximum, and lowering
 	it also expires older keys that outlive it.
 </p>
-<form method="POST" action="?/s3Lifetimes" class="mt-4 grid gap-3" use:enhance={mutation.enhance}>
+<form
+	method="POST"
+	action="?/s3Lifetimes"
+	class="mt-4 grid gap-3"
+	bind:this={form}
+	use:enhance={saving.only(() => changed, mutation.enhance)}
+>
 	<input type="hidden" name="max" value={max} />
 	<input type="hidden" name="ephemeral" value={ephemeral} />
 	<div class="flex flex-wrap items-end gap-2">
 		<div class="grid gap-2">
 			<Label for="s3-ephemeral">Ephemeral keys last</Label>
-			<Select.Root type="single" bind:value={ephemeral}>
+			<Select.Root type="single" bind:value={ephemeral} onValueChange={save}>
 				<Select.Trigger id="s3-ephemeral" class="w-36">
 					{lifetimeLabel(Number(ephemeral))}
 				</Select.Trigger>
@@ -51,7 +62,7 @@
 		</div>
 		<div class="grid gap-2">
 			<Label for="s3-max">No key lasts more than</Label>
-			<Select.Root type="single" bind:value={max}>
+			<Select.Root type="single" bind:value={max} onValueChange={save}>
 				<Select.Trigger id="s3-max" class="w-36">
 					{max === 'never' ? 'No limit' : lifetimeLabel(Number(max))}
 				</Select.Trigger>
@@ -67,14 +78,7 @@
 				</Select.Content>
 			</Select.Root>
 		</div>
-		<Button
-			type="submit"
-			variant="outline"
-			disabled={!changed || mutation.pending}
-			pending={mutation.pending}
-		>
-			Save
-		</Button>
+		<div class="flex h-9 items-center"><SavedTick {saving} pending={mutation.pending} /></div>
 	</div>
 	<FormError error={mutation.error} />
 </form>

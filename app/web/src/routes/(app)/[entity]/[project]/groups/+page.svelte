@@ -13,6 +13,9 @@
 	import BestDots, { type BestDot } from '#lib/components/groups/BestDots.svelte';
 	import CompareHistory, { type CompareLine } from '#lib/components/groups/CompareHistory.svelte';
 	import BestByPicker from '#lib/components/groups/BestByPicker.svelte';
+	import BestMark from '#lib/components/groups/BestMark.svelte';
+	import { SCROLL_FADE, scrollFade } from '#lib/scroll-fade.ts';
+	import HeaderMenu from '#lib/components/HeaderMenu.svelte';
 	import LiveDot from '#lib/components/groups/LiveDot.svelte';
 	import { GroupsLive } from '#lib/components/groups/live.svelte.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -76,6 +79,8 @@
 		return key && key !== cmp.best_key ? metricLabel(key) : null;
 	}
 
+	/** Every group ranks by a column of its own: nothing compares on the page's. */
+	const allOwn = $derived(cmp.rows.length > 0 && cmp.rows.every((r) => otherMetric(r)));
 	/** Groups ranked by the page's best-by column with a best run, in rank order. */
 	const charted = $derived(cmp.rows.filter((r) => r.run && !otherMetric(r)));
 	/** The best group, which the changes are from. */
@@ -154,7 +159,8 @@
 	// value); an empty last cell takes what's left, so rows span the window without the
 	// columns drifting apart.
 	const NAME_W = 280;
-	const VALUE_W = 96;
+	// The ranked column's header holds its name, the trophy and its menu.
+	const VALUE_W = 176;
 	const DELTA_W = 136;
 	const STD_W = 84;
 	const RUNS_W = 56;
@@ -203,6 +209,8 @@
 	const totalW = $derived(NAME_W + VALUE_W + DELTA_W + STD_W + RUNS_W + sum(primary) + sum(keys));
 	/** A cell's flex: exactly `w` pixels. */
 	const fit = (w: number) => `0 0 ${w}px`;
+	/** The names' column: at most 40% of a phone's width, so the values show beside it. */
+	const NAME_FLEX = `0 0 min(${NAME_W}px, 40vw)`;
 
 	/** The largest change from the best group, which the bars are scaled to. */
 	const maxDelta = $derived.by(() => {
@@ -408,14 +416,14 @@
 		class={[
 			'group/row flex h-11 w-full items-stretch border-b border-divider tabular-nums',
 			lit ? 'bg-muted' : 'hover:bg-muted',
-			other && 'text-faint'
+			other && 'text-muted-foreground'
 		]}
 		onpointerenter={() => (hovered = r.run)}
 		onpointerleave={() => (hovered = null)}
 	>
 		<div
 			class={[NAME_CELL, lit ? 'bg-muted' : 'bg-background group-hover/row:bg-muted']}
-			style:flex={fit(NAME_W)}
+			style:flex={NAME_FLEX}
 		>
 			<span class="grid w-4 flex-none place-items-center" aria-hidden="true">
 				{#if r.group == null}
@@ -475,7 +483,11 @@
 		</div>
 		<div class={[CELL, 'justify-end gap-2']} style:flex={fit(DELTA_W)}>
 			{#if delta == null}
-				<span class="text-faint">–</span>
+				<span
+					class="text-faint"
+					title={other ? `Ranked by ${other}, not ${metricLabel(cmp.best_key ?? '')}` : undefined}
+					>–</span
+				>
 			{:else if r === top}
 				<span class="text-faint" title="The best group, which the changes are from">best</span>
 			{:else}
@@ -547,15 +559,6 @@
 			<LiveDot connection={live.connection} />
 		{/snippet}
 		{#snippet toolbar()}
-			<BestByPicker
-				quiet
-				key={cmp.best_key}
-				order={cmp.best_order}
-				keys={data.summaryKeys}
-				disabled={readonly}
-				title="The project’s setting; a group can have its own"
-				onchange={setBest}
-			/>
 			<span class="flex-1"></span>
 			<div class="flex items-center gap-2">
 				<Switch id="differences-only" bind:checked={differencesOnly} />
@@ -573,6 +576,7 @@
 				{/snippet}
 				{#snippet actions()}
 					<BestByPicker
+						placeholder="Pick a column"
 						key={null}
 						order={null}
 						keys={data.summaryKeys}
@@ -607,8 +611,12 @@
 			     the rest, so they grow when there are few groups. -->
 			<div class="absolute inset-0 flex flex-col overflow-y-auto overscroll-contain">
 				<section
-					class="max-h-[56%] min-h-24 flex-none overflow-auto overscroll-contain border-b border-divider text-[13px]"
+					class={[
+						'max-h-[56%] min-h-24 flex-none overflow-auto overscroll-contain border-b border-divider text-[13px]',
+						SCROLL_FADE
+					]}
 					aria-label="Compare"
+					{@attach scrollFade}
 				>
 					<div style:min-width="{totalW}px">
 						<!-- The band and the header stay on top; the names stay at the left. -->
@@ -617,7 +625,7 @@
 								<div class="flex h-[26px] text-xs text-muted-foreground">
 									<div
 										class="sticky left-0 z-2 bg-background shadow-[inset_-1px_0_0_var(--divider)]"
-										style:flex={fit(NAME_W)}
+										style:flex={NAME_FLEX}
 									></div>
 									<div
 										class="border-l border-divider px-3 pt-1.5"
@@ -627,10 +635,7 @@
 									</div>
 									{#if primary.length}
 										<div
-											class={[
-												'border-l border-divider px-3 pt-1.5 whitespace-nowrap text-foreground',
-												PRIMARY_END
-											]}
+											class={['border-l border-divider px-3 pt-1.5 whitespace-nowrap', PRIMARY_END]}
 											style:flex={fit(sum(primary))}
 											title="What matters for comparing the groups: the settings and metrics their own tables suggest"
 										>
@@ -667,22 +672,36 @@
 							<div
 								class="flex h-10 w-full items-stretch border-b text-xs font-medium text-muted-foreground"
 							>
-								<div class={[NAME_CELL, 'bg-background']} style:flex={fit(NAME_W)}>
-									<span class="text-foreground">Group</span>
+								<div class={[NAME_CELL, 'bg-background']} style:flex={NAME_FLEX}>
+									<span>Group</span>
 									<span class="ml-auto truncate font-normal text-faint">
 										{count(cmp.rows.length, 'group')} · {cmp.ungrouped_count} ungrouped
 									</span>
 								</div>
-								<div class={[CELL, 'justify-end text-foreground']} style:flex={fit(VALUE_W)}>
-									{metricLabel(cmp.best_key)}
-									{order === 'asc' ? '↓' : '↑'}
+								<!-- The column groups are ranked by: its trophy changes which, and which way. -->
+								<div class={[CELL, 'group/h justify-end gap-1']} style:flex={fit(VALUE_W)}>
+									<span class="truncate">{metricLabel(cmp.best_key)}</span>
+									<BestMark {order} source="the project’s setting; a group can have its own" />
+									{#if !readonly}
+										{@const key = cmp.best_key}
+										<HeaderMenu
+											label={metricLabel(key)}
+											best={{
+												active: true,
+												order,
+												onbest: (o) => setBest(key, o),
+												keys: data.summaryKeys.filter((k) => k !== key),
+												onpick: (k) => setBest(k, order)
+											}}
+										/>
+									{/if}
 								</div>
 								<div class={[CELL, 'justify-end']} style:flex={fit(DELTA_W)}>vs best</div>
 								<div class={[CELL, 'justify-end']} style:flex={fit(STD_W)}>± repeats</div>
-								<div class={[CELL, 'justify-end']} style:flex={fit(RUNS_W)}>runs</div>
+								<div class={[CELL, 'justify-end']} style:flex={fit(RUNS_W)}>Runs</div>
 								{#each suggested.settings as key, i (key)}
 									<div
-										class={[CELL, 'text-foreground', i === primary.length - 1 && PRIMARY_END]}
+										class={[CELL, i === primary.length - 1 && PRIMARY_END]}
 										style:flex={fit(widthOf[key])}
 										title={key}
 									>
@@ -693,13 +712,19 @@
 									<div
 										class={[
 											CELL,
-											'justify-end text-foreground',
+											'group/h justify-end gap-1',
 											suggested.settings.length + i === primary.length - 1 && PRIMARY_END
 										]}
 										style:flex={fit(widthOf[key])}
 										title="{key} of each group’s best run"
 									>
 										<span class="truncate">{metricName(key)}</span>
+										{#if !readonly && data.summaryKeys.includes(key)}
+											<HeaderMenu
+												label={metricName(key)}
+												best={{ active: false, order: null, onbest: (o) => setBest(key, o) }}
+											/>
+										{/if}
 									</div>
 								{/each}
 								{#each keys as key (key)}
@@ -760,74 +785,83 @@
 					</div>
 				</section>
 
-				<section
-					class="flex min-h-[340px] flex-1 gap-4 px-5 pt-5 pb-6 max-lg:min-h-[640px] max-lg:flex-col"
-					aria-label="Charts"
-				>
-					{#if !summaryOnly}
-						<Card.Root class="min-h-[300px] min-w-0 flex-[3] rounded-lg px-1">
+				{#if allOwn}
+					<!-- Charts compare groups on the page's column; none ranks by it. -->
+					<p class="px-5 py-6 text-[13px] text-muted-foreground">
+						Each group ranks its runs by a column of its own, so none compare on
+						{metricLabel(cmp.best_key)}. Rank by one of theirs from the
+						{metricLabel(cmp.best_key)} column’s menu to chart them here.
+					</p>
+				{:else}
+					<section
+						class="flex min-h-[340px] flex-1 gap-4 px-5 pt-5 pb-6 max-lg:min-h-[640px] max-lg:flex-col"
+						aria-label="Charts"
+					>
+						{#if !summaryOnly}
+							<Card.Root class="min-h-[300px] min-w-0 flex-[3] rounded-lg px-1">
+								<Card.Header class="gap-0.5">
+									<Card.Title class="text-[13px]">
+										{metricLabel(cmp.best_key)}
+										<span class="font-normal text-muted-foreground">· each group’s best run</span>
+									</Card.Title>
+									<Card.Description class="text-xs">
+										{order === 'asc' ? 'Lower' : 'Higher'} is better
+									</Card.Description>
+								</Card.Header>
+								<Card.Content class="flex min-h-0 flex-1 flex-col">
+									{#if !lines.length}
+										<div class="grid flex-1 place-items-center text-[13px] text-faint">
+											No group has a best run by {metricLabel(cmp.best_key)} yet
+										</div>
+									{:else if history}
+										<CompareHistory
+											data={history}
+											{lines}
+											metric={chartKey(cmp.best_key)}
+											{hovered}
+											onhover={(run) => (hovered = run)}
+										/>
+									{:else}
+										<div class="grid flex-1 place-items-center text-[13px] text-faint">
+											{historyFailed ? 'Couldn’t read the runs’ histories' : 'Reading histories…'}
+										</div>
+									{/if}
+								</Card.Content>
+							</Card.Root>
+						{/if}
+						<Card.Root
+							class={[
+								'min-h-[300px] min-w-0 flex-[2] rounded-lg px-1',
+								!summaryOnly && 'lg:max-w-[46%]'
+							]}
+						>
 							<Card.Header class="gap-0.5">
 								<Card.Title class="text-[13px]">
 									{metricLabel(cmp.best_key)}
-									<span class="font-normal text-muted-foreground">· each group’s best run</span>
+									<span class="font-normal text-muted-foreground">· every run, by group</span>
 								</Card.Title>
 								<Card.Description class="text-xs">
-									{order === 'asc' ? 'Lower' : 'Higher'} is better
+									Faint: each run · solid: the best{spread ? ', ± std across repeats' : ''}
 								</Card.Description>
 							</Card.Header>
 							<Card.Content class="flex min-h-0 flex-1 flex-col">
-								{#if !lines.length}
-									<div class="grid flex-1 place-items-center text-[13px] text-faint">
-										No group has a best run by {metricLabel(cmp.best_key)} yet
-									</div>
-								{:else if history}
-									<CompareHistory
-										data={history}
-										{lines}
-										metric={chartKey(cmp.best_key)}
+								{#if dots.length}
+									<BestDots
+										{dots}
 										{hovered}
+										format={fmt}
+										formatSpread={fmtSpread}
 										onhover={(run) => (hovered = run)}
 									/>
 								{:else}
 									<div class="grid flex-1 place-items-center text-[13px] text-faint">
-										{historyFailed ? 'Couldn’t read the runs’ histories' : 'Reading histories…'}
+										No group has a value yet
 									</div>
 								{/if}
 							</Card.Content>
 						</Card.Root>
-					{/if}
-					<Card.Root
-						class={[
-							'min-h-[300px] min-w-0 flex-[2] rounded-lg px-1',
-							!summaryOnly && 'lg:max-w-[46%]'
-						]}
-					>
-						<Card.Header class="gap-0.5">
-							<Card.Title class="text-[13px]">
-								{metricLabel(cmp.best_key)}
-								<span class="font-normal text-muted-foreground">· every run, by group</span>
-							</Card.Title>
-							<Card.Description class="text-xs">
-								Faint: each run · solid: the best{spread ? ', ± std across repeats' : ''}
-							</Card.Description>
-						</Card.Header>
-						<Card.Content class="flex min-h-0 flex-1 flex-col">
-							{#if dots.length}
-								<BestDots
-									{dots}
-									{hovered}
-									format={fmt}
-									formatSpread={fmtSpread}
-									onhover={(run) => (hovered = run)}
-								/>
-							{:else}
-								<div class="grid flex-1 place-items-center text-[13px] text-faint">
-									No group has a value yet
-								</div>
-							{/if}
-						</Card.Content>
-					</Card.Root>
-				</section>
+					</section>
+				{/if}
 			</div>
 		{/if}
 	</main>

@@ -84,9 +84,9 @@ The numbering continues from 021.
 - **The column stays `models.name`,** now holding the path, so no column is renamed during a
   deploy (020). An index on `(org_pk, project_pk, name text_pattern_ops)` makes folder listings
   and the prefix checks above index scans.
-- **Listing a folder** shows one level, as D87 does: models first (name, latest version, primary
-  version, size, updated), then folders with the number of models under them. 100 entries per
-  page, keyed on the name.
+- **Listing a folder** shows one level, as D87 does: folders first, with the number of models
+  under them, then models (name, latest version, primary version, size, updated). 100 entries
+  per page, keyed on the name.
 - **Folders can't be selected** in the Models tab's list (D130), only models. Moving or deleting
   a whole folder of models is selecting the models in it. This keeps a model's delete what D109
   says it is, one trash entry per model.

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SCROLL_FADE, scrollFade } from '#lib/scroll-fade.ts';
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -25,7 +26,10 @@
 	let { scope, path, info, hidden }: Props = $props();
 
 	// Pages by offset, kept in the URL (D90): 50 rows, or 10 with binary columns.
-	const size = $derived(info.binary ? 10 : 50);
+	// Rows to a page: fewer for rows of images and audio. The pager's menu changes it.
+	const sizes = $derived(info.binary ? [10, 25, 50] : [25, 50, 100]);
+	let picked = $state<number | null>(null);
+	const size = $derived(picked ?? (info.binary ? 10 : 50));
 	const offset = $derived(
 		Math.max(0, Math.floor(Number(page.url.searchParams.get('offset')) || 0))
 	);
@@ -204,7 +208,12 @@
 			{rows.total ? 'No rows on this page.' : 'This version has no rows.'}
 		</p>
 	{:else}
-		<div class={['overflow-x-auto', loading && 'opacity-60']} bind:clientWidth={width}>
+		<!-- Its right edge fades while more columns run on past it. -->
+		<div
+			class={['overflow-x-auto', SCROLL_FADE, loading && 'opacity-60']}
+			bind:clientWidth={width}
+			{@attach scrollFade}
+		>
 			<!-- Short columns are pinned to their content (w-px), so the width left over goes to
 			     the columns that wrap, or to a filler when none do. -->
 			<table class="w-full border-collapse text-[13px]" bind:this={table}>
@@ -246,9 +255,10 @@
 							]}
 							onclick={(e) => onrowclick(e, n, row)}
 						>
-							<td class="py-1.5 pr-2 pl-5 text-muted-foreground tabular-nums">
+							<!-- The number's button fills its cell: a target to aim at, and the keyboard's. -->
+							<td class="p-0 text-muted-foreground tabular-nums">
 								<button
-									class="rounded-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+									class="block w-full py-1.5 pr-2 pl-5 text-left outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
 									aria-expanded={open}
 									aria-label="{open ? 'Close' : 'Open'} row {n}"
 									onclick={() => toggle(n, row)}
@@ -301,6 +311,13 @@
 				label="Row pages"
 				ongo={(p) => go((p - 1) * size)}
 				onstep={(step) => go(Math.max(0, offset + step * size))}
+				{size}
+				{sizes}
+				onsize={(n) => {
+					picked = n;
+					// The page holding the first row shown.
+					go(Math.floor(offset / n) * n);
+				}}
 			/>
 		</div>
 	{/if}

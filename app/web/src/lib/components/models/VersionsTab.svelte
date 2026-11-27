@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
-	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import EyeIcon from '@lucide/svelte/icons/eye';
 	import FootprintsIcon from '@lucide/svelte/icons/footprints';
 	import StarIcon from '@lucide/svelte/icons/star';
@@ -15,7 +14,6 @@
 	import type { ModelInfo, ModelVersion, ModelVersionsPage } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
 	import DataTable, { ROW_LINK, type Column } from '../DataTable.svelte';
-	import { ROW_MENU_TRIGGER } from '../RowMenu.svelte';
 	import TagChip from '../TagChip.svelte';
 	import DeleteVersionDialog from './DeleteVersionDialog.svelte';
 	import MakePrimaryDialog from './MakePrimaryDialog.svelte';
@@ -43,7 +41,7 @@
 		{ id: 'tags', label: 'Tags' },
 		{ id: 'run', label: 'Run', from: 'md' },
 		{ id: 'size', label: 'Size', align: 'end', from: 'sm' },
-		{ id: 'pushed', label: 'Pushed', align: 'end' }
+		{ id: 'pushed', label: 'Updated', align: 'end' }
 	];
 	const name = $derived(info.name);
 
@@ -136,38 +134,31 @@
 {/snippet}
 
 {#snippet menu(v: ModelVersion)}
-	<DropdownMenu.Root>
-		<DropdownMenu.Trigger class={ROW_MENU_TRIGGER} aria-label="Version {v.number} actions">
-			<EllipsisIcon class="size-4" />
-		</DropdownMenu.Trigger>
-		<DropdownMenu.Content align="end" class="w-44">
-			<DropdownMenu.Item>
-				{#snippet child({ props })}
-					<a {...props} href={versionHref(String(v.number))}>
-						<EyeIcon /> View
-					</a>
-				{/snippet}
-			</DropdownMenu.Item>
-			<DropdownMenu.Item
-				disabled={v.primary}
-				onSelect={() => promoting.show({ number: v.number, current: info.primary })}
-			>
-				<StarIcon /> Make primary
-			</DropdownMenu.Item>
-			<DropdownMenu.Item
-				onSelect={() => {
-					tagAnchor = openMenuTrigger();
-					tagging.show(v.number);
-				}}
-			>
-				<TagIcon /> Add tag…
-			</DropdownMenu.Item>
-			<DropdownMenu.Separator />
-			<DropdownMenu.Item variant="destructive" onSelect={() => deleting.show(v)}>
-				<Trash2Icon /> Delete…
-			</DropdownMenu.Item>
-		</DropdownMenu.Content>
-	</DropdownMenu.Root>
+	<DropdownMenu.Item>
+		{#snippet child({ props })}
+			<a {...props} href={versionHref(String(v.number))}>
+				<EyeIcon /> View
+			</a>
+		{/snippet}
+	</DropdownMenu.Item>
+	<DropdownMenu.Item
+		disabled={v.primary}
+		onSelect={() => promoting.show({ number: v.number, current: info.primary })}
+	>
+		<StarIcon /> Make primary
+	</DropdownMenu.Item>
+	<DropdownMenu.Item
+		onSelect={() => {
+			tagAnchor = openMenuTrigger();
+			tagging.show(v.number);
+		}}
+	>
+		<TagIcon /> Add tag…
+	</DropdownMenu.Item>
+	<DropdownMenu.Separator />
+	<DropdownMenu.Item variant="destructive" onSelect={() => deleting.show(v)}>
+		<Trash2Icon /> Delete…
+	</DropdownMenu.Item>
 {/snippet}
 
 {#snippet more()}

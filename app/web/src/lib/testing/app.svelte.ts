@@ -80,3 +80,6 @@ export function enhance(form: HTMLFormElement, submit: SubmitFunction = () => {}
 	form.addEventListener('submit', onsubmit);
 	return { destroy: () => form.removeEventListener('submit', onsubmit) };
 }
+
+/** An action's answer read back from its response (plain JSON here, devalue in the app). */
+export const deserialize = (text: string): ActionResult => JSON.parse(text) as ActionResult;

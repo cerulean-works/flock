@@ -67,6 +67,6 @@ export const actions: Actions = {
 		const chosen = await change('PATCH', '/api/v1/me', { default_org: org });
 		if (refused(chosen)) return fail(chosen.status, { ...kept, ...chosen.data });
 		await refreshUser();
-		redirect(303, wandb ? orgHref(org) : entityHref(org));
+		redirect(303, wandb ? orgHref(org, 'import') : entityHref(org));
 	}
 };

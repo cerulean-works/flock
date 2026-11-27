@@ -2,9 +2,9 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import SearchIcon from '@lucide/svelte/icons/search';
-	import XIcon from '@lucide/svelte/icons/x';
 	import { tick } from 'svelte';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import BarSearch from '#lib/components/BarSearch.svelte';
 	import CopyButton from '#lib/components/CopyButton.svelte';
 	import Properties from '#lib/components/Properties.svelte';
 	import Property from '#lib/components/Property.svelte';
@@ -63,7 +63,7 @@
 		queries[title] = null;
 		await tick();
 		document
-			.querySelector<HTMLElement>(`[aria-label="Find a ${title.toLowerCase()} key"]`)
+			.querySelector<HTMLElement>(`button[aria-label="Search ${title.toLowerCase()} keys"]`)
 			?.focus();
 	}
 
@@ -71,7 +71,7 @@
 		queries[title] = '';
 		if (details) details.open = true;
 		await tick();
-		document.getElementById(`find-${title}`)?.focus();
+		document.querySelector<HTMLInputElement>(`#find-${title} input`)?.focus();
 	}
 </script>
 
@@ -93,17 +93,17 @@
 				<summary
 					class="-mx-2 flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md px-2 text-[13px] select-none hover:bg-muted/60 [&::-webkit-details-marker]:hidden"
 				>
+					<ChevronRightIcon
+						class="size-3.5 flex-none text-muted-foreground transition-transform group-open/list:rotate-90"
+					/>
+					<span class="font-medium">{title}</span>
+					<span class="text-muted-foreground tabular-nums">{all.length}</span>
 					{#if q == null}
-						<ChevronRightIcon
-							class="size-3.5 flex-none text-muted-foreground transition-transform group-open/list:rotate-90"
-						/>
-						<span class="font-medium">{title}</span>
-						<span class="text-muted-foreground tabular-nums">{all.length}</span>
 						<button
 							type="button"
 							class="-mr-1 ml-auto grid size-6 place-items-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-							aria-label="Find a {title.toLowerCase()} key"
-							{@attach hint(`Find a ${title.toLowerCase()} key`)}
+							aria-label="Search {title.toLowerCase()} keys"
+							{@attach hint(`Search ${title.toLowerCase()} keys`)}
 							onclick={(e) => {
 								e.preventDefault();
 								void openSearch(title, e.currentTarget.closest('details'));
@@ -111,55 +111,55 @@
 						>
 							<SearchIcon class="size-3.5" />
 						</button>
-					{:else}
-						<SearchIcon class="size-3.5 flex-none text-muted-foreground" />
-						<input
-							id="find-{title}"
-							class="min-w-0 flex-1 bg-transparent outline-none placeholder:text-faint"
-							placeholder="Find a {title.toLowerCase()} key"
-							aria-label="Find a {title.toLowerCase()} key"
-							bind:value={queries[title]}
-							onclick={(e) => e.preventDefault()}
-							onkeydown={(e) => {
-								// Space would toggle the list.
-								if (e.key === ' ') e.stopPropagation();
-								if (e.key === 'Escape') {
-									e.stopPropagation();
-									closeSearch(title);
-								}
-							}}
-							onkeyup={(e) => e.key === ' ' && e.preventDefault()}
-						/>
-						<span class="text-muted-foreground tabular-nums">{rows.length}</span>
-						<button
-							type="button"
-							class="-mr-1 grid size-6 place-items-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-							aria-label="Close the search"
-							onclick={(e) => {
-								e.preventDefault();
-								closeSearch(title);
-							}}
-						>
-							<XIcon class="size-3.5" />
-						</button>
 					{/if}
 				</summary>
-				<dl class="pt-1 pb-1 font-mono text-[12px] leading-6">
+				<!-- Under the list's name, which stays: what's searched and how many keys it holds. -->
+				{#if q != null}
+					<div class="pt-1" id="find-{title}">
+						<BarSearch
+							bind:value={() => queries[title] ?? '', (v) => (queries[title] = v)}
+							things="{title.toLowerCase()} keys"
+							open
+							slash={false}
+							onclose={() => closeSearch(title)}
+						>
+							{#snippet trailing()}
+								<span class="flex-none pr-1.5 text-xs text-muted-foreground tabular-nums"
+									>{rows.length}</span
+								>
+							{/snippet}
+						</BarSearch>
+					</div>
+				{/if}
+				<!-- Keys take what the longest needs, up to two fifths; values the rest. -->
+				<dl
+					class="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3 pt-1 pb-1 font-mono text-[12px] leading-6"
+				>
 					{#each rows as [key, value] (key)}
 						{@const shown = formatValue(value)}
+						<!-- Copy on hover over the value's end (the full value): the value keeps the room. -->
 						<div
-							class="-mx-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 rounded px-2 hover:bg-muted"
+							class="group/prop col-span-2 -mx-2 grid grid-cols-subgrid rounded px-2 hover:bg-muted"
 						>
 							<dt class="truncate text-muted-foreground" {@attach hint(key)}>{key}</dt>
-							<dd
-								class={['truncate text-right tabular-nums', shown === '–' && 'text-faint']}
-								{@attach hint(exact(value))}
-							>
-								{shown}
+							<dd class="relative flex min-w-0 items-center justify-end">
+								<span
+									class={['truncate tabular-nums', shown === '–' && 'text-faint']}
+									{@attach hint(exact(value))}>{shown}</span
+								>
+								{#if shown !== '–'}
+									<span
+										class="absolute inset-y-0 right-0 flex items-center bg-muted pl-1 opacity-0 group-hover/prop:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100"
+									>
+										{@render copy(exact(value), `Copy ${key}`)}
+									</span>
+								{/if}
 							</dd>
 						</div>
 					{:else}
-						<p class="py-1 font-sans text-[13px] text-muted-foreground">No matching keys</p>
+						<p class="col-span-2 py-1 font-sans text-[13px] text-muted-foreground">
+							No matching keys
+						</p>
 					{/each}
 				</dl>
 			</details>
@@ -211,7 +211,8 @@
 	{#if run.runtime}<Property label="Runtime">{duration(run.runtime)}</Property>{/if}
 	<Property label="Logged by">
 		{#if owner}
-			<span class="flex min-w-0 items-center gap-2">
+			<!-- On the name's baseline, as every row: the avatar centres itself beside it. -->
+			<span class="flex min-w-0 items-baseline gap-2">
 				<Avatar
 					name={owner.name}
 					src={owner.avatar_url}
@@ -231,8 +232,7 @@
 	{/if}
 	{#if run.gpu_hours}
 		<Property label="GPU hours">
-			{hours(run.gpu_hours)}
-			{#if currency && run.cost != null}<span class="text-muted-foreground"
+			{hours(run.gpu_hours)}{#if currency && run.cost != null}<span class="text-muted-foreground"
 					>&nbsp;· {money(run.cost, currency)}</span
 				>{/if}
 		</Property>

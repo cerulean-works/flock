@@ -189,7 +189,6 @@ describe('eval items', () => {
 			keep: 'only_a',
 			with: 'acme/evals/r2'
 		});
-		await expect.element(row.getByText(/Answer:/)).toBeVisible();
 		expect(onview).toHaveBeenLastCalledWith({
 			task: 'arc_easy',
 			keep: 'only_a',
@@ -201,11 +200,15 @@ describe('eval items', () => {
 		// Each run's pick is named in its cell: A's on the gold choice, B's on Mars.
 		const gold = choices.getByRole('row').filter({ hasText: 'gold' });
 		await expect.element(gold.getByRole('cell', { name: /^A \(its pick\)/ })).toBeVisible();
+		// The prompt's closing "Answer:" cue isn't shown.
+		await expect
+			.element(row.getByRole('cell').nth(1))
+			.toHaveTextContent(/^Question: Which planet is closest to the Sun\?$/);
 		const mars = choices.getByRole('row').filter({ hasText: 'Mars' });
 		await expect.element(mars.getByRole('cell', { name: /^B \(its pick\)/ })).toBeVisible();
 		await expect
 			.element(screen.getByRole('cell', { name: /^B \(its pick\)/ }))
-			.toHaveAccessibleName('B (its pick): share 50.0% · prob 66.5% · logprob -1.00');
+			.toHaveAccessibleName('B (its pick): prob 66.5% · logprob -1.00');
 	});
 
 	it('tints an opened doc’s tokens by the heat chosen and says why a run has none', async () => {

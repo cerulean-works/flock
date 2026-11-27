@@ -1,7 +1,5 @@
 <script lang="ts">
 	import BlendIcon from '@lucide/svelte/icons/blend';
-	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import ListPage from '#lib/components/ListPage.svelte';
 	import { headerTrail } from '#lib/storage.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -86,28 +84,8 @@
 	{/if}
 {/snippet}
 
-<!-- While rows are checked: what to do with them. -->
-{#snippet selected()}
-	{#if selection}
-		<Button variant="outline" size="sm" onclick={() => blend(selection.chosen)}>
-			<BlendIcon /> Blend
-		</Button>
-		<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
-			<FolderInputIcon /> Move
-		</Button>
-		<Button
-			variant="outline"
-			size="sm"
-			class="text-destructive"
-			onclick={() => selection.act('delete')}
-		>
-			<Trash2Icon /> Delete
-		</Button>
-	{/if}
-{/snippet}
-
 {#if data.kind === 'folder'}
-	<ListPage title={header.title} trail={header.trail} org={false} {actions} {selection} {selected}>
+	<ListPage title={header.title} trail={header.trail} org={false} {actions}>
 		<!-- Imports and blends writing into this folder, over its listing. -->
 		<div class="px-5 has-[li]:pt-4">
 			<HFImportRows {scope} list={imports} kind="dataset" folder={data.path} />
@@ -120,6 +98,7 @@
 				folder={data.folder}
 				now={data.now}
 				{selection}
+				onblend={blend}
 				{projects}
 			/>
 		{/key}

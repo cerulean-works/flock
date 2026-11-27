@@ -1,14 +1,11 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
-	import ArrowDownToLineIcon from '@lucide/svelte/icons/arrow-down-to-line';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
-	import ClockIcon from '@lucide/svelte/icons/clock';
+	import ChevronsDownIcon from '@lucide/svelte/icons/chevrons-down';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import DownloadIcon from '@lucide/svelte/icons/download';
-	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
-	import SearchIcon from '@lucide/svelte/icons/search';
-	import TextWrapIcon from '@lucide/svelte/icons/text-wrap';
+	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
 	import { onMount, tick, untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import { toast } from 'svelte-sonner';
@@ -16,6 +13,7 @@
 	import { page } from '$app/state';
 	import type { ResolvedPathname } from '$app/types';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import BarSearch from '#lib/components/BarSearch.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { clock, elapsed, parseLine, type Level, type LogLine, type Span } from '#lib/logs.ts';
@@ -76,15 +74,9 @@
 	let loading = $state(true);
 	let failed = $state(false);
 	let scroller = $state<HTMLDivElement>();
-	let input = $state<HTMLInputElement>();
-	/** The search: an icon in the view bar that opens into a field, open while it holds text. */
-	let searching = $state(false);
-	async function openSearch() {
-		searching = true;
-		await tick();
-		input?.focus();
-		input?.select();
-	}
+	/** The search: the bar's, an icon that opens into a field, open while it holds text. */
+	let field = $state<BarSearch>();
+	const openSearch = () => field?.focus();
 
 	// ---------------------------------------------------------------------------- view options
 
@@ -184,8 +176,6 @@
 		if (e.key === 'Enter') {
 			e.preventDefault();
 			step(e.shiftKey ? -1 : 1);
-		} else if (e.key === 'Escape') {
-			query = '';
 		}
 	}
 
@@ -418,7 +408,13 @@
 	// ------------------------------------------------------------------------- copy, download
 
 	const asText = (ls: LogLine[]) =>
-		ls.map((l) => (l.at == null ? l.text : `${dateTime(l.at)}  ${l.text}`)).join('\n');
+		ls
+			.map((l) => {
+				// The time as the log shows it, so a pasted line reads the same.
+				const at = stampOf(l);
+				return at ? `${at}  ${l.text}` : l.text;
+			})
+			.join('\n');
 
 	async function copy() {
 		try {
@@ -463,7 +459,7 @@
 	};
 
 	const TOKEN_COLOR: Record<TokenKind, string> = {
-		number: 'text-ansi-cyan',
+		number: 'text-foreground',
 		key: 'text-muted-foreground',
 		string: 'text-ansi-green',
 		time: 'text-faint',
@@ -483,18 +479,21 @@
 
 	function pieceClass(p: Piece) {
 		const level = p.token === 'error' || p.token === 'warning' || p.token === 'info';
+		// A match takes its own text colour: a token's colour on the match's fill can't be read.
 		return [
-			p.color
-				? SPAN_COLOR[p.color]
-				: p.dim && !level
-					? 'text-faint'
-					: p.token && TOKEN_COLOR[p.token],
+			p.mark
+				? null
+				: p.color
+					? SPAN_COLOR[p.color]
+					: p.dim && !level
+						? 'text-faint'
+						: p.token && TOKEN_COLOR[p.token],
 			p.bold && 'font-semibold',
 			p.italic && 'italic',
 			p.underline && 'underline',
 			p.mark === 'hit' && 'rounded-[2px] bg-ansi-yellow/25 text-foreground',
 			p.mark === 'current' &&
-				'rounded-[2px] bg-ansi-yellow text-background outline-1 outline-ansi-yellow'
+				'rounded-[2px] bg-ansi-yellow text-white outline-1 outline-ansi-yellow dark:text-black'
 		];
 	}
 
@@ -509,7 +508,9 @@
 		return pieces(l.spans, tokenize(l.text), marks, l.dim);
 	}
 
-	const levelsShown = $derived(LEVEL_KEYS.filter((k) => !hidden.includes(k)).length);
+	/** The levels this log has (and any hidden one), in order: the menu lists only these. */
+	const present = $derived(LEVEL_KEYS.filter((k) => counts[k] > 0 || hidden.includes(k)));
+	const levelsShown = $derived(present.filter((k) => !hidden.includes(k)).length);
 	const laterCount = $derived(Math.max(0, known - first - lines.length));
 </script>
 
@@ -526,29 +527,17 @@
 		]}
 		{@attach into(bar)}
 	>
-		{#if searching || q}
-			<label
-				class="flex h-7 w-56 min-w-0 items-center gap-1.5 rounded-md bg-muted/60 pr-0.5 pl-2 focus-within:ring-3 focus-within:ring-ring/50 max-sm:w-28"
-			>
-				<SearchIcon class="size-3.5 flex-none text-muted-foreground" />
-				<input
-					bind:this={input}
-					class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-					placeholder="Search the log"
-					aria-label="Search the log"
-					bind:value={query}
-					oninput={onquery}
-					onkeydown={(e) => {
-						if (e.key === 'Escape' && !query) {
-							searching = false;
-							return;
-						}
-						onsearchkey(e);
-					}}
-					onblur={() => {
-						if (!query) searching = false;
-					}}
-				/>
+		<BarSearch
+			bind:this={field}
+			bind:value={query}
+			things="the log"
+			keys="⌘ F"
+			clearable={false}
+			class="max-sm:w-28"
+			oninput={onquery}
+			onkeydown={onsearchkey}
+		>
+			{#snippet trailing()}
 				{#if q}
 					<span class="flex-none text-xs text-muted-foreground tabular-nums" aria-live="polite">
 						{#if matches.length}
@@ -580,87 +569,66 @@
 						<ChevronDownIcon />
 					</Button>
 				{/if}
-			</label>
-		{:else}
-			<Button
-				variant="quiet"
-				size="icon-bar"
-				aria-label="Search the log"
-				{@attach hint('Search the log  ⌘ F')}
-				onclick={() => void openSearch()}
-			>
-				<SearchIcon />
-			</Button>
-		{/if}
+			{/snippet}
+		</BarSearch>
 
+		<!-- How the lines show, in one menu as a view's Display: the levels shown (only those the
+		     log has), the timestamps, wrapping. Lit while it hides levels. -->
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
 					<Button
 						{...props}
 						variant={hidden.length ? 'quiet-on' : 'quiet'}
-						size="bar"
-						{@attach hint('Filter by level')}
+						size="icon-bar"
+						aria-label={hidden.length
+							? `Display, ${levelsShown} of ${present.length} levels shown`
+							: 'Display'}
+						{@attach hint(
+							hidden.length
+								? `Display: ${levelsShown} of ${present.length} levels shown`
+								: 'Display'
+						)}
 					>
-						<ListFilterIcon />
-						<span class="max-sm:sr-only"
-							>{levelsShown === LEVEL_KEYS.length ? 'All levels' : `${levelsShown} levels`}</span
-						>
-					</Button>
-				{/snippet}
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="end" class="w-48">
-				<DropdownMenu.Group>
-					<DropdownMenu.Label>Levels</DropdownMenu.Label>
-					{#each LEVEL_KEYS as k (k)}
-						<DropdownMenu.CheckboxItem
-							checked={!hidden.includes(k)}
-							onCheckedChange={(on) => toggleLevel(k, on)}
-						>
-							<span
-								class={[
-									'size-2 flex-none rounded-full',
-									k === 'error'
-										? 'bg-ansi-red'
-										: k === 'warning'
-											? 'bg-ansi-yellow'
-											: k === 'info'
-												? 'bg-ansi-blue'
-												: 'bg-faint'
-								]}
-							></span>
-							{LEVEL_LABEL[k]}
-							<span class="ml-auto text-xs text-muted-foreground tabular-nums">
-								{counts[k].toLocaleString('en-US')}
-							</span>
-						</DropdownMenu.CheckboxItem>
-					{/each}
-				</DropdownMenu.Group>
-				{#if hidden.length}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item onSelect={() => ((hidden = []), remember())}>
-						Show all levels
-					</DropdownMenu.Item>
-				{/if}
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
-
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger>
-				{#snippet child({ props })}
-					<Button
-						{...props}
-						variant="quiet"
-						size="bar"
-						class={bar ? 'max-sm:hidden' : undefined}
-						{@attach hint('Timestamps')}
-					>
-						<ClockIcon />
-						<span class="max-sm:hidden">{STAMPS.find((s) => s.value === stamps)?.label}</span>
+						<SlidersHorizontalIcon />
 					</Button>
 				{/snippet}
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content align="end" class="w-56">
+				{#if present.length > 1}
+					<DropdownMenu.Group>
+						<DropdownMenu.Label>Levels</DropdownMenu.Label>
+						{#each present as k (k)}
+							<DropdownMenu.CheckboxItem
+								checked={!hidden.includes(k)}
+								onCheckedChange={(on) => toggleLevel(k, on)}
+							>
+								<span
+									class={[
+										'size-2 flex-none rounded-full',
+										k === 'error'
+											? 'bg-ansi-red'
+											: k === 'warning'
+												? 'bg-ansi-yellow'
+												: k === 'info'
+													? 'bg-ansi-blue'
+													: 'bg-faint'
+									]}
+								></span>
+								{LEVEL_LABEL[k]}
+								<span class="ml-auto text-xs text-muted-foreground tabular-nums">
+									{counts[k].toLocaleString('en-US')}
+								</span>
+							</DropdownMenu.CheckboxItem>
+						{/each}
+						{#if hidden.length}
+							<DropdownMenu.Item onSelect={() => ((hidden = []), remember())}>
+								<span class="size-4" aria-hidden="true"></span> Show all levels
+							</DropdownMenu.Item>
+						{/if}
+					</DropdownMenu.Group>
+					<DropdownMenu.Separator />
+				{/if}
 				<DropdownMenu.Group>
 					<DropdownMenu.Label>Timestamps</DropdownMenu.Label>
 					<DropdownMenu.RadioGroup
@@ -672,32 +640,27 @@
 						{/each}
 					</DropdownMenu.RadioGroup>
 				</DropdownMenu.Group>
+				<DropdownMenu.Separator />
+				<DropdownMenu.CheckboxItem
+					checked={wrap}
+					onCheckedChange={(on) => ((wrap = on), remember())}
+				>
+					Wrap long lines
+				</DropdownMenu.CheckboxItem>
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
-
-		<Button
-			variant={wrap ? 'quiet-on' : 'quiet'}
-			size="icon-bar"
-			class={bar ? 'max-sm:hidden' : undefined}
-			{@attach hint(wrap ? 'Don’t wrap long lines' : 'Wrap long lines')}
-			aria-label="Wrap long lines"
-			aria-pressed={wrap}
-			onclick={() => ((wrap = !wrap), remember())}
-		>
-			<TextWrapIcon />
-		</Button>
 		{#if live}
 			<Button
 				variant={following ? 'quiet-on' : 'quiet'}
-				size="bar"
+				size="icon-bar"
 				{@attach hint(
 					following ? 'Stop following new lines' : 'Follow new lines as they’re printed'
 				)}
+				aria-label="Follow new lines"
 				aria-pressed={following}
 				onclick={follow}
 			>
-				<ArrowDownToLineIcon />
-				<span class="max-sm:sr-only">Follow</span>
+				<ChevronsDownIcon />
 			</Button>
 		{/if}
 
@@ -726,8 +689,12 @@
 		</Button>
 	</div>
 
+	<!-- A stop of its own, so the keyboard can scroll the log (the line links are left out). -->
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 	<div
-		class="relative min-h-0 flex-1 overflow-auto [overflow-anchor:none]"
+		class="relative min-h-0 flex-1 overflow-auto outline-none [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+		tabindex="0"
+		aria-label="Console output"
 		bind:this={scroller}
 		bind:clientHeight={viewH}
 		bind:clientWidth={viewW}
@@ -783,8 +750,10 @@
 							data-index={row}
 							{@attach wrap && measure}
 						>
+							<!-- Out of the Tab order: a stop per line would trap the keyboard in the log. -->
 							<a
 								href="#L{l.line + 1}"
+								tabindex="-1"
 								class={[
 									'w-[8ch] flex-none pr-[2ch] text-right tabular-nums select-none hover:text-foreground hover:underline',
 									selected === l.line

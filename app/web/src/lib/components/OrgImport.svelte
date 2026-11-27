@@ -1,19 +1,6 @@
 <script lang="ts" module>
+	import { importShown } from '#lib/wandb.ts';
 	import type { OrgImport as Job } from '#lib/types.ts';
-
-	/** How long an import that stopped short stays on the page, for someone to resume it. */
-	const ATTENTION = 3 * 86_400;
-
-	/**
-	 * Whether the import is worth showing: while it runs, or for a few days after it failed or was
-	 * interrupted. A finished or cancelled import leaves nothing behind.
-	 */
-	export function importShown(job: Job | null, now: number): job is Job {
-		if (!job) return false;
-		if (job.state === 'running') return true;
-		if (job.state !== 'failed' && job.state !== 'interrupted') return false;
-		return now - (job.finished_at ?? job.started_at) < ATTENTION;
-	}
 </script>
 
 <script lang="ts">

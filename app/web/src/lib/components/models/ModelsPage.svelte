@@ -1,9 +1,6 @@
 <script lang="ts">
-	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import ListPage from '#lib/components/ListPage.svelte';
 	import { headerTrail } from '#lib/storage.ts';
-	import { Button } from '#lib/components/ui/button/index.js';
 	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
 	import HFImportRows from '#lib/components/imports/HFImportRows.svelte';
 	import { nameOf, scopeCrumbs } from '#lib/datasets.ts';
@@ -63,31 +60,12 @@
 	<HFImportButton {scope} kind="model" list={imports} />
 {/snippet}
 
-<!-- While models are checked (D130): what to do with them. -->
-{#snippet selected()}
-	{#if selection}
-		<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
-			<FolderInputIcon /> Move
-		</Button>
-		<Button
-			variant="outline"
-			size="sm"
-			class="text-destructive"
-			onclick={() => selection.act('delete')}
-		>
-			<Trash2Icon /> Delete
-		</Button>
-	{/if}
-{/snippet}
-
 {#if data.kind === 'folder'}
 	<ListPage
 		title={header.title}
 		trail={header.trail}
 		org={false}
 		actions={writer ? actions : undefined}
-		{selection}
-		{selected}
 	>
 		<!-- Imports writing into this folder, over its listing. -->
 		<div class="px-5 has-[li]:pt-4">

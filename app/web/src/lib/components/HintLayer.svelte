@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Keys from '#lib/components/Keys.svelte';
 	import { tip } from '#lib/hint.svelte.ts';
 
 	// The page's one hover hint (#lib/hint.svelte.ts): its bottom corner just off the pointer, up
@@ -45,18 +46,7 @@
 		{#if parts.keys.length}
 			<span class="flex items-center gap-2">
 				{parts.label}
-				<span class="flex items-center gap-1">
-					{#each parts.keys as k, i (i)}
-						{#if k === 'then'}
-							<span class="text-muted-foreground">then</span>
-						{:else}
-							<kbd
-								class="grid h-4 min-w-4 place-items-center rounded-[4px] border border-border px-1 font-sans text-[11px] leading-none text-muted-foreground"
-								>{k}</kbd
-							>
-						{/if}
-					{/each}
-				</span>
+				<Keys keys={parts.keys.join(' ')} />
 			</span>
 			{#if parts.more}<span class="block text-muted-foreground">{parts.more}</span>{/if}
 		{:else}
