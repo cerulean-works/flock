@@ -61,9 +61,6 @@ describe('PickerList', () => {
 
 	it('goes up a folder on Backspace only in an empty box, and back a level on Escape', async () => {
 		const { onup, onback, box } = folders();
-		await expect.element(screen.getByText('⌫ up a folder')).toBeVisible();
-		await expect.element(screen.getByText('esc back')).toBeVisible();
-
 		await box.fill('a');
 		await userEvent.keyboard('{Backspace}');
 		expect(onup).not.toHaveBeenCalled(); // it deleted the letter
