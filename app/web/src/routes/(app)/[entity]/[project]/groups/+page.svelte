@@ -13,6 +13,8 @@
 	import BestDots, { type BestDot } from '#lib/components/groups/BestDots.svelte';
 	import CompareHistory, { type CompareLine } from '#lib/components/groups/CompareHistory.svelte';
 	import BestByPicker from '#lib/components/groups/BestByPicker.svelte';
+	import BestMark from '#lib/components/groups/BestMark.svelte';
+	import HeaderMenu from '#lib/components/HeaderMenu.svelte';
 	import LiveDot from '#lib/components/groups/LiveDot.svelte';
 	import { GroupsLive } from '#lib/components/groups/live.svelte.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -154,7 +156,7 @@
 	// value); an empty last cell takes what's left, so rows span the window without the
 	// columns drifting apart.
 	const NAME_W = 280;
-	const VALUE_W = 96;
+	const VALUE_W = 148;
 	const DELTA_W = 136;
 	const STD_W = 84;
 	const RUNS_W = 56;
@@ -547,15 +549,6 @@
 			<LiveDot connection={live.connection} />
 		{/snippet}
 		{#snippet toolbar()}
-			<BestByPicker
-				quiet
-				key={cmp.best_key}
-				order={cmp.best_order}
-				keys={data.summaryKeys}
-				disabled={readonly}
-				title="The project’s setting; a group can have its own"
-				onchange={setBest}
-			/>
 			<span class="flex-1"></span>
 			<div class="flex items-center gap-2">
 				<Switch id="differences-only" bind:checked={differencesOnly} />
@@ -573,6 +566,7 @@
 				{/snippet}
 				{#snippet actions()}
 					<BestByPicker
+						placeholder="Pick a column"
 						key={null}
 						order={null}
 						keys={data.summaryKeys}
@@ -673,9 +667,26 @@
 										{count(cmp.rows.length, 'group')} · {cmp.ungrouped_count} ungrouped
 									</span>
 								</div>
-								<div class={[CELL, 'justify-end text-foreground']} style:flex={fit(VALUE_W)}>
-									{metricLabel(cmp.best_key)}
-									{order === 'asc' ? '↓' : '↑'}
+								<!-- The column groups are ranked by: its trophy changes which, and which way. -->
+								<div
+									class={[CELL, 'group/h justify-end gap-1 text-foreground']}
+									style:flex={fit(VALUE_W)}
+								>
+									<span class="truncate">{metricLabel(cmp.best_key)}</span>
+									<BestMark {order} source="the project’s setting; a group can have its own" />
+									{#if !readonly}
+										{@const key = cmp.best_key}
+										<HeaderMenu
+											label={metricLabel(key)}
+											best={{
+												active: true,
+												order,
+												onbest: (o) => setBest(key, o),
+												keys: data.summaryKeys.filter((k) => k !== key),
+												onpick: (k) => setBest(k, order)
+											}}
+										/>
+									{/if}
 								</div>
 								<div class={[CELL, 'justify-end']} style:flex={fit(DELTA_W)}>vs best</div>
 								<div class={[CELL, 'justify-end']} style:flex={fit(STD_W)}>± repeats</div>
@@ -693,13 +704,19 @@
 									<div
 										class={[
 											CELL,
-											'justify-end text-foreground',
+											'group/h justify-end gap-1 text-foreground',
 											suggested.settings.length + i === primary.length - 1 && PRIMARY_END
 										]}
 										style:flex={fit(widthOf[key])}
 										title="{key} of each group’s best run"
 									>
 										<span class="truncate">{metricName(key)}</span>
+										{#if !readonly && data.summaryKeys.includes(key)}
+											<HeaderMenu
+												label={metricName(key)}
+												best={{ active: false, order: null, onbest: (o) => setBest(key, o) }}
+											/>
+										{/if}
 									</div>
 								{/each}
 								{#each keys as key (key)}

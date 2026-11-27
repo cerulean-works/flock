@@ -21,6 +21,8 @@
 		quiet?: boolean;
 		/** Which edge of the button the menu lines up with. */
 		align?: 'start' | 'end';
+		/** Its words while nothing is picked. */
+		placeholder?: string;
 	}
 
 	let {
@@ -31,7 +33,8 @@
 		disabled = false,
 		title,
 		quiet = false,
-		align = 'start'
+		align = 'start',
+		placeholder
 	}: Props = $props();
 
 	let query = $state('');
@@ -57,7 +60,9 @@
 			>
 				<TrophyIcon />
 				<span class="sr-only">Best by</span>
-				<span class="max-w-48 truncate font-medium text-foreground">{bestLabel(key, order)}</span>
+				<span class="max-w-48 truncate font-medium text-foreground"
+					>{key ? bestLabel(key, order) : (placeholder ?? bestLabel(key, order))}</span
+				>
 				<ChevronDownIcon class="text-muted-foreground" />
 			</Button>
 		{/snippet}

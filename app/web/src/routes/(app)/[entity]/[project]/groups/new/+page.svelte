@@ -5,10 +5,11 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Page from '#lib/components/Page.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import AutoGroups from '#lib/components/groups/AutoGroups.svelte';
 	import GroupEditor from '#lib/components/groups/GroupEditor.svelte';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
-	import { fromFlockFilter, newGroupHref, rowsOf, type Proposal } from '#lib/groups.ts';
+	import { fromFlockFilter, groupsHref, newGroupHref, rowsOf, type Proposal } from '#lib/groups.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -67,24 +68,29 @@
 	<title>New group · {project} · {data.shell.orgName ?? entity}</title>
 </svelte:head>
 
+<!-- The two ways in: underline tabs at the view bar's start, Auto's or the editor's. -->
+{#snippet tabs()}
+	<Tabs.Root value={tab} onValueChange={(v) => show(v as Tab)}>
+		<Tabs.List aria-label="How to make groups">
+			<Tabs.Trigger value="auto" title="The assistant proposes groups">
+				<SparklesIcon />Auto
+			</Tabs.Trigger>
+			<Tabs.Trigger value="manual" title="Pick runs with filters and by hand">
+				<SlidersHorizontalIcon />Manual
+			</Tabs.Trigger>
+		</Tabs.List>
+	</Tabs.Root>
+{/snippet}
+
 <Page width="full">
 	<div class="flex min-h-0 flex-1 flex-col">
-		<!-- The two ways in, centred above either. -->
-		<div class="flex flex-none justify-center pt-4">
-			<Tabs.Root value={tab} onValueChange={(v) => show(v as Tab)}>
-				<Tabs.List aria-label="How to make groups" class="h-9!">
-					<Tabs.Trigger value="auto" class="px-3" title="The assistant proposes groups">
-						<SparklesIcon />Auto
-					</Tabs.Trigger>
-					<Tabs.Trigger value="manual" class="px-3" title="Pick runs with filters and by hand">
-						<SlidersHorizontalIcon />Manual
-					</Tabs.Trigger>
-				</Tabs.List>
-			</Tabs.Root>
-		</div>
-
 		{#if autoOpened}
 			<div class={['min-h-0 flex-1 flex-col', tab === 'auto' ? 'flex' : 'hidden']}>
+				<PageHeader
+					title="New group"
+					trail={[{ label: 'Groups', href: groupsHref(entity, project) }]}
+					toolbar={tabs}
+				/>
 				<AutoGroups
 					{entity}
 					{project}
@@ -108,6 +114,7 @@
 						people={data.people}
 						groupList={data.groupList}
 						prefill={data.prefill}
+						tabs={available ? tabs : undefined}
 					/>
 				{/key}
 			</div>

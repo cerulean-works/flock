@@ -15,7 +15,9 @@
 	const MIN_W = 64;
 	/** A cell's padding (px-3 each side), and room for the header's sort arrow and funnel. */
 	const PAD = 24;
-	const ARROW = 42;
+	const ARROW = 46;
+	/** The Best by column's trophy and arrow, beside them. */
+	const TROPHY = 24;
 	/** Rows measured per page: enough to see its widest values, cheap on long pages. */
 	const SAMPLE = 200;
 
@@ -32,16 +34,13 @@
 </script>
 
 <script lang="ts">
-	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
-	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
-	import ArrowUpDownIcon from '@lucide/svelte/icons/arrow-up-down';
 	import GripHorizontalIcon from '@lucide/svelte/icons/grip-horizontal';
 	import { untrack } from 'svelte';
 	import { hint } from '#lib/hint.svelte.ts';
 	import { page as appPage } from '$app/state';
 	import { prefetchRunPage } from '#lib/data/cache.ts';
 	import { columnGroups } from '#lib/data/snapshot.ts';
-	import type { ColumnDef, ColumnGroupSpan, RunQuery } from '#lib/types.ts';
+	import type { ColumnDef, ColumnGroupSpan, RunQuery, SortOrder } from '#lib/types.ts';
 	import {
 		dateTime,
 		duration,
@@ -62,7 +61,7 @@
 	import { columnFilterProps } from '#lib/workspace/column-filter.ts';
 	import { runValues } from '#lib/data/run-values.svelte.ts';
 	import { moveKey } from '#lib/workspace/layout.ts';
-	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
+	import { DEFAULT_ORDER, DEFAULT_SORT, applyRunQuery, runHref } from '#lib/workspace/url.ts';
 	import { layerOpen, typing } from '#lib/keys.svelte.ts';
 	import { goto } from '$app/navigation';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
@@ -70,6 +69,9 @@
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import Avatar from './Avatar.svelte';
 	import ColumnFilter from './ColumnFilter.svelte';
+	import HeaderMenu from './HeaderMenu.svelte';
+	import BestMark from './groups/BestMark.svelte';
+	import { isInternalKey, type BestOrder } from '#lib/groups.ts';
 	import ColumnResizer from './ColumnResizer.svelte';
 	import RunEye from './RunEye.svelte';
 	import RunMenu from './RunMenu.svelte';
@@ -94,9 +96,32 @@
 		onprimaryorder?: (keys: string[]) => void;
 		/** In Visualize, above the charts rather than beside them. */
 		stacked?: boolean;
+		/**
+		 * **Best by** on the headers (a group's page, D217): a trophy on the column runs are ranked
+		 * by, and on hover on any other numeric summary column, to make it the one.
+		 */
+		best?: {
+			key: string | null;
+			order: BestOrder | null;
+			source?: string;
+			onchange: (key: string, order: BestOrder) => void;
+			/** Read-only: the trophy shows where it is, and changes nothing. */
+			disabled?: boolean;
+		} | null;
 	}
 
-	let { mode, nameW, primary = null, onprimaryorder, stacked = false }: Props = $props();
+	let {
+		mode,
+		nameW,
+		primary = null,
+		onprimaryorder,
+		stacked = false,
+		best = null
+	}: Props = $props();
+
+	/** A column that can rank runs: a number the run summarised, not one Flock keeps. */
+	const rankable = (col: ColumnDef) =>
+		col.kind === 'num' && col.key.startsWith('summary.') && !isInternalKey(col.key);
 
 	const ws = getWorkspace();
 	const runs = $derived(ws.page.runs);
@@ -178,7 +203,7 @@
 		return columns.map((col, c) => {
 			if (!f || !FITTED.has(col.kind)) return col.width;
 			let w = textWidth(labels[c], f.head) ?? col.width;
-			w += ARROW;
+			w += ARROW + (best?.key === col.key ? TROPHY : 0);
 			const rows = Math.min(page.runs.length, SAMPLE);
 			for (let r = 0; r < rows; r++) {
 				const text = untrack(() => cellText(c, r));
@@ -342,6 +367,13 @@
 			sort: key,
 			order: same && query.order === 'desc' ? 'asc' : 'desc'
 		};
+	}
+
+	/** The URL sorted by a column one way, from the header's menu. */
+	function sortHrefIn(key: string, order: SortOrder) {
+		const params = new URLSearchParams(appPage.url.search);
+		applyRunQuery(params, { ...query, page: 1, sort: key, order });
+		return ws.href(params);
 	}
 
 	function sortHref(key: string) {
@@ -604,22 +636,28 @@
 
 <svelte:window {onkeydown} />
 
-<!-- A header's sort: ↑ or ↓ while the table sorts by it, a faint ↕ on hover otherwise. -->
-{#snippet arrow(key: string)}
-	<span class="grid size-4 flex-none place-items-center">
-		{#if query.sort === key}
-			{@const Icon = query.order === 'asc' ? ArrowUpIcon : ArrowDownIcon}
-			<Icon
-				class="arrow size-3 flex-none text-foreground"
-				aria-label={query.order === 'asc' ? 'ascending' : 'descending'}
-			/>
-		{:else}
-			<ArrowUpDownIcon
-				class="size-3 flex-none text-faint opacity-0 group-hover/h:opacity-100"
-				aria-hidden="true"
-			/>
-		{/if}
-	</span>
+<!-- A header's menu: its sort (↑ or ↓ while the table sorts by it, a faint ↕ on hover
+     otherwise) and, on a group's page, Best by. A click on the label sorts at once. -->
+{#snippet sortMenu(key: string, label: string, col: ColumnDef | null)}
+	{@const ranks = !!best && !!col && rankable(col) && !best.disabled}
+	<HeaderMenu
+		{label}
+		sort={{
+			dir: query.sort === key ? query.order : null,
+			onsort: (order) => void goto(sortHrefIn(key, order), { reset: false }),
+			onclear:
+				query.sort === key && key !== DEFAULT_SORT
+					? () => void goto(sortHrefIn(DEFAULT_SORT, DEFAULT_ORDER), { reset: false })
+					: undefined
+		}}
+		best={ranks && best
+			? {
+					active: best.key === key,
+					order: best.order,
+					onbest: (order) => best?.onchange(key, order)
+				}
+			: null}
+	/>
 {/snippet}
 
 <!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across;
@@ -674,8 +712,8 @@
 					onpointerleave={leaveSort}
 				>
 					Name
-					{@render arrow('name')}
 				</a>
+				{@render sortMenu('name', 'Name', null)}
 				<!-- How many runs the charts show; the pager alone counts the table's rows. -->
 				{#if !wide}
 					<span class="ml-auto font-normal whitespace-nowrap text-faint">
@@ -718,12 +756,16 @@
 						onpointerenter={() => hoverSort(col.key)}
 						onpointerleave={leaveSort}
 					>
-						<span class={['label min-w-0 flex-1 truncate', isNumeric(col) && 'text-right']}
+						<span class={['label min-w-0 truncate', isNumeric(col) ? 'flex-1 text-right' : '']}
 							>{labels[c]}</span
 						>
-						<!-- Sort and filter side by side at the cell's right edge. -->
-						{@render arrow(col.key)}
+						{#if best?.key === col.key}
+							<BestMark order={best.order} source={best.source} />
+						{/if}
+						{#if !isNumeric(col)}<span class="flex-1"></span>{/if}
 					</a>
+					<!-- Sort and filter side by side at the cell's right edge. -->
+					{@render sortMenu(col.key, labels[c], col)}
 					{#if wide}
 						<ColumnFilter {...filterOf(c)} />
 					{/if}

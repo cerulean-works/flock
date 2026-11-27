@@ -42,6 +42,11 @@
 		org?: boolean;
 		/** `workspace` only: in place of the title's text, the trail's last step (a name to edit). */
 		heading?: Snippet;
+		/**
+		 * `workspace` only: on a phone, the step before the title stays (where this page is).
+		 * Off, a phone shows the title alone (a name being edited gets the width).
+		 */
+		phoneTrail?: boolean;
 	}
 
 	let {
@@ -57,7 +62,8 @@
 		description,
 		trail = [],
 		org: withOrg = true,
-		heading
+		heading,
+		phoneTrail = true
 	}: Props = $props();
 
 	// Where the page is, Linear-style: org / project / … / title, each step a link.
@@ -134,7 +140,10 @@
 		>
 			<!-- On one baseline: after crumbs the title is their 13px, set apart only by weight and
 			     colour. Icons and chevrons centre themselves. -->
-			<nav aria-label="Breadcrumbs" class="flex min-w-0 items-baseline gap-1.5">
+			<nav
+				aria-label="Breadcrumbs"
+				class={['flex min-w-0 items-baseline gap-1.5', !phoneTrail && 'max-sm:flex-1']}
+			>
 				{#if withOrg && org && orgName && title !== orgName}
 					<a
 						href={entityHref(org)}
@@ -154,7 +163,7 @@
 				{/if}
 				{#each steps as step, i (`${i}:${step.href}`)}
 					<!-- On a phone only the step before the title stays: where this page is. -->
-					{@const far = i < steps.length - 1 && 'max-sm:hidden'}
+					{@const far = (i < steps.length - 1 || !phoneTrail) && 'max-sm:hidden'}
 					<a href={step.href} class={[far, CRUMB]} {@attach hint(step.label)}>{step.label}</a>
 					<ChevronRightIcon
 						class={['size-3.5 flex-none self-center text-faint', far]}
@@ -170,15 +179,19 @@
 				{/if}
 				<!-- A title on its own (a top-level page) is the wordmark's 16px, at its own weight;
 				     after crumbs it keeps their 13px. -->
-				<h1
-					class={[
-						'min-w-0 truncate leading-5 font-medium text-foreground',
-						alone ? 'text-[16px] tracking-[-0.015em]' : 'text-[13px]'
-					]}
-					{@attach hint(subtitleTitle ?? title)}
-				>
-					{title}
-				</h1>
+				{#if heading}
+					{@render heading()}
+				{:else}
+					<h1
+						class={[
+							'min-w-0 truncate leading-5 font-medium text-foreground',
+							alone ? 'text-[16px] tracking-[-0.015em]' : 'text-[13px]'
+						]}
+						{@attach hint(subtitleTitle ?? title)}
+					>
+						{title}
+					</h1>
+				{/if}
 				<!-- In the trail, in a box of the text's height: taller controls (a version picker, a
 				     ⋯ button) overflow it rather than stretch the trail, so the trail's marks stay
 				     centred on its text, on the org's mark's line. -->

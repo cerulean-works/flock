@@ -16,7 +16,7 @@
 	import Columns2Icon from '@lucide/svelte/icons/columns-2';
 	import Rows2Icon from '@lucide/svelte/icons/rows-2';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-	import type { Snippet } from 'svelte';
+	import type { ComponentProps, Snippet } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ResolvedPathname } from '$app/types';
@@ -40,7 +40,7 @@
 	} from '#lib/workspace/project-view.svelte.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import ChartsPane from './ChartsPane.svelte';
-	import ViewSettings from './ViewSettings.svelte';
+	import ViewSettings, { type DisplaySetting } from './ViewSettings.svelte';
 	import DeleteRunsDialog from './DeleteRunsDialog.svelte';
 	import EditRunDialog from './EditRunDialog.svelte';
 	import EmptyState from './EmptyState.svelte';
@@ -101,6 +101,10 @@
 		evalPreset?: boolean;
 		/** Whether the preset is on until the viewer turns it off (a group of eval runs). */
 		evalsFirst?: boolean;
+		/** Best by on the table's headers (a group's page; see RunsTable). */
+		best?: ComponentProps<typeof RunsTable>['best'];
+		/** How the runs are drawn (a group's Group by, Color by, …), atop the view's settings. */
+		display?: DisplaySetting[];
 	}
 
 	let {
@@ -125,7 +129,9 @@
 		tableH: savedTableH = TABLE_H.initial,
 		readonly,
 		evalPreset = false,
-		evalsFirst = false
+		evalsFirst = false,
+		best = null,
+		display = []
 	}: Props = $props();
 
 	const ws = getWorkspace();
@@ -510,6 +516,7 @@
 								? { keys: evalsView.keys, onjump: (key) => evalsTable?.scrollToColumn(key) }
 								: { onjump: (key) => table?.scrollToColumn(key) }}
 						charts={chartsShown}
+						{display}
 					/>
 					{#if chartsShown}
 						<Button
@@ -555,7 +562,15 @@
 		{#if evalsShown}
 			<EvalsTable bind:this={evalsTable} view={evalsView} />
 		{:else}
-			<RunsTable bind:this={table} mode={view} {nameW} {primary} {onprimaryorder} stacked={below} />
+			<RunsTable
+				bind:this={table}
+				mode={view}
+				{nameW}
+				{primary}
+				{onprimaryorder}
+				{best}
+				stacked={below}
+			/>
 		{/if}
 		<ChartsPane
 			shown={chartsShown}
