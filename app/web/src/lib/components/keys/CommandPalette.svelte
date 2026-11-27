@@ -36,9 +36,9 @@
 			if (shell?.s3) {
 				go.push({ label: 'Datasets', href: datasetsHref(org), hint: 'G D' });
 				go.push({ label: 'Models', href: modelsHref(org), hint: 'G M' });
-				go.push({ label: 'Storage', href: storageHref(org) });
+				go.push({ label: 'Storage', href: storageHref(org), hint: 'G S' });
 			}
-			go.push({ label: 'Settings and members', href: orgHref(org), hint: 'G S' });
+			go.push({ label: 'Settings', href: orgHref(org), hint: 'G ,' });
 		}
 		go.push({ label: 'Account and keys', href: resolve('/(app)/account') });
 

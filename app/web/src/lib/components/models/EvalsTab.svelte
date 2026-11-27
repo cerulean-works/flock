@@ -9,6 +9,7 @@
 	import type { Scope } from '#lib/scope.ts';
 	import type { ModelEvalRun, ModelVersionDetail } from '#lib/types.ts';
 	import { runHref } from '#lib/workspace/url.ts';
+	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	let { scope, version }: { scope: Scope; version: ModelVersionDetail } = $props();
@@ -48,13 +49,14 @@
 </script>
 
 {#if !version.evals?.length}
-	<div class="max-w-[68ch] text-[13px] text-muted-foreground">
-		<p>No eval runs have scored this version yet.</p>
-		<p class="mt-1">
-			Score it with <code class="font-mono text-[0.95em] text-foreground"
-				>flock eval run --model {ref} --suite base_easy --wandb-project model-evals --out results</code
-			>.
-		</p>
+	<!-- The empty pages' look: a muted line, then the command in a code block to copy. -->
+	<div class="grid max-w-[68ch] gap-3 text-[13px] text-muted-foreground">
+		<p>No eval runs have scored this version yet. Score it with:</p>
+		<CopyBlock
+			code="flock eval run --model {ref} --suite base_easy --wandb-project model-evals --out results"
+			lang="bash"
+			label="Copy command"
+		/>
 	</div>
 {:else if failed}
 	<p class="text-[13px] text-destructive" role="alert">{failed}</p>

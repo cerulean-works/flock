@@ -133,7 +133,15 @@
 		{:else if note}
 			<div class="text-[12px] break-words text-muted-foreground">{@render note()}</div>
 		{/if}
-		<div class="flex justify-end">
+		<div class="flex justify-end gap-1.5">
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				class="text-muted-foreground"
+				disabled={pending}
+				onclick={() => setOpen(false)}>Cancel</Button
+			>
 			<Button type="submit" size="sm" disabled={disabled || pending} {pending}>{submit}</Button>
 		</div>
 	</form>

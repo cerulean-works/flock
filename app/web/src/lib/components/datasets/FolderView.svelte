@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { accountHref } from '#lib/settings.ts';
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
@@ -6,7 +7,6 @@
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import {
 		DATASETS_BUCKET,
@@ -21,11 +21,11 @@
 	import { datasetSnippet } from '#lib/snippets.ts';
 	import type { Selection } from '#lib/selection.svelte.ts';
 	import type { DatasetFolder, DeleteResult, MoveResult } from '#lib/types.ts';
-	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
+	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
 	import EmptyState from '../EmptyState.svelte';
 	import DataTable, { type Column, ROW_LINK } from '../DataTable.svelte';
-	import RowMenu from '../RowMenu.svelte';
+	import RowMenuItems from '../RowMenuItems.svelte';
 	import DeleteDatasetsDialog from './DeleteDatasetsDialog.svelte';
 	import MoveDatasetsDialog from './MoveDatasetsDialog.svelte';
 	import ForkDialog from './ForkDialog.svelte';
@@ -40,15 +40,17 @@
 		folder: DatasetFolder;
 		now: number;
 		/**
-		 * Rows checked, for members and admins (D130), whose rows also get a menu (D133). The
-		 * page shows the selection bar, whose actions open this listing's dialogs.
+		 * Rows checked, for members and admins (D130), whose rows also get a menu (D133): a
+		 * checked row's menu acts on every row checked.
 		 */
 		selection?: Selection;
+		/** Blend these datasets (the page's blend dialog). */
+		onblend?: (paths: readonly string[]) => void;
 		/** The org's projects, for the Move dialog's scope picker (D166). */
 		projects?: readonly string[];
 	}
 
-	let { scope, path, folder, now, selection, projects = [] }: Props = $props();
+	let { scope, path, folder, now, selection, onblend, projects = [] }: Props = $props();
 	/** The ⋯ menu a rename opened from. */
 	let renameAnchor = $state<HTMLElement | null>(null);
 
@@ -194,9 +196,8 @@
 			<span>
 				Tools that can’t run <code class="font-mono text-[0.9em]">flock</code> can use a long-lived
 				key from your
-				<a
-					class="text-link underline-offset-3 hover:underline"
-					href="{resolve('/(app)/account')}#s3-keys">account page</a
+				<a class="text-link underline-offset-3 hover:underline" href="{accountHref('keys')}?keys=s3"
+					>account page</a
 				>.
 			</span>
 		{/snippet}
@@ -212,6 +213,7 @@
 		selectable={(row) => row.kind !== 'file'}
 		name={(row) => row.name}
 		menu={selection ? rowMenu : undefined}
+		hasMenu={(row) => row.kind !== 'file'}
 		empty={nothing}
 		footer={cursor || failed ? pager : undefined}
 	>
@@ -256,15 +258,24 @@
 
 {#snippet rowMenu(row: Row)}
 	{#if selection && row.kind !== 'file'}
-		<RowMenu
-			name={row.name}
+		{@const on = selection.targetsFor(row.key)}
+		{@const sets = on.filter((k) => !folderPaths.has(k))}
+		<RowMenuItems
+			many={on.length < 2
+				? null
+				: sets.length === on.length
+					? count(on.length, 'dataset')
+					: sets.length
+						? count(on.length, 'item')
+						: count(on.length, 'folder')}
 			onfork={row.kind === 'dataset' ? () => selection.act('fork', [row.key]) : undefined}
 			onrename={() => {
 				renameAnchor = openMenuTrigger();
 				selection.act('rename', [row.key]);
 			}}
-			onmove={() => selection.act('move', [row.key])}
-			ondelete={() => selection.act('delete', [row.key])}
+			onblend={onblend && sets.length ? () => onblend(sets) : undefined}
+			onmove={() => selection.act('move', on)}
+			ondelete={() => selection.act('delete', on)}
 		/>
 	{/if}
 {/snippet}

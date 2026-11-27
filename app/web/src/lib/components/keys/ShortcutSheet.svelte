@@ -19,10 +19,11 @@
 				...(s3
 					? ([
 							['G then D', 'Go to Datasets'],
-							['G then M', 'Go to Models']
+							['G then M', 'Go to Models'],
+							['G then S', 'Go to Storage']
 						] as [string, string][])
 					: []),
-				['G then S', 'Go to Settings']
+				['G then ,', 'Go to Settings']
 			]
 		],
 		[

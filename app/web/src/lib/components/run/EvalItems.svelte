@@ -81,7 +81,8 @@
 		onview
 	}: Props = $props();
 
-	const SIZE = 20;
+	// Items to a page; the pager's menu changes it.
+	let perPage = $state(20);
 	const HEATS: { heat: TokenHeat; label: string; hint: string }[] = [
 		{ heat: 'surprisal', label: 'Surprisal', hint: 'Darker: the run found the token less likely' },
 		{ heat: 'rank', label: 'Rank', hint: 'Darker: more tokens the run found likelier' },
@@ -109,7 +110,7 @@
 	);
 	let sort = $state<'margin' | 'doc'>(untrack(() => view.sort ?? 'margin'));
 	// A page past what Flock reads (an offset of 2^31) is past the last: the last one shows.
-	let at = $state(untrack(() => Math.min(view.page ?? 1, Math.floor(2 ** 31 / SIZE) + 1)));
+	let at = $state(untrack(() => Math.min(view.page ?? 1, Math.floor(2 ** 31 / perPage) + 1)));
 	let found = $state<ItemsPage | null>(null);
 	// Kept while the next page loads, so the pager (and the focus on it) stays.
 	let total = $state<number | null>(null);
@@ -194,7 +195,7 @@
 	const taskChoices = $derived(
 		tasks.filter((t) => t.task.toLowerCase().includes(taskQuery.trim().toLowerCase()))
 	);
-	const pages = $derived(Math.max(1, Math.ceil((total ?? 0) / SIZE)));
+	const pages = $derived(Math.max(1, Math.ceil((total ?? 0) / perPage)));
 
 	// Every change the reader makes ends here, so the page's link follows it. Untracked: the page
 	// writes its URL, and an effect that read it back would loop (027 D195).
@@ -228,8 +229,8 @@
 			task,
 			keep,
 			sort,
-			offset: String((at - 1) * SIZE),
-			limit: String(SIZE),
+			offset: String((at - 1) * perPage),
+			limit: String(perPage),
 			...(other ? { with: other } : {})
 		}).toString()
 	);
@@ -255,7 +256,7 @@
 				total = page.total;
 				// A link past the last page (the docs changed since) shows the last one.
 				if (!page.items.length && page.total && at > 1) {
-					at = Math.ceil(page.total / SIZE);
+					at = Math.ceil(page.total / perPage);
 					tell();
 					return;
 				}
@@ -346,7 +347,7 @@
 	// A square's dot: its task and cell, in the default order, at the page that holds the doc, the
 	// doc open; the focus moves to its row once the page arrives.
 	function openAt(to: string, cell: ItemKeep, index: number, id: string) {
-		const page = Math.floor(index / SIZE) + 1;
+		const page = Math.floor(index / perPage) + 1;
 		const shown = task === to && keep === cell && sort === 'margin' && at === page && found;
 		open = id;
 		if (shown) {
@@ -769,12 +770,22 @@
 		<PageNumbers
 			current={at}
 			{pages}
-			first={(at - 1) * SIZE + 1}
-			last={Math.min(at * SIZE, total)}
+			first={(at - 1) * perPage + 1}
+			last={Math.min(at * perPage, total)}
 			{total}
 			label="Item pages"
 			ongo={(p) => {
 				at = p;
+				open = null;
+				tell();
+			}}
+			size={perPage}
+			sizes={[20, 50, 100]}
+			sizeLabel="Items per page"
+			onsize={(n) => {
+				// The page holding the first item shown.
+				at = Math.floor(((at - 1) * perPage) / n) + 1;
+				perPage = n;
 				open = null;
 				tell();
 			}}

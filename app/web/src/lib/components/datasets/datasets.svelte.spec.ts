@@ -285,7 +285,7 @@ describe('DatasetView', () => {
 		expect(code).toContain('"aws_access_key_id": "YOUR_ACCESS_KEY_ID",');
 		expect(code).toContain('"allow_http": "true",');
 		expect(dialog.getByRole('link', { name: 'account page' }).element().getAttribute('href')).toBe(
-			'/account#s3-keys'
+			'/account/keys?keys=s3'
 		);
 	});
 
@@ -523,7 +523,7 @@ describe('DatasetView', () => {
 		await expect.element(screen.getByText('__lance_commit_message')).not.toBeInTheDocument();
 		await expect.element(screen.getByText('flock.source')).toBeVisible();
 		// Adding a tag sits in the row's menu, and removing one warns first.
-		await screen.getByRole('button', { name: 'Version 5 actions' }).click();
+		await screen.getByRole('button', { name: 'Actions for Version 5' }).click();
 		await expect.element(screen.getByRole('menuitem', { name: 'Add tag…' })).toBeVisible();
 	});
 
@@ -655,7 +655,7 @@ describe('a dataset’s visibility', () => {
 		await screen.getByRole('tab', { name: 'Versions' }).click();
 		await expect.element(screen.getByLabelText('View version 4')).toBeVisible();
 		await expect
-			.element(screen.getByRole('button', { name: 'Version 4 actions' }))
+			.element(screen.getByRole('button', { name: 'Actions for Version 4' }))
 			.not.toBeInTheDocument();
 	});
 });

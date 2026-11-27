@@ -25,7 +25,10 @@
 	let { scope, path, info, hidden }: Props = $props();
 
 	// Pages by offset, kept in the URL (D90): 50 rows, or 10 with binary columns.
-	const size = $derived(info.binary ? 10 : 50);
+	// Rows to a page: fewer for rows of images and audio. The pager's menu changes it.
+	const sizes = $derived(info.binary ? [10, 25, 50] : [25, 50, 100]);
+	let picked = $state<number | null>(null);
+	const size = $derived(picked ?? (info.binary ? 10 : 50));
 	const offset = $derived(
 		Math.max(0, Math.floor(Number(page.url.searchParams.get('offset')) || 0))
 	);
@@ -301,6 +304,13 @@
 				label="Row pages"
 				ongo={(p) => go((p - 1) * size)}
 				onstep={(step) => go(Math.max(0, offset + step * size))}
+				{size}
+				{sizes}
+				onsize={(n) => {
+					picked = n;
+					// The page holding the first row shown.
+					go(Math.floor(offset / n) * n);
+				}}
 			/>
 		</div>
 	{/if}

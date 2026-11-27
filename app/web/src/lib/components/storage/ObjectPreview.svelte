@@ -94,7 +94,7 @@
 		<Markdown text={shown.body} class="pt-1" />
 	{:else if shown}
 		<pre
-			class="max-h-[70vh] overflow-auto bg-card px-4 py-3 font-mono text-[12.5px] leading-relaxed whitespace-pre"><code
+			class="max-h-[70vh] w-fit max-w-[min(100%,60rem)] min-w-[min(100%,36rem)] overflow-auto bg-card px-4 py-3 font-mono text-[12.5px] leading-relaxed whitespace-pre"><code
 				>{shown.body}</code
 			></pre>
 	{:else}

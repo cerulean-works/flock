@@ -10,9 +10,7 @@
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
 	import DataTable, { ROW_LINK, type Column } from '../DataTable.svelte';
-	import { ROW_MENU_TRIGGER } from '../RowMenu.svelte';
 	import TagChip from '../TagChip.svelte';
-	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
 	import TagDialog from './TagDialog.svelte';
 	import { openMenuTrigger } from '../AnchoredForm.svelte';
@@ -144,21 +142,14 @@
 {/snippet}
 
 {#snippet menu(v: DatasetVersion)}
-	<DropdownMenu.Root>
-		<DropdownMenu.Trigger class={ROW_MENU_TRIGGER} aria-label="Version {v.version} actions">
-			<EllipsisIcon class="size-4" />
-		</DropdownMenu.Trigger>
-		<DropdownMenu.Content align="end" class="w-40">
-			<DropdownMenu.Item
-				onSelect={() => {
-					tagAnchor = openMenuTrigger();
-					tagging.show(v.version);
-				}}
-			>
-				<TagIcon /> Add tag…
-			</DropdownMenu.Item>
-		</DropdownMenu.Content>
-	</DropdownMenu.Root>
+	<DropdownMenu.Item
+		onSelect={() => {
+			tagAnchor = openMenuTrigger();
+			tagging.show(v.version);
+		}}
+	>
+		<TagIcon /> Add tag…
+	</DropdownMenu.Item>
 {/snippet}
 
 {#snippet more()}

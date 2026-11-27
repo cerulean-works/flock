@@ -1,4 +1,3 @@
-import { createRawSnippet } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
@@ -6,7 +5,6 @@ import '../../../routes/layout.css';
 import { Selection } from '#lib/selection.svelte.ts';
 import { goto, invalidateAll, resetApp } from '#lib/testing/app.svelte.ts';
 import type { DatasetFolder, DeleteResult, MoveResult, TrashEntry } from '#lib/types.ts';
-import SelectionBar from '../SelectionBar.svelte';
 import DeletedDatasets from './DeletedDatasets.svelte';
 import FolderView from './FolderView.svelte';
 
@@ -139,25 +137,42 @@ describe('selecting datasets and folders', () => {
 	});
 });
 
-describe('SelectionBar', () => {
-	const actions = createRawSnippet(() => ({ render: () => '<button>Move</button>' }));
-
-	it('counts the rows checked, and clears with Clear or Escape', async () => {
-		const selection = new Selection();
-		selection.keys = ['a', 'b', 'c'];
-		selection.toggleAll();
-		render(SelectionBar, { selection, children: actions });
-		await expect.element(screen.getByRole('toolbar')).toHaveTextContent('3 selected');
-		await expect.element(screen.getByRole('button', { name: 'Move' })).toBeVisible();
-		await screen.getByRole('button', { name: 'Clear' }).click();
-		expect(selection.size).toBe(0);
-		selection.click('b');
+describe('Escape', () => {
+	it('clears the rows checked', async () => {
+		const selection = list();
+		await box('a').click();
+		await box('b').click();
 		await userEvent.keyboard('{Escape}');
 		expect(selection.size).toBe(0);
 	});
 });
 
 describe('the row menu', () => {
+	it('acts on every row checked when the row is one of them, from its ⋯ or a right-click', async () => {
+		const selection = list();
+		await box('a').click();
+		await box('b').click();
+		await screen.getByRole('button', { name: 'Actions for a' }).click();
+		await expect.element(screen.getByText('2 datasets', { exact: true })).toBeVisible();
+		await expect.element(screen.getByRole('menuitem', { name: 'Rename…' })).not.toBeInTheDocument();
+		await expect
+			.element(screen.getByRole('menuitem', { name: 'Delete 2 datasets…' }))
+			.toBeVisible();
+		await userEvent.keyboard('{Escape}');
+		// A right-click on a row outside the selection acts on that row alone.
+		await screen.getByRole('link', { name: 'c', exact: true }).click({ button: 'right' });
+		await expect.element(screen.getByRole('menuitem', { name: 'Rename…' })).toBeVisible();
+		await userEvent.keyboard('{Escape}');
+		await screen.getByRole('link', { name: 'deep', exact: true }).click({ button: 'right' });
+		await userEvent.keyboard('{Escape}');
+		await box('deep').click();
+		await screen.getByRole('link', { name: 'b', exact: true }).click({ button: 'right' });
+		await expect.element(screen.getByText('3 items', { exact: true })).toBeVisible();
+		await screen.getByRole('menuitem', { name: 'Move…' }).click();
+		expect(selection.action).toBe('move');
+		expect(selection.targets).toEqual(['eval/a', 'eval/b', 'eval/deep']);
+	});
+
 	it('is on datasets and folders, not files, and renames a folder by its full path', async () => {
 		const calls = serve({ '/api/datasets/acme/rename': () => ({ path: 'archive/deep' }) });
 		list();

@@ -123,18 +123,56 @@ const TEXT = new Set(
 	)
 );
 
-/** A short type for the listing's Type column, from the extension. */
+/** Types known by a name of their own; acronyms stay in capitals, as people write them. */
+const NAMED: Record<string, string> = {
+	json: 'JSON',
+	jsonl: 'JSON Lines',
+	ndjson: 'JSON Lines',
+	pdf: 'PDF',
+	md: 'Markdown',
+	markdown: 'Markdown',
+	txt: 'Text',
+	log: 'Log',
+	out: 'Log',
+	err: 'Log',
+	csv: 'CSV',
+	tsv: 'TSV',
+	yaml: 'YAML',
+	yml: 'YAML',
+	toml: 'TOML',
+	py: 'Python',
+	ipynb: 'Notebook',
+	sh: 'Shell script',
+	bash: 'Shell script',
+	zsh: 'Shell script',
+	html: 'HTML',
+	htm: 'HTML',
+	parquet: 'Parquet',
+	arrow: 'Arrow',
+	safetensors: 'Safetensors',
+	pt: 'PyTorch',
+	pth: 'PyTorch',
+	ckpt: 'Checkpoint',
+	bin: 'Binary',
+	gz: 'Gzip',
+	tar: 'Tar',
+	zip: 'Zip',
+	zst: 'Zstandard'
+};
+
+/**
+ * A short type for the listing's Type column, from the extension: a name where one is known
+ * (`Python`, `PNG image`), otherwise the extension as written, in lower case (`.npy`).
+ */
 export function typeLabel(key: string): string {
 	if (key.endsWith('/')) return 'Folder';
 	const ext = extension(key);
 	if (!ext) return 'File';
+	if (ext in NAMED) return NAMED[ext];
 	if (ext in IMAGES) return `${ext.toUpperCase()} image`;
-	if (ext === 'json') return 'JSON';
-	if (ext === 'pdf') return 'PDF';
 	if (ext in VIDEO) return `${ext.toUpperCase()} video`;
 	if (ext in AUDIO) return `${ext.toUpperCase()} audio`;
-	if (TEXT.has(ext)) return ext === 'md' || ext === 'markdown' ? 'Markdown' : ext.toUpperCase();
-	return ext.toUpperCase();
+	return `.${ext}`;
 }
 
 export type PreviewKind = 'image' | 'text' | 'markdown' | 'json' | 'video' | 'audio' | 'pdf' | null;

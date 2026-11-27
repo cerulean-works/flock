@@ -2,7 +2,6 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
-	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HistoryIcon from '@lucide/svelte/icons/history';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -60,6 +59,7 @@
 		dense
 		empty={none}
 		{menu}
+		hasMenu={(b) => b.deleted_at === undefined}
 	>
 		{#snippet lead(bucket)}<HardDriveIcon
 				class={bucket.deleted_at === undefined ? undefined : 'text-faint'}
@@ -118,43 +118,31 @@
 {#snippet none()}No buckets yet. Create one to start uploading.{/snippet}
 
 {#snippet menu(bucket: Bucket)}
-	{#if bucket.deleted_at === undefined}
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger
-				class="grid size-6 place-items-center rounded-md text-muted-foreground opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:bg-[color-mix(in_srgb,var(--muted),var(--foreground)_6%)] hover:text-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-[state=open]:opacity-100 pointer-coarse:opacity-100"
-				aria-label="Actions for {bucket.name}"
-			>
-				<EllipsisIcon class="size-4" />
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="end" class="w-44">
-				{#if bucket.managed === 'datasets'}
-					<DropdownMenu.Item>
-						{#snippet child({ props })}
-							<a {...props} href={datasetsHref(params.org)}>
-								<DatabaseIcon /> Open in Datasets
-							</a>
-						{/snippet}
-					</DropdownMenu.Item>
-				{:else if bucket.managed === 'models'}
-					<DropdownMenu.Item>
-						{#snippet child({ props })}
-							<a {...props} href={modelsHref(params.org)}>
-								<BoxIcon /> Open in Models
-							</a>
-						{/snippet}
-					</DropdownMenu.Item>
-				{/if}
-				<DropdownMenu.Item onSelect={() => (history = bucket.name)}>
-					<HistoryIcon /> History
-				</DropdownMenu.Item>
-				{#if admin && !bucket.managed}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item variant="destructive" onSelect={() => (deleting = bucket.name)}>
-						<Trash2Icon /> Delete bucket…
-					</DropdownMenu.Item>
-				{/if}
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
+	{#if bucket.managed === 'datasets'}
+		<DropdownMenu.Item>
+			{#snippet child({ props })}
+				<a {...props} href={datasetsHref(params.org)}>
+					<DatabaseIcon /> Open in Datasets
+				</a>
+			{/snippet}
+		</DropdownMenu.Item>
+	{:else if bucket.managed === 'models'}
+		<DropdownMenu.Item>
+			{#snippet child({ props })}
+				<a {...props} href={modelsHref(params.org)}>
+					<BoxIcon /> Open in Models
+				</a>
+			{/snippet}
+		</DropdownMenu.Item>
+	{/if}
+	<DropdownMenu.Item onSelect={() => (history = bucket.name)}>
+		<HistoryIcon /> History
+	</DropdownMenu.Item>
+	{#if admin && !bucket.managed}
+		<DropdownMenu.Separator />
+		<DropdownMenu.Item variant="destructive" onSelect={() => (deleting = bucket.name)}>
+			<Trash2Icon /> Delete bucket…
+		</DropdownMenu.Item>
 	{/if}
 {/snippet}
 

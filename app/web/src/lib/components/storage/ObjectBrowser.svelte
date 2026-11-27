@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
-	import DownloadIcon from '@lucide/svelte/icons/download';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import UploadIcon from '@lucide/svelte/icons/upload';
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
@@ -27,6 +25,7 @@
 	import { MODELS_BUCKET, modelsHref } from '#lib/models.ts';
 	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyButton from '../CopyButton.svelte';
+	import RowMenuItems from '../RowMenuItems.svelte';
 	import CreateFolderDialog from './CreateFolderDialog.svelte';
 	import DeleteObjectsDialog from './DeleteObjectsDialog.svelte';
 	import UploadList from './UploadList.svelte';
@@ -132,8 +131,17 @@
 	$effect.pre(() => {
 		selection.keys = keys;
 	});
-	const chosenKeys = $derived(selection.chosen.filter((k) => !k.endsWith('/')));
-	const chosenFolders = $derived(selection.chosen.filter((k) => k.endsWith('/')));
+	// What the delete dialog acts on: the rows a row's menu was for, kept while it closes.
+	let doomed = $state.raw<readonly string[]>([]);
+	const doomedKeys = $derived(doomed.filter((k) => !k.endsWith('/')));
+	const doomedFolders = $derived(doomed.filter((k) => k.endsWith('/')));
+	/** A row's menu label for several rows: files, folders, or both as items. */
+	function many(keys: readonly string[]): string | null {
+		if (keys.length < 2) return null;
+		const folders = keys.filter((k) => k.endsWith('/')).length;
+		const noun = !folders ? 'file' : folders === keys.length ? 'folder' : 'item';
+		return count(keys.length, noun);
+	}
 
 	const COLUMNS: Column[] = [
 		{ id: 'name', label: 'Name' },
@@ -193,20 +201,6 @@
 	/>
 {/snippet}
 
-<!-- While rows are checked: what to do with them. -->
-{#snippet selected()}
-	{#if chosenKeys.length === 1 && !chosenFolders.length}
-		<Button variant="outline" size="sm" onclick={() => download(chosenKeys[0])}>
-			<DownloadIcon /> Download
-		</Button>
-	{/if}
-	{#if !readOnly}
-		<Button variant="outline" size="sm" class="text-destructive" onclick={() => (deleting = true)}>
-			<Trash2Icon /> Delete
-		</Button>
-	{/if}
-{/snippet}
-
 <!-- The folder's S3 URI to copy, and the search by name prefix: the bar's search, as on Runs. -->
 {#snippet controls()}
 	<!-- The trail already says where this is; the URI is for copying, named in the hint. -->
@@ -226,8 +220,6 @@
 	org={false}
 	{actions}
 	{controls}
-	{selection}
-	{selected}
 	class={dragging ? 'outline-2 -outline-offset-4 outline-primary outline-dashed' : undefined}
 	aria-label="Objects in {s3Uri(bucket, prefix)}"
 	ondragenter={(e) => {
@@ -265,6 +257,8 @@
 		name={(row) => nameOf(row.key)}
 		{selection}
 		label="Objects"
+		menu={rowMenu}
+		hasMenu={(row) => !readOnly || row.kind !== 'folder'}
 		dense
 		empty={failed || loading ? undefined : none}
 		footer={failed || rows.length || cursor ? more : undefined}
@@ -307,6 +301,21 @@
 	</DataTable>
 </ListPage>
 
+<!-- A row's menu (its ⋯ or a right-click): the row's, or every row checked when it's one. -->
+{#snippet rowMenu(row: (typeof rows)[number])}
+	{@const on = selection.targetsFor(row.key)}
+	<RowMenuItems
+		many={many(on)}
+		ondownload={row.kind === 'folder' ? undefined : () => download(row.key)}
+		ondelete={readOnly
+			? undefined
+			: () => {
+					doomed = on;
+					deleting = true;
+				}}
+	/>
+{/snippet}
+
 {#snippet none()}
 	{filter
 		? `Nothing here starts with “${filter}”.`
@@ -344,8 +353,8 @@
 	bind:open={deleting}
 	{org}
 	{bucket}
-	keys={chosenKeys}
-	prefixes={chosenFolders}
+	keys={doomedKeys}
+	prefixes={doomedFolders}
 	ondeleted={() => {
 		selection.clear();
 		load();

@@ -112,10 +112,12 @@ describe('ObjectBrowser', () => {
 		await userEvent.keyboard('{Shift>}');
 		await page.getByRole('checkbox', { name: 'Select b.json' }).click();
 		await userEvent.keyboard('{/Shift}');
-		await expect.element(page.getByText('3 selected')).toBeVisible();
-		// Download is for one object; folders are deleted with what's in them.
-		await expect.element(page.getByRole('button', { name: 'Download' })).not.toBeInTheDocument();
-		await page.getByRole('toolbar').getByRole('button', { name: 'Delete' }).click();
+		// A checked row's menu acts on every row checked: no Download, which is for one file;
+		// folders are deleted with what's in them.
+		await page.getByRole('button', { name: 'Actions for a.txt' }).click();
+		await expect.element(page.getByText('3 items', { exact: true })).toBeVisible();
+		await expect.element(page.getByRole('menuitem', { name: 'Download' })).not.toBeInTheDocument();
+		await page.getByRole('menuitem', { name: 'Delete 3 items…' }).click();
 		const dialog = page.getByRole('alertdialog');
 		await expect.element(dialog.getByText('Delete 2 objects and 1 folder?')).toBeVisible();
 		await dialog.getByRole('button', { name: 'Delete' }).click();
@@ -152,11 +154,9 @@ describe('ObjectBrowser in flock-models', () => {
 		expect(page.getByRole('link', { name: 'Models' }).element().getAttribute('href')).toBe(
 			'/models/acme'
 		);
-		await page.getByRole('checkbox', { name: 'Select config.json' }).click();
-		await expect.element(page.getByRole('button', { name: 'Download' })).toBeVisible();
-		await expect
-			.element(page.getByRole('toolbar').getByRole('button', { name: 'Delete' }))
-			.not.toBeInTheDocument();
+		await page.getByRole('button', { name: 'Actions for config.json' }).click();
+		await expect.element(page.getByRole('menuitem', { name: 'Download' })).toBeVisible();
+		await expect.element(page.getByRole('menuitem', { name: /Delete/ })).not.toBeInTheDocument();
 	});
 });
 

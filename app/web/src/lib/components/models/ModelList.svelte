@@ -15,7 +15,7 @@
 	import CopyBlock from '../CopyBlock.svelte';
 	import DataTable, { type Column, ROW_LINK } from '../DataTable.svelte';
 	import EmptyState from '../EmptyState.svelte';
-	import RowMenu from '../RowMenu.svelte';
+	import RowMenuItems from '../RowMenuItems.svelte';
 	import DeleteModelDialog from './DeleteModelDialog.svelte';
 	import DeleteModelsDialog from './DeleteModelsDialog.svelte';
 	import FolderDialog from './FolderDialog.svelte';
@@ -218,18 +218,18 @@
 
 {#snippet rowMenu(r: Row)}
 	{#if selection && r.kind === 'model'}
-		<RowMenu
-			name={nameOf(r.m.name)}
+		{@const on = selection.targetsFor(r.m.name)}
+		<RowMenuItems
+			many={on.length > 1 ? count(on.length, 'model') : null}
 			onrename={() => {
 				renameAnchor = openMenuTrigger();
 				selection.act('rename', [r.m.name]);
 			}}
-			onmove={() => selection.act('move', [r.m.name])}
-			ondelete={() => selection.act('delete', [r.m.name])}
+			onmove={() => selection.act('move', on)}
+			ondelete={() => selection.act('delete', on)}
 		/>
 	{:else if r.kind === 'folder'}
-		<RowMenu
-			name={r.f.name}
+		<RowMenuItems
 			onrename={() => onFolder(r.f, 'rename')}
 			onmove={() => onFolder(r.f, 'move')}
 			ondelete={() => onFolder(r.f, 'delete')}

@@ -3,6 +3,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { hint } from '#lib/hint.svelte.ts';
+	import PageSizeMenu from './PageSizeMenu.svelte';
 	import { PAGER_PILL } from './Pager.svelte';
 	import PagerRange from './PagerRange.svelte';
 
@@ -28,9 +29,27 @@
 		 * page's length from it. Without it they go to the page before or after.
 		 */
 		onstep?: (step: -1 | 1) => void;
+		/** Rows to a page, the sizes offered and what's counted ("Rows per page"), as the other pagers. */
+		size?: number;
+		sizes?: readonly number[];
+		sizeLabel?: string;
+		onsize?: (size: number) => void;
 	}
 
-	let { current, pages, first, last, total, label, ongo, onstep }: Props = $props();
+	let {
+		current,
+		pages,
+		first,
+		last,
+		total,
+		label,
+		ongo,
+		onstep,
+		size,
+		sizes = [],
+		sizeLabel = 'Rows per page',
+		onsize
+	}: Props = $props();
 
 	const step = (by: -1 | 1) => (onstep ? onstep(by) : ongo(current + by));
 </script>
@@ -61,5 +80,8 @@
 		>
 			<ChevronRightIcon />
 		</Button>
+		{#if size && onsize && sizes.length}
+			<PageSizeMenu {size} {sizes} label={sizeLabel} {onsize} />
+		{/if}
 	</nav>
 </div>

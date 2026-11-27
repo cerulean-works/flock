@@ -84,6 +84,12 @@
 	);
 </script>
 
+<!-- Past the sidebar to the page, for the keyboard: shown on the first Tab. -->
+<a
+	href="#content"
+	class="fixed top-2 left-2 z-50 -translate-y-16 rounded-md bg-background px-3 py-1.5 text-[13px] font-medium shadow-md outline-none focus-visible:translate-y-0 focus-visible:ring-3 focus-visible:ring-ring/50"
+	>Skip to content</a
+>
 <div class="flex h-full">
 	{#if !collapsed}
 		<aside
@@ -205,7 +211,7 @@
 					]}
 					href={storageHref(data.shell.org)}
 					aria-label="Storage"
-					{@attach hint('Storage')}
+					{@attach hint('Storage  G then S')}
 				>
 					<HardDriveIcon />
 				</Button>
@@ -234,7 +240,7 @@
 			</div>
 		</aside>
 	{/if}
-	<div class="flex min-w-0 flex-1 flex-col">
+	<div id="content" class="flex min-w-0 flex-1 flex-col outline-none" tabindex="-1">
 		<header
 			class="flex h-11 flex-none items-center gap-2 border-b border-divider bg-sidebar px-3 md:hidden"
 		>
