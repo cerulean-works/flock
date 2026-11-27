@@ -259,9 +259,9 @@ describe('DatasetView', () => {
 		// The README is the default tab.
 		await expect.element(screen.getByRole('heading', { name: 'MMLU', exact: true })).toBeVisible();
 		await expect.element(screen.getByRole('tab', { name: 'Viewer' })).toBeVisible();
-		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
-		// Reaching the files and deleting are in the overflow menu.
+		// Renaming, reaching the files and deleting are in the overflow menu.
 		await screen.getByRole('button', { name: 'More dataset actions' }).click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Rename…' })).toBeVisible();
 		expect(
 			screen.getByRole('menuitem', { name: 'Browse files' }).element().getAttribute('href')
 		).toBe('/storage/acme/flock-datasets/eval/mmlu/');
@@ -646,8 +646,8 @@ describe('a dataset’s visibility', () => {
 
 	it('isn’t offered to members', async () => {
 		view('member', false);
-		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
 		await more().click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Rename…' })).toBeVisible();
 		await expect.element(screen.getByRole('menuitem', { name: 'Access in S3' })).toBeVisible();
 		await expect
 			.element(screen.getByRole('menuitem', { name: 'Make public…' }))

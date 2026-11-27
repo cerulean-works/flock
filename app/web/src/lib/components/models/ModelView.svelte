@@ -109,10 +109,8 @@
 			<DownloadIcon /> <span class="max-sm:sr-only">Load</span>
 		</Button>
 	{/if}
-	<Button variant="quiet" size="bar" onclick={() => (renaming = true)}>
-		<PencilIcon /> <span class="max-sm:sr-only">Rename</span>
-	</Button>
-	<!-- Reaching the files and deletion: less often, so tucked away. -->
+	<!-- Renaming, the files and deletion: less often, so tucked away, as a run's and a
+	     project's are. -->
 	<DropdownMenu.Root>
 		<DropdownMenu.Trigger>
 			{#snippet child({ props })}
@@ -122,6 +120,9 @@
 			{/snippet}
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content align="end" class="w-48">
+			<DropdownMenu.Item onSelect={() => (renaming = true)}>
+				<PencilIcon /> Rename…
+			</DropdownMenu.Item>
 			{#if filesHref}
 				<DropdownMenu.Item>
 					{#snippet child({ props })}

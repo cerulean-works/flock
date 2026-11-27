@@ -227,16 +227,8 @@
 				<GitForkIcon /> <span class="max-sm:sr-only">Fork</span>
 			</Button>
 		{/if}
-		<Button
-			variant="quiet"
-			size="bar"
-			disabled={!!held}
-			{@attach hint(held ?? undefined)}
-			onclick={() => (renaming = true)}
-		>
-			<PencilIcon /> <span class="max-sm:sr-only">Rename</span>
-		</Button>
-		<!-- Reaching the files, visibility and deletion: less often, so tucked away. -->
+		<!-- Renaming, the files, visibility and deletion: less often, so tucked away, as a run's
+		     and a project's are. -->
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
@@ -252,6 +244,13 @@
 				{/snippet}
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content align="end" class="w-48">
+				<DropdownMenu.Item
+					disabled={!!held}
+					{@attach hint(held ?? undefined)}
+					onSelect={() => (renaming = true)}
+				>
+					<PencilIcon /> Rename…
+				</DropdownMenu.Item>
 				<DropdownMenu.Item onSelect={() => (accessing = true)}>
 					<PlugIcon /> Access in S3
 				</DropdownMenu.Item>

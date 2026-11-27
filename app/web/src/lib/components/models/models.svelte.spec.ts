@@ -307,9 +307,9 @@ describe('ModelView', () => {
 		await expect.element(screen.getByRole('button', { name: /^Version 12/ })).toBeVisible();
 		await expect.element(screen.getByText('· Primary')).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Load' })).toBeVisible();
-		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
-		// Browsing the files and deleting are in the overflow menu.
+		// Renaming, browsing the files and deleting are in the overflow menu.
 		await screen.getByRole('button', { name: 'More model actions' }).click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Rename…' })).toBeVisible();
 		expect(
 			screen.getByRole('menuitem', { name: 'Browse files' }).element().getAttribute('href')
 		).toBe('/storage/acme/flock-models/olmo2-1b/u/ULID12/');
