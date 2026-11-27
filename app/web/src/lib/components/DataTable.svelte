@@ -66,6 +66,8 @@
 		footer?: Snippet;
 		/** The table's name, for screen readers. */
 		label?: string;
+		/** A header cell's content, in place of its label: a column that filters, say. */
+		head?: Snippet<[Column]>;
 	}
 
 	let {
@@ -82,7 +84,8 @@
 		dense = false,
 		empty,
 		footer,
-		label
+		label,
+		head
 	}: Props = $props();
 
 	// The grid's tracks at each width, from the columns shown there: an edge on each side, so
@@ -186,7 +189,9 @@
 						{#if selection}<RowCheckbox {selection} />{/if}
 					</span>
 				{/if}
-				{#if c.quiet}<span class="sr-only">{c.label}</span>{:else}{c.label}{/if}
+				{#if c.quiet}<span class="sr-only">{c.label}</span>{:else if head}{@render head(
+						c
+					)}{:else}{c.label}{/if}
 			</span>
 		{/each}
 	</div>

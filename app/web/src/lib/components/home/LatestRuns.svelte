@@ -7,6 +7,7 @@
 	import { FEED_SIZES, FeedPages } from '#lib/data/feed-pages.svelte.ts';
 	import { FeedPager } from '#lib/data/feed.svelte.ts';
 	import type { FeedPage } from '#lib/types.ts';
+	import type { Snippet } from 'svelte';
 	import { dateTime, duration, gpus, relativeTime } from '#lib/utils.ts';
 	import { runHref } from '#lib/workspace/url.ts';
 
@@ -16,11 +17,13 @@
 		query: Record<string, string>;
 		now: number;
 		empty: string;
-		/** Only the viewer's runs: the Owner column would repeat their name. */
+		/** Only the viewer's runs: the phone's avatar would repeat their face. */
 		mine?: boolean;
+		/** A header cell's content (the Owner, Project and State filters). */
+		head?: Snippet<[Column]>;
 	}
 
-	let { first, query, now, empty, mine = false }: Props = $props();
+	let { first, query, now, empty, mine = false, head }: Props = $props();
 
 	// svelte-ignore state_referenced_locally
 	const pager = new FeedPager(first, query);
@@ -40,7 +43,8 @@
 		{ id: 'runtime', label: 'Runtime', from: 'lg', align: 'end' },
 		{ id: 'started', label: 'Updated', align: 'end' }
 	];
-	const COLUMNS = $derived(mine ? ALL_COLUMNS.filter((c) => c.id !== 'owner') : ALL_COLUMNS);
+	// The Owner column stays even on one person's runs: its header is where the filter changes.
+	const COLUMNS = ALL_COLUMNS;
 	// One row per run, its latest state.
 	const pages = new FeedPages(pager, (item) => !!item.run);
 	// A page short of rows (merged events) loads more before it shows.
@@ -55,6 +59,7 @@
 	key={(item) => item.id}
 	name={(item) => item.run?.display_name ?? item.run?.id ?? item.id}
 	label="Latest runs"
+	{head}
 	empty={none}
 >
 	{#snippet cell(item, column)}

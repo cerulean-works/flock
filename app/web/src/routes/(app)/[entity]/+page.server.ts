@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { change, projectPath, refused, flock } from '#lib/server/flock.ts';
 import { FEED, runStateKinds } from '#lib/data/feed.svelte.ts';
-import type { Budget, FeedPage, OrgInfo, ProjectInfo } from '#lib/types.ts';
+import type { Budget, FeedPage, Member, OrgInfo, ProjectInfo } from '#lib/types.ts';
 import { formText, monthOf, projectNameError } from '#lib/utils.ts';
 import { entityHref, projectHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -27,6 +27,8 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 		mine: false,
 		project: null,
 		state: null,
+		owner: null,
+		members: [] as Pick<Member, 'id' | 'name' | 'avatar_url'>[],
 		budget: null,
 		thisMonth: monthOf(now),
 		now
@@ -35,7 +37,10 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 	// no public project, sends the visitor to sign in.)
 	if (!locals.token) return outside(await flock(orgPath).then((r) => r.json() as Promise<OrgInfo>));
 
-	const mine = url.searchParams.get('runs') === 'mine';
+	// Whose runs: `?runs=mine`, or any member's by id (`?owner=`), which the Owner column offers.
+	const ownerParam = url.searchParams.get('owner');
+	const owner = ownerParam && /^\d+$/.test(ownerParam) ? Number(ownerParam) : null;
+	const mine = owner === null && url.searchParams.get('runs') === 'mine';
 	const project = url.searchParams.get('project') || null;
 	const state = runStateKinds(url.searchParams.get('state'));
 	const query: Record<string, string> = {
@@ -43,6 +48,7 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 		kinds: state?.kinds ?? 'run_started',
 		limit: '50',
 		...(mine && { owner: 'me' }),
+		...(owner !== null && { owner: String(owner) }),
 		...(project && { project })
 	};
 	// The org answers 404 to non-members unless it has public projects, and says they have no
@@ -57,9 +63,13 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 		`${orgPath}/budget${month && /^\d{4}-\d{2}$/.test(month) ? `?month=${month}` : ''}`
 	).then((r) => r.json() as Promise<Budget>);
 	budgeting.catch(() => {});
+	const membering = flock(`${orgPath}/members`).then(
+		(r) => r.json() as Promise<{ members: Member[] }>
+	);
+	membering.catch(() => {});
 	const org = await flock(orgPath).then((r) => r.json() as Promise<OrgInfo>);
 	if (!org.role) return outside(org);
-	const [feed, budget] = await Promise.all([feeding, budgeting]);
+	const [feed, budget, { members }] = await Promise.all([feeding, budgeting, membering]);
 	// Relative times are computed against this, so SSR and hydration print the same text.
 	return {
 		org,
@@ -69,6 +79,8 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 		mine,
 		project,
 		state: state?.value ?? null,
+		owner,
+		members: members.map(({ id, name, avatar_url }) => ({ id, name, avatar_url })),
 		budget,
 		thisMonth: monthOf(now),
 		now
