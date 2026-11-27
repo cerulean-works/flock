@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ColumnKind } from '#lib/types.ts';
 import {
-	chipRow,
-	joinChips,
+	chipSegments,
+	dropChip,
+	flipJoiner,
+	joinSegments,
 	chipParts,
 	countConditions,
 	describeFilters,
@@ -405,35 +407,45 @@ describe('chipParts', () => {
 });
 
 describe('the chip row', () => {
-	const state = { key: 'state', op: 'eq', value: 'running' } as const;
+	const running = { key: 'state', op: 'eq', value: 'running' } as const;
+	const finished = { key: 'state', op: 'eq', value: 'finished' } as const;
+	const states = { match: 'any' as const, filters: [running, finished] };
+	const tags = { key: 'tags', op: 'contains', value: 'baseline' } as const;
 	const owner = { key: 'owner', op: 'eq', value: 7 } as const;
-	const lr = { key: 'config.lr', op: 'gte', value: 0.0003 } as const;
 
-	it('joins top-level filters with and', () => {
-		expect(chipRow([state, lr])).toEqual({ chips: [state, lr], match: 'all' });
-		expect(chipRow([])).toEqual({ chips: [], match: 'all' });
-	});
-
-	it('reads one any group of several chips as the chips joined with or', () => {
-		expect(chipRow([{ match: 'any', filters: [state, owner, lr] }])).toEqual({
-			chips: [state, owner, lr],
-			match: 'any'
-		});
+	it('shows top-level filters as chips joined with and', () => {
+		expect(chipSegments([running, owner])).toEqual([[running], [owner]]);
+		expect(chipSegments([])).toEqual([]);
 	});
 
 	it("keeps one column's values as one chip", () => {
-		const values = {
-			match: 'any' as const,
-			filters: [state, { ...state, value: 'failed' }]
-		};
-		expect(chipRow([values])).toEqual({ chips: [values], match: 'all' });
+		expect(chipSegments([states])).toEqual([[states]]);
 	});
 
-	it('writes a row back as filters, and round-trips', () => {
-		expect(joinChips([state, lr], 'all')).toEqual([state, lr]);
-		expect(joinChips([state, lr], 'any')).toEqual([{ match: 'any', filters: [state, lr] }]);
-		expect(joinChips([state], 'any')).toEqual([state]);
-		const any = joinChips([state, owner], 'any');
-		expect(joinChips(chipRow(any).chips, 'all')).toEqual([state, owner]);
+	it('shows an or group inside the row as its chips', () => {
+		// (state is running or finished) or tags has baseline, and owner is 7
+		const filters = [{ match: 'any' as const, filters: [states, tags] }, owner];
+		expect(chipSegments(filters)).toEqual([[states, tags], [owner]]);
+		expect(joinSegments(chipSegments(filters))).toEqual(filters);
+	});
+
+	it('reads a top-level all group as the row itself', () => {
+		expect(chipSegments([{ match: 'all', filters: [running, owner] }])).toEqual([
+			[running],
+			[owner]
+		]);
+	});
+
+	it('switches one joiner: and joins its neighbours with or, or splits there', () => {
+		const row = [[states, tags], [owner]];
+		expect(flipJoiner(row, 1)).toEqual([[states, tags, owner]]);
+		expect(flipJoiner(row, 0)).toEqual([[states], [tags], [owner]]);
+		expect(flipJoiner(flipJoiner(row, 0), 0)).toEqual(row);
+	});
+
+	it('drops a chip, leaving a lone chip of an or group plain', () => {
+		const row = [[states, tags], [owner]];
+		expect(dropChip(row, 1)).toEqual([[states], [owner]]);
+		expect(joinSegments(dropChip(row, 2))).toEqual([{ match: 'any', filters: [states, tags] }]);
 	});
 });

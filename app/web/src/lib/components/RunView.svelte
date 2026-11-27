@@ -30,9 +30,11 @@
 	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
 	import {
 		chipParts,
-		chipRow,
+		chipSegments,
 		describeFilters,
-		joinChips,
+		dropChip,
+		flipJoiner,
+		joinSegments,
 		type RunFilter
 	} from '#lib/workspace/filters.ts';
 	import { columnLabel } from '#lib/workspace/columns.ts';
@@ -404,8 +406,12 @@
 		void goto(ws.href(params), { reset: false });
 	}
 
-	/** The filters as chips, and whether the row matches all of them or any. */
-	const row = $derived(chipRow(ws.page.query.filters));
+	/** The filters as chips, in segments: chips in one join with or, segments with and. */
+	const segments = $derived(chipSegments(ws.page.query.filters));
+	/** Each segment's first chip's place in the row, so joiners and crosses name a chip. */
+	const starts = $derived(
+		segments.reduce<number[]>((at, _, i) => [...at, i ? at[i - 1] + segments[i - 1].length : 0], [])
+	);
 
 	/** The run query with other filters, from the first page. */
 	function setFilters(filters: RunFilter[]) {
@@ -415,17 +421,11 @@
 		void goto(ws.href(params), { reset: false });
 	}
 
-	/** The chips without the one at `i`, joined as before. */
-	const dropFilter = (i: number) =>
-		setFilters(
-			joinChips(
-				row.chips.filter((_, j) => j !== i),
-				row.match
-			)
-		);
+	/** The row without chip `k`, the rest joined as before. */
+	const dropFilter = (k: number) => setFilters(joinSegments(dropChip(segments, k)));
 
-	/** Every chip joined the other way: and becomes or, or becomes and. */
-	const flipMatch = () => setFilters(joinChips(row.chips, row.match === 'all' ? 'any' : 'all'));
+	/** The joiner after chip `k` the other way: and joins its neighbours with or; or splits. */
+	const flipAfter = (k: number) => setFilters(joinSegments(flipJoiner(segments, k)));
 
 	const narrowed = $derived(!!ws.page.query.search || ws.page.query.filters.length > 0);
 
@@ -598,28 +598,30 @@
 					onremove={dropSearch}
 				/>
 			{/if}
-			{#each row.chips as f, i (i)}
-				{#if i > 0}
-					<!-- How the chips join; a click switches every joiner, and the row with them. -->
-					<button
-						type="button"
-						class="rounded px-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-						aria-label={row.match === 'all'
-							? 'Runs match all filters. Match any instead'
-							: 'Runs match any filter. Match all instead'}
-						{@attach hint(
-							row.match === 'all' ? 'Match any filter instead' : 'Match all filters instead'
-						)}
-						onclick={flipMatch}
-					>
-						{row.match === 'all' ? 'and' : 'or'}
-					</button>
+			{#each segments as segment, si (si)}
+				{#if si > 0}
+					{@render joiner(starts[si] - 1, 'and')}
 				{/if}
-				<FilterChip
-					parts={chipParts(f, { label: labelOf, kind: kindOf, people: ws.people, me })}
-					onclick={() => filterControl?.edit()}
-					onremove={() => dropFilter(i)}
-				/>
+				<!-- An or group reads as one where and is in the row too: or binds first. -->
+				<span
+					class={[
+						'flex flex-wrap items-center gap-1.5',
+						segment.length > 1 &&
+							segments.length > 1 &&
+							'rounded-lg px-1 py-0.5 ring-1 ring-divider ring-inset'
+					]}
+				>
+					{#each segment as f, ci (ci)}
+						{#if ci > 0}
+							{@render joiner(starts[si] + ci - 1, 'or')}
+						{/if}
+						<FilterChip
+							parts={chipParts(f, { label: labelOf, kind: kindOf, people: ws.people, me })}
+							onclick={() => filterControl?.edit()}
+							onremove={() => dropFilter(starts[si] + ci)}
+						/>
+					{/each}
+				</span>
 			{/each}
 		</div>
 	{/if}
@@ -737,3 +739,16 @@
 	<MoveRunsDialog />
 	<DeleteRunsDialog />
 {/if}
+
+{#snippet joiner(k: number, word: 'and' | 'or')}
+	<!-- How two chips join; a click switches this one: and joins them with or, or splits. -->
+	<button
+		type="button"
+		class="rounded px-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+		aria-label={word === 'and' ? 'and: match either instead' : 'or: match both instead'}
+		{@attach hint(word === 'and' ? 'Match either instead' : 'Match both instead')}
+		onclick={() => flipAfter(k)}
+	>
+		{word}
+	</button>
+{/snippet}
