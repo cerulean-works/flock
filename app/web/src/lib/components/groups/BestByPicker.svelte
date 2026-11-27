@@ -49,8 +49,9 @@
 		{#snippet child({ props })}
 			<Button
 				{...props}
-				variant={quiet ? 'ghost' : 'outline'}
-				class="gap-1.5 pr-2 font-normal text-muted-foreground"
+				variant={quiet ? 'quiet' : 'outline'}
+				size={quiet ? 'bar' : 'default'}
+				class={['gap-1.5 font-normal', !quiet && 'pr-2 text-muted-foreground']}
 				title={`Best by ${bestWords(key, order)}${title ? ` (${title})` : ''}`}
 			>
 				<TrophyIcon />

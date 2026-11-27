@@ -395,6 +395,7 @@
 	{/snippet}
 	{#snippet trailing()}
 		<BestByPicker
+			quiet
 			key={bestKey}
 			order={bestOrder}
 			keys={ws.meta.columns

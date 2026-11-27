@@ -60,12 +60,7 @@
 	<DropdownMenu.Root>
 		<DropdownMenu.Trigger {disabled}>
 			{#snippet child({ props })}
-				<Button
-					{...props}
-					variant="outline"
-					class="gap-1.5 pr-2 font-normal"
-					title={`Display preferences\n${summary}`}
-				>
+				<Button {...props} variant="quiet" size="bar" title={`Display preferences\n${summary}`}>
 					<PaletteIcon />
 					Display
 					<ChevronDownIcon class="text-muted-foreground" />
