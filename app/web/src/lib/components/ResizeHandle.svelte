@@ -16,6 +16,8 @@
 		/** Once the width settles: dropped, a key let go, or reset. */
 		oncommit: (px: number) => void;
 		class?: string;
+		/** A click without a drag (or Enter) collapses the box, in place of a double-click reset. */
+		oncollapse?: () => void;
 	}
 
 	let {
@@ -26,7 +28,8 @@
 		label,
 		onresize,
 		oncommit,
-		class: className
+		class: className,
+		oncollapse
 	}: Props = $props();
 
 	const sign = $derived(edge === 'left' ? -1 : 1);
@@ -47,8 +50,17 @@
 			last = clampWidth(bounds, w0 + sign * (at(ev) - p0));
 			onresize(last);
 		};
-		const up = () => {
+		const up = (ev: PointerEvent) => {
 			dragging = false;
+			// Barely moved: a click.
+			if (oncollapse && ev.type === 'pointerup' && Math.abs(at(ev) - p0) < 3) {
+				el.removeEventListener('pointermove', move);
+				el.removeEventListener('pointerup', up);
+				el.removeEventListener('pointercancel', up);
+				if (last !== w0) onresize(w0);
+				oncollapse();
+				return;
+			}
 			el.removeEventListener('pointermove', move);
 			el.removeEventListener('pointerup', up);
 			el.removeEventListener('pointercancel', up);
@@ -60,6 +72,11 @@
 	}
 
 	function onkeydown(e: KeyboardEvent) {
+		if (oncollapse && e.key === 'Enter') {
+			e.preventDefault();
+			oncollapse();
+			return;
+		}
 		const steps: Record<string, number> =
 			axis === 'x' ? { ArrowLeft: -16, ArrowRight: 16 } : { ArrowUp: -16, ArrowDown: 16 };
 		const by = steps[e.key];
@@ -85,7 +102,9 @@
 	aria-valuemin={bounds.min}
 	aria-valuemax={bounds.max}
 	tabindex="0"
-	{@attach hint('Drag to resize, or double-click to reset')}
+	{@attach hint(
+		oncollapse ? 'Drag to resize\nClick to collapse' : 'Drag to resize, or double-click to reset'
+	)}
 	class={[
 		'group/resize absolute z-10 touch-none outline-none',
 		axis === 'y'
@@ -96,7 +115,7 @@
 	{onpointerdown}
 	{onkeydown}
 	onkeyup={(e) => e.key.startsWith('Arrow') && oncommit(value)}
-	ondblclick={reset}
+	ondblclick={oncollapse ? undefined : reset}
 >
 	<div
 		class={[

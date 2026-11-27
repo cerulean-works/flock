@@ -7,6 +7,19 @@
 	let height = $state(0);
 	let innerWidth = $state(0);
 
+	// "Label  Keys": what's after the two spaces is a shortcut, drawn as keys ("G then R").
+	const parts = $derived.by(() => {
+		const at = tip.text.lastIndexOf('  ');
+		if (at < 0 || tip.text.includes('\n')) return { label: tip.text, keys: [] as string[] };
+		const keys = tip.text
+			.slice(at + 2)
+			.trim()
+			.split(/\s+/);
+		// Only short keys: a name or description with two spaces in it stays text.
+		if (keys.length > 3 || keys.some((k) => k.length > 4)) return { label: tip.text, keys: [] };
+		return { label: tip.text.slice(0, at), keys };
+	});
+
 	const flipX = $derived(tip.x + 12 + width > innerWidth - 8);
 	const flipY = $derived(tip.y - 12 - height < 8);
 </script>
@@ -24,6 +37,24 @@
 		bind:clientWidth={width}
 		bind:clientHeight={height}
 	>
-		{tip.text.length > 600 ? `${tip.text.slice(0, 600)}…` : tip.text}
+		{#if parts.keys.length}
+			<span class="flex items-center gap-2">
+				{parts.label}
+				<span class="flex items-center gap-1">
+					{#each parts.keys as k, i (i)}
+						{#if k === 'then'}
+							<span class="text-muted-foreground">then</span>
+						{:else}
+							<kbd
+								class="grid h-4 min-w-4 place-items-center rounded-[4px] border border-border px-1 font-sans text-[11px] leading-none text-muted-foreground"
+								>{k}</kbd
+							>
+						{/if}
+					{/each}
+				</span>
+			</span>
+		{:else}
+			{tip.text.length > 600 ? `${tip.text.slice(0, 600)}…` : tip.text}
+		{/if}
 	</div>
 {/if}

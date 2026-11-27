@@ -388,6 +388,7 @@
 					class={ITEM}
 					href={resolve('/(app)')}
 					aria-current={route === '/(app)' ? 'page' : undefined}
+					{@attach hint('Go to Home  G then H')}
 				>
 					<HouseIcon /> Home
 				</a>
@@ -397,6 +398,7 @@
 					class={ITEM}
 					href={entityHref(org)}
 					aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
+					{@attach hint('Go to Runs  G then R')}
 				>
 					<ActivityIcon /> Runs
 				</a>
@@ -405,6 +407,7 @@
 						class={ITEM}
 						href={datasetsHref(org)}
 						aria-current={route?.startsWith('/(app)/datasets/') ? 'page' : undefined}
+						{@attach hint('Go to Datasets  G then D')}
 					>
 						<DatabaseIcon /> Datasets
 					</a>
@@ -412,6 +415,7 @@
 						class={ITEM}
 						href={modelsHref(org)}
 						aria-current={route?.startsWith('/(app)/models/') ? 'page' : undefined}
+						{@attach hint('Go to Models  G then M')}
 					>
 						<BoxIcon /> Models
 					</a>

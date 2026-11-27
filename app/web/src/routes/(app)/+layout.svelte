@@ -89,6 +89,7 @@
 				value={sidebarW}
 				bounds={SIDEBAR_W}
 				label="Resize sidebar"
+				oncollapse={() => setCollapsed(true)}
 				onresize={(px) => (sidebarW = px)}
 				oncommit={(px) => saveWidth(SIDEBAR_W, px)}
 			/>
