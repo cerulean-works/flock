@@ -635,10 +635,7 @@
 									</div>
 									{#if primary.length}
 										<div
-											class={[
-												'border-l border-divider px-3 pt-1.5 whitespace-nowrap text-foreground',
-												PRIMARY_END
-											]}
+											class={['border-l border-divider px-3 pt-1.5 whitespace-nowrap', PRIMARY_END]}
 											style:flex={fit(sum(primary))}
 											title="What matters for comparing the groups: the settings and metrics their own tables suggest"
 										>
@@ -676,16 +673,13 @@
 								class="flex h-10 w-full items-stretch border-b text-xs font-medium text-muted-foreground"
 							>
 								<div class={[NAME_CELL, 'bg-background']} style:flex={NAME_FLEX}>
-									<span class="text-foreground">Group</span>
+									<span>Group</span>
 									<span class="ml-auto truncate font-normal text-faint">
 										{count(cmp.rows.length, 'group')} · {cmp.ungrouped_count} ungrouped
 									</span>
 								</div>
 								<!-- The column groups are ranked by: its trophy changes which, and which way. -->
-								<div
-									class={[CELL, 'group/h justify-end gap-1 text-foreground']}
-									style:flex={fit(VALUE_W)}
-								>
+								<div class={[CELL, 'group/h justify-end gap-1']} style:flex={fit(VALUE_W)}>
 									<span class="truncate">{metricLabel(cmp.best_key)}</span>
 									<BestMark {order} source="the project’s setting; a group can have its own" />
 									{#if !readonly}
@@ -704,10 +698,10 @@
 								</div>
 								<div class={[CELL, 'justify-end']} style:flex={fit(DELTA_W)}>vs best</div>
 								<div class={[CELL, 'justify-end']} style:flex={fit(STD_W)}>± repeats</div>
-								<div class={[CELL, 'justify-end']} style:flex={fit(RUNS_W)}>runs</div>
+								<div class={[CELL, 'justify-end']} style:flex={fit(RUNS_W)}>Runs</div>
 								{#each suggested.settings as key, i (key)}
 									<div
-										class={[CELL, 'text-foreground', i === primary.length - 1 && PRIMARY_END]}
+										class={[CELL, i === primary.length - 1 && PRIMARY_END]}
 										style:flex={fit(widthOf[key])}
 										title={key}
 									>
@@ -718,7 +712,7 @@
 									<div
 										class={[
 											CELL,
-											'group/h justify-end gap-1 text-foreground',
+											'group/h justify-end gap-1',
 											suggested.settings.length + i === primary.length - 1 && PRIMARY_END
 										]}
 										style:flex={fit(widthOf[key])}
