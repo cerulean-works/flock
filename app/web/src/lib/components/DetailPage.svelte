@@ -96,7 +96,9 @@
 	</Tabs.Root>
 	<div class="ml-auto flex flex-none items-center gap-0.5">
 		{#if controls}{@render controls()}{/if}
-		{@render toggle()}
+		<!-- On a tab without the pane its place stays, so the actions don't move from tab to tab. -->
+		{#if properties}{@render toggle()}{:else}<span class="size-7 max-md:hidden" aria-hidden="true"
+			></span>{/if}
 	</div>
 {/snippet}
 
