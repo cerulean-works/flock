@@ -5,7 +5,7 @@
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import XIcon from '@lucide/svelte/icons/x';
-	import type { Snippet } from 'svelte';
+	import { tick, type Snippet } from 'svelte';
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import type { EvalRunChoice } from '#lib/types.ts';
 	import { relativeTime } from '#lib/utils.ts';
@@ -114,7 +114,12 @@
 	const count = $derived(mode === 'runs' ? (runs?.length ?? 0) : shownProjects.length);
 	const now = Date.now() / 1000;
 
+	let field = $state<HTMLInputElement | null>(null);
+	/** Typing always goes to the search field, whichever list shows. */
+	const refocus = () => void tick().then(() => field?.focus());
+
 	function toProjects() {
+		refocus();
 		mode = 'projects';
 		query = '';
 		active = Math.max(
@@ -125,6 +130,7 @@
 
 	function toRuns(p: { entity: string; name: string }) {
 		chosen = { entity: p.entity, project: p.name };
+		refocus();
 		mode = 'runs';
 		query = '';
 		runs = null;
@@ -187,7 +193,14 @@
 			</button>
 		{/snippet}
 	</Popover.Trigger>
-	<Popover.Content align="start" class="w-[28rem] max-w-[calc(100vw-2rem)] gap-0 p-0">
+	<Popover.Content
+		align="start"
+		class="w-[28rem] max-w-[calc(100vw-2rem)] gap-0 p-0"
+		onOpenAutoFocus={(e) => {
+			e.preventDefault();
+			field?.focus();
+		}}
+	>
 		<div class="flex items-center gap-1.5 border-b border-divider px-2 py-1.5">
 			{#if mode === 'runs'}
 				<button
@@ -207,14 +220,16 @@
 					type="button"
 					class="flex-none rounded p-0.5 text-muted-foreground hover:bg-accent"
 					aria-label="Back to the runs"
-					onclick={() => (mode = 'runs')}
+					onclick={() => {
+						mode = 'runs';
+						refocus();
+					}}
 				>
 					<ArrowLeftIcon class="size-3.5" />
 				</button>
 			{/if}
-			<!-- svelte-ignore a11y_autofocus -->
 			<input
-				autofocus
+				bind:this={field}
 				role="combobox"
 				aria-expanded="true"
 				aria-controls="{id}-list"
