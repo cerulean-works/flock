@@ -50,7 +50,8 @@ import {
 	panelSmoothing,
 	parseLayout,
 	pinFirst,
-	type PlotSettings
+	type PlotSettings,
+	ROWS_MAX
 } from './layout.ts';
 import { resolvePanel, type PanelView } from './panels.ts';
 import { workspaceHref } from './url.ts';
@@ -187,7 +188,8 @@ export const NEW_PANEL = `${CUSTOM_PREFIX}new`;
 /** Runs a project shows when this browser has no hidden runs saved for it: the newest. */
 export const NEWEST_SHOWN = 10;
 
-const DEFAULT_ROWS = 2;
+/** Every panel of a section, scrolled rather than paged (Gate 2): as many rows as allowed. */
+const DEFAULT_ROWS = ROWS_MAX;
 
 /** A value this browser kept, or null when there's none (or storage is blocked or unreadable). */
 function readStored(key: string): unknown {

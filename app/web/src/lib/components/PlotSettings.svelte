@@ -7,6 +7,7 @@
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
+	import { ROWS_MAX } from '#lib/workspace/layout.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { NO_SMOOTHING, smooths } from '#lib/chart/series.ts';
 	import SmoothingPicker from './SmoothingPicker.svelte';
@@ -95,11 +96,11 @@
 				onValueChange={(v) => (ws.defaultRows = Number(v))}
 			>
 				<Select.Trigger size="sm" class="w-20" aria-label="Default rows per section">
-					{ws.defaultRows}
+					{ws.defaultRows === ROWS_MAX ? 'All' : ws.defaultRows}
 				</Select.Trigger>
 				<Select.Content>
-					{#each [1, 2, 3, 4, 6, 8] as n (n)}
-						<Select.Item value={String(n)}>{n}</Select.Item>
+					{#each [1, 2, 3, 4, 6, ROWS_MAX] as n (n)}
+						<Select.Item value={String(n)}>{n === ROWS_MAX ? 'All' : n}</Select.Item>
 					{/each}
 				</Select.Content>
 			</Select.Root>
