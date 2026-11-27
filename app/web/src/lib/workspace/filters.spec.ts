@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ColumnKind } from '#lib/types.ts';
 import {
+	chipSegments,
+	dropChip,
+	flipJoiner,
+	joinSegments,
 	chipParts,
 	countConditions,
 	describeFilters,
@@ -399,5 +403,49 @@ describe('chipParts', () => {
 				names
 			)
 		).toEqual({ label: '', op: '', value: 'config.lr < 0.01 or name is a' });
+	});
+});
+
+describe('the chip row', () => {
+	const running = { key: 'state', op: 'eq', value: 'running' } as const;
+	const finished = { key: 'state', op: 'eq', value: 'finished' } as const;
+	const states = { match: 'any' as const, filters: [running, finished] };
+	const tags = { key: 'tags', op: 'contains', value: 'baseline' } as const;
+	const owner = { key: 'owner', op: 'eq', value: 7 } as const;
+
+	it('shows top-level filters as chips joined with and', () => {
+		expect(chipSegments([running, owner])).toEqual([[running], [owner]]);
+		expect(chipSegments([])).toEqual([]);
+	});
+
+	it("keeps one column's values as one chip", () => {
+		expect(chipSegments([states])).toEqual([[states]]);
+	});
+
+	it('shows an or group inside the row as its chips', () => {
+		// (state is running or finished) or tags has baseline, and owner is 7
+		const filters = [{ match: 'any' as const, filters: [states, tags] }, owner];
+		expect(chipSegments(filters)).toEqual([[states, tags], [owner]]);
+		expect(joinSegments(chipSegments(filters))).toEqual(filters);
+	});
+
+	it('reads a top-level all group as the row itself', () => {
+		expect(chipSegments([{ match: 'all', filters: [running, owner] }])).toEqual([
+			[running],
+			[owner]
+		]);
+	});
+
+	it('switches one joiner: and joins its neighbours with or, or splits there', () => {
+		const row = [[states, tags], [owner]];
+		expect(flipJoiner(row, 1)).toEqual([[states, tags, owner]]);
+		expect(flipJoiner(row, 0)).toEqual([[states], [tags], [owner]]);
+		expect(flipJoiner(flipJoiner(row, 0), 0)).toEqual(row);
+	});
+
+	it('drops a chip, leaving a lone chip of an or group plain', () => {
+		const row = [[states, tags], [owner]];
+		expect(dropChip(row, 1)).toEqual([[states], [owner]]);
+		expect(joinSegments(dropChip(row, 2))).toEqual([{ match: 'any', filters: [states, tags] }]);
 	});
 });

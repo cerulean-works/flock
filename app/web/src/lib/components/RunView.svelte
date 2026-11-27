@@ -28,7 +28,15 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Crumb } from '#lib/storage.ts';
 	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
-	import { chipParts, describeFilters } from '#lib/workspace/filters.ts';
+	import {
+		chipParts,
+		chipSegments,
+		describeFilters,
+		dropChip,
+		flipJoiner,
+		joinSegments,
+		type RunFilter
+	} from '#lib/workspace/filters.ts';
 	import { columnLabel } from '#lib/workspace/columns.ts';
 	import FilterChip from '#lib/components/FilterChip.svelte';
 	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
@@ -398,17 +406,26 @@
 		void goto(ws.href(params), { reset: false });
 	}
 
-	/** The filters without the one at `i`, from the first page. */
-	function dropFilter(i: number) {
+	/** The filters as chips, in segments: chips in one join with or, segments with and. */
+	const segments = $derived(chipSegments(ws.page.query.filters));
+	/** Each segment's first chip's place in the row, so joiners and crosses name a chip. */
+	const starts = $derived(
+		segments.reduce<number[]>((at, _, i) => [...at, i ? at[i - 1] + segments[i - 1].length : 0], [])
+	);
+
+	/** The run query with other filters, from the first page. */
+	function setFilters(filters: RunFilter[]) {
 		const params = new URLSearchParams(page.url.search);
-		applyRunQuery(params, {
-			...ws.page.query,
-			filters: ws.page.query.filters.filter((_, j) => j !== i),
-			page: 1
-		});
+		applyRunQuery(params, { ...ws.page.query, filters, page: 1 });
 		ws.selected.clear();
 		void goto(ws.href(params), { reset: false });
 	}
+
+	/** The row without chip `k`, the rest joined as before. */
+	const dropFilter = (k: number) => setFilters(joinSegments(dropChip(segments, k)));
+
+	/** The joiner after chip `k` the other way: and joins its neighbours with or; or splits. */
+	const flipAfter = (k: number) => setFilters(joinSegments(flipJoiner(segments, k)));
 
 	const narrowed = $derived(!!ws.page.query.search || ws.page.query.filters.length > 0);
 
@@ -467,7 +484,10 @@
 								: 'Table and charts side by side  V\nClick again to stack them'
 						)}
 					>
-						{#if stacked}<Rows2Icon />{:else}<Columns2Icon />{/if}
+						<!-- The layout mark only while Visualize is open, where a second click flips it. -->
+						{#if view === 'visualize'}
+							{#if stacked}<Rows2Icon />{:else}<Columns2Icon />{/if}
+						{/if}
 						Visualize
 					</Tabs.Trigger>
 					<Tabs.Trigger value="charts" {@attach hint('Charts  C')}>Charts</Tabs.Trigger>
@@ -578,12 +598,30 @@
 					onremove={dropSearch}
 				/>
 			{/if}
-			{#each ws.page.query.filters as f, i (i)}
-				<FilterChip
-					parts={chipParts(f, { label: labelOf, kind: kindOf, people: ws.people, me })}
-					onclick={() => filterControl?.edit()}
-					onremove={() => dropFilter(i)}
-				/>
+			{#each segments as segment, si (si)}
+				{#if si > 0}
+					{@render joiner(starts[si] - 1, 'and')}
+				{/if}
+				<!-- An or group reads as one where and is in the row too: or binds first. -->
+				<span
+					class={[
+						'flex flex-wrap items-center gap-1.5',
+						segment.length > 1 &&
+							segments.length > 1 &&
+							'rounded-lg px-1 py-0.5 ring-1 ring-divider ring-inset'
+					]}
+				>
+					{#each segment as f, ci (ci)}
+						{#if ci > 0}
+							{@render joiner(starts[si] + ci - 1, 'or')}
+						{/if}
+						<FilterChip
+							parts={chipParts(f, { label: labelOf, kind: kindOf, people: ws.people, me })}
+							onclick={() => filterControl?.edit()}
+							onremove={() => dropFilter(starts[si] + ci)}
+						/>
+					{/each}
+				</span>
 			{/each}
 		</div>
 	{/if}
@@ -701,3 +739,16 @@
 	<MoveRunsDialog />
 	<DeleteRunsDialog />
 {/if}
+
+{#snippet joiner(k: number, word: 'and' | 'or')}
+	<!-- How two chips join; a click switches this one: and joins them with or, or splits. -->
+	<button
+		type="button"
+		class="rounded px-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+		aria-label={word === 'and' ? 'and: match either instead' : 'or: match both instead'}
+		{@attach hint(word === 'and' ? 'Match either instead' : 'Match both instead')}
+		onclick={() => flipAfter(k)}
+	>
+		{word}
+	</button>
+{/snippet}

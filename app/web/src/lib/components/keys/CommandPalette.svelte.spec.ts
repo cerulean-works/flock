@@ -21,12 +21,22 @@ const project = (name: string) => ({
 	created_by: 7
 });
 
-/** Flock's answers: bert's groups and runs, as the palette asks for them. */
-function answer(url: string): unknown {
+/** Flock's answers: bert's groups and runs, as the palette asks for them (runs searched by name). */
+function answer(url: string, init?: RequestInit): unknown {
 	if (url.endsWith('/projects/acme/bert/groups'))
 		return { groups: [{ id: 4, name: 'Seeds', color: '#36f' }], ungrouped_count: 0 };
-	if (url.endsWith('/projects/acme/bert/runs/query'))
-		return { ids: ['r1', 'r2'], data: { display_name: ['lr-sweep-1', 'lr-sweep-2'] } };
+	if (url.endsWith('/projects/acme/bert/runs/query')) {
+		const body = JSON.stringify(JSON.parse(String(init?.body ?? '{}')).filter ?? '');
+		const q = /\(\?i\)([\w-]+)/.exec(body)?.[1]?.toLowerCase() ?? '';
+		const runs = [
+			['r1', 'lr-sweep-1'],
+			['r2', 'lr-sweep-2']
+		].filter(([, n]) => n.includes(q));
+		return {
+			ids: runs.map(([id]) => id),
+			data: { display_name: runs.map(([, n]) => n), job_type: runs.map(() => 'train') }
+		};
+	}
 	return null;
 }
 
@@ -37,7 +47,10 @@ beforeEach(async () => {
 	});
 	vi.stubGlobal(
 		'fetch',
-		vi.fn(async (url: string) => new Response(JSON.stringify(answer(url)), { status: 200 }))
+		vi.fn(
+			async (url: string, init?: RequestInit) =>
+				new Response(JSON.stringify(answer(url, init)), { status: 200 })
+		)
 	);
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -66,5 +79,27 @@ describe('the command menu', () => {
 		await expect.element(screen.getByRole('option', { name: /lr-sweep-1/ })).toBeVisible();
 		await userEvent.keyboard('lr-sweep-2{Enter}');
 		expect(goto).toHaveBeenLastCalledWith('/acme/bert/runs/r2');
+	});
+
+	it('opens a run in place with Tab, listing its pages', async () => {
+		render(CommandPalette, { open: true });
+		await userEvent.keyboard('bert');
+		await expect.element(screen.getByRole('option', { name: /bert/ })).toBeVisible();
+		await userEvent.keyboard('{Tab}');
+		await expect.element(screen.getByRole('option', { name: /lr-sweep-1/ })).toBeVisible();
+		await userEvent.keyboard('lr-sweep-2');
+		await expect
+			.element(screen.getByRole('option', { name: /lr-sweep-1/ }))
+			.not.toBeInTheDocument();
+		await userEvent.keyboard('{Tab}');
+
+		await expect.element(screen.getByText('lr-sweep-2 ›')).toBeVisible();
+		await expect.element(screen.getByRole('option', { name: /Charts/ })).toBeVisible();
+		await expect.element(screen.getByRole('option', { name: /Logs/ })).toBeVisible();
+		await expect.element(screen.getByRole('option', { name: /Files/ })).toBeVisible();
+		// A training run has no Results or Compare.
+		await expect.element(screen.getByRole('option', { name: /Results/ })).not.toBeInTheDocument();
+		await userEvent.keyboard('logs{Enter}');
+		expect(goto).toHaveBeenLastCalledWith('/acme/bert/runs/r2?tab=logs');
 	});
 });
