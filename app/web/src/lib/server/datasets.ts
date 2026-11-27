@@ -31,7 +31,7 @@ export async function loadDatasets(
 	viewer: Promise<Access>
 ): Promise<DatasetsPath> {
 	const [{ s3 }, access] = await Promise.all([authConfig(), viewer]);
-	if (!s3) error(404, 'This Flock server has no S3 storage');
+	if (!s3) error(404, { message: 'This Flock server has no S3 storage', noS3: true });
 	const outside = access === 'public';
 	if (outside && (!path || scope.project !== null)) error(404, 'Not found');
 	const base = datasetsPath(scope.org);

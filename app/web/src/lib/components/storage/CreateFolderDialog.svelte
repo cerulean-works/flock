@@ -1,13 +1,12 @@
 <script lang="ts">
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import { bucketCall, folderNameError, s3Uri } from '#lib/storage.ts';
-	import FormError from '../FormError.svelte';
+	import AnchoredForm from '../AnchoredForm.svelte';
 
 	interface Props {
 		open: boolean;
+		/** The button it opens from. */
+		anchor?: HTMLElement | null;
 		org: string;
 		bucket: string;
 		/** The folder it goes in (ending in `/`, or empty). */
@@ -16,14 +15,13 @@
 		oncreated: (prefix: string) => void;
 	}
 
-	let { open = $bindable(), org, bucket, prefix, oncreated }: Props = $props();
+	let { open = $bindable(), anchor = null, org, bucket, prefix, oncreated }: Props = $props();
 
 	let name = $state('');
 	let pending = $state(false);
 	let error = $state<string | null>(null);
 
-	async function create(e: SubmitEvent) {
-		e.preventDefault();
+	async function create() {
 		error = folderNameError(name);
 		if (error) return;
 		pending = true;
@@ -40,38 +38,29 @@
 	}
 </script>
 
-<Dialog.Root
+<AnchoredForm
 	bind:open
-	onOpenChangeComplete={(o) => {
-		if (o) return;
+	{anchor}
+	title="New folder"
+	submit="Create folder"
+	{pending}
+	{error}
+	onsubmit={create}
+	onclosed={() => {
 		name = '';
 		error = null;
 	}}
 >
-	<Dialog.Content class="sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>New folder</Dialog.Title>
-			<Dialog.Description class="break-all">
-				In <span class="font-mono text-[12.5px]">{s3Uri(bucket, prefix)}</span>. It stays empty
-				until you upload into it.
-			</Dialog.Description>
-		</Dialog.Header>
-		<form class="grid gap-4" onsubmit={create}>
-			<div class="grid gap-2">
-				<Label for="folder-name">Name</Label>
-				<Input
-					id="folder-name"
-					bind:value={name}
-					autocomplete="off"
-					spellcheck="false"
-					autofocus
-					aria-invalid={!!error}
-				/>
-			</div>
-			<FormError {error} />
-			<Dialog.Footer>
-				<Button type="submit" {pending}>Create folder</Button>
-			</Dialog.Footer>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
+	<Input
+		bind:value={name}
+		aria-label="Name"
+		placeholder="Name"
+		autocomplete="off"
+		spellcheck="false"
+		aria-invalid={!!error}
+	/>
+	{#snippet note()}
+		In <span class="font-mono">{s3Uri(bucket, prefix)}</span>. It stays empty until you upload into
+		it.
+	{/snippet}
+</AnchoredForm>

@@ -90,7 +90,7 @@ describe('selecting datasets and folders', () => {
 			.not.toBeInTheDocument();
 		await box('a').click();
 		expect([...selection.selected]).toEqual(['eval/a']);
-		await vi.waitFor(() => expect(opacity('deep/')).toBe('1'));
+		await vi.waitFor(() => expect(opacity('deep')).toBe('1'));
 		const row = box('a').element().closest('[role="row"]')!;
 		expect(row.getAttribute('aria-selected')).toBe('true');
 		expect(row.className).toContain('bg-selection/45');
@@ -99,7 +99,7 @@ describe('selecting datasets and folders', () => {
 	it('checks a range with shift-click, and all or none from the header', async () => {
 		const selection = list();
 		await box('a').click();
-		await box('deep/').click({ modifiers: ['Shift'] });
+		await box('deep').click({ modifiers: ['Shift'] });
 		expect(selection.chosen).toEqual(['eval/a', 'eval/b', 'eval/c', 'eval/deep']);
 		await box('b').click();
 		await box('c').click({ modifiers: ['Shift'] });
@@ -164,7 +164,7 @@ describe('the row menu', () => {
 		await expect
 			.element(screen.getByRole('button', { name: 'Actions for notes.md' }))
 			.not.toBeInTheDocument();
-		await screen.getByRole('button', { name: 'Actions for deep/' }).click();
+		await screen.getByRole('button', { name: 'Actions for deep' }).click();
 		await expect.element(screen.getByRole('menuitem', { name: 'Delete…' })).toBeVisible();
 		await screen.getByRole('menuitem', { name: 'Rename…' }).click();
 		await expect.element(screen.getByRole('heading', { name: 'Rename eval/deep/' })).toBeVisible();
@@ -195,7 +195,7 @@ describe('the row menu', () => {
 		await expect.element(confirm).toBeDisabled();
 		await screen.getByLabelText('Type eval/b to confirm').fill('eval/b');
 		await confirm.click();
-		await vi.waitFor(() => expect(names()).toEqual(['a', 'c', 'deep/', 'notes.md']));
+		await vi.waitFor(() => expect(names()).toEqual(['a', 'c', 'deep', 'notes.md']));
 		expect(body(calls[0].init)).toEqual({ paths: ['eval/b'] });
 	});
 });
@@ -225,7 +225,7 @@ describe('MoveDatasetsDialog', () => {
 		});
 		const selection = list();
 		await box('a').click();
-		await box('deep/').click();
+		await box('deep').click();
 		selection.act('move');
 		await expect.element(screen.getByRole('heading', { name: 'Move 2 items' })).toBeVisible();
 		// The destination is picked, never typed: the breadcrumbs say where it is.
@@ -259,7 +259,7 @@ describe('MoveDatasetsDialog', () => {
 			to: 'eval/deep'
 		});
 		// The row moved leaves the list and the selection; this folder is read again.
-		expect(names()).toEqual(['b', 'c', 'deep/', 'notes.md']);
+		expect(names()).toEqual(['b', 'c', 'deep', 'notes.md']);
 		expect(selection.chosen).toEqual(['eval/deep']);
 		expect(invalidateAll).toHaveBeenCalled();
 	});
@@ -289,7 +289,7 @@ describe('MoveDatasetsDialog', () => {
 			.element(screen.getByRole('alert'))
 			.toHaveTextContent('That’s more than 10,000 objects.');
 		await expect.element(screen.getByText('aws s3 mv …')).toBeVisible();
-		expect(names()).toEqual(['a', 'b', 'c', 'deep/', 'notes.md']);
+		expect(names()).toEqual(['a', 'b', 'c', 'deep', 'notes.md']);
 	});
 });
 

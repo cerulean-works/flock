@@ -74,10 +74,10 @@ describe('ObjectBrowser', () => {
 			[...document.querySelectorAll('[role=rowgroup] [role=row]')].map((r) =>
 				r.querySelector('[role=cell]:first-child a')!.textContent!.trim()
 			);
-		expect(rows()).toEqual(['v1/', 'a.txt', 'b.json', 'c.png']);
+		expect(rows()).toEqual(['v1', 'a.txt', 'b.json', 'c.png']);
 		await expect.element(page.getByText('2.0 KB')).toBeInTheDocument();
 		await page.getByRole('button', { name: 'Load more' }).click();
-		await vi.waitFor(() => expect(rows()).toEqual(['v1/', 'a.txt', 'b.json', 'c.png', 'd.md']));
+		await vi.waitFor(() => expect(rows()).toEqual(['v1', 'a.txt', 'b.json', 'c.png', 'd.md']));
 		expect(calls[0].url).toBe(
 			'/api/storage/acme/data/objects?prefix=runs%2F&limit=200&cursor=next'
 		);
@@ -94,6 +94,7 @@ describe('ObjectBrowser', () => {
 			})
 		});
 		render(ObjectBrowser, { org: 'acme', bucket: 'data', prefix: 'runs/', listing, now: 0 });
+		await page.getByRole('button', { name: 'Filter by name prefix' }).click();
 		await page.getByRole('textbox', { name: 'Filter by name prefix' }).fill('b');
 		await vi.waitFor(() =>
 			expect(document.querySelectorAll('[role=rowgroup] [role=row]').length).toBe(1)
@@ -177,7 +178,7 @@ describe('ObjectBrowser in -projects/ (D169)', () => {
 		const { unmount } = render(ObjectBrowser, { ...props, bucket: 'flock-datasets' });
 		const link = page.getByRole('link', { name: 'pretrain in Datasets' });
 		expect(link.element().getAttribute('href')).toBe('/acme/pretrain/datasets');
-		await expect.element(page.getByText('9/')).toBeVisible();
+		await expect.element(page.getByText('9', { exact: true })).toBeVisible();
 		expect(page.getByRole('link', { name: /old/ }).query()).toBeNull();
 		unmount();
 		render(ObjectBrowser, { ...props, bucket: 'flock-models' });
@@ -195,7 +196,7 @@ describe('ObjectBrowser in -projects/ (D169)', () => {
 			now: 0,
 			projects
 		});
-		await expect.element(page.getByText('412/')).toBeVisible();
+		await expect.element(page.getByText('412', { exact: true })).toBeVisible();
 		expect(page.getByRole('link', { name: /pretrain/ }).query()).toBeNull();
 	});
 });

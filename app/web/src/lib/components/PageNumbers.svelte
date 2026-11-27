@@ -2,11 +2,14 @@
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { pageNumbers } from '#lib/datasets.ts';
+	import { hint } from '#lib/hint.svelte.ts';
+	import { PAGER_PILL } from './Pager.svelte';
+	import PagerRange from './PagerRange.svelte';
 
 	/**
-	 * A pager under a table: which rows are shown of how many, then Previous, the page numbers
-	 * (the first, the last and the current one's neighbours) and Next.
+	 * A pager for a list in a page's content (the dataset viewer, a run's eval items): the runs
+	 * table's floating pill (Gate 2), pinned at the foot of the scroll as the list goes by. Which
+	 * rows are shown of how many, then the page before and after.
 	 */
 	interface Props {
 		/** The current page, from 1. */
@@ -28,50 +31,35 @@
 	}
 
 	let { current, pages, first, last, total, label, ongo, onstep }: Props = $props();
+
+	const step = (by: -1 | 1) => (onstep ? onstep(by) : ongo(current + by));
 </script>
 
-<nav
-	class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] tabular-nums"
-	aria-label={label}
->
-	<p>
-		{first.toLocaleString('en-US')}–{last.toLocaleString('en-US')}
-		<span class="text-muted-foreground">of {total.toLocaleString('en-US')}</span>
-	</p>
-	<div class="ml-auto flex items-center gap-1">
+<div class="sticky bottom-3.5 z-5 w-fit">
+	<nav class={PAGER_PILL} aria-label={label}>
+		<PagerRange from={first} to={last} most={total} />
+		<span class="mr-1 text-muted-foreground">of {total.toLocaleString('en-US')}</span>
 		<Button
 			variant="ghost"
-			size="sm"
+			size="icon-sm"
+			class="disabled:opacity-40"
 			aria-label="Previous page"
+			{@attach hint('Previous page')}
 			disabled={first <= 1}
-			onclick={() => (onstep ? onstep(-1) : ongo(current - 1))}
+			onclick={() => step(-1)}
 		>
-			<ChevronLeftIcon /> Previous
+			<ChevronLeftIcon />
 		</Button>
-		{#each pageNumbers(current, pages) as p, i (p ?? `gap${i}`)}
-			{#if p === null}
-				<span class="w-7 text-center text-muted-foreground" aria-hidden="true">…</span>
-			{:else}
-				<Button
-					variant={p === current ? 'secondary' : 'ghost'}
-					size="sm"
-					class="min-w-7 px-1.5"
-					aria-label="Page {p}"
-					aria-current={p === current ? 'page' : undefined}
-					onclick={() => ongo(p)}
-				>
-					{p.toLocaleString('en-US')}
-				</Button>
-			{/if}
-		{/each}
 		<Button
 			variant="ghost"
-			size="sm"
+			size="icon-sm"
+			class="disabled:opacity-40"
 			aria-label="Next page"
-			disabled={last >= total}
-			onclick={() => (onstep ? onstep(1) : ongo(current + 1))}
+			{@attach hint('Next page')}
+			disabled={last >= total || current >= pages}
+			onclick={() => step(1)}
 		>
-			Next <ChevronRightIcon />
+			<ChevronRightIcon />
 		</Button>
-	</div>
-</nav>
+	</nav>
+</div>

@@ -10,7 +10,6 @@
 	import ConnectDialog from '#lib/components/storage/ConnectDialog.svelte';
 	import CreateBucket from '#lib/components/storage/CreateBucket.svelte';
 	import DeleteBucketDialog from '#lib/components/storage/DeleteBucketDialog.svelte';
-	import { Badge } from '#lib/components/ui/badge/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
 	import { modelsHref } from '#lib/models.ts';
@@ -51,7 +50,7 @@
 	<CreateBucket nameLimit={data.nameLimit} />
 {/snippet}
 
-<ListPage title="Storage" heading="Buckets" {actions}>
+<ListPage title="Storage" org={false} {actions}>
 	<DataTable
 		columns={COLUMNS}
 		rows={data.buckets}
@@ -87,17 +86,16 @@
 							{bucket.name}
 						</a>
 						{#if bucket.managed}
-							<Badge
-								variant="secondary"
-								class="text-muted-foreground"
+							<span
+								class="text-[12px] text-muted-foreground"
 								{@attach hint(
 									bucket.managed === 'models'
 										? 'Flock created this bucket for the Models tab'
 										: 'Flock created this bucket for the Datasets tab'
 								)}
 							>
-								Managed by Flock
-							</Badge>
+								managed
+							</span>
 						{/if}
 					</span>
 				{/if}

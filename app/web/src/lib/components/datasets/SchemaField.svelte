@@ -13,11 +13,11 @@
 <!-- A row of the Schema tab's tree: structs and lists open onto their children. -->
 <li class={['border-b border-divider', depth > 0 && 'last:border-b-0']}>
 	<div
-		class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem] items-start gap-3 py-2 text-[13px] leading-6"
+		class="grid min-h-9 grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem] items-start gap-5 px-5 py-1.5 text-[13px] leading-6 hover:bg-muted"
 	>
 		<!-- Names start at the edge; a struct's chevron follows its name. -->
 		<span class="flex min-w-0 items-center" style:padding-left="{depth * 1.25}rem">
-			<span class="truncate font-mono text-[12.5px]" {@attach hint(field.name)}>{field.name}</span>
+			<span class="truncate" {@attach hint(field.name)}>{field.name}</span>
 			{#if field.children.length}
 				<button
 					class="ml-1 grid size-5 flex-none place-items-center rounded-sm text-muted-foreground hover:bg-muted"

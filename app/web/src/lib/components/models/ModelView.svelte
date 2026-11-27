@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
@@ -8,24 +7,28 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { Badge } from '#lib/components/ui/badge/index.js';
+	import DetailPage from '#lib/components/DetailPage.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import VersionPicker from '#lib/components/VersionPicker.svelte';
 	import { folderHref, modelApi, modelCall, sortTags } from '#lib/models.ts';
+	import type { Crumb } from '#lib/storage.ts';
 	import type { ModelInfo, ModelVersionDetail, ModelVersionsPage } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 	import DeleteModelDialog from './DeleteModelDialog.svelte';
 	import EvalsTab from './EvalsTab.svelte';
 	import FilesTab from './FilesTab.svelte';
 	import LoadDialog from './LoadDialog.svelte';
+	import ModelProperties from './ModelProperties.svelte';
 	import OverviewTab from './OverviewTab.svelte';
 	import RenameModelDialog from './RenameModelDialog.svelte';
+	import { openMenuTrigger } from '../AnchoredForm.svelte';
 	import VersionsTab from './VersionsTab.svelte';
 
 	interface Props {
 		scope: Scope;
+		/** The header's steps before the name, such as Models › baselines. */
+		trail?: Crumb[];
 		info: ModelInfo;
 		/** The version shown; null while the model has none. */
 		version: ModelVersionDetail | null;
@@ -34,7 +37,7 @@
 		now: number;
 	}
 
-	let { scope, info, version, requested, now }: Props = $props();
+	let { scope, trail = [], info, version, requested, now }: Props = $props();
 
 	type Tab = 'overview' | 'versions' | 'evals' | 'files';
 	const TABS: { value: Tab; label: string }[] = [
@@ -84,96 +87,83 @@
 
 	let loading = $state(false);
 	let renaming = $state(false);
+	let renameAnchor = $state<HTMLElement | null>(null);
 	let deleting = $state(false);
 </script>
 
-<div class="pt-3">
-	<h1
-		class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]"
-		{@attach hint(info.model)}
-	>
-		{info.name}
-	</h1>
+{#snippet badges()}
 	{#if version}
-		<!-- The version and whether it's the primary, all at the picker's height so the row sits level. -->
-		<div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
-			<VersionPicker
-				version={version.number}
-				{requested}
-				primary={info.primary}
-				tags={sortTags(info.tags)}
-				read={readVersions}
-				{versionHref}
-			/>
-			{#if version.primary}
-				<Badge variant="secondary" class="h-7 px-2.5 text-[13px] font-normal">Primary</Badge>
-			{/if}
-		</div>
+		<VersionPicker
+			version={version.number}
+			{requested}
+			primary={info.primary}
+			mark={version.primary ? 'Primary' : null}
+			tags={sortTags(info.tags)}
+			read={readVersions}
+			{versionHref}
+		/>
 	{/if}
-</div>
+{/snippet}
 
-<div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
-	<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
-		<Tabs.List aria-label="Model">
-			{#each TABS as t (t.value)}
-				<Tabs.Trigger value={t.value}>{t.label}</Tabs.Trigger>
-			{/each}
-		</Tabs.List>
-	</Tabs.Root>
-	<div class="ml-auto flex flex-wrap items-center gap-1">
-		{#if version}
-			<Button
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground"
-				onclick={() => (loading = true)}
-			>
-				<DownloadIcon /> Load
-			</Button>
-		{/if}
-		<Button
-			variant="ghost"
-			size="sm"
-			class="text-muted-foreground"
-			onclick={() => (renaming = true)}
-		>
-			<PencilIcon /> Rename
+{#snippet controls()}
+	{#if version}
+		<Button variant="quiet" size="bar" onclick={() => (loading = true)}>
+			<DownloadIcon /> <span class="max-sm:sr-only">Load</span>
 		</Button>
-		<!-- Reaching the files and deletion: less often, so tucked away. -->
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger>
-				{#snippet child({ props })}
-					<Button
-						{...props}
-						variant="ghost"
-						size="icon-sm"
-						class="text-muted-foreground"
-						aria-label="More model actions"
-					>
-						<EllipsisIcon />
-					</Button>
-				{/snippet}
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="end" class="w-48">
-				{#if filesHref}
-					<DropdownMenu.Item>
-						{#snippet child({ props })}
-							<a {...props} href={filesHref}>
-								<FolderOpenIcon /> Browse files
-							</a>
-						{/snippet}
-					</DropdownMenu.Item>
-					<DropdownMenu.Separator />
-				{/if}
-				<DropdownMenu.Item variant="destructive" onSelect={() => (deleting = true)}>
-					<Trash2Icon /> Delete…
+	{/if}
+	<!-- Renaming, the files and deletion: less often, so tucked away, as a run's and a
+	     project's are. -->
+	<DropdownMenu.Root>
+		<DropdownMenu.Trigger>
+			{#snippet child({ props })}
+				<Button {...props} variant="quiet" size="icon-bar" aria-label="More model actions">
+					<EllipsisIcon />
+				</Button>
+			{/snippet}
+		</DropdownMenu.Trigger>
+		<DropdownMenu.Content align="end" class="w-48">
+			<DropdownMenu.Item
+				onSelect={() => {
+					renameAnchor = openMenuTrigger();
+					renaming = true;
+				}}
+			>
+				<PencilIcon /> Rename…
+			</DropdownMenu.Item>
+			{#if filesHref}
+				<DropdownMenu.Item>
+					{#snippet child({ props })}
+						<a {...props} href={filesHref}>
+							<FolderOpenIcon /> Browse files
+						</a>
+					{/snippet}
 				</DropdownMenu.Item>
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
-	</div>
-</div>
+				<DropdownMenu.Separator />
+			{/if}
+			<DropdownMenu.Item variant="destructive" onSelect={() => (deleting = true)}>
+				<Trash2Icon /> Delete…
+			</DropdownMenu.Item>
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
+{/snippet}
 
-<div class="mt-6">
+{#snippet properties()}
+	{#if version}<ModelProperties {info} {version} />{/if}
+{/snippet}
+
+<DetailPage
+	title={info.name}
+	{trail}
+	titleHint={info.model}
+	{badges}
+	tabs={TABS}
+	{tab}
+	ontab={setTab}
+	tabsLabel="Model"
+	{controls}
+	properties={tab === 'overview' && version ? properties : undefined}
+	flush={tab === 'versions' || (tab === 'files' && !!version)}
+>
 	{#if tab === 'versions'}
 		<VersionsTab
 			{scope}
@@ -184,12 +174,12 @@
 			{now}
 		/>
 	{:else if !version}
-		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">
-			This model has no versions yet. A version appears once its upload finishes.
+		<p class="text-[13px] text-muted-foreground">
+			No versions yet. A version appears once its upload finishes.
 		</p>
 	{:else if tab === 'overview'}
 		{#key version.number}
-			<OverviewTab {scope} {info} {version} />
+			<OverviewTab {scope} {version} />
 		{/key}
 	{:else if tab === 'evals'}
 		{#key `${scope.org}/${version.model}@${version.number}`}
@@ -198,10 +188,10 @@
 	{:else}
 		<FilesTab {scope} {version} />
 	{/if}
-</div>
+</DetailPage>
 
 {#if version}
 	<LoadDialog bind:open={loading} {scope} name={info.name} number={version.number} />
 {/if}
-<RenameModelDialog bind:open={renaming} {scope} name={info.name} />
+<RenameModelDialog bind:open={renaming} anchor={renameAnchor} {scope} name={info.name} />
 <DeleteModelDialog bind:open={deleting} {scope} {info} />

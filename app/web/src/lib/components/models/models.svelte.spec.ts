@@ -167,7 +167,7 @@ describe('ModelList', () => {
 		render(ModelList, { scope, path: 'eval', folder, now: NOW });
 		const model = screen.getByRole('link', { name: 'olmo2-1b' });
 		expect(model.element().getAttribute('href')).toBe('/acme/pretrain/models/eval/olmo2-1b');
-		const sub = screen.getByRole('link', { name: 'sweeps/' });
+		const sub = screen.getByRole('link', { name: 'sweeps' });
 		expect(sub.element().getAttribute('href')).toBe('/acme/pretrain/models/eval/sweeps');
 		await expect.element(screen.getByText('4 models')).toBeVisible();
 	});
@@ -213,7 +213,7 @@ describe('a folder row\u2019s menu', () => {
 		invalidateAll.mockClear();
 		const calls = serve({ [`${API}/-/folders`]: () => ({ path: 'bench', project: null }) });
 		render(ModelList, { scope, path: '', folder: listing, now: NOW, selection: new Selection() });
-		await screen.getByRole('button', { name: 'Actions for eval/' }).click();
+		await screen.getByRole('button', { name: 'Actions for eval' }).click();
 		await screen.getByRole('menuitem', { name: 'Rename…' }).click();
 		await screen.getByLabelText('New name').fill('bench');
 		await screen.getByRole('button', { name: 'Rename', exact: true }).click();
@@ -226,13 +226,13 @@ describe('a folder row\u2019s menu', () => {
 		invalidateAll.mockClear();
 		const calls = serve({ [`${API}/-/folders`]: () => new Response(null, { status: 204 }) });
 		render(ModelList, { scope, path: '', folder: listing, now: NOW, selection: new Selection() });
-		await screen.getByRole('button', { name: 'Actions for eval/' }).click();
+		await screen.getByRole('button', { name: 'Actions for eval' }).click();
 		await screen.getByRole('menuitem', { name: 'Delete…' }).click();
 		await expect
 			.element(screen.getByRole('button', { name: 'Delete', exact: true }))
 			.toBeDisabled();
 		await screen.getByRole('button', { name: 'Cancel' }).click();
-		await screen.getByRole('button', { name: 'Actions for empty/' }).click();
+		await screen.getByRole('button', { name: 'Actions for empty' }).click();
 		await screen.getByRole('menuitem', { name: 'Delete…' }).click();
 		await screen.getByRole('button', { name: 'Delete', exact: true }).click();
 		await expect.poll(() => invalidateAll).toHaveBeenCalled();
@@ -305,11 +305,11 @@ describe('ModelView', () => {
 		view();
 		await expect.element(screen.getByRole('heading', { name: 'olmo2-1b', level: 1 })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: /^Version 12/ })).toBeVisible();
-		await expect.element(screen.getByText('Primary', { exact: true })).toBeVisible();
+		await expect.element(screen.getByText('· Primary')).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Load' })).toBeVisible();
-		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
-		// Browsing the files and deleting are in the overflow menu.
+		// Renaming, browsing the files and deleting are in the overflow menu.
 		await screen.getByRole('button', { name: 'More model actions' }).click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Rename…' })).toBeVisible();
 		expect(
 			screen.getByRole('menuitem', { name: 'Browse files' }).element().getAttribute('href')
 		).toBe('/storage/acme/flock-models/olmo2-1b/u/ULID12/');
@@ -323,12 +323,14 @@ describe('ModelView', () => {
 		await expect.element(screen.getByRole('rowheader', { name: 'attention.heads' })).toBeVisible();
 		await expect.element(screen.getByText('2,048')).toBeVisible();
 		await expect.element(screen.getByRole('rowheader', { name: 'architecture' })).toBeVisible();
-		await expect.element(screen.getByRole('rowheader', { name: 'Digest' })).toBeVisible();
-		await expect.element(screen.getByRole('row', { name: /^Size 3\.0 GB/ })).toBeVisible();
-		await expect.element(screen.getByRole('row', { name: 'Made primary by Bob' })).toBeVisible();
-		await expect
-			.element(screen.getByRole('rowheader', { name: 'Made primary', exact: true }))
-			.toBeVisible();
+		// The version's facts, in the properties pane: folded into a Details row on a phone.
+		const pane = screen.getByRole('complementary', { name: 'Properties' });
+		await expect.element(pane.getByText('Digest', { exact: true })).not.toBeVisible();
+		await pane.getByRole('button', { name: 'Details' }).click();
+		await expect.element(pane.getByText('Digest', { exact: true })).toBeVisible();
+		await expect.element(pane.getByText('3.0 GB', { exact: true })).toBeVisible();
+		await expect.element(pane.getByText('Made primary', { exact: true })).toBeVisible();
+		await expect.element(pane.getByText('Bob', { exact: true })).toBeVisible();
 		const keys = calls
 			.filter((c) => c.url.endsWith('/presign'))
 			.map((c) => body(c.init).key)
@@ -345,9 +347,7 @@ describe('ModelView', () => {
 		view(undefined, { ...primary, files: primary.files.filter((f) => f.path !== 'README.md') });
 		await expect
 			.element(
-				screen.getByText(
-					'This version has no README. Add a README.md to the folder you push to describe it.'
-				)
+				screen.getByText('No README. Add a README.md to the folder you push to describe it.')
 			)
 			.toBeVisible();
 	});
@@ -379,23 +379,22 @@ describe('ModelView', () => {
 		await expect.element(shell.getByText('flock models pull acme/olmo2-1b@12')).toBeVisible();
 	});
 
-	it('picks versions and tags, with checkpoint tags in step order and the primary first', async () => {
+	it('picks versions from one list, by number or by a tag', async () => {
 		serve({ ...storage(), [`${API}/olmo2-1b/-/versions`]: () => page(versions) });
 		view();
 		await screen.getByRole('button', { name: /^Version 12/ }).click();
 		const list = screen.getByRole('listbox');
-		await expect.element(list.getByRole('option', { name: /^primary/ })).toBeVisible();
-		const items = list
+		// One list of versions, newest first, each once with its names.
+		await expect.element(list.getByRole('option', { name: /Version 12.*Primary/ })).toBeVisible();
+		const numbers = list
 			.getByRole('option')
 			.all()
-			.map((i) => i.element().textContent!.replace(/\s+/g, ' ').trim());
-		expect(items.slice(0, 4)).toEqual([
-			'primary version 12',
-			'release version 13',
-			'checkpoint-900 version 13',
-			'checkpoint-12000 version 14'
-		]);
-		await list.getByRole('option', { name: /^release/ }).click();
+			.map((i) => Number(/Version (\d+)/.exec(i.element().textContent!)![1]));
+		expect(numbers).toEqual([...numbers].sort((x, y) => y - x));
+		expect(new Set(numbers).size).toBe(numbers.length);
+		// Found by a tag, it goes by the tag.
+		await screen.getByRole('combobox', { name: 'Search versions' }).fill('release');
+		await list.getByRole('option', { name: /release/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/models/acme/olmo2-1b?version=release', {
 			reset: false
 		});
@@ -499,11 +498,7 @@ describe('ModelView', () => {
 			now: NOW
 		});
 		await expect
-			.element(
-				screen.getByText(
-					'This model has no versions yet. A version appears once its upload finishes.'
-				)
-			)
+			.element(screen.getByText('No versions yet. A version appears once its upload finishes.'))
 			.toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Load' })).not.toBeInTheDocument();
 		await screen.getByRole('button', { name: 'More model actions' }).click();

@@ -34,25 +34,22 @@
 </script>
 
 {#if rows.length}
-	<ul class="mb-5 grid gap-2" aria-label="Blends">
+	<!-- One muted line a job, over the folder's table: no fill, the × on hover (D9). -->
+	<ul class="mb-3 grid gap-0.5" aria-label="Blends">
 		{#each rows as job (job.id)}
-			<li class="bg-card px-3 py-2.5 text-[13.5px]">
+			<li class="group/job flex min-h-7 items-center gap-3 text-[13px] text-muted-foreground">
+				<p class="min-w-0 truncate tabular-nums">
+					{jobText(job)}
+					{#if job.state === 'finished'}
+						<a
+							class="text-link underline-offset-3 hover:underline"
+							href={refHref(scope.org, job.dest)}>Open</a
+						>
+					{/if}
+				</p>
 				{#if job.state === 'running'}
-					<div class="flex items-center gap-3">
-						<p class="min-w-0 flex-1 truncate tabular-nums">{jobText(job)}</p>
-						{#if job.kind === 'blend'}
-							<Button
-								variant="outline"
-								size="sm"
-								onclick={() => cancel(job)}
-								pending={cancelling === job.id}
-							>
-								Cancel
-							</Button>
-						{/if}
-					</div>
 					<div
-						class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+						class="h-1 w-24 flex-none overflow-hidden rounded-full bg-muted"
 						role="progressbar"
 						aria-label="Progress of {job.dest}"
 						aria-valuemin={0}
@@ -64,30 +61,27 @@
 							style:width="{Math.max(2, job.progress * 100)}%"
 						></div>
 					</div>
-				{:else}
-					<div class="flex items-start gap-3">
-						<div class="grid min-w-0 flex-1 gap-1">
-							<p class="leading-7">
-								{jobText(job)}
-								{#if job.state === 'finished'}
-									<a
-										class="text-link underline-offset-3 hover:underline"
-										href={refHref(scope.org, job.dest)}>Open</a
-									>
-								{/if}
-							</p>
-							{#if job.error}<p class="text-destructive">{job.error}</p>{/if}
-						</div>
+					{#if job.kind === 'blend'}
 						<Button
-							variant="ghost"
-							size="icon"
-							class="size-7"
-							aria-label="Hide"
-							onclick={() => list.hide(job.id)}
+							variant="quiet"
+							size="bar"
+							onclick={() => cancel(job)}
+							pending={cancelling === job.id}
 						>
-							<XIcon />
+							Cancel
 						</Button>
-					</div>
+					{/if}
+				{:else}
+					{#if job.error}<span class="min-w-0 truncate text-destructive">{job.error}</span>{/if}
+					<Button
+						variant="quiet"
+						size="icon-bar"
+						class="size-6 opacity-0 group-hover/job:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+						aria-label="Hide"
+						onclick={() => list.hide(job.id)}
+					>
+						<XIcon />
+					</Button>
 				{/if}
 			</li>
 		{/each}
