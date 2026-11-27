@@ -10,6 +10,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { hint } from '#lib/hint.svelte.ts';
+	import PagerRange from './PagerRange.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { RunQuery } from '#lib/types.ts';
 	import { applyRunQuery, PAGE_SIZES } from '#lib/workspace/url.ts';
@@ -38,11 +39,7 @@
 		class={['pager absolute bottom-[var(--pager-bottom,0.875rem)] left-4 z-5', PAGER_PILL]}
 		aria-label="Run pages"
 	>
-		<span
-			>{(first + 1).toLocaleString('en-US')}–{(first + ws.page.runs.length).toLocaleString(
-				'en-US'
-			)}</span
-		>
+		<PagerRange from={first + 1} to={first + ws.page.runs.length} most={ws.page.total} />
 		<span class="of mr-1 text-muted-foreground">of {ws.page.total.toLocaleString('en-US')}</span>
 		<Button
 			variant="ghost"

@@ -4,6 +4,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { hint } from '#lib/hint.svelte.ts';
 	import { PAGER_PILL } from './Pager.svelte';
+	import PagerRange from './PagerRange.svelte';
 
 	/**
 	 * A pager for a list in a page's content (the dataset viewer, a run's eval items): the runs
@@ -36,7 +37,7 @@
 
 <div class="sticky bottom-3.5 z-5 w-fit">
 	<nav class={PAGER_PILL} aria-label={label}>
-		<span>{first.toLocaleString('en-US')}–{last.toLocaleString('en-US')}</span>
+		<PagerRange from={first} to={last} most={total} />
 		<span class="mr-1 text-muted-foreground">of {total.toLocaleString('en-US')}</span>
 		<Button
 			variant="ghost"

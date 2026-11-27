@@ -4,6 +4,7 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import PageSizeMenu from './PageSizeMenu.svelte';
+	import PagerRange from './PagerRange.svelte';
 	import { PAGER_PILL } from './Pager.svelte';
 
 	interface Props {
@@ -51,7 +52,7 @@
 <!-- The runs table's floating pager (Gate 2), for a list that loads as it pages: the same pill,
      the same buttons. Its place (pinned at the scroll's foot) is the page's to set. -->
 <nav bind:this={nav} class={PAGER_PILL} aria-label={label}>
-	<span>{from.toLocaleString('en-US')}–{to.toLocaleString('en-US')}</span>
+	<PagerRange {from} {to} most={total === 'many' ? to : Number(total)} />
 	<!-- A total only once it's known: the feed loads as it pages. -->
 	{#if total !== 'many'}<span class="mr-1 text-muted-foreground"
 			>of {Number(total).toLocaleString('en-US')}</span
