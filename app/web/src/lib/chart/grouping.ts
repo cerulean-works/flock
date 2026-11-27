@@ -114,6 +114,11 @@ export interface StyleOptions {
 	colorBy: string | null;
 	band: BandKind;
 	dark?: boolean;
+	/**
+	 * Every value the Group by and Color by keys take among all the runs (not just the page's),
+	 * so a value keeps its color when a search or filter hides others.
+	 */
+	domain?: { group?: readonly unknown[]; color?: readonly unknown[] };
 }
 
 /** What a group's charts draw differently from the workspace's line per run. */
@@ -142,8 +147,16 @@ export interface ChartStyle {
  */
 export function chartStyle(runs: readonly StyledRun[], o: StyleOptions): ChartStyle | null {
 	const hues = GROUP_HUES[o.dark ? 'dark' : 'light'];
-	const groups = o.groupBy ? orderValues(runs.map((r) => r.group)) : [];
-	const shades = o.colorBy ? orderValues(runs.map((r) => r.color)) : [];
+	// Colors come from every value the runs take (`domain`), the legend names the page's.
+	const groups = o.groupBy
+		? orderValues([...(o.domain?.group ?? []), ...runs.map((r) => r.group)])
+		: [];
+	const shades = o.colorBy
+		? orderValues([...(o.domain?.color ?? []), ...runs.map((r) => r.color)])
+		: [];
+	const onPage = (values: readonly unknown[]) => new Set(values.map(valueKey));
+	const groupsShown = onPage(runs.map((r) => r.group));
+	const shadesShown = onPage(runs.map((r) => r.color));
 	const hueOf = new Map<string, string>(
 		groups.map((g, i) => [
 			g.key,
@@ -185,16 +198,20 @@ export function chartStyle(runs: readonly StyledRun[], o: StyleOptions): ChartSt
 	const legend = !colors
 		? []
 		: o.groupBy
-			? groups.map((g) => ({
-					key: g.key,
-					label: `${o.groupBy} ${g.label}`,
-					color: hueOf.get(g.key)!
-				}))
-			: shades.map((s) => ({
-					key: s.key,
-					label: `${o.colorBy} ${s.label}`,
-					color: shade(hues[0], tOf.get(s.key) ?? 0.5, o.dark)
-				}));
+			? groups
+					.filter((g) => groupsShown.has(g.key))
+					.map((g) => ({
+						key: g.key,
+						label: `${o.groupBy} ${g.label}`,
+						color: hueOf.get(g.key)!
+					}))
+			: shades
+					.filter((s) => shadesShown.has(s.key))
+					.map((s) => ({
+						key: s.key,
+						label: `${o.colorBy} ${s.label}`,
+						color: shade(hues[0], tOf.get(s.key) ?? 0.5, o.dark)
+					}));
 	return { colors, means, band: o.band, legend };
 }
 

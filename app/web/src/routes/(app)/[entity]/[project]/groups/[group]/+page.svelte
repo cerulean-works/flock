@@ -7,6 +7,7 @@
 	import { page } from '$app/state';
 	import type { ResolvedPathname } from '$app/types';
 	import { bestRows, chartStyle } from '#lib/chart/grouping.ts';
+	import { runValues } from '#lib/data/run-values.svelte.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import { evalTable } from '#lib/eval-table.ts';
 	import { evalRuns } from '#lib/evals-view.svelte.ts';
@@ -118,7 +119,8 @@
 						groupBy: by && displayKey(by),
 						colorBy: color && displayKey(color),
 						band: view.seeds === 'minmax' ? 'minmax' : 'std',
-						dark: scheme.dark
+						dark: scheme.dark,
+						domain: domainOf(by, color)
 					}
 				);
 				if (!showBest || !bestKey || !bestOrder) return style;
@@ -135,6 +137,18 @@
 		}
 	);
 	setWorkspace(ws);
+
+	/**
+	 * Every value the Group by and Color by keys take in the whole group, so a run keeps its
+	 * color while a search or filter shows only some (the values route, read once per visit).
+	 */
+	function domainOf(by: string | null | undefined, color: string | null | undefined) {
+		const keys = [by, color].filter((k): k is string => !!k);
+		if (!keys.length) return undefined;
+		const all = runValues(entity, project, keys, data.group.id);
+		const values = (k: string | null | undefined) => (k ? all[k]?.map((v) => v.value) : undefined);
+		return { group: values(by), color: values(color) };
+	}
 
 	/**
 	 * A group of eval runs (some run has a suite score; the columns are the project's) opens on

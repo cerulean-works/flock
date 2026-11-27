@@ -317,11 +317,10 @@
 						onclick={() => pickField(f.key)}
 					>
 						<span class="min-w-0 flex-1 truncate">{f.name}</span>
-						{#if f.kind}<span class="text-xs text-faint">{KINDS[f.kind]}</span>{/if}
 					</button>
 				</li>
 			{:else}
-				<li class="px-2 py-2 text-[13px] text-muted-foreground">No such field</li>
+				<li class="px-2 py-2 text-[13px] text-muted-foreground">No column matches</li>
 			{/each}
 		</ul>
 		<div class="flex items-center border-t border-divider p-1">

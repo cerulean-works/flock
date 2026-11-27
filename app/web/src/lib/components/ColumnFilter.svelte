@@ -40,10 +40,11 @@
 				{...trigger}
 				type="button"
 				class={[
-					'relative z-2 grid size-5 flex-none place-items-center rounded outline-none hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:bg-muted data-[state=open]:opacity-100',
+					'relative grid h-5 flex-none place-items-center overflow-hidden rounded outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:bg-muted',
+					// Room only while it's wanted (the header's hover or focus, open, or filtering).
 					props.active
-						? 'text-primary'
-						: 'opacity-0 group-hover/h:opacity-100 pointer-coarse:opacity-100'
+						? 'w-5 text-primary'
+						: 'w-0 opacity-0 group-focus-within/h:w-5 group-focus-within/h:opacity-100 group-hover/h:w-5 group-hover/h:opacity-100 focus-visible:w-5 focus-visible:opacity-100 data-[state=open]:w-5 data-[state=open]:opacity-100 pointer-coarse:w-5 pointer-coarse:opacity-100'
 				]}
 				aria-label="Filter {props.label.toLowerCase()}"
 				{@attach hint(`Filter ${props.label.toLowerCase()}`)}

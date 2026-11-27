@@ -6,7 +6,7 @@
 		value: string | null;
 		options: { value: string | null; label: string }[];
 		onchange: (value: string | null) => void;
-		/** Choices are column keys: shown in the code font. */
+		/** Choices are column keys (shown in the menus' own font, as every column name is). */
 		mono?: boolean;
 		/** What the setting does, on its label's hover. */
 		title?: string;
@@ -100,12 +100,7 @@
 										class="max-w-40 gap-1 font-normal"
 										aria-label="{d.label}: {shown(d)}"
 									>
-										<span
-											class={[
-												'min-w-0 truncate text-foreground',
-												d.mono && d.value !== null && 'font-mono text-[12.5px]'
-											]}>{shown(d)}</span
-										>
+										<span class="min-w-0 truncate text-foreground">{shown(d)}</span>
 										<ChevronDownIcon class="text-muted-foreground" />
 									</Button>
 								{/snippet}
@@ -120,11 +115,7 @@
 									onValueChange={(v) => d.onchange(v === NONE ? null : v)}
 								>
 									{#each d.options as o (o.value ?? NONE)}
-										<DropdownMenu.RadioItem
-											value={o.value ?? NONE}
-											closeOnSelect
-											class={d.mono && o.value !== null ? 'font-mono text-[12.5px]' : ''}
-										>
+										<DropdownMenu.RadioItem value={o.value ?? NONE} closeOnSelect>
 											<span class="truncate">{o.label}</span>
 										</DropdownMenu.RadioItem>
 									{/each}

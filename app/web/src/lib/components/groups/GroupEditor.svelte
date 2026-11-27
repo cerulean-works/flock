@@ -461,7 +461,7 @@
 		(editing
 			? [
 					{ n: total, label: count(total, 'run'), swatch: '' },
-					{ n: kept, label: `${kept} kept`, swatch: 'bg-state-running/40' },
+					{ n: kept, label: `${kept} already in`, swatch: 'bg-state-running/40' },
 					{ n: toAdd, label: `${toAdd} to add`, swatch: 'bg-state-finished/50' },
 					{ n: counts.out, label: `${counts.out} to drop`, swatch: 'bg-muted-foreground/30' },
 					{
@@ -510,7 +510,15 @@
 					}
 				]
 			: []),
-		...varies.map((k) => ({ key: k, label: displayKey(k), w: COL_W, num: false })),
+		// Numbers right-aligned under their header, as on the group's own page.
+		...varies.map((k) => ({
+			key: k,
+			label: displayKey(k),
+			w: COL_W,
+			num:
+				rows.some((r) => typeof r.cells[k] === 'number') &&
+				rows.every((r) => r.cells[k] == null || typeof r.cells[k] === 'number')
+		})),
 		// Best by (D217): its column, or an empty one to pick it from while it's unset.
 		...(bestKey || summaryKeys.length
 			? [{ key: '$best', label: bestKey ? metricLabel(bestKey) : 'Best by', w: 128, num: true }]
@@ -549,7 +557,8 @@
 			<label class="flex min-w-0 max-sm:flex-1">
 				<span class="sr-only">Group name</span>
 				<input
-					class="-mx-1 field-sizing-content h-6 max-w-80 min-w-24 truncate rounded px-1 text-[13px] leading-5 font-medium text-foreground outline-none placeholder:text-faint hover:bg-muted/60 focus-visible:bg-muted/60 {BUTTON_FOCUS}"
+					class="-mx-1 field-sizing-content h-6 max-w-80 min-w-24 truncate rounded px-1 text-[13px] leading-5 font-medium text-foreground shadow-[inset_0_-1px_0_var(--border)] outline-none placeholder:text-faint hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:shadow-none {BUTTON_FOCUS}"
+					aria-label="Group name"
 					value={name}
 					oninput={(e) => (typed = e.currentTarget.value)}
 					placeholder="New group"
@@ -608,7 +617,18 @@
 			</Button>
 		{/snippet}
 		{#snippet toolbar()}
-			{@render tabs?.()}
+			<!-- Tabs at the left and the icons at the right, as on the group's own page. -->
+			{#if tabs}
+				{@render tabs()}
+				<span class="mx-2 h-4 w-px bg-divider" aria-hidden="true"></span>
+			{/if}
+			<Tabs.Root value={view} onValueChange={(v) => (view = v as 'all' | 'in')}>
+				<Tabs.List aria-label="Show">
+					<Tabs.Trigger value="all">All runs · {rows.length}</Tabs.Trigger>
+					<Tabs.Trigger value="in">In group · {counts.in}</Tabs.Trigger>
+				</Tabs.List>
+			</Tabs.Root>
+			<span class="flex-1"></span>
 			<BarSearch bind:value={search} things="runs" />
 			<RunFilters
 				{filters}
@@ -616,22 +636,21 @@
 				people={peopleMap}
 				onapply={(next) => void setFilters(next)}
 			/>
-			<span class="flex-1"></span>
-			<Tabs.Root value={view} onValueChange={(v) => (view = v as 'all' | 'in')}>
-				<Tabs.List aria-label="Show">
-					<Tabs.Trigger value="all">All runs · {rows.length}</Tabs.Trigger>
-					<Tabs.Trigger value="in">In group · {counts.in}</Tabs.Trigger>
-				</Tabs.List>
-			</Tabs.Root>
 		{/snippet}
 	</PageHeader>
 	{#if rawFilter || filters.length}
-		<!-- The filters in effect, one chip each, as on the Runs page; the cross drops one. -->
+		<!-- The group's rule, one chip per condition; the cross drops one. Not a filter on the
+		     list below: All runs lists every run, ticked or not. -->
 		<div
 			class="flex min-h-9 flex-none flex-wrap items-center gap-1.5 border-b border-divider py-1 pr-4 pl-5"
-			aria-label="Filters"
+			aria-label="The group’s rule"
 			role="group"
 		>
+			<span
+				class="mr-1 text-xs text-muted-foreground"
+				{@attach hint('Runs matching this join the group; All runs still lists every run')}
+				>Rule</span
+			>
 			{#if rawFilter}
 				<span
 					class="h-6 truncate rounded-md bg-muted px-2 py-0.5 font-mono text-[12px] leading-5"
@@ -654,7 +673,7 @@
 			<div class="relative min-h-0 flex-1">
 				<div class="absolute inset-0 overflow-auto overscroll-contain text-[13px]">
 					<div
-						class="sticky top-0 z-3 flex h-10 items-stretch border-b bg-background text-xs font-medium text-muted-foreground"
+						class="sticky top-0 z-3 flex h-9 items-stretch border-b bg-background text-xs font-medium text-muted-foreground"
 						style:min-width="{tableW}px"
 					>
 						<div class={[NAME_CELL, 'bg-background']} style:width="{NAME_W}px">
@@ -706,7 +725,7 @@
 						{@const struck = look === 'out' || look === 'dropped'}
 						<div
 							class={[
-								'group/row flex h-10 items-stretch border-b border-divider tabular-nums',
+								'group/row flex h-9 items-stretch border-b border-divider tabular-nums',
 								LOOK_ROW[look]
 							]}
 							style:min-width="{tableW}px"
@@ -745,7 +764,7 @@
 						</div>
 					{/each}
 					{#if shown.length > limit}
-						<div class="flex h-10 items-center pl-4" style:min-width="{tableW}px">
+						<div class="flex h-9 items-center pl-4" style:min-width="{tableW}px">
 							<button
 								type="button"
 								class="sticky left-4 text-xs text-link hover:underline"

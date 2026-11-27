@@ -4,8 +4,8 @@
 	import type { BestOrder } from '#lib/groups.ts';
 
 	/**
-	 * The mark on the header of the column Best by reads (D217): a trophy and which way is best,
-	 * ↓ lowest or ↑ highest. Changed from the header's menu; this only says so.
+	 * The mark on the header of the column Best by reads (D217): a trophy alone, so it is never
+	 * read as the sort's arrow. Which way is best is in its hint and the header menu's ✓.
 	 */
 
 	interface Props {
@@ -22,11 +22,10 @@
 </script>
 
 <span
-	class="inline-flex flex-none items-center gap-px text-foreground"
+	class="inline-flex flex-none items-center text-foreground"
 	role="img"
 	aria-label={text}
 	{@attach hint(text)}
 >
 	<TrophyIcon class="size-3" />
-	<span class="text-[11px] leading-none" aria-hidden="true">{order === 'desc' ? '↑' : '↓'}</span>
 </span>

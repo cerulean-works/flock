@@ -63,10 +63,12 @@
 				{...props}
 				type="button"
 				class={[
-					'relative grid size-5 flex-none place-items-center rounded outline-none hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none data-[state=open]:bg-muted data-[state=open]:opacity-100',
+					'relative grid h-5 flex-none place-items-center overflow-hidden rounded outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none data-[state=open]:bg-muted',
+					// Room only while it's wanted: on the header's hover or focus, open, or sorting,
+					// so a narrow column's name isn't cut for an icon nobody sees.
 					dir
-						? 'text-foreground'
-						: 'text-faint opacity-0 group-hover/h:opacity-100 pointer-coarse:opacity-100'
+						? 'w-5 text-foreground'
+						: 'w-0 text-faint opacity-0 group-focus-within/h:w-5 group-focus-within/h:opacity-100 group-hover/h:w-5 group-hover/h:opacity-100 focus-visible:w-5 focus-visible:opacity-100 data-[state=open]:w-5 data-[state=open]:opacity-100 pointer-coarse:w-5 pointer-coarse:opacity-100'
 				]}
 				aria-label={dir ? `${what}, ${dir === 'asc' ? 'ascending' : 'descending'}` : what}
 				{@attach hint(what)}
@@ -133,7 +135,7 @@
 						/>
 						<div class="max-h-64 overflow-y-auto p-1">
 							{#each others.slice(0, SHOWN) as k (k)}
-								<DropdownMenu.Item class="font-mono text-[12.5px]" onSelect={() => onpick(k)}>
+								<DropdownMenu.Item onSelect={() => onpick(k)}>
 									<span class="truncate">{metricLabel(k)}</span>
 								</DropdownMenu.Item>
 							{:else}

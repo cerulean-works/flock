@@ -39,6 +39,7 @@
 		type ProjectView
 	} from '#lib/workspace/project-view.svelte.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
+	import { MediaQuery } from 'svelte/reactivity';
 	import ChartsPane from './ChartsPane.svelte';
 	import ViewSettings, { type DisplaySetting } from './ViewSettings.svelte';
 	import DeleteRunsDialog from './DeleteRunsDialog.svelte';
@@ -387,6 +388,14 @@
 	};
 	const me = $derived(page.data.shell?.me?.id as number | undefined);
 
+	/** The search dropped, from the first page (its chip on a phone, where the field hides). */
+	function dropSearch() {
+		const params = new URLSearchParams(page.url.search);
+		applyRunQuery(params, { ...ws.page.query, search: '', page: 1 });
+		ws.selected.clear();
+		void goto(ws.href(params), { reset: false });
+	}
+
 	/** The filters without the one at `i`, from the first page. */
 	function dropFilter(i: number) {
 		const params = new URLSearchParams(page.url.search);
@@ -413,8 +422,14 @@
 	const chartsShown = $derived(view !== 'table');
 	/** Runs are picked in the table: the toolbar is their actions'. */
 	/** Where the charts start: past the names, or past the table beside them. */
-	const below = $derived(view === 'visualize' && stacked);
-	const paneLeft = $derived(below ? 0 : view === 'visualize' ? shownTableW : nameW);
+	/** A phone: Visualize always stacks, and Charts takes the whole width, without the names. */
+	const phone = new MediaQuery('(max-width: 639px)');
+	const below = $derived(view === 'visualize' && (stacked || phone.current));
+	const paneLeft = $derived(
+		below ? 0 : view === 'visualize' ? shownTableW : phone.current ? 0 : nameW
+	);
+	/** The phone's row of controls under the bar, whose room the page below makes. */
+	let moreH = $state(0);
 </script>
 
 <svelte:window {onkeydown} />
@@ -460,13 +475,16 @@
 
 			<!-- Before the icons: its words change width (Show / Hide), so the icons stay put. -->
 			{#if evalsShown && evalsView.others}
+				{@const others = `${evalsView.others === 1 ? '1 run' : `${evalsView.others} runs`} scored on other settings`}
 				<Button
 					variant="quiet"
 					size="bar"
+					aria-label="{evalsView.showOther ? 'Hide' : 'Show'} {others}"
 					onclick={() => (evalsView.showOther = !evalsView.showOther)}
 				>
-					{evalsView.showOther ? 'Hide' : 'Show'}
-					{evalsView.others} on other settings
+					<!-- Short on a phone, where the tabs need the room. -->
+					<span class="max-sm:hidden">{evalsView.showOther ? 'Hide' : 'Show'} {others}</span>
+					<span class="sm:hidden">{evalsView.showOther ? '−' : '+'}{evalsView.others} other</span>
 				</Button>
 			{/if}
 			{#if ws.page.total > 0 || narrowed}
@@ -482,6 +500,7 @@
 					<EllipsisIcon />
 				</Button>
 				<div
+					bind:clientHeight={moreH}
 					class={[
 						'flex items-center gap-1',
 						more
@@ -489,7 +508,19 @@
 							: 'max-sm:hidden'
 					]}
 				>
-					<!-- With no runs yet, only the view tabs: nothing here could act. -->
+					<!-- With no runs yet, only the view tabs: nothing here could act. Add panel first,
+					     so the icons after it stay put between Table and the views with charts. -->
+					{#if chartsShown}
+						<Button
+							variant="quiet"
+							size="icon-bar"
+							aria-label="Add panel"
+							{@attach hint('Add panel')}
+							onclick={() => ws.newPanel()}
+						>
+							<PlusIcon />
+						</Button>
+					{/if}
 					<RunSearch />
 					<RunFilters bind:this={filterControl} />
 
@@ -519,17 +550,6 @@
 						charts={chartsShown}
 						{display}
 					/>
-					{#if chartsShown}
-						<Button
-							variant="quiet"
-							size="icon-bar"
-							aria-label="Add panel"
-							{@attach hint('Add panel')}
-							onclick={() => ws.newPanel()}
-						>
-							<PlusIcon />
-						</Button>
-					{/if}
 				</div>
 			{/if}
 			{@render trailing?.()}
@@ -538,13 +558,24 @@
 			{/if}
 		{/snippet}
 	</PageHeader>
-	{#if ws.page.query.filters.length}
-		<!-- The filters in effect, one chip each: a click edits them, the cross drops one. -->
+	{#if more && phone.current}
+		<!-- Room for the phone's row of controls, so it covers nothing. -->
+		<div class="flex-none" style:height="{moreH}px" aria-hidden="true"></div>
+	{/if}
+	{#if ws.page.query.filters.length || (phone.current && ws.page.query.search)}
+		<!-- The filters in effect, one chip each: a click edits them, the cross drops one. On a
+		     phone, where the search field folds away, the search too. -->
 		<div
 			class="flex min-h-9 flex-none flex-wrap items-center gap-1.5 border-b border-divider py-1 pr-4 pl-5"
 			aria-label="Filters"
 			role="group"
 		>
+			{#if phone.current && ws.page.query.search}
+				<FilterChip
+					parts={{ label: 'Name', op: 'contains', value: ws.page.query.search }}
+					onremove={dropSearch}
+				/>
+			{/if}
 			{#each ws.page.query.filters as f, i (i)}
 				<FilterChip
 					parts={chipParts(f, { label: labelOf, kind: kindOf, people: ws.people, me })}
@@ -563,15 +594,18 @@
 		{#if evalsShown}
 			<EvalsTable bind:this={evalsTable} view={evalsView} />
 		{:else}
-			<RunsTable
-				bind:this={table}
-				mode={view}
-				{nameW}
-				{primary}
-				{onprimaryorder}
-				{best}
-				stacked={below}
-			/>
+			<!-- Charts on a phone: the charts alone, the names would leave them no room. -->
+			<div class={['contents', view === 'charts' && 'max-sm:hidden']}>
+				<RunsTable
+					bind:this={table}
+					mode={view}
+					{nameW}
+					{primary}
+					{onprimaryorder}
+					{best}
+					stacked={below}
+				/>
+			</div>
 		{/if}
 		<ChartsPane
 			shown={chartsShown}
@@ -600,7 +634,7 @@
 			<Pager />
 			<!-- On the name column's edge, above the table and the charts beside it. The Evals table
 			     sizes its own run column. -->
-			{#if !evalsShown}
+			{#if !evalsShown && !phone.current}
 				<div
 					class={['pointer-events-none absolute top-0 left-0 z-5', !below && 'bottom-0']}
 					style:width="{nameW}px"
