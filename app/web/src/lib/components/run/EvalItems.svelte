@@ -172,8 +172,14 @@
 			widths[k as Column] = readWidth(w, cookies.get(w.cookie));
 	});
 	const DELTA_W = 64;
+	// The Question column takes what the others leave, down to its least width; past that the
+	// table scrolls sideways.
 	const tableWidth = $derived(
-		widths.doc + widths.question + widths.gold + widths.run * sides.length + (other ? DELTA_W : 0)
+		widths.doc +
+			ITEM_W.question.min +
+			widths.gold +
+			widths.run * sides.length +
+			(other ? DELTA_W : 0)
 	);
 	// Doc, question, gold, a column per run, Δ with two, and the filler.
 	const columns = $derived(4 + sides.length + (other ? 1 : 0));
@@ -413,11 +419,14 @@
 
 <!-- A column heading with the handle that resizes its column. -->
 <!-- The text truncates, not the cell, so the handle on its edge isn't clipped. -->
-{#snippet head(text: string, column: Column | null)}
-	<th class="relative h-9 px-2 text-left font-medium">
+<!-- Right of the Question column, which takes the width the others leave, a column's handle
+     sits on its left edge: that is the edge that moves as it widens. -->
+{#snippet head(text: string, column: Column | null, edge: 'left' | 'right' = 'right')}
+	<th class="relative h-9 px-3 text-left font-medium">
 		<span class="block truncate">{text}</span>
 		{#if column}
 			<ResizeHandle
+				{edge}
 				value={widths[column]}
 				bounds={ITEM_W[column]}
 				label="Resize the {text} column"
@@ -622,12 +631,16 @@
 				<thead class="border-b text-xs text-muted-foreground">
 					<tr>
 						{@render head('Doc', 'doc')}
-						{@render head('Question', 'question')}
-						{@render head('Gold', 'gold')}
+						{@render head('Question', null)}
+						{@render head('Gold', 'gold', 'left')}
 						<!-- The runs share one width: only the first has a handle, so an edge moves
 						     with the pointer. -->
-						{#each sides as side, i (side)}{@render head(side, i === 0 ? 'run' : null)}{/each}
-						{#if other}<th class="h-9 px-2 text-right font-medium">Δ</th>{/if}
+						{#each sides as side, i (side)}{@render head(
+								side,
+								i === 0 ? 'run' : null,
+								'left'
+							)}{/each}
+						{#if other}<th class="h-9 px-3 text-right font-medium">Δ</th>{/if}
 						<th></th>
 					</tr>
 				</thead>
@@ -646,7 +659,7 @@
 								opened && !shown && 'opacity-40 focus-within:opacity-100 hover:opacity-100'
 							]}
 						>
-							<td class="px-2 py-1.5">
+							<td class="px-3 py-1.5">
 								<button
 									type="button"
 									class="flex max-w-full items-center gap-1 font-mono text-[12px]"
@@ -660,22 +673,22 @@
 									<span class="truncate" {@attach hint(row.id)}>{row.id}</span>
 								</button>
 							</td>
-							<td class="px-2 py-1.5">
+							<td class="px-3 py-1.5">
 								<!-- Opened, the whole question as scored; closed, the part that varies. -->
 								<span class={['whitespace-pre-wrap', !item && 'line-clamp-2']}
 									>{item ? (item.question ?? '') : row.text}</span
 								>
 							</td>
-							<td class="px-2 py-1.5"><span class="line-clamp-2">{row.gold_text}</span></td>
+							<td class="px-3 py-1.5"><span class="line-clamp-2">{row.gold_text}</span></td>
 							{#each row.runs as answer, side (side)}
 								<td
-									class="px-2 py-1.5"
+									class="px-3 py-1.5"
 									{@attach hint(
 										`Gold choice’s probability ${(100 * answer.gold_prob).toFixed(1)}%`
 									)}
 								>
 									<!-- Right or wrong by the icon's shape, then what the run picked. -->
-									<span class="flex items-start gap-1.5">
+									<span class="flex items-start gap-2">
 										{#if answer.correct}
 											<CheckIcon class="mt-0.5 size-3.5 flex-none text-state-finished" />
 										{:else}
@@ -698,7 +711,7 @@
 								</td>
 							{/each}
 							{#if other}
-								<td class="px-2 py-1.5 text-right font-mono text-[12px] tabular-nums">
+								<td class="px-3 py-1.5 text-right font-mono text-[12px] tabular-nums">
 									{m[0] != null && m[1] != null ? signedMargin(m[0] - m[1]) : '–'}
 								</td>
 							{/if}
@@ -721,7 +734,7 @@
 						{:else if shown}
 							<tr class="border-b border-divider">
 								<td></td>
-								<td colspan={columns - 1} class="px-2 py-1.5 text-muted-foreground">
+								<td colspan={columns - 1} class="px-3 py-1.5 text-muted-foreground">
 									{#if detailRefusal}
 										<span role="alert">No text for this doc: {detailRefusal}</span>
 									{:else}
