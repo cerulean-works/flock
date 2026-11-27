@@ -27,8 +27,6 @@
 		active?: number;
 		loading?: boolean;
 		error?: string | null;
-		/** What Enter does to the active option, for the key footer. */
-		verb?: 'pick' | 'open';
 		/** The search box's id, for a label outside. */
 		id?: string;
 		disabled?: boolean;
@@ -55,7 +53,6 @@
 		active = $bindable(0),
 		loading = false,
 		error = null,
-		verb = 'pick',
 		id,
 		disabled = false,
 		class: height = 'max-h-72',
@@ -149,11 +146,3 @@
 	{/if}
 </div>
 {@render actions?.()}
-<p
-	class="flex gap-3 border-t border-divider px-3 py-1.5 text-[11px] text-muted-foreground"
-	aria-hidden="true"
->
-	<span>↑↓ move</span><span>↵ {verb}</span>
-	{#if onup}<span>⌫ up a folder</span>{/if}
-	{#if onback}<span>esc back</span>{/if}
-</p>

@@ -174,7 +174,6 @@
 		bind:active
 		loading={folders === null}
 		error={failed}
-		verb="open"
 		{id}
 		{disabled}
 		class="h-44"

@@ -59,7 +59,7 @@ describe('the sidebar from outside the org', () => {
 		await expect.element(link('Sign in')).toBeVisible();
 		expect(link('Sign in').element().getAttribute('href')).toBe('/login?next=%2Facme');
 		// None of the members' pages, nothing to change, and nobody's account.
-		for (const name of ['Home', 'Runs', 'Datasets', 'Models', 'Storage'])
+		for (const name of ['Runs', 'Datasets', 'Models', 'Storage'])
 			await expect.element(link(name)).not.toBeInTheDocument();
 		await expect
 			.element(screen.getByRole('button', { name: 'New project' }))
@@ -83,8 +83,8 @@ describe('the sidebar from outside the org', () => {
 		});
 		await expect.element(link('Acme')).toBeVisible();
 		await expect.element(link('bert')).toBeVisible();
-		await expect.element(link('Home')).toBeVisible();
-		for (const name of ['Runs', 'Datasets', 'Models', 'Storage', 'Sign in'])
+		// Home was folded into Runs: the visitor's way back is the wordmark.
+		for (const name of ['Home', 'Runs', 'Datasets', 'Models', 'Storage', 'Sign in'])
 			await expect.element(link(name)).not.toBeInTheDocument();
 		// The switcher names their own orgs, not the one visited.
 		const menu = screen.getByRole('button', { name: 'No organization, signed in as Ada' });
@@ -107,7 +107,7 @@ describe('the sidebar for members', () => {
 			access: 'member',
 			signedIn: true
 		});
-		for (const name of ['Home', 'Runs', 'Datasets', 'Models', 'Storage'])
+		for (const name of ['Runs', 'Datasets', 'Models', 'Storage'])
 			await expect.element(link(name)).toBeVisible();
 		await expect.element(screen.getByRole('heading', { name: 'Projects' })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'New project' })).toBeVisible();
@@ -129,12 +129,10 @@ describe('the sidebar on a project’s pages (D169)', () => {
 	const href = (name: string) =>
 		panel().getByRole('link', { name, exact: true }).element().getAttribute('href');
 
-	it('slides over to the project: the way home, then its runs, datasets and models', async () => {
+	it('opens the project in place: its runs, datasets and models, one step in', async () => {
 		open(ADA, '/(app)/[entity]/[project]/models/[...path]');
 		render(Sidebar, member);
-		await expect.element(panel().getByRole('heading', { name: 'bert' })).toBeVisible();
-		expect([href('Home'), href('Runs'), href('Datasets'), href('Models')]).toEqual([
-			'/',
+		expect([href('Runs'), href('Datasets'), href('Models')]).toEqual([
 			'/acme/bert',
 			'/acme/bert/datasets',
 			'/acme/bert/models'
@@ -142,10 +140,9 @@ describe('the sidebar on a project’s pages (D169)', () => {
 		await expect
 			.element(panel().getByRole('link', { name: 'Models' }))
 			.toHaveAttribute('aria-current', 'page');
-		// The org's panel is out of view, and out of reach of the keyboard.
-		expect(
-			screen.getByRole('link', { name: 'Storage' }).element().closest('[inert]')
-		).not.toBeNull();
+		// The org's pages stay where they were: the sidebar doesn't change shape.
+		await expect.element(link('Storage')).toBeVisible();
+		expect(link('Storage').element().closest('[inert]')).toBeNull();
 	});
 
 	it('marks Runs on a run’s page, and shows outsiders only the runs', async () => {
@@ -154,7 +151,7 @@ describe('the sidebar on a project’s pages (D169)', () => {
 		await expect
 			.element(panel().getByRole('link', { name: 'Runs' }))
 			.toHaveAttribute('aria-current', 'page');
-		expect(href('Acme')).toBe('/acme');
+		expect(link('Acme').element().getAttribute('href')).toBe('/acme');
 		await expect.element(panel().getByRole('link', { name: 'Datasets' })).not.toBeInTheDocument();
 		await expect.element(panel().getByRole('link', { name: 'Models' })).not.toBeInTheDocument();
 	});

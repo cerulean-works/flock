@@ -62,8 +62,8 @@
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger
 		class={[
-			'group flex items-center gap-3 rounded-lg text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-muted',
-			compact ? 'p-1.5' : 'w-full px-2 py-2.5'
+			'group flex items-center gap-3 rounded-lg text-left outline-none hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-sidebar-accent',
+			compact ? 'p-1.5' : 'w-full px-2 py-2'
 		]}
 		aria-label="{label ?? 'No organization'}, signed in as {me.name}"
 		{@attach hint(compact ? `${label ?? 'No organization'}, signed in as ${me.name}` : undefined)}
@@ -76,7 +76,7 @@
 				<Avatar
 					name={me.name}
 					src={me.avatar_url}
-					class="absolute -right-1.5 -bottom-1.5 size-4 text-[7px] ring-2 ring-sidebar group-hover:ring-muted group-aria-expanded:ring-muted"
+					class="absolute -right-1.5 -bottom-1.5 size-4 text-[7px] ring-2 ring-sidebar group-hover:ring-sidebar-accent group-aria-expanded:ring-sidebar-accent"
 				/>
 			{:else}
 				<Avatar name={me.name} src={me.avatar_url} />

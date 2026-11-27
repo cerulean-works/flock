@@ -5,9 +5,14 @@
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import type { Selection } from '#lib/selection.svelte.ts';
+	import type { Crumb } from '#lib/storage.ts';
 
 	interface Props extends HTMLAttributes<HTMLElement> {
 		title: string;
+		/** The steps between the org (and project) and the title, such as Datasets › pretrain. */
+		trail?: Crumb[];
+		/** Lead the trail with the org (off on Datasets, Models and Storage). */
+		org?: boolean;
 		/** Beside the title: a ⋯ menu, a badge. */
 		badges?: Snippet;
 		/** Muted text on the title's line: a count of running runs. */
@@ -29,6 +34,8 @@
 
 	let {
 		title,
+		trail = [],
+		org = true,
 		badges,
 		subtitle,
 		actions,
@@ -42,7 +49,12 @@
 	}: Props = $props();
 
 	const selecting = $derived(!!selection?.size && !!selected);
-	const toolbar = $derived(heading || location || controls || selecting ? bar : undefined);
+	// Without a heading or a place to name, the controls need no row of their own: they join the
+	// header's actions.
+	const inline = $derived(!heading && !location && !selecting && !!controls);
+	const toolbar = $derived(
+		heading || location || selecting || (controls && !inline) ? bar : undefined
+	);
 </script>
 
 <!--
@@ -61,12 +73,25 @@
 		{/if}
 	</div>
 	{#if controls}
-		<div class="ml-auto flex flex-none items-center gap-2">{@render controls()}</div>
+		<div class="ml-auto flex flex-none items-center gap-1">{@render controls()}</div>
 	{/if}
 {/snippet}
 
+{#snippet both()}
+	{#if controls}{@render controls()}{/if}
+	{#if actions}{@render actions()}{/if}
+{/snippet}
+
 <Page width="full">
-	<PageHeader {title} {badges} {subtitle} {actions} {toolbar} />
+	<PageHeader
+		{title}
+		{trail}
+		{org}
+		{badges}
+		{subtitle}
+		actions={inline ? both : actions}
+		{toolbar}
+	/>
 	<main {...main} class={['relative min-h-0 flex-1 overflow-y-auto pb-10', main.class]}>
 		{@render children()}
 	</main>
