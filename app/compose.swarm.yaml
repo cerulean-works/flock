@@ -30,6 +30,11 @@ services:
     environment:
       FLOCK_API_URL: ${FLOCK_API_URL:-http://flock-api:8080}
       FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
+      # Home's GPU cell reads the Slurm queue dashboard when this is set (see app/web/README.md).
+      FLOCK_SLURM_URL: ${FLOCK_SLURM_URL:-}
+      FLOCK_SLURM_PUBLIC_URL: ${FLOCK_SLURM_PUBLIC_URL:-}
+      FLOCK_SLURM_ACCESS_ID: ${FLOCK_SLURM_ACCESS_ID:-}
+      FLOCK_SLURM_ACCESS_SECRET: ${FLOCK_SLURM_ACCESS_SECRET:-}
     networks:
       - dokploy-network
       - internal
