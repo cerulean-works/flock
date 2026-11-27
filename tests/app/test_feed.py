@@ -92,3 +92,49 @@ def test_feed_visibility_and_bad_requests(flock: FlockServer, api: Client) -> No
     assert api.get(FEED, owner="someone").status == 400
     assert api.get(FEED, cursor="not a cursor").status == 400
     assert api.get(FEED, limit=0).status == 422
+
+
+def test_feed_filters_runs_by_several_values_and_lists_facets(
+    flock: FlockServer, api: Client
+) -> None:
+    alice = flock.add_user("alice@lab.test")
+    query = """
+    mutation UpsertBucket($name: String, $project: String, $entity: String,
+                          $groupName: String, $jobType: String) {
+      upsertBucket(input: {name: $name, modelName: $project, entityName: $entity,
+                           groupName: $groupName, jobType: $jobType}) { bucket { id } }
+    }
+    """
+    for who, project, name, group, job in [
+        (api, "p", "r1", "sweep-a", "train"),
+        (api, "p", "r2", "sweep-b", "eval"),
+        (alice.api, "q", "a1", "sweep-a", "eval"),
+    ]:
+        variables = {"name": name, "project": project, "entity": "flock"}
+        resp = who.graphql(query, variables | {"groupName": group, "jobType": job})
+        assert resp.status == 200 and "errors" not in resp.json(), resp.body
+
+    def runs(**params: Any) -> list[str]:
+        items = api.get(FEED, org="flock", kinds="run_started", **params).json()["items"]
+        return sorted(i["run"]["id"] for i in items)
+
+    assert runs(group="sweep-a") == ["a1", "r1"]
+    assert runs(job_type="eval") == ["a1", "r2"]
+    assert runs(group="sweep-a,sweep-b", job_type="train") == ["r1"]
+    assert runs(owner=f"me,{alice.id}") == ["a1", "r1", "r2"]
+    assert runs(owner=str(alice.id)) == ["a1"]
+    assert runs(project="p,q", job_type="eval") == ["a1", "r2"]
+    assert runs(gpu="H100") == []
+    # A run filter leaves projects out: they have no owner, group or job type.
+    narrowed = api.get(FEED, org="flock", group="sweep-a").json()["items"]
+    assert {i["kind"] for i in narrowed} == {"run_started"}
+
+    facets = api.get("/api/v1/orgs/flock/run-facets").json()
+    assert facets["group"] == [{"value": "sweep-a", "runs": 2}, {"value": "sweep-b", "runs": 1}]
+    assert facets["job_type"] == [{"value": "eval", "runs": 2}, {"value": "train", "runs": 1}]
+    assert facets["project"] == [{"value": "p", "runs": 2}, {"value": "q", "runs": 1}]
+    assert {f["value"] for f in facets["owner"]} == {alice.id, api.get("/api/v1/me").json()["id"]}
+    assert facets["gpu"] == []
+    only_q = api.get("/api/v1/orgs/flock/run-facets", project="q").json()
+    assert only_q["project"] == [{"value": "q", "runs": 1}]
+    assert alice.api.get("/api/v1/orgs/nope/run-facets").status == 404
