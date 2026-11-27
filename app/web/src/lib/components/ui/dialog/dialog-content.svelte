@@ -37,7 +37,9 @@
 		{#if showCloseButton}
 			<DialogPrimitive.Close data-slot="dialog-close">
 				{#snippet child({ props })}
-					<Button variant="ghost" class="absolute top-2 right-2" size="icon-sm" {...props}>
+					<!-- Centred on the title's 24px line, and on the column of a copy block's button
+					     (8px in from the content's edge), so the dialog's corner icons line up. -->
+					<Button variant="ghost" class="absolute top-3.5 right-6" size="icon-sm" {...props}>
 						<XIcon />
 						<span class="sr-only">Close</span>
 					</Button>
