@@ -68,6 +68,8 @@
 		signedIn?: boolean;
 		/** Hide the sidebar (wide windows only: the drawer closes by itself). */
 		oncollapse?: () => void;
+		/** In the phone drawer: the collapse button closes it, as an X. */
+		drawer?: boolean;
 	}
 
 	let {
@@ -79,7 +81,8 @@
 		orgName = null,
 		orgAvatar = null,
 		signedIn = true,
-		oncollapse
+		oncollapse,
+		drawer = false
 	}: Props = $props();
 
 	const outside = $derived(access === 'public');
@@ -368,11 +371,11 @@
 				variant="ghost"
 				size="icon-sm"
 				class="flex-none text-muted-foreground hover:bg-sidebar-accent"
-				aria-label="Hide sidebar"
-				{@attach hint('Hide sidebar  [')}
+				aria-label={drawer ? 'Close menu' : 'Hide sidebar'}
+				{@attach hint(drawer ? 'Close menu' : 'Hide sidebar  [')}
 				onclick={oncollapse}
 			>
-				<PanelLeftCloseIcon />
+				{#if drawer}<XIcon />{:else}<PanelLeftCloseIcon />{/if}
 			</Button>
 		{/if}
 	</div>
@@ -569,8 +572,9 @@
 						Show {projects.length - shown.length} more
 					</button>
 				{/if}
-				{#if project && !shown.some((p) => p.name === project)}
-					<!-- A project beyond the shown ones (or outside the org's list): still open in place. -->
+				{#if project && !shown.some((p) => p.name === project) && (!page.error || projects.some((p) => p.name === project))}
+					<!-- A project beyond the shown ones (or outside the org's list): still open in place.
+					     Not one whose address failed and the org doesn't list: it doesn't exist. -->
 					<div class="mt-1 grid grid-cols-1 gap-px">
 						<a
 							class={ITEM}

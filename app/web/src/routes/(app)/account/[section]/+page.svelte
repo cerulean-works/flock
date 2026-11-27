@@ -11,12 +11,7 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
-	import {
-		ACCOUNT_SECTIONS,
-		SETTINGS_HEADING,
-		accountHref,
-		oldAccountAnchor
-	} from '#lib/settings.ts';
+	import { ACCOUNT_SECTIONS, accountHref, oldAccountAnchor } from '#lib/settings.ts';
 	import type { Theme } from '#lib/theme.ts';
 	import { setTheme } from '#lib/theme.svelte.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
@@ -61,7 +56,6 @@
 		<ProfileSettings profile={data.profile} />
 	{:else if data.section === 'organizations'}
 		<section>
-			<h2 class={SETTINGS_HEADING}>Organizations</h2>
 			{#if data.profile.orgs.length}
 				<ul class="mt-3 border-t border-divider">
 					{#each data.profile.orgs as org (org.name)}
@@ -114,7 +108,6 @@
 		/>
 	{:else if data.section === 'sign-ins'}
 		<section>
-			<h2 class={SETTINGS_HEADING}>Command line sign-ins</h2>
 			<p class="mt-2 text-muted-foreground">
 				Machines signed in with <code class="font-mono text-[0.9em]">flock login</code>.
 			</p>
@@ -169,7 +162,6 @@
 		</section>
 	{:else if data.section === 'appearance'}
 		<section>
-			<h2 class={SETTINGS_HEADING}>Appearance</h2>
 			<p class="mt-2 text-muted-foreground">
 				System follows your computer’s light or dark setting. It’s saved in this browser.
 			</p>

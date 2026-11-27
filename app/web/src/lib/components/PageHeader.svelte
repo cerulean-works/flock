@@ -47,6 +47,11 @@
 		 * Off, a phone shows the title alone (a name being edited gets the width).
 		 */
 		phoneTrail?: boolean;
+		/**
+		 * `workspace` only: the project leading the trail, in place of the address's (null for
+		 * none: a 404's project that doesn't exist).
+		 */
+		project?: string | null;
 	}
 
 	let {
@@ -63,14 +68,17 @@
 		trail = [],
 		org: withOrg = true,
 		heading,
-		phoneTrail = true
+		phoneTrail = true,
+		project: projectOverride
 	}: Props = $props();
 
 	// Where the page is, Linear-style: org / project / … / title, each step a link.
 	// `entity` on the workspace pages, `org` on Datasets, Models and Storage.
 	const org = $derived(page.params.entity ?? page.params.org ?? null);
 	const orgName = $derived(page.data.shell?.orgName ?? org);
-	const project = $derived(page.params.project ?? null);
+	const project = $derived(
+		projectOverride === undefined ? (page.params.project ?? null) : projectOverride
+	);
 	const steps = $derived<Crumb[]>([
 		...(project && title !== project ? [{ label: project, href: projectHref(org!, project) }] : []),
 		...trail

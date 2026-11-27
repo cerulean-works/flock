@@ -19,10 +19,14 @@
 		 * another section's page.
 		 */
 		follow?: (hash: string) => ResolvedPathname | null;
+		/** How many things the page lists (members, accounts), muted beside the title. */
+		count?: number;
+		/** At the header's right: the page's one action (New organization). */
+		actions?: Snippet;
 		children: Snippet;
 	}
 
-	let { title, trail, org = false, follow, children }: Props = $props();
+	let { title, trail, org = false, follow, count, actions, children }: Props = $props();
 
 	onMount(() => {
 		const to = location.hash && follow?.(location.hash);
@@ -32,12 +36,19 @@
 </script>
 
 <!--
-	A settings page (G1, G2): the trail, then one left-aligned 640px column whose sections share
-	one heading size. The sidebar lists the other sections.
+	A settings page (G1, G2): the trail, whose last step names the page, then one left-aligned
+	640px column. A page's first section is the page itself and goes unheaded; further sections
+	share one heading size. The sidebar lists the other sections.
 -->
+{#snippet counted()}
+	<span class="text-[13px] text-muted-foreground tabular-nums"
+		>{count?.toLocaleString('en-US')}</span
+	>
+{/snippet}
 <Page width="full">
-	<PageHeader {title} {trail} {org} />
+	<PageHeader {title} {trail} {org} {actions} badges={count == null ? undefined : counted} />
 	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
-		<div class="max-w-160 pt-8">{@render children()}</div>
+		<!-- A page's first section starts at the column's top, whatever its first margin. -->
+		<div class="max-w-160 pt-8 [&>section:first-child>:first-child]:mt-0">{@render children()}</div>
 	</main>
 </Page>

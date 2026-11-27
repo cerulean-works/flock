@@ -34,7 +34,8 @@ const dialog = () => page.getByRole('dialog');
 describe('the profile section', () => {
 	it('shows the picture, the name, the email and the password button', async () => {
 		render(ProfileSettings, { profile: { ...ADA, avatar_url: PICTURE } });
-		await expect.element(page.getByRole('heading', { name: 'Profile' })).toBeVisible();
+		// The page's header names it; the section itself goes unheaded.
+		await expect.element(page.getByRole('heading', { name: 'Password' })).toBeVisible();
 		await expect.element(page.getByLabelText('Name')).toHaveValue('Ada Lovelace');
 		await expect.element(page.getByLabelText('Email')).toHaveValue('ada@example.com');
 		await expect.element(page.getByLabelText('Email')).toHaveAttribute('readonly');

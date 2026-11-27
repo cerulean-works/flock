@@ -42,6 +42,11 @@
 		done: () => (confirming = false)
 	});
 
+	// One wording, inline and in the confirm form; a plain number field, without spinners.
+	const WORDS = 'untagged versions of each model';
+	const NUMBER =
+		'h-8 w-20 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
+
 	function flip(next: boolean) {
 		if (next) {
 			first = keep;
@@ -65,33 +70,41 @@
 	use:enhance={saving.only(() => changed, mutation.enhance)}
 >
 	<input type="hidden" name="keep" value={off ? '' : keep} />
-	<div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+	<div class="flex items-center gap-3">
 		<Switch
 			id="model-retention"
 			bind:ref={switchEl}
 			bind:checked={() => on && !off, flip}
-			aria-label="Retention"
+			aria-label="Model retention"
 		/>
-		<label for="model-retention-keep" class={['text-[14px]', !on && 'text-muted-foreground']}>
-			Keep the newest
-		</label>
-		<Input
-			id="model-retention-keep"
-			class="w-20 tabular-nums"
-			type="number"
-			min="1"
-			step="1"
-			inputmode="numeric"
-			aria-label="Untagged versions to keep"
-			bind:value={keep}
-			disabled={!on}
-			onblur={save}
-		/>
-		<span class={['text-[14px]', !on && 'text-muted-foreground']}>
-			untagged versions of each model
-		</span>
-		<SavedTick {saving} pending={mutation.pending} />
+		<label for="model-retention" class="text-[14px]">{on && !off ? 'On' : 'Off'}</label>
+		{#if !on || off}<SavedTick {saving} pending={mutation.pending} />{/if}
 	</div>
+	<!-- The number is asked once: in the confirm form while off, here once it's on. -->
+	{#if on && !off}
+		<div class="flex flex-wrap items-center gap-x-2 gap-y-2 text-[14px]">
+			<label for="model-retention-keep">Keep the newest</label>
+			<Input
+				id="model-retention-keep"
+				class={NUMBER}
+				type="number"
+				min="1"
+				step="1"
+				inputmode="numeric"
+				aria-label="Untagged versions to keep"
+				bind:value={keep}
+				onblur={save}
+				onkeydown={(e) => {
+					if (e.key === 'Escape') {
+						keep = String(saved);
+						e.currentTarget.blur();
+					}
+				}}
+			/>
+			<span>{WORDS}</span>
+			<SavedTick {saving} pending={mutation.pending} />
+		</div>
+	{/if}
 	<FormError error={mutation.error} />
 </form>
 
@@ -108,17 +121,17 @@
 	onclosed={() => turningOn.reset()}
 >
 	<label class="flex flex-wrap items-center gap-2 text-[13px]">
-		Keep the latest
+		Keep the newest
 		<Input
 			name="keep"
-			class="h-8 w-20 tabular-nums"
+			class={NUMBER}
 			type="number"
 			min="1"
 			step="1"
 			inputmode="numeric"
-			aria-label="Untagged versions to keep, from now on"
+			aria-label="Untagged versions to keep"
 			bind:value={first}
 		/>
-		untagged versions
+		{WORDS}
 	</label>
 </AnchoredForm>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { missingTrail } from './not-found.ts';
+import { missingHeading, missingTrail } from './not-found.ts';
 
 const labels = (path: string) => missingTrail(path)?.map((c) => `${c.label} ${c.href}`) ?? null;
 
@@ -30,5 +30,22 @@ describe('missingTrail', () => {
 		expect(labels('/acme/gone')).toBeNull();
 		expect(labels('/acme/pretrain/gone')).toBeNull();
 		expect(labels('/datasets/gone')).toBeNull();
+	});
+
+	it('leads a settings page to its settings', () => {
+		expect(labels('/orgs/acme/nope')).toEqual(['Settings /orgs/acme']);
+		expect(labels('/orgs/gone')).toBeNull();
+		expect(labels('/account/nope')).toEqual(['Account /account']);
+		expect(labels('/admin/nope')).toEqual(['Super admin /admin']);
+	});
+});
+
+describe('missingHeading', () => {
+	it('names the thing missing, one way', () => {
+		expect(missingHeading('folder -/a/b not found')).toBe('No folder at this address');
+		expect(missingHeading('settings page nope not found')).toBe('No settings page at this address');
+		expect(missingHeading('project gone not found')).toBe('No project at this address');
+		expect(missingHeading('Not Found')).toBe('No page at this address');
+		expect(missingHeading(undefined)).toBe('No page at this address');
 	});
 });

@@ -14,7 +14,7 @@ const KNOWN = new Set([
 ]);
 
 export const load: PageServerLoad = async ({ depends, params }) => {
-	if (!KNOWN.has(params.section)) error(404, 'Not found');
+	if (!KNOWN.has(params.section)) error(404, `settings page ${params.section} not found`);
 	const data = await loadOrg({ depends, params });
 	// A section this viewer doesn't see (a member on General): the first one they do.
 	if (!data.sections.some((s) => s.slug === params.section))

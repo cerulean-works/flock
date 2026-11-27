@@ -21,7 +21,7 @@
 	import { wandbImport } from '#lib/wandb.ts';
 	import { entityHref, orgHref } from '#lib/workspace/url.ts';
 	import SettingsPage from '#lib/components/SettingsPage.svelte';
-	import { ADMIN_SECTIONS, SETTINGS_HEADING, adminHref } from '#lib/settings.ts';
+	import { ADMIN_SECTIONS, adminHref } from '#lib/settings.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -51,26 +51,31 @@
 
 	// One fixed action column, so the header and every row agree on where the others fall.
 	const ORG_GRID =
-		'grid grid-cols-[minmax(0,1fr)_80px] sm:grid-cols-[minmax(0,1fr)_88px_88px_96px_80px] items-center gap-x-4';
+		'grid grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_88px_88px_96px] items-center gap-x-4';
+	// Accounts: who, their organizations, when they joined, and the row's menu.
+	const USER_GRID =
+		'grid grid-cols-[minmax(0,1fr)_32px] sm:grid-cols-[minmax(0,1fr)_96px_32px] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_96px_32px] items-center gap-x-4';
 </script>
 
 <svelte:head>
 	<title>{title} · Super admin · Flock</title>
 </svelte:head>
 
-<SettingsPage {title} trail={[{ label: 'Super admin', href: adminHref('organizations') }]}>
+{#snippet newOrg()}
+	<Button variant="outline" size="sm" onclick={() => (creating = true)}>
+		<PlusIcon /> New organization
+	</Button>
+{/snippet}
+
+<SettingsPage
+	{title}
+	trail={[{ label: 'Super admin', href: adminHref('organizations') }]}
+	count={data.section === 'organizations' ? data.orgs.length : data.users.length}
+	actions={data.section === 'organizations' ? newOrg : undefined}
+>
 	{#if data.section === 'organizations'}
 		<section>
-			<div class="flex flex-wrap items-baseline gap-x-3 gap-y-2">
-				<h2 class={SETTINGS_HEADING}>Organizations</h2>
-				<span class="text-[13px] text-muted-foreground tabular-nums"
-					>{data.orgs.length.toLocaleString('en-US')}</span
-				>
-				<Button variant="outline" size="sm" class="ml-auto" onclick={() => (creating = true)}>
-					<PlusIcon /> New organization
-				</Button>
-			</div>
-			<div class="mt-4 border-t border-divider">
+			<div class="border-t border-divider">
 				<div
 					class={[
 						ORG_GRID,
@@ -81,7 +86,6 @@
 					<span class="text-right">Projects</span>
 					<span class="text-right">Members</span>
 					<span>Created</span>
-					<span></span>
 				</div>
 				<ul>
 					{#each data.orgs as org (org.name)}
@@ -101,23 +105,20 @@
 							<span class="hidden text-right tabular-nums sm:block">
 								{org.project_count.toLocaleString('en-US')}
 							</span>
-							<span class="hidden text-right tabular-nums sm:block">
+							<!-- The count opens the org's members. -->
+							<a
+								class="hidden text-right tabular-nums hover:text-link hover:underline sm:block"
+								href={orgHref(org.name, 'members')}
+								aria-label="{org.member_count} members of {org.display_name}"
+							>
 								{org.member_count.toLocaleString('en-US')}
-							</span>
+							</a>
 							<span
 								class="hidden text-muted-foreground sm:block"
 								{@attach hint(dateTime(org.created_at))}
 							>
 								{relativeTime(org.created_at, data.now)}
 							</span>
-							<Button
-								variant="ghost"
-								size="sm"
-								class="justify-self-end"
-								href={orgHref(org.name, 'members')}
-							>
-								Members
-							</Button>
 						</li>
 					{:else}
 						<li class="border-b border-divider py-4 text-muted-foreground">
@@ -129,32 +130,39 @@
 		</section>
 	{:else if data.section === 'accounts'}
 		<section>
-			<div class="flex items-baseline gap-x-3">
-				<h2 class={SETTINGS_HEADING}>Accounts</h2>
-				<span class="text-[13px] text-muted-foreground tabular-nums"
-					>{data.users.length.toLocaleString('en-US')}</span
-				>
+			<div
+				class={[
+					USER_GRID,
+					'h-10 border-t border-b border-divider text-xs font-medium text-muted-foreground'
+				]}
+			>
+				<span>Name</span>
+				<span class="hidden md:block">Organizations</span>
+				<span class="hidden sm:block">Joined</span>
+				<span></span>
 			</div>
-			<ul class="mt-4 border-t border-divider">
+			<ul>
 				{#each data.users as user (user.id)}
-					<li class="flex min-h-14 items-center gap-3 border-b border-divider py-2">
-						<Avatar name={user.name} src={user.avatar_url} />
-						<div class="min-w-0 flex-1">
-							<p class="flex items-center gap-2">
-								<span class="truncate font-medium">{user.name}</span>
-								{#if user.id === me}<span class="text-[13px] text-muted-foreground">(you)</span
-									>{/if}
-								{#if user.is_superadmin}
-									<Badge variant="secondary" class="text-foreground">Super admin</Badge>
-								{/if}
-							</p>
-							<MetaRow class="mt-0.5">
-								<MetaItem icon={MailIcon}>{user.email}</MetaItem>
-								{#if user.google}<MetaItem icon={LogInIcon}>Google sign-in</MetaItem>{/if}
-							</MetaRow>
+					<li class={[USER_GRID, 'min-h-14 border-b border-divider py-2']}>
+						<div class="flex min-w-0 items-center gap-3">
+							<Avatar name={user.name} src={user.avatar_url} />
+							<div class="min-w-0 flex-1">
+								<p class="flex items-center gap-2">
+									<span class="truncate font-medium">{user.name}</span>
+									{#if user.id === me}<span class="text-[13px] text-muted-foreground">(you)</span
+										>{/if}
+									{#if user.is_superadmin}
+										<Badge variant="secondary" class="text-foreground">Super admin</Badge>
+									{/if}
+								</p>
+								<MetaRow class="mt-0.5">
+									<MetaItem icon={MailIcon}>{user.email}</MetaItem>
+									{#if user.google}<MetaItem icon={LogInIcon}>Google sign-in</MetaItem>{/if}
+								</MetaRow>
+							</div>
 						</div>
 						<p
-							class="hidden w-48 truncate text-[13px] text-muted-foreground md:block"
+							class="hidden truncate text-[13px] text-muted-foreground md:block"
 							{@attach hint(user.orgs.map((o) => `${o.name} (${o.role})`).join(', '))}
 						>
 							<!-- Spaced with margins: Svelte trims whitespace at the edges of tags. -->
@@ -169,12 +177,12 @@
 							{/each}
 						</p>
 						<span
-							class="hidden w-20 text-[13px] text-muted-foreground sm:block"
+							class="hidden text-[13px] text-muted-foreground sm:block"
 							{@attach hint(`Joined ${dateTime(user.created_at)}`)}
 						>
 							{relativeTime(user.created_at, data.now)}
 						</span>
-						<span class="flex w-8 flex-none justify-end">
+						<span class="flex justify-end">
 							<UserMenu {user} self={user.id === me} />
 						</span>
 					</li>

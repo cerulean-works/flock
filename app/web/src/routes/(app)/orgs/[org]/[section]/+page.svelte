@@ -2,6 +2,7 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import HistoryIcon from '@lucide/svelte/icons/history';
+	import MailIcon from '@lucide/svelte/icons/mail';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
 	import { enhance } from '$app/forms';
@@ -72,6 +73,7 @@
 <SettingsPage
 	{title}
 	org
+	count={data.section === 'members' ? data.members.length : undefined}
 	trail={[
 		{ label: 'Settings', href: orgSettingsHref(data.org.name, data.sections[0].slug as never) }
 	]}
@@ -84,8 +86,7 @@
 >
 	{#if data.section === 'general'}
 		<section>
-			<h2 class={SETTINGS_HEADING}>General</h2>
-			<div class="mt-4">
+			<div>
 				<AvatarField kind="org" name={data.org.display_name} src={data.org.avatar_url} />
 			</div>
 			<form
@@ -96,31 +97,39 @@
 				use:enhance={nameSave.only(() => renamed, naming.enhance)}
 			>
 				<Label for="org-display-name">Display name</Label>
-				<div class="flex items-center gap-2">
+				<div class="relative">
 					<Input
 						id="org-display-name"
 						name="display_name"
 						bind:value={displayName}
 						autocomplete="off"
 						maxlength={128}
+						class="pr-20"
 						aria-invalid={!!naming.error}
 						onblur={() => nameSave.save(nameForm, renamed)}
+						onkeydown={(e) => {
+							// Escape puts back what's saved, as Linear does; leaving then sends nothing.
+							if (e.key === 'Escape') {
+								displayName = data.org.display_name;
+								e.currentTarget.blur();
+							}
+						}}
 					/>
-					<SavedTick saving={nameSave} pending={naming.pending} />
+					<SavedTick saving={nameSave} pending={naming.pending} overlay />
 				</div>
 				<FormError error={naming.error} />
 			</form>
 
 			<div class="mt-8 grid gap-2">
 				<Label for="org-id">ID</Label>
-				<div class="flex items-center gap-2">
-					<Input
-						id="org-id"
-						value={data.org.name}
-						readonly
-						class="bg-muted font-mono text-[13px] text-muted-foreground focus-visible:text-foreground"
+				<!-- The copy button sits in the field's end, so the field keeps the column's width. -->
+				<div class="relative">
+					<Input id="org-id" value={data.org.name} readonly class="pr-10 font-mono text-[13px]" />
+					<CopyButton
+						text={data.org.name}
+						label="Copy ID"
+						class="absolute top-1/2 right-1 size-7 -translate-y-1/2"
 					/>
-					<CopyButton text={data.org.name} label="Copy ID" />
 				</div>
 				<p class="text-[13px] text-muted-foreground">
 					Used in links and by the wandb SDK, as in <code class="font-mono text-[12.5px]"
@@ -147,13 +156,7 @@
 		</section>
 	{:else if data.section === 'members'}
 		<section>
-			<div class="flex items-baseline gap-x-3">
-				<h2 class={SETTINGS_HEADING}>Members</h2>
-				<span class="text-[13px] text-muted-foreground tabular-nums">
-					{data.members.length.toLocaleString('en-US')}
-				</span>
-			</div>
-			<ul class="mt-4 border-t border-divider">
+			<ul class="border-t border-divider">
 				{#each data.members as member (member.id)}
 					{@const self = member.id === data.me.id}
 					<li class="flex min-h-14 items-center gap-3 border-b border-divider py-2">
@@ -248,20 +251,32 @@
 					<h3 class="mt-8 text-[13px] font-medium text-muted-foreground">Pending</h3>
 					<ul class="mt-2 border-t border-divider">
 						{#each data.invites as invite (invite.id)}
-							<li class="flex h-12 items-center gap-3 border-b border-divider">
-								<span class="min-w-0 flex-1 truncate">{invite.email}</span>
+							<!-- A member row's columns: the mark, who, the role, the row's action. -->
+							<li class="flex min-h-14 items-center gap-3 border-b border-divider py-2">
+								<span
+									class="grid size-7 flex-none place-items-center rounded-full border border-dashed border-border text-muted-foreground"
+									aria-hidden="true"><MailIcon class="size-3.5" /></span
+								>
+								<div class="min-w-0 flex-1">
+									<p class="truncate font-medium">{invite.email}</p>
+									<MetaRow class="flex-nowrap">
+										<MetaItem icon={HistoryIcon} title="Invited {dateTime(invite.created_at)}">
+											{relativeTime(invite.created_at, data.now)}
+										</MetaItem>
+										<MetaItem icon={ClockIcon} title="Expires {dateTime(invite.expires_at)}">
+											{duration(invite.expires_at - data.now)} left
+										</MetaItem>
+									</MetaRow>
+								</div>
 								<Badge variant="secondary" class="text-muted-foreground">
 									{ROLES[invite.role]}
 								</Badge>
-								<MetaRow class="hidden flex-none flex-nowrap sm:flex">
-									<MetaItem icon={HistoryIcon} title="Invited {dateTime(invite.created_at)}">
-										{relativeTime(invite.created_at, data.now)}
-									</MetaItem>
-									<MetaItem icon={ClockIcon} title="Expires {dateTime(invite.expires_at)}">
-										{duration(invite.expires_at - data.now)} left
-									</MetaItem>
-								</MetaRow>
-								<form method="POST" action="?/revoke" use:enhance={revoking.enhance}>
+								<form
+									method="POST"
+									action="?/revoke"
+									class="flex w-8 flex-none justify-end"
+									use:enhance={revoking.enhance}
+								>
 									<input type="hidden" name="invite" value={invite.id} />
 									<Button
 										type="submit"
@@ -282,7 +297,6 @@
 		{/if}
 	{:else if data.section === 'budget'}
 		<section>
-			<h2 class={SETTINGS_HEADING}>Budget</h2>
 			<BillingForm billing={data.billing} {admin} />
 		</section>
 
@@ -310,7 +324,6 @@
 		</section>
 	{:else if data.section === 'assistant'}
 		<section>
-			<h2 class={SETTINGS_HEADING}>Run groups assistant</h2>
 			<AssistantSettings org={data.org} />
 		</section>
 	{:else if data.section === 'deleted'}
@@ -328,7 +341,6 @@
 		{/if}
 	{:else if data.section === 'import'}
 		<section>
-			<h2 class={SETTINGS_HEADING}>Import from W&B</h2>
 			<OrgImport
 				org={data.org.name}
 				label={data.org.display_name}

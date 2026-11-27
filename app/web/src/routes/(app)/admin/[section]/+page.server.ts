@@ -4,7 +4,8 @@ import { ADMIN_SECTIONS, type AdminSection } from '#lib/settings.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
-	if (!ADMIN_SECTIONS.some((s) => s.slug === params.section)) error(404, 'Not found');
+	if (!ADMIN_SECTIONS.some((s) => s.slug === params.section))
+		error(404, `settings page ${params.section} not found`);
 	return { ...(await loadAdmin()), section: params.section as AdminSection };
 };
 

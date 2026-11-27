@@ -28,8 +28,7 @@
 
 <!-- The account's Profile section: the picture, the name, the email and the password. -->
 <section>
-	<h2 class={SETTINGS_HEADING}>Profile</h2>
-	<div class="mt-4">
+	<div>
 		<AvatarField kind="user" name={profile.name} src={profile.avatar_url} />
 	</div>
 	<form
@@ -40,28 +39,31 @@
 		use:enhance={nameSave.only(() => renamed, naming.enhance)}
 	>
 		<Label for="profile-name">Name</Label>
-		<div class="flex items-center gap-2">
+		<div class="relative">
 			<Input
 				id="profile-name"
 				name="name"
 				bind:value={name}
 				autocomplete="name"
 				maxlength={128}
+				class="pr-20"
 				aria-invalid={!!naming.error}
 				onblur={() => nameSave.save(form, renamed)}
+				onkeydown={(e) => {
+					// Escape puts back what's saved, as Linear does; leaving then sends nothing.
+					if (e.key === 'Escape') {
+						name = profile.name;
+						e.currentTarget.blur();
+					}
+				}}
 			/>
-			<SavedTick saving={nameSave} pending={naming.pending} />
+			<SavedTick saving={nameSave} pending={naming.pending} overlay />
 		</div>
 		<FormError error={naming.error} />
 	</form>
 	<div class="mt-8 grid gap-2">
 		<Label for="profile-email">Email</Label>
-		<Input
-			id="profile-email"
-			value={profile.email}
-			readonly
-			class="bg-muted text-muted-foreground focus-visible:text-foreground"
-		/>
+		<Input id="profile-email" value={profile.email} readonly />
 	</div>
 </section>
 

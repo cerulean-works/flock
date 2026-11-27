@@ -4,7 +4,8 @@ import { ACCOUNT_SECTIONS, type AccountSection } from '#lib/settings.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
-	if (!ACCOUNT_SECTIONS.some((s) => s.slug === params.section)) error(404, 'Not found');
+	if (!ACCOUNT_SECTIONS.some((s) => s.slug === params.section))
+		error(404, `settings page ${params.section} not found`);
 	return { ...(await loadAccount({ locals })), section: params.section as AccountSection };
 };
 
