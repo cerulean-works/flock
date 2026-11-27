@@ -567,21 +567,10 @@
 					{/if}
 					{#if chartsShown}
 						<PlotSettings compact={compactTools} />
-						{#if view === 'charts'}
-							<Button variant="quiet" size="bar" onclick={() => ws.newPanel()}
-								><PlusIcon /> Add panel</Button
-							>
-						{:else}
-							<Button
-								variant="quiet"
-								size="icon-bar"
-								{@attach hint('Add panel')}
-								aria-label="Add panel"
-								onclick={() => ws.newPanel()}
-							>
-								<PlusIcon />
-							</Button>
-						{/if}
+						<!-- Named in every view, Visualize too; on a phone the icon alone. -->
+						<Button variant="quiet" size="bar" onclick={() => ws.newPanel()}>
+							<PlusIcon /> <span class="max-sm:sr-only">Add panel</span>
+						</Button>
 					{/if}
 				</div>
 			{/if}
