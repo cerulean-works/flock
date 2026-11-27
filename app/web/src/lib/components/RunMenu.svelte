@@ -13,7 +13,7 @@
      on the selection (two eval runs compare from here). -->
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger
-		class="run-menu -mr-1.5 grid size-6 flex-none place-items-center rounded-md text-muted-foreground opacity-0 group-hover/row:opacity-100 hover:bg-[color-mix(in_srgb,var(--muted),var(--foreground)_6%)] hover:text-foreground focus-visible:opacity-100 data-[state=open]:opacity-100"
+		class="run-menu -mr-1.5 grid size-6 flex-none place-items-center rounded-md text-muted-foreground opacity-0 group-hover/row:opacity-100 hover:bg-[color-mix(in_srgb,var(--muted),var(--foreground)_6%)] hover:text-foreground focus-visible:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100"
 		aria-label="Actions for {ws.nameOf(row)}"
 	>
 		<EllipsisIcon class="size-4" />

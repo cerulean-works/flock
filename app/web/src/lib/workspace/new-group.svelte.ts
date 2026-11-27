@@ -20,9 +20,10 @@ export function openNewGroup(ws: Workspace, rows: readonly number[], anchor: HTM
 	const keys = ws.meta.columns.map((c) => c.key).filter((k) => k.startsWith('config.'));
 	const configs = rows.map((r) => Object.fromEntries(keys.map((k) => [k, ws.cell(r, k)])));
 	newGroup.ids = rows.map((r) => ws.page.runs[r].id);
-	// What varies, when that makes a name ("lr × steps"); runs apart in many ways get none.
+	// What varies, when that makes a name ("lr × steps"); runs apart in many ways, or alike
+	// (named by their count, which the button already says), get none.
 	const name = groupName(configs, []);
-	newGroup.name = / more$|created_at|command/.test(name) ? '' : name;
+	newGroup.name = / more$|created_at|command|^\d+ runs?$/.test(name) ? '' : name;
 	newGroup.anchor = anchor;
 	newGroup.open = true;
 }
