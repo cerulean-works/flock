@@ -31,7 +31,7 @@
 		tabsLabel?: string;
 		/** The view bar's right side (the title row's, without tabs): the page's actions, quiet. */
 		controls?: Snippet;
-		/** The properties pane: right of the content, below it on a phone. `]` hides it. */
+		/** The properties pane: right of the content, above it on a phone. `]` hides it. */
 		properties?: Snippet;
 		/** The content, the part that scrolls. */
 		children: Snippet;
@@ -122,27 +122,27 @@
 		actions={headerActions}
 		toolbar={tabs ? bar : undefined}
 	/>
-	<!-- On a phone the content and its properties scroll as one, the pane under the content. -->
+	<!-- On a phone the content and its properties scroll as one, the facts first. -->
 	<div class="flex min-h-0 flex-1 max-md:flex-col max-md:overflow-y-auto">
-		<main
-			class={[
-				'@container relative min-w-0 flex-1 px-5 pt-5 pb-16 md:overflow-y-auto',
-				properties && 'max-md:flex-none max-md:pb-6'
-			]}
-		>
-			{@render children()}
-		</main>
 		{#if properties}
 			<aside
 				aria-label="Properties"
 				class={[
-					'flex-none px-5 py-4 md:w-70 md:overflow-y-auto md:border-l md:border-divider',
-					'max-md:border-t max-md:border-divider max-md:pb-16',
+					'flex-none px-5 py-4 md:order-last md:w-70 md:overflow-y-auto md:border-l md:border-divider',
+					'max-md:border-b max-md:border-divider',
 					!shown && 'md:hidden'
 				]}
 			>
 				{@render properties()}
 			</aside>
 		{/if}
+		<main
+			class={[
+				'@container relative min-w-0 flex-1 px-5 pt-5 pb-16 md:overflow-y-auto',
+				properties && 'max-md:flex-none'
+			]}
+		>
+			{@render children()}
+		</main>
 	</div>
 </Page>
