@@ -357,7 +357,9 @@
 			href: runHref(entity, project, r.id),
 			project
 		}));
-		return () => (keyboard.runs = []);
+		return () => {
+			keyboard.runs = [];
+		};
 	});
 
 	// Keep the neighbouring pages warm so paging is instant. Runs in idle time after hydration

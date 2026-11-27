@@ -61,7 +61,9 @@
 				href: runHref(item.org, item.project, item.run!.id),
 				project: item.project
 			}));
-		return () => (keyboard.runs = []);
+		return () => {
+			keyboard.runs = [];
+		};
 	});
 </script>
 
