@@ -11,6 +11,11 @@
 		 * columns fit by default; the others fill.
 		 */
 		size?: 'fit' | 'fill';
+		/**
+		 * The column's grid track as written (`6rem`, `minmax(12rem,2fr)`), in place of `size`:
+		 * for tables stacked on one page whose columns line up, such as a run's suites and tasks.
+		 */
+		width?: string;
 		/** Right-aligned, for numbers and times. */
 		align?: 'end';
 		/** Shown from this window width up; always shown when omitted. */
@@ -88,7 +93,7 @@
 	const BREAKPOINTS = ['base', 'sm', 'md', 'lg', 'xl', '2xl'] as const;
 	const RANK = { base: 0, sm: 1, md: 2, lg: 3, xl: 4, '2xl': 5 };
 	const fits = (c: Column) => (c.size ?? (c.align === 'end' ? 'fit' : 'fill')) === 'fit';
-	const track = (c: Column) => (fits(c) ? 'minmax(6rem,max-content)' : 'minmax(0,auto)');
+	const track = (c: Column) => c.width ?? (fits(c) ? 'minmax(6rem,max-content)' : 'minmax(0,auto)');
 	const tracks = $derived(
 		Object.fromEntries(
 			BREAKPOINTS.map((at) => [

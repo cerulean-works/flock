@@ -84,20 +84,32 @@
 	// When it was scored: relative, the date and time in the hint.
 	const scoredAt = $derived(Date.parse(p.created_at) / 1000);
 
-	const SUITE_COLUMNS: Column[] = [
-		{ id: 'name', label: 'Suite' },
-		{ id: 'score', label: 'Score', align: 'end' },
-		{ id: 'metric', label: 'Metric', size: 'fit', from: 'sm' },
-		{ id: 'members', label: 'Members', align: 'end', from: 'sm' }
-	];
-	const taskColumns = $derived<Column[]>([
-		{ id: 'name', label: 'Task' },
-		{ id: 'score', label: 'Score', align: 'end' },
-		{ id: 'metric', label: 'Primary metric', size: 'fit', from: 'sm' },
-		{ id: 'docs', label: 'Docs', align: 'end', from: 'sm' },
-		{ id: 'dataset', label: 'Dataset', from: 'md' },
+	// Suites over tasks, column for column: a suite's score sits above its tasks' scores. Both
+	// tables share these tracks; a suite's dataset column stays empty.
+	const NAME_W = 'minmax(10rem,3fr)';
+	const SCORE_W = '5.5rem';
+	const METRIC_W = '8.5rem';
+	const COUNT_W = '5.5rem';
+	const DATASET_W = 'minmax(0,4fr)';
+	const CUT_W = '6rem';
+	const suiteColumns = $derived<Column[]>([
+		{ id: 'name', label: 'Suite', width: NAME_W },
+		{ id: 'score', label: 'Score', align: 'end', width: SCORE_W },
+		{ id: 'metric', label: 'Metric', width: METRIC_W, from: 'sm' },
+		{ id: 'members', label: 'Members', align: 'end', width: COUNT_W, from: 'sm' },
+		{ id: 'dataset', label: 'Dataset', quiet: true, width: DATASET_W, from: 'md' },
 		...(truncated
-			? [{ id: 'cut', label: 'Docs cut', align: 'end' as const, from: 'sm' as const }]
+			? [{ id: 'cut', label: 'Docs cut', quiet: true, width: CUT_W, from: 'sm' as const }]
+			: [])
+	]);
+	const taskColumns = $derived<Column[]>([
+		{ id: 'name', label: 'Task', width: NAME_W },
+		{ id: 'score', label: 'Score', align: 'end', width: SCORE_W },
+		{ id: 'metric', label: 'Primary metric', width: METRIC_W, from: 'sm' },
+		{ id: 'docs', label: 'Docs', align: 'end', width: COUNT_W, from: 'sm' },
+		{ id: 'dataset', label: 'Dataset', width: DATASET_W, from: 'md' },
+		...(truncated
+			? [{ id: 'cut', label: 'Docs cut', align: 'end' as const, width: CUT_W, from: 'sm' as const }]
 			: [])
 	]);
 	type Suite = EvalResults['suites'][number];
@@ -133,7 +145,7 @@
 			class="text-muted-foreground"
 			{@attach hint(s.metric ?? 'Each member task’s primary metric')}>{s.metric ?? 'primary'}</span
 		>
-	{:else}
+	{:else if col === 'members'}
 		<span {@attach hint(s.members.join(', '))}>{s.members.length}</span>
 	{/if}
 {/snippet}
@@ -216,7 +228,7 @@
 				<section aria-labelledby="results-suites">
 					<h2 id="results-suites" class="px-5 pt-6 pb-2 text-[15px] font-medium">Suites</h2>
 					<DataTable
-						columns={SUITE_COLUMNS}
+						columns={suiteColumns}
 						rows={results.suites}
 						key={(s) => s.suite}
 						cell={suiteCell}
