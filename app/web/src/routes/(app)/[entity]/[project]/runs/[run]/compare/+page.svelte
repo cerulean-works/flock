@@ -14,6 +14,8 @@
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import InfoHint from '#lib/components/InfoHint.svelte';
 	import EvalItems from '#lib/components/run/EvalItems.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import EvalRunPicker from '#lib/components/run/EvalRunPicker.svelte';
 	import {
 		NOT_COMPARED,
@@ -334,7 +336,14 @@
 				<p class="bg-card px-3 py-2.5" role="alert">
 					These runs can’t be compared doc by doc: {refusal}
 				</p>
-			{:else if data.b}
+			{:else if !data.b}
+				<!-- Only A so far: B's list may be closed without a pick. -->
+				<EmptyState variant="onboarding" title="Pick a run to compare">
+					{#snippet actions()}
+						<Button variant="quiet" size="bar" onclick={() => (pickingB = true)}>Pick run B</Button>
+					{/snippet}
+				</EmptyState>
+			{:else}
 				<!-- A pair with no task in common has nothing to list: the reasons below say why. -->
 				{#if tasks.length}
 					<section aria-labelledby="items">
@@ -385,8 +394,10 @@
 								of the doc where it has none. Counts only: no test of significance.
 							</InfoHint>
 						</h2>
-						<div class="relative overflow-x-auto">
-							<table class="w-full min-w-[66rem] table-fixed border-t border-divider">
+						<div class="relative bleed overflow-x-auto">
+							<table
+								class="w-full min-w-[66rem] table-fixed border-t border-divider [&_tr>*:first-child]:pl-5 [&_tr>*:last-child]:pr-5"
+							>
 								{@render columns()}
 								<thead class="border-b text-xs text-muted-foreground">
 									<tr>
@@ -428,20 +439,20 @@
 										)}
 										<!-- The row opens the task's items above; its name is the button for the keys. -->
 										<tr
-											class="cursor-pointer border-b border-divider hover:bg-muted"
+											class="h-9 cursor-pointer border-b border-divider hover:bg-muted"
 											onclick={() => showTask(t.task)}
 										>
 											<td class="truncate px-3 py-1.5">
+												<!-- The metric and hash in the hint: one line a task. -->
 												<button
 													type="button"
-													class="block max-w-full truncate font-mono text-[12.5px] hover:underline"
-													{@attach hint('Show its items')}
+													class="block max-w-full truncate hover:underline"
+													{@attach hint(
+														`Show its items\n${t.metric} · ${t.task_hash.slice(0, 12)}`
+													)}
 												>
 													{t.task}
 												</button>
-												<span class="text-xs text-faint" {@attach hint(t.task_hash)}>
-													{t.metric} · {t.task_hash.slice(0, 12)}
-												</span>
 											</td>
 											<td class="px-3 py-1.5 text-right tabular-nums">{t.num_docs}</td>
 											{@render rates(rate)}
@@ -476,16 +487,15 @@
 							<h2 id="not-compared" class="mb-2 text-[15px] font-medium">
 								{diff.not_compared.length} tasks not compared
 							</h2>
-							<div class="relative overflow-x-auto">
-								<table class="w-full min-w-[66rem] table-fixed border-t border-divider">
+							<div class="relative bleed overflow-x-auto">
+								<table
+									class="w-full min-w-[66rem] table-fixed border-t border-divider [&_tr>*:first-child]:pl-5 [&_tr>*:last-child]:pr-5"
+								>
 									{@render columns()}
 									<tbody>
 										{#each diff.not_compared as [task, reason] (task)}
 											<tr class="border-b border-divider">
-												<td
-													class="truncate px-3 py-1.5 font-mono text-[12.5px]"
-													{@attach hint(task)}>{task}</td
-												>
+												<td class="truncate px-3 py-1.5" {@attach hint(task)}>{task}</td>
 												<td colspan="8" class="px-3 py-1.5 text-muted-foreground"
 													>{NOT_COMPARED[reason] ?? reason}</td
 												>
