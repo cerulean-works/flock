@@ -3,14 +3,13 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
 	import LockIcon from '@lucide/svelte/icons/lock';
-	import SearchIcon from '@lucide/svelte/icons/search';
 	import { tick } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
+	import MenuSearch from './MenuSearch.svelte';
 	import { toggle } from '#lib/utils.ts';
 	import {
 		columnLabel,
@@ -383,20 +382,15 @@
 {/snippet}
 
 {#snippet body()}
-	<div class="relative m-2">
-		<SearchIcon
-			class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-		/>
-		<Input
-			bind:ref={search}
-			bind:value={query}
-			class="h-8 pl-8"
-			placeholder={searching ? 'Clear the search to reorder' : 'Find a column'}
-			aria-label="Find a column"
-			onkeydown={onsearchkey}
-		/>
-	</div>
-	<div class="min-h-0 flex-1 overflow-y-auto border-t p-2 text-[13px]" bind:this={scroller}>
+	<MenuSearch
+		bind:ref={search}
+		autofocus
+		bind:value={query}
+		placeholder={searching ? 'Clear the search to reorder' : 'Search columns…'}
+		label="Search columns"
+		onkeydown={onsearchkey}
+	/>
+	<div class="min-h-0 flex-1 overflow-y-auto p-2 text-[13px]" bind:this={scroller}>
 		{#if nodes.length}
 			<ul class="relative" aria-label="Columns">{@render level(nodes, '', 0)}</ul>
 		{:else}

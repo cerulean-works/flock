@@ -59,7 +59,7 @@ describe('RunLogs', () => {
 		await expect.element(page.getByText('RuntimeError: CUDA out of memory')).toBeVisible();
 		// The search is an icon until opened, then a field with the focus.
 		await page.getByRole('button', { name: 'Search the log' }).click();
-		await expect.element(page.getByRole('textbox', { name: 'Search the log' })).toHaveFocus();
+		await expect.element(page.getByRole('searchbox', { name: 'Search the log' })).toHaveFocus();
 		await userEvent.keyboard('checkpoint');
 		// One every 50 lines in the 1000 loaded.
 		await expect.element(page.getByText(/^\d+ \/ 20$/)).toBeVisible();

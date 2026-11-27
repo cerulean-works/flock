@@ -2,6 +2,7 @@
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import { onDestroy } from 'svelte';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import MenuSearch from '#lib/components/MenuSearch.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { FilterValue } from './ColumnFilter.svelte';
 
@@ -120,17 +121,17 @@
 	{/if}
 </div>
 {#if kind === 'values'}
-	<div class="grid gap-1.5 px-1.5 pb-1.5">
-		{#if options.length > 8}
-			<!-- svelte-ignore a11y_autofocus -->
-			<input
-				class={FIELD}
-				placeholder="Search values…"
-				aria-label="Search {label.toLowerCase()} values"
-				bind:value={query}
-				autofocus
-			/>
-		{/if}
+	{#if options.length > 8}
+		<MenuSearch
+			class="border-t"
+			placeholder="Search values…"
+			label="Search {label.toLowerCase()} values"
+			bind:value={query}
+			{onback}
+			autofocus
+		/>
+	{/if}
+	<div class={['px-1.5 pb-1.5', options.length > 8 && 'pt-1.5']}>
 		<div class="max-h-64 overflow-y-auto" role="group" aria-label="{label} values">
 			{#each shown as o (o.value)}
 				<label class="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 hover:bg-muted">

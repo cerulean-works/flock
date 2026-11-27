@@ -1,4 +1,5 @@
 import type { ColumnKind, Owner } from '#lib/types.ts';
+import { duration, formatNumber } from '#lib/utils.ts';
 
 // Run filters: what the workspace's Filter popover edits, how they travel in its URL
 // (`?filters=[["state","eq","running"],{"any":[["config.lr","lt",0.01],["config.opt","eq","adam"]]}]`)
@@ -241,6 +242,110 @@ export function describeFilters(
 	return top.filters
 		.map((f) => one(f, top.filters.length > 1))
 		.join(`${sep}${top.match === 'any' ? 'or' : 'and'} `);
+}
+
+/** A filter chip's three parts, Linear's way: `State` `is any of` `Finished, Failed`. */
+export interface ChipParts {
+	/** The column as its header names it; empty for a filter built in Advanced. */
+	label: string;
+	/** The comparison, shown muted; empty with `label`. */
+	op: string;
+	value: string;
+}
+
+/** What chips need to name columns and values as the table shows them. */
+export interface ChipNames {
+	label?: (key: string) => string;
+	kind?: (key: string) => ColumnKind | undefined;
+	people?: People;
+	/** The viewer's user id, shown as Me. */
+	me?: number;
+}
+
+const CHIP_OPS: Record<FilterOp, string> = {
+	eq: 'is',
+	ne: 'is not',
+	gt: 'above',
+	gte: 'at least',
+	lt: 'below',
+	lte: 'at most',
+	contains: 'contains',
+	exists: 'is set',
+	missing: 'is not set'
+};
+
+/** A chip's comparison: dates are after and before, lists include. */
+function chipOp(op: FilterOp, kind: ColumnKind | undefined): string {
+	if (kind === 'time' && (op === 'gt' || op === 'gte')) return 'after';
+	if (kind === 'time' && (op === 'lt' || op === 'lte')) return 'before';
+	if (kind === 'json' && op === 'eq') return 'includes';
+	if (kind === 'json' && op === 'ne') return 'does not include';
+	return CHIP_OPS[op];
+}
+
+/** A date in local time, `Nov 20`, with the year when it isn't this one and the time when set. */
+function chipDate(seconds: number): string {
+	const d = new Date(seconds * 1000);
+	const year = d.getFullYear() !== new Date().getFullYear();
+	const date = d.toLocaleDateString('en-US', {
+		month: 'short',
+		day: 'numeric',
+		...(year ? { year: 'numeric' } : {})
+	});
+	if (!d.getHours() && !d.getMinutes()) return date;
+	const pad = (n: number) => String(n).padStart(2, '0');
+	return `${date}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** A value as the table writes it: states capitalised, people by name (Me), numbers rounded. */
+export function chipValue(
+	value: FilterValue | null,
+	kind: ColumnKind | undefined,
+	people: People = NOBODY,
+	me?: number
+): string {
+	if (value == null) return '';
+	if (kind === 'state' && typeof value === 'string')
+		return value.charAt(0).toUpperCase() + value.slice(1);
+	if (kind === 'user' && typeof value === 'number')
+		return value === me ? 'Me' : (people.get(value)?.name ?? `user ${value}`);
+	if (kind === 'time' && typeof value === 'number') return chipDate(value);
+	if (kind === 'duration' && typeof value === 'number') return duration(value);
+	if (typeof value === 'number') return formatNumber(value);
+	return String(value);
+}
+
+/** One column's chosen values: `is A`, or `is any of A, B`. */
+export function valuesChip(label: string, values: readonly string[], list = false): ChipParts {
+	const op = list ? 'includes' : 'is';
+	return { label, op: values.length > 1 ? `${op} any of` : op, value: values.join(', ') };
+}
+
+/**
+ * A top-level filter as a chip's parts. A column's values (an `any` group of `is` on one key)
+ * read as one chip; other groups, built in Advanced, as their text alone.
+ */
+export function chipParts(f: RunFilter, names: ChipNames = {}): ChipParts {
+	const kindOf = names.kind ?? (() => undefined);
+	const labelOf = names.label ?? ((key: string) => key);
+	const people = names.people ?? NOBODY;
+	if (isGroup(f)) {
+		const [first] = f.filters;
+		if (first && !isGroup(first) && isValuesOf(f, first.key)) {
+			const kind = kindOf(first.key);
+			const values = f.filters.map((g) =>
+				chipValue((g as RunCondition).value, kind, people, names.me)
+			);
+			return valuesChip(labelOf(first.key), values, kind === 'json');
+		}
+		return { label: '', op: '', value: describeFilters([f], kindOf, false, people) };
+	}
+	const kind = kindOf(f.key);
+	return {
+		label: labelOf(f.key),
+		op: chipOp(f.op, kind),
+		value: UNARY.has(f.op) ? '' : chipValue(f.value, kind, people, names.me)
+	};
 }
 
 /**

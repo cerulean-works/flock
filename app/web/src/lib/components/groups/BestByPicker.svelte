@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import TrophyIcon from '@lucide/svelte/icons/trophy';
+	import MenuSearch from '#lib/components/MenuSearch.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { bestLabel, bestWords, isInternalKey, metricLabel, type BestOrder } from '#lib/groups.ts';
@@ -76,12 +77,14 @@
 		<DropdownMenu.Group>
 			<DropdownMenu.Label>Summary column</DropdownMenu.Label>
 			<!-- Typing here filters the columns; keys go to the input, not the menu's typeahead. -->
-			<input
-				class="mx-1 mb-1 h-7 w-[calc(100%-0.5rem)] rounded-md border border-input bg-background px-2 text-[13px] outline-none placeholder:text-faint focus-visible:border-ring"
-				placeholder="Find a column"
-				aria-label="Find a summary column"
+			<MenuSearch
+				class="-mx-1 mb-1 border-t"
+				placeholder="Search columns…"
+				label="Search summary columns"
 				bind:value={query}
-				onkeydown={(e) => e.stopPropagation()}
+				onkeydown={(e) => {
+					if (e.key !== 'Escape' && e.key !== 'Tab') e.stopPropagation();
+				}}
 			/>
 			<div class="max-h-64 overflow-y-auto">
 				<DropdownMenu.RadioGroup

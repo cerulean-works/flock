@@ -4,13 +4,13 @@
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
-	import SearchIcon from '@lucide/svelte/icons/search';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import UploadIcon from '@lucide/svelte/icons/upload';
-	import { tick, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import DataTable, { type Column, ROW_LINK } from '#lib/components/DataTable.svelte';
+	import BarSearch from '#lib/components/BarSearch.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
 	import { Selection } from '#lib/selection.svelte.ts';
 	import { PAGE, bucketCall, entries, nameOf, objectHref, s3Uri, typeLabel } from '#lib/storage.ts';
@@ -161,8 +161,6 @@
 
 	let creatingFolder = $state(false);
 	let folderButton = $state<HTMLElement | null>(null);
-	let filtering = $state(false);
-	let filterInput = $state<HTMLInputElement>();
 	// The header leads with the org: Storage › bucket › folders, the last the title.
 	const header = $derived(headerTrail(crumbs, title));
 	let deleting = $state(false);
@@ -209,44 +207,16 @@
 	{/if}
 {/snippet}
 
-<!-- The folder's S3 URI to copy, and the filter: an icon until it's wanted, as on Runs. -->
+<!-- The folder's S3 URI to copy, and the search by name prefix: the bar's search, as on Runs. -->
 {#snippet controls()}
 	<!-- The trail already says where this is; the URI is for copying, named in the hint. -->
 	<CopyButton text={s3Uri(bucket, prefix)} label="Copy {s3Uri(bucket, prefix)}" />
-	{#if !filtering && !filter}
-		<Button
-			variant="quiet"
-			size="icon-bar"
-			aria-label="Filter by name prefix"
-			{@attach hint('Filter by name prefix')}
-			onclick={async () => {
-				filtering = true;
-				await tick();
-				filterInput?.focus();
-			}}
-		>
-			<SearchIcon />
-		</Button>
-	{:else}
-		<label
-			class="flex h-7 w-52 min-w-0 items-center gap-1.5 rounded-md bg-muted px-2 focus-within:ring-3 focus-within:ring-ring/50"
-		>
-			<SearchIcon class="size-4 flex-none text-muted-foreground" />
-			<input
-				bind:this={filterInput}
-				class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-				placeholder="Filter by name prefix"
-				aria-label="Filter by name prefix"
-				spellcheck="false"
-				bind:value={filter}
-				oninput={filtered}
-				onblur={() => (filtering = false)}
-				onkeydown={(e) => {
-					if (e.key === 'Escape') e.currentTarget.blur();
-				}}
-			/>
-		</label>
-	{/if}
+	<BarSearch
+		bind:value={filter}
+		things="objects"
+		placeholder="Search by prefix…"
+		oninput={filtered}
+	/>
 {/snippet}
 
 <!-- Files dropped anywhere on the listing upload into this folder; folders keep their paths. -->

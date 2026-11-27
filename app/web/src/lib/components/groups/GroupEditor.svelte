@@ -1,5 +1,4 @@
 <script lang="ts">
-	import SearchIcon from '@lucide/svelte/icons/search';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { onMount } from 'svelte';
@@ -7,6 +6,7 @@
 	import { goto, invalidate } from '$app/navigation';
 	import RunFilters from '#lib/components/RunFilters.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
+	import BarSearch from '#lib/components/BarSearch.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
@@ -552,20 +552,9 @@
 			</Button>
 		</div>
 		<div class="flex h-12 items-center gap-2 border-b pr-7 pl-5">
-			<label
-				class="flex h-8 w-48 min-w-0 flex-none items-center gap-2 rounded-lg border border-input bg-background px-2.5 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
-			>
-				<SearchIcon class="size-4 flex-none text-muted-foreground" />
-				<input
-					bind:value={search}
-					type="search"
-					class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint [&::-webkit-search-cancel-button]:hidden"
-					placeholder="Search runs"
-					aria-label="Search runs by name or id"
-					autocomplete="off"
-					spellcheck="false"
-				/>
-			</label>
+			<div class="w-52 flex-none">
+				<BarSearch bind:value={search} things="runs" open />
+			</div>
 			<RunFilters
 				{filters}
 				columns={filterColumns}

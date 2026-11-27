@@ -5,7 +5,7 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import XIcon from '@lucide/svelte/icons/x';
 
-	import SearchIcon from '@lucide/svelte/icons/search';
+	import MenuSearch from './MenuSearch.svelte';
 	import { columnLabel } from '#lib/workspace/columns.ts';
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -296,22 +296,18 @@
 <!-- The field list, then the field's value: one step each, applied on the pick. -->
 {#snippet picker()}
 	{#if field == null}
-		<div class="flex items-center gap-2 border-b border-divider px-2.5">
-			<SearchIcon class="size-4 flex-none text-muted-foreground" />
-			<input
-				bind:this={findInput}
-				bind:value={find}
-				class="h-9 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-				placeholder="Filter by…"
-				aria-label="Field to filter by"
-				onkeydown={(e) => {
-					if (e.key === 'Enter' && fields.length) {
-						e.preventDefault();
-						void pickField(fields[0].key);
-					}
-				}}
-			/>
-		</div>
+		<MenuSearch
+			bind:ref={findInput}
+			bind:value={find}
+			placeholder="Search columns…"
+			label="Search columns"
+			onkeydown={(e) => {
+				if (e.key === 'Enter' && fields.length) {
+					e.preventDefault();
+					void pickField(fields[0].key);
+				}
+			}}
+		/>
 		<ul class="max-h-72 overflow-y-auto p-1" aria-label="Fields">
 			{#each fields as f (f.key)}
 				<li>

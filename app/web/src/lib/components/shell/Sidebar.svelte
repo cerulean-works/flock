@@ -447,8 +447,8 @@
 									'text-muted-foreground opacity-0 group-focus-within/section:opacity-100 group-hover/section:opacity-100 hover:bg-sidebar-accent',
 									searching && 'bg-sidebar-accent opacity-100'
 								]}
-								aria-label="Find a project"
-								{@attach hint('Find a project')}
+								aria-label="Search projects"
+								{@attach hint('Search projects')}
 							>
 								<SearchIcon />
 							</Button>
@@ -460,8 +460,8 @@
 							key={(p) => p.name}
 							current={(p) => p.name === project}
 							noun="projects"
-							label="Find a project"
-							placeholder="Find a project…"
+							label="Search projects"
+							placeholder="Search projects…"
 							class="max-h-72"
 							bind:query
 							bind:active

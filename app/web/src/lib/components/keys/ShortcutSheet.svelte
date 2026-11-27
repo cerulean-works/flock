@@ -28,6 +28,7 @@
 		[
 			'Lists',
 			[
+				['/', 'Search'],
 				['J  K', 'Next and previous row'],
 				['Enter', 'Open the row'],
 				['X', 'Select the row'],
@@ -38,7 +39,6 @@
 			'Runs',
 			[
 				['T  V  C', 'Table, Visualize, Charts'],
-				['/', 'Search runs'],
 				['F', 'Filter runs']
 			]
 		]

@@ -7,9 +7,11 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { tick, type Snippet } from 'svelte';
 	import * as Popover from '#lib/components/ui/popover/index.js';
-	import type { EvalRunChoice } from '#lib/types.ts';
+	import type { EvalRunChoice, ProjectInfo } from '#lib/types.ts';
+	import type { RunValues } from '#lib/data/run-values.svelte.ts';
 	import { relativeTime } from '#lib/utils.ts';
 	import Skeleton from '#lib/components/Skeleton.svelte';
+	import MenuSearch from '#lib/components/MenuSearch.svelte';
 
 	/**
 	 * Picks one side of a comparison (025 D185) from the keyboard: the search box has focus, ↑↓
@@ -51,7 +53,7 @@
 	let query = $state('');
 	let active = $state(0);
 	let runs = $state<EvalRunChoice[] | null>(null);
-	let projects = $state<{ entity: string; name: string }[] | null>(null);
+	let projects = $state<ProjectInfo[] | null>(null);
 	let failed = $state<string | null>(null);
 
 	// Each opening starts over, however it was opened (a click, or the page's shortcut).
@@ -95,15 +97,34 @@
 		};
 	});
 
-	// The org's projects, read once, the first time they're listed.
+	// The org's projects with eval runs, read once, the first time they're listed: a project's
+	// job types say whether it has any.
 	$effect(() => {
 		if (!open || mode !== 'projects' || projects) return;
 		const controller = new AbortController();
-		fetch(`/api/projects?${new URLSearchParams({ entity })}`, { signal: controller.signal })
-			.then((res) => res.json() as Promise<{ projects: { entity: string; name: string }[] }>)
-			.then((got) => (projects = got.projects))
+		const { signal } = controller;
+		const hasEvals = async (p: ProjectInfo) => {
+			if (!p.run_count) return false;
+			const res = await fetch(
+				`/api/projects/${encodeURIComponent(p.entity)}/${encodeURIComponent(p.name)}/runs/values?keys=job_type`,
+				{ signal }
+			);
+			if (!res.ok) return false;
+			const { values } = (await res.json()) as { values: RunValues };
+			return (values.job_type ?? []).some((v) => v.value === 'eval' && v.runs > 0);
+		};
+		fetch(`/api/projects?${new URLSearchParams({ entity })}`, { signal })
+			.then((res) => res.json() as Promise<{ projects: ProjectInfo[] }>)
+			.then(async (got) => {
+				const evals = await Promise.all(got.projects.map(hasEvals));
+				projects = got.projects.filter((_, i) => evals[i]);
+				active = Math.max(
+					0,
+					projects.findIndex((p) => p.name === scope.project)
+				);
+			})
 			.catch((err: Error) => {
-				if (!controller.signal.aborted) failed = err.message;
+				if (!signal.aborted) failed = err.message;
 			});
 		return () => controller.abort();
 	});
@@ -128,7 +149,7 @@
 		);
 	}
 
-	function toRuns(p: { entity: string; name: string }) {
+	function toRuns(p: ProjectInfo) {
 		chosen = { entity: p.entity, project: p.name };
 		refocus();
 		mode = 'runs';
@@ -152,12 +173,6 @@
 		} else if (e.key === 'Backspace' && !query && mode === 'runs') {
 			e.preventDefault();
 			toProjects();
-		} else if (e.key === 'Escape' && mode === 'projects') {
-			// Back to the runs, rather than closing.
-			e.preventDefault();
-			e.stopPropagation();
-			mode = 'runs';
-			query = '';
 		}
 	}
 
@@ -195,55 +210,61 @@
 	</Popover.Trigger>
 	<Popover.Content
 		align="start"
+		collisionPadding={16}
 		class="w-[28rem] max-w-[calc(100vw-2rem)] gap-0 p-0"
 		onOpenAutoFocus={(e) => {
 			e.preventDefault();
 			field?.focus();
 		}}
 	>
-		<div class="flex items-center gap-1.5 border-b border-divider px-2 py-1.5">
-			{#if mode === 'runs'}
-				<button
-					type="button"
-					class="inline-flex max-w-40 flex-none items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs hover:bg-accent"
-					{@attach hint(
-						`Runs of ${scope.entity}/${scope.project}: click, or Backspace, to change project`
-					)}
-					onclick={toProjects}
-				>
-					<FolderIcon class="size-3 flex-none text-muted-foreground" />
-					<span class="truncate">{scope.project}</span>
-					<XIcon class="size-3 flex-none text-muted-foreground" />
-				</button>
-			{:else}
-				<button
-					type="button"
-					class="flex-none rounded p-0.5 text-muted-foreground hover:bg-accent"
-					aria-label="Back to the runs"
-					onclick={() => {
+		<MenuSearch
+			bind:ref={field}
+			role="combobox"
+			aria-expanded="true"
+			aria-controls="{id}-list"
+			aria-activedescendant={count ? `${id}-${mode}-${active}` : undefined}
+			label={mode === 'runs' ? `Search eval runs for ${side}` : 'Search projects'}
+			placeholder={mode === 'runs' ? 'Search eval runs…' : 'Search projects…'}
+			bind:value={query}
+			oninput={() => (active = 0)}
+			{onkeydown}
+			onback={mode === 'projects'
+				? () => {
+						// Back to the runs, rather than closing.
 						mode = 'runs';
-						refocus();
-					}}
-				>
-					<ArrowLeftIcon class="size-3.5" />
-				</button>
-			{/if}
-			<input
-				bind:this={field}
-				role="combobox"
-				aria-expanded="true"
-				aria-controls="{id}-list"
-				aria-activedescendant={count ? `${id}-${mode}-${active}` : undefined}
-				aria-label={mode === 'runs' ? `Search eval runs for ${side}` : 'Search projects'}
-				placeholder={mode === 'runs' ? 'Search eval runs…' : 'Search projects…'}
-				class="h-7 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-				spellcheck="false"
-				autocomplete="off"
-				bind:value={query}
-				oninput={() => (active = 0)}
-				{onkeydown}
-			/>
-		</div>
+						query = '';
+					}
+				: undefined}
+		>
+			{#snippet before()}
+				{#if mode === 'runs'}
+					<button
+						type="button"
+						class="inline-flex max-w-40 flex-none items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-xs hover:bg-accent"
+						{@attach hint(
+							`Runs of ${scope.entity}/${scope.project}: click, or Backspace, to change project`
+						)}
+						onclick={toProjects}
+					>
+						<FolderIcon class="size-3 flex-none text-muted-foreground" />
+						<span class="truncate">{scope.project}</span>
+						<XIcon class="size-3 flex-none text-muted-foreground" />
+					</button>
+				{:else}
+					<button
+						type="button"
+						class="flex-none rounded p-0.5 text-muted-foreground hover:bg-accent"
+						aria-label="Back to the runs"
+						onclick={() => {
+							mode = 'runs';
+							refocus();
+						}}
+					>
+						<ArrowLeftIcon class="size-3.5" />
+					</button>
+				{/if}
+			{/snippet}
+		</MenuSearch>
 		<div id="{id}-list" role="listbox" class="max-h-72 overflow-y-auto p-1 text-[13px]">
 			{#if failed}
 				<p class="px-2 py-2 text-xs text-destructive" role="alert">{failed}</p>
@@ -300,6 +321,12 @@
 						<span class="min-w-0 flex-1 truncate">{p.name}</span>
 						{#if p.name === scope.project}<CheckIcon class="size-3.5 flex-none" />{/if}
 					</div>
+				{:else}
+					{#if projects}
+						<p class="px-2 py-2 text-xs text-muted-foreground">
+							{query.trim() ? 'No projects match.' : 'No projects have eval runs.'}
+						</p>
+					{/if}
 				{/each}
 			{/if}
 		</div>

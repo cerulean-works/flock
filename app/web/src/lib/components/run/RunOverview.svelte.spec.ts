@@ -71,14 +71,17 @@ describe('RunOverview', () => {
 			now: 1_795_100_000
 		});
 		await expect.element(screen.getByRole('button', { name: 'See logs' })).not.toBeInTheDocument();
-		await screen.getByRole('button', { name: 'Find a config key' }).click();
-		const field = screen.getByRole('textbox', { name: 'Find a config key' });
+		await screen.getByRole('button', { name: 'Search config keys' }).click();
+		const field = screen.getByRole('searchbox', { name: 'Search config keys' });
 		await expect.element(field).toHaveFocus();
 		await userEvent.keyboard('se');
 		await expect.element(screen.getByText('seed', { exact: true })).toBeVisible();
 		await expect.element(screen.getByText('lr', { exact: true })).not.toBeInTheDocument();
+		// Escape clears the text first, then closes the field.
+		await userEvent.keyboard('{Escape}');
+		await expect.element(field).toHaveValue('');
+		await expect.element(screen.getByText('lr', { exact: true })).toBeVisible();
 		await userEvent.keyboard('{Escape}');
 		await expect.element(field).not.toBeInTheDocument();
-		await expect.element(screen.getByText('lr', { exact: true })).toBeVisible();
 	});
 });

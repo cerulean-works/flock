@@ -94,8 +94,8 @@ describe('ObjectBrowser', () => {
 			})
 		});
 		render(ObjectBrowser, { org: 'acme', bucket: 'data', prefix: 'runs/', listing, now: 0 });
-		await page.getByRole('button', { name: 'Filter by name prefix' }).click();
-		await page.getByRole('textbox', { name: 'Filter by name prefix' }).fill('b');
+		await page.getByRole('button', { name: 'Search by prefix' }).click();
+		await page.getByRole('searchbox', { name: 'Search by prefix' }).fill('b');
 		await vi.waitFor(() =>
 			expect(document.querySelectorAll('[role=rowgroup] [role=row]').length).toBe(1)
 		);

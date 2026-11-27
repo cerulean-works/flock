@@ -15,7 +15,6 @@
 	import ClipboardCheckIcon from '@lucide/svelte/icons/clipboard-check';
 	import Columns2Icon from '@lucide/svelte/icons/columns-2';
 	import Rows2Icon from '@lucide/svelte/icons/rows-2';
-	import XIcon from '@lucide/svelte/icons/x';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import type { Snippet } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
@@ -29,7 +28,9 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Crumb } from '#lib/storage.ts';
 	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
-	import { describeFilters } from '#lib/workspace/filters.ts';
+	import { chipParts, describeFilters } from '#lib/workspace/filters.ts';
+	import { columnLabel } from '#lib/workspace/columns.ts';
+	import FilterChip from '#lib/components/FilterChip.svelte';
 	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
 	import { keyboard } from '#lib/keys.svelte.ts';
 	import {
@@ -372,6 +373,12 @@
 	let more = $state(false);
 	let filterControl = $state<{ edit: () => void; pick: () => void } | null>(null);
 	const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
+	/** A column as its header names it, for the chips. */
+	const labelOf = (key: string) => {
+		const col = ws.meta.columns.find((c) => c.key === key);
+		return col ? columnLabel(col) : key;
+	};
+	const me = $derived(page.data.shell?.me?.id as number | undefined);
 
 	/** The filters without the one at `i`, from the first page. */
 	function dropFilter(i: number) {
@@ -531,25 +538,11 @@
 			role="group"
 		>
 			{#each ws.page.query.filters as f, i (i)}
-				{@const text = describeFilters([f], kindOf, false, ws.people)}
-				<span class="inline-flex h-6 max-w-80 items-center rounded-md bg-muted text-xs">
-					<button
-						type="button"
-						class="min-w-0 truncate rounded-l-md py-0.5 pr-1 pl-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-						onclick={() => filterControl?.edit()}
-						{@attach hint(text)}
-					>
-						{text}
-					</button>
-					<button
-						type="button"
-						class="grid h-6 w-6 flex-none place-items-center rounded-r-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-						aria-label="Remove filter {text}"
-						onclick={() => dropFilter(i)}
-					>
-						<XIcon class="size-3" />
-					</button>
-				</span>
+				<FilterChip
+					parts={chipParts(f, { label: labelOf, kind: kindOf, people: ws.people, me })}
+					onclick={() => filterControl?.edit()}
+					onremove={() => dropFilter(i)}
+				/>
 			{/each}
 		</div>
 	{/if}

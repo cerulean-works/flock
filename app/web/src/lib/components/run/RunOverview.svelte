@@ -2,9 +2,9 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import SearchIcon from '@lucide/svelte/icons/search';
-	import XIcon from '@lucide/svelte/icons/x';
 	import { tick } from 'svelte';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import BarSearch from '#lib/components/BarSearch.svelte';
 	import CopyButton from '#lib/components/CopyButton.svelte';
 	import Properties from '#lib/components/Properties.svelte';
 	import Property from '#lib/components/Property.svelte';
@@ -63,7 +63,7 @@
 		queries[title] = null;
 		await tick();
 		document
-			.querySelector<HTMLElement>(`[aria-label="Find a ${title.toLowerCase()} key"]`)
+			.querySelector<HTMLElement>(`button[aria-label="Search ${title.toLowerCase()} keys"]`)
 			?.focus();
 	}
 
@@ -71,7 +71,7 @@
 		queries[title] = '';
 		if (details) details.open = true;
 		await tick();
-		document.getElementById(`find-${title}`)?.focus();
+		document.querySelector<HTMLInputElement>(`#find-${title} input`)?.focus();
 	}
 </script>
 
@@ -102,8 +102,8 @@
 						<button
 							type="button"
 							class="-mr-1 ml-auto grid size-6 place-items-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-							aria-label="Find a {title.toLowerCase()} key"
-							{@attach hint(`Find a ${title.toLowerCase()} key`)}
+							aria-label="Search {title.toLowerCase()} keys"
+							{@attach hint(`Search ${title.toLowerCase()} keys`)}
 							onclick={(e) => {
 								e.preventDefault();
 								void openSearch(title, e.currentTarget.closest('details'));
@@ -112,50 +112,45 @@
 							<SearchIcon class="size-3.5" />
 						</button>
 					{:else}
-						<SearchIcon class="size-3.5 flex-none text-muted-foreground" />
-						<input
+						<!-- In the summary: a click or Space mustn't toggle the list. -->
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<span
+							class="flex min-w-0 flex-1"
 							id="find-{title}"
-							class="min-w-0 flex-1 bg-transparent outline-none placeholder:text-faint"
-							placeholder="Find a {title.toLowerCase()} key"
-							aria-label="Find a {title.toLowerCase()} key"
-							bind:value={queries[title]}
 							onclick={(e) => e.preventDefault()}
-							onkeydown={(e) => {
-								// Space would toggle the list.
-								if (e.key === ' ') e.stopPropagation();
-								if (e.key === 'Escape') {
-									e.stopPropagation();
-									closeSearch(title);
-								}
-							}}
+							onkeydown={(e) => e.key === ' ' && e.stopPropagation()}
 							onkeyup={(e) => e.key === ' ' && e.preventDefault()}
-						/>
-						<span class="text-muted-foreground tabular-nums">{rows.length}</span>
-						<button
-							type="button"
-							class="-mr-1 grid size-6 place-items-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-							aria-label="Close the search"
-							onclick={(e) => {
-								e.preventDefault();
-								closeSearch(title);
-							}}
 						>
-							<XIcon class="size-3.5" />
-						</button>
+							<BarSearch
+								bind:value={() => queries[title] ?? '', (v) => (queries[title] = v)}
+								things="{title.toLowerCase()} keys"
+								open
+								slash={false}
+								onclose={() => closeSearch(title)}
+							>
+								{#snippet trailing()}
+									<span class="flex-none pr-1.5 text-xs text-muted-foreground tabular-nums"
+										>{rows.length}</span
+									>
+								{/snippet}
+							</BarSearch>
+						</span>
 					{/if}
 				</summary>
 				<dl class="pt-1 pb-1 font-mono text-[12px] leading-6">
 					{#each rows as [key, value] (key)}
 						{@const shown = formatValue(value)}
+						<!-- Copy on hover at the row's end, as the Details rows do; the full value. -->
 						<div
-							class="-mx-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 rounded px-2 hover:bg-muted"
+							class="group/prop -mx-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 rounded px-2 hover:bg-muted"
 						>
 							<dt class="truncate text-muted-foreground" {@attach hint(key)}>{key}</dt>
-							<dd
-								class={['truncate text-right tabular-nums', shown === '–' && 'text-faint']}
-								{@attach hint(exact(value))}
-							>
-								{shown}
+							<dd class="flex min-w-0 items-center justify-end gap-1">
+								<span
+									class={['truncate tabular-nums', shown === '–' && 'text-faint']}
+									{@attach hint(exact(value))}>{shown}</span
+								>
+								{#if shown !== '–'}{@render copy(exact(value), `Copy ${key}`)}{/if}
 							</dd>
 						</div>
 					{:else}

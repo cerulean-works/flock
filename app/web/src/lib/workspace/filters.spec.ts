@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { ColumnKind } from '#lib/types.ts';
 import {
+	chipParts,
 	countConditions,
 	describeFilters,
 	flockFilter,
@@ -322,5 +324,80 @@ describe('flockFilter', () => {
 			])
 		).toEqual({ a: { $eq: 1 } });
 		expect(flockFilter('', [{ match: 'all', filters: [] }])).toBeNull();
+	});
+});
+
+describe('chipParts', () => {
+	const kinds: Record<string, ColumnKind> = {
+		state: 'state',
+		owner: 'user',
+		tags: 'json',
+		created_at: 'time',
+		'config.lr': 'num',
+		name: 'str'
+	};
+	const names = {
+		label: (k: string) => (k === 'config.lr' ? 'lr' : k[0].toUpperCase() + k.slice(1)),
+		kind: (k: string) => kinds[k],
+		people: new Map([[7, { id: 7, name: 'Ada', avatar_url: null }]]) as unknown as People,
+		me: 3
+	};
+
+	it('reads one value as `is` and several as `is any of`, as the table writes them', () => {
+		expect(chipParts({ key: 'state', op: 'eq', value: 'finished' }, names)).toEqual({
+			label: 'State',
+			op: 'is',
+			value: 'Finished'
+		});
+		expect(
+			chipParts(
+				{
+					match: 'any',
+					filters: [
+						{ key: 'owner', op: 'eq', value: 3 },
+						{ key: 'owner', op: 'eq', value: 7 }
+					]
+				},
+				names
+			)
+		).toEqual({ label: 'Owner', op: 'is any of', value: 'Me, Ada' });
+		expect(chipParts({ key: 'tags', op: 'eq', value: 'base' }, names).op).toBe('includes');
+	});
+
+	it('words ranges, dates and text', () => {
+		expect(chipParts({ key: 'config.lr', op: 'gte', value: 0.0012346 }, names)).toEqual({
+			label: 'lr',
+			op: 'at least',
+			value: '0.001235'
+		});
+		expect(chipParts({ key: 'config.lr', op: 'lte', value: 2 }, names).op).toBe('at most');
+		const nov20 = new Date(2026, 10, 20).getTime() / 1000;
+		expect(chipParts({ key: 'created_at', op: 'gte', value: nov20 }, names).op).toBe('after');
+		expect(chipParts({ key: 'created_at', op: 'lte', value: nov20 }, names).op).toBe('before');
+		expect(chipParts({ key: 'name', op: 'contains', value: 'sweep' }, names)).toEqual({
+			label: 'Name',
+			op: 'contains',
+			value: 'sweep'
+		});
+		expect(chipParts({ key: 'name', op: 'exists', value: null }, names)).toEqual({
+			label: 'Name',
+			op: 'is set',
+			value: ''
+		});
+	});
+
+	it('gives a group built in Advanced as its text alone', () => {
+		expect(
+			chipParts(
+				{
+					match: 'any',
+					filters: [
+						{ key: 'config.lr', op: 'lt', value: 0.01 },
+						{ key: 'name', op: 'eq', value: 'a' }
+					]
+				},
+				names
+			)
+		).toEqual({ label: '', op: '', value: 'config.lr < 0.01 or name is a' });
 	});
 });

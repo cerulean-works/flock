@@ -1,7 +1,7 @@
 <script lang="ts">
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import SearchIcon from '@lucide/svelte/icons/search';
+	import MenuSearch from '#lib/components/MenuSearch.svelte';
 	import { toast } from 'svelte-sonner';
 	import { invalidate } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -95,18 +95,12 @@
 			<span class="text-xs text-muted-foreground">Pick any number of groups.</span>
 		</div>
 		{#if groups.length > 5}
-			<label
-				class="mx-0.5 my-1 flex h-7 items-center gap-2 rounded-md border border-input px-2 focus-within:border-ring"
-			>
-				<SearchIcon class="size-3.5 flex-none text-muted-foreground" />
-				<input
-					type="search"
-					class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-					placeholder="Find a group"
-					aria-label="Find a group"
-					bind:value={query}
-				/>
-			</label>
+			<MenuSearch
+				class="-mx-1.5 border-t"
+				placeholder="Search groups…"
+				label="Search groups"
+				bind:value={query}
+			/>
 		{/if}
 		<div class="grid max-h-64 gap-px overflow-y-auto">
 			{#each matches as g (g.id)}
