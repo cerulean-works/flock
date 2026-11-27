@@ -78,16 +78,18 @@
 	const SUITE_COLUMNS: Column[] = [
 		{ id: 'name', label: 'Suite' },
 		{ id: 'score', label: 'Score', align: 'end' },
-		{ id: 'metric', label: 'Metric', size: 'fit' },
-		{ id: 'members', label: 'Members', align: 'end' }
+		{ id: 'metric', label: 'Metric', size: 'fit', from: 'sm' },
+		{ id: 'members', label: 'Members', align: 'end', from: 'sm' }
 	];
 	const taskColumns = $derived<Column[]>([
 		{ id: 'name', label: 'Task' },
 		{ id: 'score', label: 'Score', align: 'end' },
-		{ id: 'metric', label: 'Primary metric', size: 'fit' },
-		{ id: 'docs', label: 'Docs', align: 'end' },
+		{ id: 'metric', label: 'Primary metric', size: 'fit', from: 'sm' },
+		{ id: 'docs', label: 'Docs', align: 'end', from: 'sm' },
 		{ id: 'dataset', label: 'Dataset', from: 'md' },
-		...(truncated ? [{ id: 'cut', label: 'Docs cut', align: 'end' as const }] : [])
+		...(truncated
+			? [{ id: 'cut', label: 'Docs cut', align: 'end' as const, from: 'sm' as const }]
+			: [])
 	]);
 	type Suite = EvalResults['suites'][number];
 	type Task = EvalResults['tasks'][number];

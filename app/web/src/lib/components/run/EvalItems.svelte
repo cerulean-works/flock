@@ -429,14 +429,19 @@
 	<!-- One 36px row: the keeps as underline tabs, whose line lands on the table's top rule; the
 	     task and the order quiet at the right. -->
 	<div class={['flex h-9 min-w-0 items-center gap-2', !other && '-mb-3', bleed && 'bleed px-5']}>
-		<div class="flex h-full flex-none items-center gap-4" role="radiogroup" aria-label="Docs shown">
+		<!-- On a narrow page the keeps scroll sideways; the controls keep their room. -->
+		<div
+			class="flex h-full min-w-0 shrink [scrollbar-width:none] items-center gap-4 overflow-x-auto max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] max-sm:pr-4"
+			role="radiogroup"
+			aria-label="Docs shown"
+		>
 			{#each keeps as k (k.keep)}
 				<button
 					type="button"
 					role="radio"
 					aria-checked={k.keep === keep}
 					class={[
-						'relative flex h-full items-center gap-1.5 px-0.5 text-[13px] font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset aria-checked:text-foreground',
+						'relative flex h-full flex-none items-center gap-1.5 px-0.5 text-[13px] font-medium whitespace-nowrap text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset aria-checked:text-foreground',
 						'after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 after:transition-opacity aria-checked:after:opacity-100',
 						lifted === k.keep && 'text-foreground'
 					]}
@@ -456,7 +461,7 @@
 				</button>
 			{/each}
 		</div>
-		<div class="ml-auto flex min-w-0 items-center gap-0.5">
+		<div class="ml-auto flex flex-none items-center gap-0.5">
 			<PickerField
 				bind:open={picking}
 				onOpenChange={(next) => {
@@ -468,7 +473,7 @@
 					);
 				}}
 				aria-label="Task: {task}"
-				class="h-7 w-auto max-w-60 gap-1 rounded-md border-0 bg-transparent px-2 text-[13px] text-subtle hover:bg-muted data-[state=open]:bg-muted dark:bg-transparent [&>svg]:size-3.5"
+				class="h-7 w-auto max-w-60 gap-1 rounded-md border-0 bg-transparent px-2 text-[13px] text-subtle hover:bg-muted data-[state=open]:bg-muted max-sm:max-w-28 dark:bg-transparent [&>svg]:size-3.5"
 			>
 				<span class="min-w-0 truncate">{task}</span>
 				{#snippet list()}

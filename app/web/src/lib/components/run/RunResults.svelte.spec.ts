@@ -73,6 +73,8 @@ afterEach(() => {
 describe('the Results tab', () => {
 	it('shows suites, each task’s primary metric, its hash to copy and dataset, and the provenance', async () => {
 		noText();
+		// The metric and docs columns show from the small breakpoint up.
+		await screen.viewport(1280, 800);
 		render(RunResults, { run: run('r1'), results: RESULTS });
 		const task = screen.getByRole('row').filter({ hasText: 'tw_exam' });
 		await expect.element(task).toBeVisible();
