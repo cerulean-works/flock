@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { page as screen } from 'vitest/browser';
+import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
 import { app, goto, invalidateAll, resetApp } from '#lib/testing/app.svelte.ts';
@@ -239,17 +239,25 @@ describe('DatasetView', () => {
 
 	it('shows the header numbers, the actions and a newer version', async () => {
 		serve({ '/api/datasets/acme/readme': () => ({ text: '# MMLU', truncated: false }) });
+		await screen.viewport(1280, 800);
 		view();
 		await expect.element(screen.getByRole('heading', { name: 'mmlu', level: 1 })).toBeVisible();
 		await expect.element(screen.getByText('1,234')).toBeVisible();
 		await expect.element(screen.getByText('5.0 MB')).toBeVisible();
 		await expect.element(screen.getByText('s3://flock-datasets/eval/mmlu')).not.toBeInTheDocument();
-		await expect.element(screen.getByText('New version available.')).toBeVisible();
-		expect(
-			screen.getByRole('link', { name: 'View version 5' }).element().getAttribute('href')
-		).toBe('/datasets/acme/eval/mmlu?version=5');
+		expect(screen.getByRole('link', { name: 'v5 available' }).element().getAttribute('href')).toBe(
+			'/datasets/acme/eval/mmlu?version=5'
+		);
+		// The version's numbers are in the properties pane, which ] hides.
+		await expect.element(screen.getByRole('complementary', { name: 'Properties' })).toBeVisible();
+		await userEvent.keyboard(']');
+		await expect
+			.element(screen.getByRole('complementary', { name: 'Properties' }))
+			.not.toBeInTheDocument();
+		await userEvent.keyboard(']');
+		await expect.element(screen.getByRole('complementary', { name: 'Properties' })).toBeVisible();
 		// The README is the default tab.
-		await expect.element(screen.getByRole('heading', { name: 'MMLU' })).toBeVisible();
+		await expect.element(screen.getByRole('heading', { name: 'MMLU', exact: true })).toBeVisible();
 		await expect.element(screen.getByRole('tab', { name: 'Viewer' })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
 		// Reaching the files and deleting are in the overflow menu.
@@ -288,19 +296,15 @@ describe('DatasetView', () => {
 		await expect.element(screen.getByRole('heading', { name: 'MMLU' })).toBeVisible();
 		await expect.element(screen.getByText('license: odc-by')).not.toBeInTheDocument();
 		await expect.element(screen.getByText('import', { exact: true })).toHaveClass('hljs-keyword');
-		// This version's numbers sit beside it.
-		await expect.element(screen.getByRole('rowheader', { name: 'Rows' })).toBeVisible();
+		// This version's numbers sit beside it, in the properties pane.
+		await expect.element(screen.getByText('Rows', { exact: true })).toBeVisible();
 	});
 
 	it('says when there is no README', async () => {
 		serve({ '/api/datasets/acme/readme': () => Response.json({ message: 'no' }, { status: 404 }) });
 		view();
 		await expect
-			.element(
-				screen.getByText(
-					'This dataset has no README. Add a README.md to its folder to describe it.'
-				)
-			)
+			.element(screen.getByText('No README. Add a README.md to its folder to describe it.'))
 			.toBeVisible();
 	});
 

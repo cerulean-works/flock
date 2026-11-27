@@ -305,7 +305,7 @@ describe('ModelView', () => {
 		view();
 		await expect.element(screen.getByRole('heading', { name: 'olmo2-1b', level: 1 })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: /^Version 12/ })).toBeVisible();
-		await expect.element(screen.getByText('Primary', { exact: true })).toBeVisible();
+		await expect.element(screen.getByText('· Primary')).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Load' })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
 		// Browsing the files and deleting are in the overflow menu.
@@ -323,12 +323,12 @@ describe('ModelView', () => {
 		await expect.element(screen.getByRole('rowheader', { name: 'attention.heads' })).toBeVisible();
 		await expect.element(screen.getByText('2,048')).toBeVisible();
 		await expect.element(screen.getByRole('rowheader', { name: 'architecture' })).toBeVisible();
-		await expect.element(screen.getByRole('rowheader', { name: 'Digest' })).toBeVisible();
-		await expect.element(screen.getByRole('row', { name: /^Size 3\.0 GB/ })).toBeVisible();
-		await expect.element(screen.getByRole('row', { name: 'Made primary by Bob' })).toBeVisible();
-		await expect
-			.element(screen.getByRole('rowheader', { name: 'Made primary', exact: true }))
-			.toBeVisible();
+		// The version's facts, in the properties pane.
+		const pane = screen.getByRole('complementary', { name: 'Properties' });
+		await expect.element(pane.getByText('Digest', { exact: true })).toBeVisible();
+		await expect.element(pane.getByText('3.0 GB', { exact: true })).toBeVisible();
+		await expect.element(pane.getByText('Made primary', { exact: true })).toBeVisible();
+		await expect.element(pane.getByText('Bob', { exact: true })).toBeVisible();
 		const keys = calls
 			.filter((c) => c.url.endsWith('/presign'))
 			.map((c) => body(c.init).key)
@@ -345,9 +345,7 @@ describe('ModelView', () => {
 		view(undefined, { ...primary, files: primary.files.filter((f) => f.path !== 'README.md') });
 		await expect
 			.element(
-				screen.getByText(
-					'This version has no README. Add a README.md to the folder you push to describe it.'
-				)
+				screen.getByText('No README. Add a README.md to the folder you push to describe it.')
 			)
 			.toBeVisible();
 	});
@@ -499,11 +497,7 @@ describe('ModelView', () => {
 			now: NOW
 		});
 		await expect
-			.element(
-				screen.getByText(
-					'This model has no versions yet. A version appears once its upload finishes.'
-				)
-			)
+			.element(screen.getByText('No versions yet. A version appears once its upload finishes.'))
 			.toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Load' })).not.toBeInTheDocument();
 		await screen.getByRole('button', { name: 'More model actions' }).click();

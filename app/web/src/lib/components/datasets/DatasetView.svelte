@@ -14,12 +14,11 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
-	import PublicBadge from '#lib/components/PublicBadge.svelte';
+	import DetailPage from '#lib/components/DetailPage.svelte';
 	import VersionPicker from '#lib/components/VersionPicker.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
-	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import {
 		DATASETS_BUCKET,
 		datasetCall,
@@ -30,6 +29,7 @@
 		refScope
 	} from '#lib/datasets.ts';
 	import { objectHref } from '#lib/storage.ts';
+	import type { Crumb } from '#lib/storage.ts';
 	import type { Access, DatasetInfo, S3Config, VersionsPage } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 	import type { BlendStart } from '#lib/forks.ts';
@@ -38,6 +38,7 @@
 	import ForkDialog from './ForkDialog.svelte';
 	import IndependentDialog from './IndependentDialog.svelte';
 	import ColumnsPicker from './ColumnsPicker.svelte';
+	import DatasetProperties from './DatasetProperties.svelte';
 	import DeleteDatasetDialog from './DeleteDatasetDialog.svelte';
 	import RenameDialog from './RenameDialog.svelte';
 	import RowsTab from './RowsTab.svelte';
@@ -48,6 +49,8 @@
 	interface Props {
 		scope: Scope;
 		path: string;
+		/** The header's steps before the name, such as Datasets › pretrain. */
+		trail?: Crumb[];
 		/** The dataset at the version shown; null when Lance couldn't read it (`failed` says why). */
 		info: DatasetInfo | null;
 		failed: string | null;
@@ -70,6 +73,7 @@
 	let {
 		scope,
 		path,
+		trail = [],
 		info,
 		failed,
 		requested,
@@ -183,142 +187,137 @@
 	let unpublish = $state<HTMLFormElement>();
 </script>
 
-<div class="pt-3">
-	<h1 class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" {@attach hint(path)}>
-		{nameOf(path)}
-	</h1>
-	{#if info || isPublic}
-		<!-- The version and visibility, all at the picker's height so the row sits level. -->
-		<div class="mt-3 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-2">
-			{#if info}
-				<VersionPicker
-					version={info.version}
-					{requested}
-					tags={allTags}
-					read={readVersions}
-					{versionHref}
-				/>
-			{/if}
-			{#if isPublic}
-				<PublicBadge
-					what="every version of it"
-					class="h-7 px-2.5 text-[13px] font-normal [&>svg]:size-3.5!"
-				/>
-			{/if}
-			{#if newer !== null}
-				<p class="ml-1 text-[13px] text-muted-foreground" role="status">
-					New version available.
-					<a class="text-link underline-offset-3 hover:underline" href={versionHref(String(newer))}>
-						View version {newer}
-					</a>
-				</p>
-			{/if}
-		</div>
+{#snippet badges()}
+	{#if info}
+		<VersionPicker
+			version={info.version}
+			{requested}
+			tags={allTags}
+			read={readVersions}
+			{versionHref}
+		/>
 	{/if}
-</div>
+	{#if info?.origin?.kind === 'blend'}
+		<span class="text-[12px] text-muted-foreground">blend</span>
+	{/if}
+	{#if isPublic}
+		<span
+			class="flex items-center gap-1 text-[12px] text-muted-foreground"
+			{@attach hint('Anyone with the link can see every version of it')}
+		>
+			<GlobeIcon class="size-3" /> Public
+		</span>
+	{/if}
+	{#if newer !== null}
+		<a
+			class="text-[12px] text-link underline-offset-3 hover:underline max-sm:hidden"
+			href={versionHref(String(newer))}
+			{@attach hint('A newer version was written')}>v{newer} available</a
+		>
+	{/if}
+{/snippet}
 
-<div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
-	<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
-		<Tabs.List aria-label="Dataset">
-			{#each TABS as t (t.value)}
-				<Tabs.Trigger value={t.value}>{t.label}</Tabs.Trigger>
-			{/each}
-		</Tabs.List>
-	</Tabs.Root>
-	<div class="ml-auto flex flex-wrap items-center gap-1">
-		{#if tab === 'rows' && info}
-			<ColumnsPicker names={info.schema.map((f) => f.name)} {hidden} />
-			<span class="mx-1 h-5 w-px bg-border" aria-hidden="true"></span>
-		{/if}
-		{#if access !== 'public'}
-			{#if info}
-				<Button
-					variant="ghost"
-					size="sm"
-					class="text-muted-foreground"
-					onclick={() => (forking = true)}
-				>
-					<GitForkIcon /> Fork
-				</Button>
-			{/if}
-			<Button
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground"
-				disabled={!!held}
-				{@attach hint(held ?? undefined)}
-				onclick={() => (renaming = true)}
-			>
-				<PencilIcon /> Rename
+{#snippet controls()}
+	{#if tab === 'rows' && info}
+		<ColumnsPicker names={info.schema.map((f) => f.name)} {hidden} />
+	{/if}
+	{#if access !== 'public'}
+		{#if info}
+			<Button variant="quiet" size="bar" onclick={() => (forking = true)}>
+				<GitForkIcon /> <span class="max-sm:sr-only">Fork</span>
 			</Button>
-			<!-- Reaching the files, visibility and deletion: less often, so tucked away. -->
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button
-							{...props}
-							variant="ghost"
-							size="icon-sm"
-							class="text-muted-foreground"
-							aria-label="More dataset actions"
-							disabled={unpublishing.pending}
-						>
-							<EllipsisIcon />
-						</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-48">
-					<DropdownMenu.Item onSelect={() => (accessing = true)}>
-						<PlugIcon /> Access in S3
-					</DropdownMenu.Item>
-					<DropdownMenu.Item>
-						{#snippet child({ props })}
-							<a {...props} href={objectHref(scope.org, DATASETS_BUCKET, `${objectKey}/`)}>
-								<FolderOpenIcon /> Browse files
-							</a>
-						{/snippet}
-					</DropdownMenu.Item>
-					{#if access === 'admin' && info && scope.project === null}
-						<DropdownMenu.Separator />
-						{#if isPublic}
-							<DropdownMenu.Item onSelect={() => unpublish?.requestSubmit()}>
-								<LockIcon /> Make private
-							</DropdownMenu.Item>
-						{:else}
-							<DropdownMenu.Item onSelect={() => (publishing = true)}>
-								<GlobeIcon /> Make public…
-							</DropdownMenu.Item>
-						{/if}
-					{/if}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item
-						variant="destructive"
-						disabled={!!held}
-						{@attach hint(held ?? undefined)}
-						onSelect={() => (deleting = true)}
-					>
-						<Trash2Icon /> Delete…
-					</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
 		{/if}
-	</div>
-</div>
+		<Button
+			variant="quiet"
+			size="bar"
+			disabled={!!held}
+			{@attach hint(held ?? undefined)}
+			onclick={() => (renaming = true)}
+		>
+			<PencilIcon /> <span class="max-sm:sr-only">Rename</span>
+		</Button>
+		<!-- Reaching the files, visibility and deletion: less often, so tucked away. -->
+		<DropdownMenu.Root>
+			<DropdownMenu.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="quiet"
+						size="icon-bar"
+						aria-label="More dataset actions"
+						disabled={unpublishing.pending}
+					>
+						<EllipsisIcon />
+					</Button>
+				{/snippet}
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content align="end" class="w-48">
+				<DropdownMenu.Item onSelect={() => (accessing = true)}>
+					<PlugIcon /> Access in S3
+				</DropdownMenu.Item>
+				<DropdownMenu.Item>
+					{#snippet child({ props })}
+						<a {...props} href={objectHref(scope.org, DATASETS_BUCKET, `${objectKey}/`)}>
+							<FolderOpenIcon /> Browse files
+						</a>
+					{/snippet}
+				</DropdownMenu.Item>
+				{#if access === 'admin' && info && scope.project === null}
+					<DropdownMenu.Separator />
+					{#if isPublic}
+						<DropdownMenu.Item onSelect={() => unpublish?.requestSubmit()}>
+							<LockIcon /> Make private
+						</DropdownMenu.Item>
+					{:else}
+						<DropdownMenu.Item onSelect={() => (publishing = true)}>
+							<GlobeIcon /> Make public…
+						</DropdownMenu.Item>
+					{/if}
+				{/if}
+				<DropdownMenu.Separator />
+				<DropdownMenu.Item
+					variant="destructive"
+					disabled={!!held}
+					{@attach hint(held ?? undefined)}
+					onSelect={() => (deleting = true)}
+				>
+					<Trash2Icon /> Delete…
+				</DropdownMenu.Item>
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
+	{/if}
+{/snippet}
 
-<div class={tab === 'rows' ? 'mt-3' : 'mt-6'}>
-	{#if tab === 'about'}
-		<AboutTab
+{#snippet properties()}
+	{#if info}
+		<DatasetProperties
 			{scope}
-			{path}
 			{info}
 			tags={tags.map((t) => t.name)}
 			onblendagain={access !== 'public' && blendStart ? () => (blending = true) : undefined}
-			onindependent={access !== 'public' && info?.origin && !info.origin.independent
+			onindependent={access !== 'public' && info.origin && !info.origin.independent
 				? () => (independent = true)
 				: undefined}
 		/>
+	{/if}
+{/snippet}
+
+<DetailPage
+	title={nameOf(path)}
+	{trail}
+	titleHint={path}
+	{badges}
+	tabs={TABS}
+	{tab}
+	ontab={setTab}
+	tabsLabel="Dataset"
+	{controls}
+	properties={tab === 'about' && info ? properties : undefined}
+>
+	{#if tab === 'about'}
+		<AboutTab {scope} {path} />
 	{:else if failed || !info}
-		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">
+		<p class="text-[13px] text-destructive" role="alert">
 			{failed ?? 'This dataset couldn’t be read.'}
 		</p>
 	{:else if tab === 'rows'}
@@ -338,7 +337,7 @@
 			{now}
 		/>
 	{/if}
-</div>
+</DetailPage>
 
 {#if access !== 'public'}
 	<S3AccessDialog bind:open={accessing} {scope} {path} {objectKey} {s3} />

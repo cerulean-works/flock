@@ -2,9 +2,7 @@
 	import BlendIcon from '@lucide/svelte/icons/blend';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import Page from '#lib/components/Page.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
-	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
 	import { headerTrail } from '#lib/storage.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
@@ -136,23 +134,19 @@
 		{/if}
 	</ListPage>
 {:else}
-	<Page width="home">
-		<div class="pt-5">
-			{#if trail.length}<Breadcrumbs crumbs={trail} />{/if}
-		</div>
-		{#key data.path}
-			<DatasetView
-				{scope}
-				path={data.path}
-				info={data.info}
-				failed={data.failed}
-				requested={data.requested}
-				s3={data.s3}
-				objectKey={data.key}
-				access={shell.access}
-				now={data.now}
-				{projects}
-			/>
-		{/key}
-	</Page>
+	{#key data.path}
+		<DatasetView
+			{scope}
+			path={data.path}
+			trail={shell.access === 'public' ? [] : header.trail}
+			info={data.info}
+			failed={data.failed}
+			requested={data.requested}
+			s3={data.s3}
+			objectKey={data.key}
+			access={shell.access}
+			now={data.now}
+			{projects}
+		/>
+	{/key}
 {/if}

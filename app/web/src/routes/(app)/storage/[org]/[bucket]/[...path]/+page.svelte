@@ -2,7 +2,6 @@
 	import ObjectBrowser from '#lib/components/storage/ObjectBrowser.svelte';
 	import ObjectView from '#lib/components/storage/ObjectView.svelte';
 	import { crumbs as crumbsFor, headerTrail, nameOf } from '#lib/storage.ts';
-	import ListPage from '#lib/components/ListPage.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
@@ -32,7 +31,5 @@
 		crumbs={trail}
 	/>
 {:else}
-	<ListPage title={header.title} trail={header.trail} org={false} class="px-5 pt-4">
-		<ObjectView org={params.org} bucket={params.bucket} object={data.object} />
-	</ListPage>
+	<ObjectView org={params.org} bucket={params.bucket} object={data.object} trail={header.trail} />
 {/if}

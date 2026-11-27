@@ -1,9 +1,7 @@
 <script lang="ts">
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import Page from '#lib/components/Page.svelte';
 	import ListPage from '#lib/components/ListPage.svelte';
-	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
 	import { headerTrail } from '#lib/storage.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
@@ -107,19 +105,14 @@
 		{/key}
 	</ListPage>
 {:else}
-	<!-- A model: its own title, version picker and tabs, at Home's width. -->
-	<Page width="home">
-		{#if trail.length}
-			<div class="pt-5"><Breadcrumbs crumbs={trail} /></div>
-		{/if}
-		{#key data.path}
-			<ModelView
-				{scope}
-				info={data.info}
-				version={data.version}
-				requested={data.requested}
-				now={data.now}
-			/>
-		{/key}
-	</Page>
+	{#key data.path}
+		<ModelView
+			{scope}
+			trail={header.trail}
+			info={data.info}
+			version={data.version}
+			requested={data.requested}
+			now={data.now}
+		/>
+	{/key}
 {/if}

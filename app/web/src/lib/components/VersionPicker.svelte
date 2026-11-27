@@ -19,13 +19,23 @@
 		tags: readonly { name: string; version: number }[];
 		/** The primary version's number, listed first as `primary`. Models have one. */
 		primary?: number | null;
+		/** A word after the version when no tag was asked for: `Primary`. */
+		mark?: string | null;
 		/** Reads the newest versions, each with the names on it (`primary`, `latest`, tags). */
 		read: (signal: AbortSignal) => Promise<{ number: number; names: string[] }[]>;
 		/** The page's URL at another `?version=` (null: the default version). */
 		versionHref: (version: string | null) => ResolvedPathname;
 	}
 
-	let { version, requested, tags, primary = null, read, versionHref }: Props = $props();
+	let {
+		version,
+		requested,
+		tags,
+		primary = null,
+		mark = null,
+		read,
+		versionHref
+	}: Props = $props();
 
 	/** A tag going to the version it's on, or a version by its number. */
 	interface Choice {
@@ -92,13 +102,18 @@
 	}
 </script>
 
-<PickerField bind:open {onOpenChange} class="h-7 w-auto gap-1.5 text-[13px]">
-	<span class="tabular-nums">Version {version}</span>
-	{#if tagged}
-		<span class="ml-1 inline-flex items-center gap-1 text-muted-foreground">
-			<TagIcon class="size-3" />{tagged}
-		</span>
-	{/if}
+<!-- A quiet control in the header's trail, beside the name: "v3 · Primary", "v3 · best". -->
+<PickerField
+	bind:open
+	{onOpenChange}
+	aria-label="Version {version}{(tagged ?? mark) ? `, ${tagged ?? mark}` : ''}"
+	class="h-7 w-auto gap-1 border-transparent bg-transparent px-2 text-[13px] font-normal text-subtle hover:bg-muted hover:text-foreground data-[state=open]:border-transparent data-[state=open]:bg-muted dark:bg-transparent"
+>
+	<span class="tabular-nums"
+		>v{version}{#if tagged ?? mark}<span class="text-muted-foreground"
+				>&nbsp;·&nbsp;{tagged ?? mark}</span
+			>{/if}</span
+	>
 	{#snippet list()}
 		<PickerList
 			options={choices}

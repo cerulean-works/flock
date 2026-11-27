@@ -1,21 +1,18 @@
 <script lang="ts">
-	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import { flatten } from '#lib/data/run.ts';
-	import { readText, runPathHref, sortTags } from '#lib/models.ts';
-	import type { ModelInfo, ModelVersionDetail } from '#lib/types.ts';
-	import { bytes, dateTime, formatValue } from '#lib/utils.ts';
+	import { readText } from '#lib/models.ts';
+	import type { ModelVersionDetail } from '#lib/types.ts';
+	import { formatValue } from '#lib/utils.ts';
 	import Markdown from '../Markdown.svelte';
-	import TagChip from '../TagChip.svelte';
 	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
 		scope: Scope;
-		info: ModelInfo;
 		version: ModelVersionDetail;
 	}
 
-	let { scope, info, version }: Props = $props();
+	let { scope, version }: Props = $props();
 
 	/** A file of the version read from storage: its text, or why it couldn't be read. */
 	type Read = { text: string } | { error: string } | null;
@@ -51,23 +48,6 @@
 			return null;
 		}
 	}
-
-	const runHref = $derived(version.run ? runPathHref(version.run) : null);
-	const facts = $derived(
-		[
-			['Size', bytes(version.total_bytes)],
-			['Files', version.files.length.toLocaleString('en-US')],
-			['Step', version.step === null ? null : version.step.toLocaleString('en-US')],
-			['Pushed', dateTime(version.created_at)],
-			['Pushed by', version.created_by?.name ?? null],
-			// When this version became primary, and by whom.
-			[
-				'Made primary',
-				version.primary && info.primary_set_at !== null ? dateTime(info.primary_set_at) : null
-			],
-			['Made primary by', (version.primary && info.primary_set_by?.name) || null]
-		].filter((f): f is [string, string] => f[1] !== null)
-	);
 </script>
 
 {#snippet table(title: string, read: Read)}
@@ -97,92 +77,19 @@
 	</section>
 {/snippet}
 
-<div class="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-	<div class="min-w-0">
-		{#if !has('README.md')}
-			<p class="mb-8 bg-card px-4 py-6 text-[13px] text-muted-foreground">
-				This version has no README. Add a README.md to the folder you push to describe it.
-			</p>
-		{:else if readme === null}
-			<Skeleton shape="lines" count={6} class="mb-8" />
-		{:else if 'error' in readme}
-			<p class="mb-8 bg-card px-4 py-6 text-[13px] text-destructive" role="alert">
-				{readme.error}
-			</p>
-		{:else}
-			<div class="mb-8"><Markdown text={readme.text} /></div>
-		{/if}
-		{#if has('config.json')}{@render table('config.json', config)}{/if}
-		{#if has('flock.json')}{@render table('flock.json', flockJson)}{/if}
-	</div>
-
-	<aside aria-labelledby="overview-version">
-		<h2 id="overview-version" class="text-[13px] text-muted-foreground">
-			Version {version.number}
-		</h2>
-		<table class="mt-1 w-full border-collapse text-[13px]">
-			<tbody>
-				{#each facts as [label, value] (label)}
-					<tr class="border-b border-divider">
-						<th
-							scope="row"
-							class="py-2 pr-4 text-left font-normal whitespace-nowrap text-muted-foreground"
-						>
-							{label}
-						</th>
-						<td class="py-2 text-right tabular-nums">{value}</td>
-					</tr>
-				{/each}
-				{#if version.run}
-					<tr class="border-b border-divider">
-						<th
-							scope="row"
-							class="py-2 pr-4 text-left font-normal whitespace-nowrap text-muted-foreground"
-							>Run</th
-						>
-						<td class="py-2 text-right break-all">
-							{#if runHref}
-								<a class="text-link underline-offset-3 hover:underline" href={runHref}
-									>{version.run}</a
-								>
-							{:else}
-								{version.run}
-							{/if}
-						</td>
-					</tr>
-				{/if}
-				{#if version.tags.length}
-					<tr class="border-b border-divider">
-						<th
-							scope="row"
-							class="py-2 pr-4 text-left align-top font-normal whitespace-nowrap text-muted-foreground"
-						>
-							{version.tags.length === 1 ? 'Tag' : 'Tags'}
-						</th>
-						<td class="py-2">
-							<ul class="flex flex-wrap justify-end gap-1" aria-label="Tags">
-								{#each sortTags(version.tags) as tag (tag)}
-									<TagChip as="li" {tag} />
-								{/each}
-							</ul>
-						</td>
-					</tr>
-				{/if}
-				<tr class="border-b border-divider">
-					<th
-						scope="row"
-						class="py-2 pr-4 text-left align-top font-normal whitespace-nowrap text-muted-foreground"
-					>
-						Digest
-					</th>
-					<td
-						class="py-2 text-right font-mono text-[12px] break-all"
-						{@attach hint(version.digest)}
-					>
-						{version.digest.slice(0, 12)}
-					</td>
-				</tr>
-			</tbody>
-		</table>
-	</aside>
+<!-- The version's README and config files (its facts are in the page's properties pane). -->
+<div class="max-w-3xl">
+	{#if !has('README.md')}
+		<p class="mb-8 text-[13px] text-muted-foreground">
+			No README. Add a README.md to the folder you push to describe it.
+		</p>
+	{:else if readme === null}
+		<Skeleton shape="lines" count={6} class="mb-8" />
+	{:else if 'error' in readme}
+		<p class="mb-8 text-[13px] text-destructive" role="alert">{readme.error}</p>
+	{:else}
+		<div class="mb-8"><Markdown text={readme.text} /></div>
+	{/if}
+	{#if has('config.json')}{@render table('config.json', config)}{/if}
+	{#if has('flock.json')}{@render table('flock.json', flockJson)}{/if}
 </div>

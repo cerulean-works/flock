@@ -20,10 +20,12 @@
 <Popover.Root>
 	<Popover.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} variant="outline" size="sm">
+			<Button {...props} variant={hidden.size ? 'quiet-on' : 'quiet'} size="bar">
 				<Columns3Icon />
-				Columns
-				{#if hidden.size}<span class="text-muted-foreground">{shown} of {names.length}</span>{/if}
+				<span class="max-sm:sr-only">Columns</span>
+				{#if hidden.size}<span class="text-muted-foreground tabular-nums"
+						>{shown}/{names.length}</span
+					>{/if}
 			</Button>
 		{/snippet}
 	</Popover.Trigger>
