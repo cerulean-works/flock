@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SCROLL_FADE, scrollFade } from '#lib/scroll-fade.ts';
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -207,7 +208,12 @@
 			{rows.total ? 'No rows on this page.' : 'This version has no rows.'}
 		</p>
 	{:else}
-		<div class={['overflow-x-auto', loading && 'opacity-60']} bind:clientWidth={width}>
+		<!-- Its right edge fades while more columns run on past it. -->
+		<div
+			class={['overflow-x-auto', SCROLL_FADE, loading && 'opacity-60']}
+			bind:clientWidth={width}
+			{@attach scrollFade}
+		>
 			<!-- Short columns are pinned to their content (w-px), so the width left over goes to
 			     the columns that wrap, or to a filler when none do. -->
 			<table class="w-full border-collapse text-[13px]" bind:this={table}>
@@ -249,9 +255,10 @@
 							]}
 							onclick={(e) => onrowclick(e, n, row)}
 						>
-							<td class="py-1.5 pr-2 pl-5 text-muted-foreground tabular-nums">
+							<!-- The number's button fills its cell: a target to aim at, and the keyboard's. -->
+							<td class="p-0 text-muted-foreground tabular-nums">
 								<button
-									class="rounded-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+									class="block w-full py-1.5 pr-2 pl-5 text-left outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
 									aria-expanded={open}
 									aria-label="{open ? 'Close' : 'Open'} row {n}"
 									onclick={() => toggle(n, row)}

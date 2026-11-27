@@ -2,7 +2,6 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { refHref } from '#lib/datasets.ts';
 	import { jobText, jobsAt } from '#lib/forks.ts';
 	import type { DatasetJobList } from '#lib/forks.svelte.ts';
 	import type { Scope } from '#lib/scope.ts';
@@ -34,18 +33,12 @@
 </script>
 
 {#if rows.length}
-	<!-- One muted line a job, over the folder's table: no fill, the × on hover (D9). -->
+	<!-- One muted line a job, over the folder's table: no fill, a × to hide it; one that went well is a toast instead. -->
 	<ul class="mb-3 grid gap-0.5" aria-label="Blends">
 		{#each rows as job (job.id)}
 			<li class="group/job flex min-h-7 items-center gap-3 text-[13px] text-muted-foreground">
 				<p class="min-w-0 truncate tabular-nums">
 					{jobText(job)}
-					{#if job.state === 'finished'}
-						<a
-							class="text-link underline-offset-3 hover:underline"
-							href={refHref(scope.org, job.dest)}>Open</a
-						>
-					{/if}
 				</p>
 				{#if job.state === 'running'}
 					<div
@@ -76,7 +69,7 @@
 					<Button
 						variant="quiet"
 						size="icon-bar"
-						class="size-6 opacity-0 group-hover/job:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+						class="size-6"
 						aria-label="Hide"
 						onclick={() => list.hide(job.id)}
 					>

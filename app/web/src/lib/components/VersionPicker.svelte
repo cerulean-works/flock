@@ -136,7 +136,7 @@
 			{onpick}
 		>
 			{#snippet row(c: Choice)}
-				<span class="flex-none tabular-nums">Version {c.version}</span>
+				<span class="flex-none tabular-nums">v{c.version}</span>
 				<span class="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground"
 					>{words(c.names)}</span
 				>

@@ -6,6 +6,8 @@
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { untrack } from 'svelte';
+	import { toast } from 'svelte-sonner';
+	import { bucketCall } from '#lib/storage.ts';
 	import { invalidateAll } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import {
@@ -20,7 +22,7 @@
 	} from '#lib/datasets.ts';
 	import { datasetSnippet } from '#lib/snippets.ts';
 	import type { Selection } from '#lib/selection.svelte.ts';
-	import type { DatasetFolder, DeleteResult, MoveResult } from '#lib/types.ts';
+	import type { DatasetFolder, DeleteResult, MoveResult, Presigned } from '#lib/types.ts';
 	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
 	import EmptyState from '../EmptyState.svelte';
@@ -54,8 +56,8 @@
 	/** The ⋯ menu a rename opened from. */
 	let renameAnchor = $state<HTMLElement | null>(null);
 
-	// The server's first page, then pages loaded here with "Load more". Datasets come first in
-	// each page, then folders, then files (D87).
+	// The server's first page, then pages loaded here with "Load more". Folders come first, then
+	// datasets, then files, as every list has them.
 	let datasets = $derived(folder.datasets);
 	let folders = $derived(folder.folders);
 	let files = $derived(folder.files);
@@ -78,6 +80,12 @@
 		updated?: number | null;
 	}
 	const rows = $derived<Row[]>([
+		...folders.map((f) => ({
+			kind: 'folder' as const,
+			key: f.path,
+			name: f.name,
+			href: datasetsHref(scope, f.path)
+		})),
 		...datasets.map((d) => ({
 			kind: 'dataset' as const,
 			key: d.path,
@@ -87,12 +95,6 @@
 			version: d.version,
 			size: d.size,
 			updated: d.updated_at
-		})),
-		...folders.map((f) => ({
-			kind: 'folder' as const,
-			key: f.path,
-			name: f.name,
-			href: datasetsHref(scope, f.path)
 		})),
 		...files.map((f) => ({
 			kind: 'file' as const,
@@ -104,16 +106,18 @@
 		}))
 	]);
 	const ICONS = { dataset: DatabaseIcon, folder: FolderIcon, file: FileIcon };
-	// Version and size show from small windows up.
-	const COLUMNS: Column[] = [
+	// Version and size show from small windows up. A level of folders alone (the root) has none of
+	// them to show, so it lists names only rather than three empty columns.
+	const ALL_COLUMNS: Column[] = [
 		{ id: 'name', label: 'Name' },
 		{ id: 'version', label: 'Version', from: 'sm', align: 'end' },
 		{ id: 'size', label: 'Size', from: 'sm', align: 'end' },
 		{ id: 'updated', label: 'Updated', align: 'end' }
 	];
+	const COLUMNS = $derived(datasets.length || files.length ? ALL_COLUMNS : ALL_COLUMNS.slice(0, 1));
 
 	// Datasets and folders can be checked; loose files can't (D130).
-	const keys = $derived([...datasets.map((d) => d.path), ...folders.map((f) => f.path)]);
+	const keys = $derived([...folders.map((f) => f.path), ...datasets.map((d) => d.path)]);
 	$effect.pre(() => {
 		if (selection) selection.keys = keys;
 	});
@@ -176,6 +180,18 @@
 			loading = false;
 		}
 	}
+
+	async function download(key: string) {
+		try {
+			const { url } = await bucketCall<Presigned>(scope.org, DATASETS_BUCKET, 'presign', {
+				method: 'get',
+				key
+			});
+			window.location.assign(url!);
+		} catch (e) {
+			toast.error((e as Error).message);
+		}
+	}
 </script>
 
 {#if empty && !path}
@@ -212,8 +228,8 @@
 		{selection}
 		selectable={(row) => row.kind !== 'file'}
 		name={(row) => row.name}
-		menu={selection ? rowMenu : undefined}
-		hasMenu={(row) => row.kind !== 'file'}
+		menu={rowMenu}
+		hasMenu={(row) => row.kind === 'file' || !!selection}
 		empty={nothing}
 		footer={cursor || failed ? pager : undefined}
 	>
@@ -257,7 +273,10 @@
 {#snippet nothing()}This folder is empty.{/snippet}
 
 {#snippet rowMenu(row: Row)}
-	{#if selection && row.kind !== 'file'}
+	{#if row.kind === 'file'}
+		<!-- A loose file isn't the list's to check or move (D130), but downloads as Storage's do. -->
+		<RowMenuItems ondownload={() => download(row.key.slice(2))} />
+	{:else if selection}
 		{@const on = selection.targetsFor(row.key)}
 		{@const sets = on.filter((k) => !folderPaths.has(k))}
 		<RowMenuItems

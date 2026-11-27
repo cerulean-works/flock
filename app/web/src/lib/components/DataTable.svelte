@@ -158,7 +158,8 @@
 			return false;
 		});
 	// A right-click on a row opens its menu where the pointer is (the runs table's way).
-	let menuAt = $state<{ x: number; y: number; row: T } | null>(null);
+	// Raw: the row kept as given, so `menuAt.row === row` finds it (a proxy would not be).
+	let menuAt = $state.raw<{ x: number; y: number; row: T } | null>(null);
 	let menuOpen = $state(false);
 	function oncontextmenu(e: MouseEvent) {
 		if (!menu) return;
@@ -210,7 +211,7 @@
 			>
 				{#if i === 0 && slotted}
 					<span class="relative z-1 flex size-4 flex-none items-center justify-center">
-						{#if selection}<RowCheckbox {selection} />{/if}
+						{#if selection && rows.length}<RowCheckbox {selection} />{/if}
 					</span>
 				{/if}
 				{#if c.quiet}<span class="sr-only">{c.label}</span>{:else if head}{@render head(

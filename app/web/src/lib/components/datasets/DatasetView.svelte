@@ -200,7 +200,8 @@
 		/>
 	{/if}
 	{#if info?.origin?.kind === 'blend'}
-		<span class="translate-y-px text-[12px] text-muted-foreground">blend</span>
+		<!-- The list's look for a dataset's kind: one grey pill wherever it shows. -->
+		<span class="rounded bg-muted px-1.5 text-[11px] text-muted-foreground">blend</span>
 	{/if}
 	{#if isPublic}
 		<span

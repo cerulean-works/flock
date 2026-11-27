@@ -72,6 +72,12 @@
 		return { name, tab, href };
 	}
 
+	/** At a managed bucket's top, `-projects/` (projects' own data, D160) reads as Projects. */
+	function shownName(key: string) {
+		const managed = bucket === DATASETS_BUCKET || bucket === MODELS_BUCKET;
+		return managed && prefix === '' && key === `${PROJECTS}/` ? 'Projects' : nameOf(key);
+	}
+
 	/** flock-models changes only through `flock models push` and the Models tab (D97). */
 	const readOnly = $derived(bucket === MODELS_BUCKET);
 
@@ -143,11 +149,12 @@
 		return count(keys.length, noun);
 	}
 
+	// Set widths, not the content's: going down the tree, the columns stay where they were.
 	const COLUMNS: Column[] = [
-		{ id: 'name', label: 'Name' },
-		{ id: 'type', label: 'Type', from: 'md' },
-		{ id: 'size', label: 'Size', align: 'end', from: 'sm' },
-		{ id: 'modified', label: 'Last modified', align: 'end', from: 'sm' }
+		{ id: 'name', label: 'Name', width: 'minmax(0,1fr)' },
+		{ id: 'type', label: 'Type', from: 'md', width: '7rem' },
+		{ id: 'size', label: 'Size', align: 'end', from: 'sm', width: '6rem' },
+		{ id: 'modified', label: 'Updated', align: 'end', from: 'sm', width: '7rem' }
 	];
 
 	// Uploads, and refreshing the listing once they're done.
@@ -182,7 +189,7 @@
 			bind:ref={folderButton}
 			onclick={() => (creatingFolder = !creatingFolder)}
 		>
-			<FolderPlusIcon /> <span class="max-sm:sr-only">Create folder</span>
+			<FolderPlusIcon /> <span class="max-sm:sr-only">New folder</span>
 		</Button>
 		<Button variant="quiet" size="bar" onclick={() => picker?.click()}>
 			<UploadIcon /> <span class="max-sm:sr-only">Upload</span>
@@ -276,7 +283,7 @@
 							href={objectHref(org, bucket, row.key)}
 							{@attach hint(row.key)}
 						>
-							{nameOf(row.key)}
+							{shownName(row.key)}
 						</a>
 					</span>
 					{#if link}

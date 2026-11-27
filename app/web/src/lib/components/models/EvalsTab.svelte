@@ -56,6 +56,7 @@
 			code="flock eval run --model {ref} --suite base_easy --wandb-project model-evals --out results"
 			lang="bash"
 			label="Copy command"
+			wrap
 		/>
 	</div>
 {:else if failed}

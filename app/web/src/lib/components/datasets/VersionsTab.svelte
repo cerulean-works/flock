@@ -36,7 +36,7 @@
 		{ id: 'version', label: 'Version', size: 'fit' },
 		{ id: 'change', label: 'Change' },
 		{ id: 'tags', label: 'Tags', from: 'sm' },
-		{ id: 'written', label: 'Written', align: 'end' }
+		{ id: 'written', label: 'Updated', align: 'end' }
 	];
 
 	// The history, newest first, 50 a page (D89).

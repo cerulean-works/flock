@@ -1,6 +1,8 @@
 /* eslint-disable svelte/prefer-svelte-reactivity -- the sets here are replaced, never changed in place */
-import { invalidateAll } from '$app/navigation';
-import { datasetCall, datasetsApi } from './datasets.ts';
+import { goto, invalidateAll } from '$app/navigation';
+import { toast } from 'svelte-sonner';
+import { datasetCall, datasetsApi, refHref } from './datasets.ts';
+import { jobText } from './forks.ts';
 import type { DatasetJob } from './types.ts';
 
 /** How often running jobs are asked about, in milliseconds. */
@@ -35,9 +37,12 @@ export class DatasetJobList {
 	get shown(): DatasetJob[] {
 		const now = Date.now() / 1000;
 		return this.jobs.filter(
+			// One that went well says so once, in a toast (below); a row stays for what didn't.
 			(j) =>
 				j.state === 'running' ||
-				(!this.#hidden.has(j.id) && now - (j.finished_at ?? j.started_at) < KEEP)
+				(j.state !== 'finished' &&
+					!this.#hidden.has(j.id) &&
+					now - (j.finished_at ?? j.started_at) < KEEP)
 		);
 	}
 
@@ -63,9 +68,14 @@ export class DatasetJobList {
 		}
 		const before = new Map(this.jobs.map((j) => [j.id, j.state]));
 		this.jobs = found;
-		if (found.some((j) => j.state === 'finished' && before.get(j.id) === 'running')) {
-			await invalidateAll();
+		const done = found.filter((j) => j.state === 'finished' && before.get(j.id) === 'running');
+		for (const job of done) {
+			const href = refHref(this.#org, job.dest);
+			toast.success(jobText(job), {
+				action: { label: 'Open', onClick: () => void goto(href) }
+			});
 		}
+		if (done.length) await invalidateAll();
 		this.#schedule();
 	}
 

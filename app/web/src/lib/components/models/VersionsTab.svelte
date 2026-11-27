@@ -41,7 +41,7 @@
 		{ id: 'tags', label: 'Tags' },
 		{ id: 'run', label: 'Run', from: 'md' },
 		{ id: 'size', label: 'Size', align: 'end', from: 'sm' },
-		{ id: 'pushed', label: 'Pushed', align: 'end' }
+		{ id: 'pushed', label: 'Updated', align: 'end' }
 	];
 	const name = $derived(info.name);
 

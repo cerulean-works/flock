@@ -11,6 +11,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import VersionPicker from '#lib/components/VersionPicker.svelte';
+	import { nameOf } from '#lib/datasets.ts';
 	import { folderHref, modelApi, modelCall, sortTags } from '#lib/models.ts';
 	import type { Crumb } from '#lib/storage.ts';
 	import type { ModelInfo, ModelVersionDetail, ModelVersionsPage } from '#lib/types.ts';
@@ -152,7 +153,7 @@
 {/snippet}
 
 <DetailPage
-	title={info.name}
+	title={nameOf(info.name)}
 	{trail}
 	titleHint={info.model}
 	{badges}

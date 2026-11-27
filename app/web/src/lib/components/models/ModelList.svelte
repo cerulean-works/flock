@@ -23,7 +23,7 @@
 	import MoveModelsDialog from './MoveModelsDialog.svelte';
 	import RenameModelDialog from './RenameModelDialog.svelte';
 
-	// Folders have no versions, size or update time: their count of models goes under Primary.
+	// Folders have no versions or update time: their count of models goes under Size.
 	const COLUMNS: Column[] = [
 		{ id: 'name', label: 'Name' },
 		{ id: 'latest', label: 'Latest', size: 'fit', from: 'sm' },
@@ -55,12 +55,12 @@
 	// moved here taken out until it's read again. Models come first in each page, then folders.
 	let models = $derived(folder.models);
 	let folders = $derived(folder.folders);
-	// One table: the models, then the folders.
+	// One table: the folders, then the models, as every list (Storage's too) has them.
 	type Row =
 		{ kind: 'model'; m: ModelEntry } | { kind: 'folder'; f: ModelFolder['folders'][number] };
 	const rows: Row[] = $derived([
-		...models.map((m) => ({ kind: 'model' as const, m })),
-		...folders.map((f) => ({ kind: 'folder' as const, f }))
+		...folders.map((f) => ({ kind: 'folder' as const, f })),
+		...models.map((m) => ({ kind: 'model' as const, m }))
 	]);
 	let cursor = $derived(folder.cursor);
 	let loading = $state(false);
@@ -193,17 +193,17 @@
 					{r.kind === 'model' ? nameOf(r.m.name) : r.f.name}
 				</a>
 			{:else if r.kind === 'folder'}
-				<!-- A folder has only its count of models, under Primary. -->
-				{#if column === 'primary'}
+				<!-- A folder has only its count of models, under Size: how much is in it. -->
+				{#if column === 'size'}
 					<span class="text-muted-foreground tabular-nums">{count(r.f.models, 'model')}</span>
 				{/if}
 			{:else if column === 'latest'}
 				<span class="text-muted-foreground">
-					{r.m.latest === null ? '' : `Version ${r.m.latest}`}
+					{r.m.latest === null ? '' : `v${r.m.latest}`}
 				</span>
 			{:else if column === 'primary'}
 				<span class="text-muted-foreground">
-					{r.m.primary === null ? '' : `Version ${r.m.primary}`}
+					{r.m.primary === null ? '' : `v${r.m.primary}`}
 				</span>
 			{:else if column === 'size'}
 				<span class="text-muted-foreground">{r.m.size == null ? '' : bytes(r.m.size)}</span>
