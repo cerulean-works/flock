@@ -691,6 +691,28 @@
 	</span>
 {/snippet}
 
+<!-- A number's header: a sort or filter in use keeps its place before the name; the ones that
+     only show on hover, focus or touch sit over the cell's leading edge, so the name, which ends
+     where its values do, neither moves nor loses letters when they appear. -->
+{#snippet numberControls(c: number, col: ColumnDef)}
+	{@const filter = wide ? filterOf(c) : null}
+	{@const sorting = query.sort === col.key}
+	{#if sorting || filter?.active}
+		<span class="flex flex-none items-center">
+			{#if sorting}{@render sortMenu(col.key, labels[c], col)}{/if}
+			{#if filter?.active}<ColumnFilter {...filter} />{/if}
+		</span>
+	{/if}
+	{#if !sorting || (filter && !filter.active)}
+		<span
+			class="absolute inset-y-0 left-0 z-1 flex items-center bg-background pr-1 pl-1.5 transition-colors duration-500 group-hover/h:bg-muted after:pointer-events-none after:absolute after:inset-y-0 after:left-full after:w-3 after:bg-linear-to-r after:from-background after:to-transparent after:opacity-0 group-focus-within/h:after:opacity-100 group-hover/h:after:from-muted group-hover/h:after:opacity-100 pointer-coarse:after:opacity-100"
+		>
+			{#if !sorting}{@render sortMenu(col.key, labels[c], col)}{/if}
+			{#if filter && !filter.active}<ColumnFilter {...filter} />{/if}
+		</span>
+	{/if}
+{/snippet}
+
 <!-- Beside the charts (`visualize`), the table is as wide as `--table-w`, and scrolls across;
      above them (stacked), it spans the page and is as tall as `--table-h`. -->
 <div
@@ -785,7 +807,7 @@
 					<!-- The name, then its sort and filter beside it: after it on text columns, before
 					     it on numbers, whose names end where their values do. -->
 					{#if isNumeric(col)}<span class="flex-1"></span>{/if}
-					{#if isNumeric(col)}{@render controls(c, col)}{/if}
+					{#if isNumeric(col)}{@render numberControls(c, col)}{/if}
 					<a
 						class={['flex h-full min-w-0 items-center gap-1.5', isNumeric(col) && 'pl-1']}
 						href={sortHref(col.key)}
