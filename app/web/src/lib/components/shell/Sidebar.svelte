@@ -18,6 +18,8 @@
 	import { resolve } from '$app/paths';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import * as Popover from '#lib/components/ui/popover/index.js';
+	import PickerList from '#lib/components/PickerList.svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import LogoMark from '#lib/components/LogoMark.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
@@ -155,14 +157,16 @@
 
 	const SHOWN = 12;
 	let showAll = $state(false);
+	// Finding a project: a picker anchored to the search icon, over the list, never pushing it.
 	let searching = $state(false);
 	let query = $state('');
+	let active = $state(0);
 	const matches = $derived(
 		query.trim()
 			? projects.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()))
 			: projects
 	);
-	const shown = $derived(showAll || query.trim() ? matches : matches.slice(0, SHOWN));
+	const shown = $derived(showAll ? projects : projects.slice(0, SHOWN));
 
 	let creating = $state(false);
 
@@ -425,23 +429,54 @@
 				<h2 class="flex-1 text-xs font-medium text-muted-foreground">
 					{outside ? 'Public projects' : 'Projects'}
 				</h2>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					class={[
-						'text-muted-foreground opacity-0 group-focus-within/section:opacity-100 group-hover/section:opacity-100 hover:bg-sidebar-accent',
-						searching && 'bg-sidebar-accent opacity-100'
-					]}
-					aria-label="Find a project"
-					{@attach hint('Find a project')}
-					aria-pressed={searching}
-					onclick={() => {
-						searching = !searching;
+				<Popover.Root
+					bind:open={searching}
+					onOpenChange={(open) => {
+						if (!open) return;
 						query = '';
+						active = 0;
 					}}
 				>
-					<SearchIcon />
-				</Button>
+					<Popover.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								variant="ghost"
+								size="icon-xs"
+								class={[
+									'text-muted-foreground opacity-0 group-focus-within/section:opacity-100 group-hover/section:opacity-100 hover:bg-sidebar-accent',
+									searching && 'bg-sidebar-accent opacity-100'
+								]}
+								aria-label="Find a project"
+								{@attach hint('Find a project')}
+							>
+								<SearchIcon />
+							</Button>
+						{/snippet}
+					</Popover.Trigger>
+					<Popover.Content align="start" class="w-64 gap-0 p-0">
+						<PickerList
+							options={matches}
+							key={(p) => p.name}
+							current={(p) => p.name === project}
+							noun="projects"
+							label="Find a project"
+							placeholder="Find a project…"
+							class="max-h-72"
+							bind:query
+							bind:active
+							onpick={(p) => {
+								searching = false;
+								void goto(projectHref(org!, p.name));
+							}}
+						>
+							{#snippet row(p: (typeof projects)[number])}
+								<FolderIcon class="size-4 flex-none text-muted-foreground" />
+								<span class="min-w-0 flex-1 truncate">{p.name}</span>
+							{/snippet}
+						</PickerList>
+					</Popover.Content>
+				</Popover.Root>
 				{#if !outside}
 					<Button
 						variant="ghost"
@@ -455,22 +490,6 @@
 					</Button>
 				{/if}
 			</div>
-			{#if searching}
-				<!-- svelte-ignore a11y_autofocus -->
-				<input
-					class="mt-1 mb-1 h-7 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-					placeholder="Find a project"
-					aria-label="Find a project"
-					bind:value={query}
-					autofocus
-					onkeydown={(e) => {
-						if (e.key === 'Escape') {
-							searching = false;
-							query = '';
-						}
-					}}
-				/>
-			{/if}
 			<!-- One column no wider than the sidebar, so a long name truncates instead of widening every row. -->
 			<ul class="grid grid-cols-1 gap-px">
 				{#each shown as p (p.name)}
@@ -521,20 +540,16 @@
 					</li>
 				{:else}
 					<li class="px-2 py-1 text-[13px] text-muted-foreground">
-						{query.trim()
-							? 'No matching projects'
-							: outside
-								? 'No public projects'
-								: 'No projects yet'}
+						{outside ? 'No public projects' : 'No projects yet'}
 					</li>
 				{/each}
 			</ul>
-			{#if matches.length > shown.length}
+			{#if projects.length > shown.length}
 				<button
 					class="mt-1 px-2 text-xs text-muted-foreground hover:text-foreground"
 					onclick={() => (showAll = true)}
 				>
-					Show {matches.length - shown.length} more
+					Show {projects.length - shown.length} more
 				</button>
 			{/if}
 			{#if project && !shown.some((p) => p.name === project)}
