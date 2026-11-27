@@ -35,8 +35,6 @@
 		 * The org, and the project on a project's pages, lead the trail by themselves.
 		 */
 		trail?: Crumb[];
-		/** `workspace` only: runs live here; the header's one moving mark says how many. */
-		live?: number;
 		/**
 		 * `workspace` only: lead the trail with the org. Off on Datasets, Models and Storage, whose
 		 * trail starts at the tab (the sidebar's foot already names the org).
@@ -56,7 +54,6 @@
 		crumbs,
 		description,
 		trail = [],
-		live = 0,
 		org: withOrg = true
 	}: Props = $props();
 
@@ -168,36 +165,27 @@
 				>
 					{title}
 				</h1>
+				<!-- In the trail, so their words share its baseline: a control's text sits level
+				     with the crumbs, not centred a pixel high. -->
+				{#if badges}
+					<div class="ml-1 flex flex-none items-baseline gap-2">{@render badges()}</div>
+				{/if}
 			</nav>
-			{#if badges}
-				<div class="flex flex-none items-center gap-2">{@render badges()}</div>
-			{/if}
 			{#if subtitle}
 				<div class="min-w-0 truncate text-[13px] text-muted-foreground max-sm:hidden">
 					{@render subtitle()}
 				</div>
 			{/if}
 			<div class="ml-auto flex flex-none items-center gap-2">
-				{#if live}
-					<!-- The page's one pulse: everything else that's live is a still dot. -->
-					<span
-						class="flex items-center gap-1.5 text-[13px] text-muted-foreground tabular-nums"
-						role="status"
-						{@attach hint(`${live} running`)}
-					>
-						<span
-							class="size-1.5 animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none"
-							aria-hidden="true"
-						></span>
-						<!-- On a phone the number alone, so the title keeps its room. -->
-						<span>{live}<span class="max-sm:sr-only">&nbsp;running</span></span>
-					</span>
-				{/if}
 				{#if actions}{@render actions()}{/if}
 			</div>
 		</div>
 		{#if toolbar}
-			<div class="relative flex h-9 items-center gap-1 border-b border-divider pr-4 pl-3">
+			<!-- Its controls' icons land on the crumbs' 20px edge; underline tabs, which have almost
+			     no padding, are nudged so their words do too. -->
+			<div
+				class="relative flex h-9 items-center gap-1 border-b border-divider pr-4 pl-3 [&>[data-slot=tabs]]:ml-[5px]"
+			>
 				{@render toolbar()}
 			</div>
 		{/if}
