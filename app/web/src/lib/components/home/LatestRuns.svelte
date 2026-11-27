@@ -25,12 +25,17 @@
 	// svelte-ignore state_referenced_locally
 	const pager = new FeedPager(first, query);
 
-	// Narrower windows drop owner, GPUs and runtime, then state.
+	// Who, then which run, then what it is; narrower windows drop group and tags, then the job
+	// type, GPUs and runtime, then the state, then the project. The run's name keeps its width; project, group and tags give way. On a
+	// phone the owner's avatar leads the run's cell.
 	const ALL_COLUMNS: Column[] = [
-		{ id: 'run', label: 'Run' },
-		{ id: 'project', label: 'Project' },
+		{ id: 'owner', label: 'Owner', size: 'fit', from: 'sm' },
+		{ id: 'run', label: 'Run', size: 'fit' },
+		{ id: 'project', label: 'Project', from: 'sm' },
 		{ id: 'state', label: 'State', size: 'fit', from: 'md' },
-		{ id: 'owner', label: 'Owner', from: 'lg' },
+		{ id: 'group', label: 'Group', from: '2xl' },
+		{ id: 'job', label: 'Job type', size: 'fit', from: 'xl' },
+		{ id: 'tags', label: 'Tags', from: '2xl' },
 		{ id: 'gpus', label: 'GPUs', size: 'fit', from: 'lg' },
 		{ id: 'runtime', label: 'Runtime', from: 'lg', align: 'end' },
 		{ id: 'started', label: 'Updated', align: 'end' }
@@ -56,6 +61,13 @@
 		{@const run = item.run!}
 		{#if column === 'run'}
 			<div class="flex min-w-0 items-center gap-2">
+				{#if item.actor && !mine}
+					<Avatar
+						name={item.actor.name}
+						src={item.actor.avatar_url}
+						class="size-4 flex-none text-[8px] sm:hidden"
+					/>
+				{/if}
 				<a
 					class={['truncate hover:text-link', ROW_LINK]}
 					href={runHref(item.org, item.project, run.id)}
@@ -71,13 +83,29 @@
 			<StateBadge state={run.state} />
 		{:else if column === 'owner'}
 			{#if item.actor}
-				<span class="flex min-w-0 items-center gap-2">
-					<Avatar name={item.actor.name} src={item.actor.avatar_url} class="size-4 text-[8px]" />
+				<span class="flex min-w-0 items-center gap-2" {@attach hint(item.actor.name)}>
+					<Avatar
+						name={item.actor.name}
+						src={item.actor.avatar_url}
+						class="size-4 flex-none text-[8px]"
+					/>
 					<span class="truncate">{item.actor.name}</span>
 				</span>
 			{:else}
 				<span class="text-faint">–</span>
 			{/if}
+		{:else if column === 'group'}
+			<span class="block truncate text-muted-foreground" {@attach hint(run.group ?? undefined)}
+				>{run.group ?? ''}</span
+			>
+		{:else if column === 'job'}
+			<span class="block truncate text-muted-foreground">{run.job_type ?? ''}</span>
+		{:else if column === 'tags'}
+			<span
+				class="block truncate text-muted-foreground"
+				{@attach hint(run.tags.length ? run.tags.join(', ') : undefined)}
+				>{run.tags.join(', ')}</span
+			>
 		{:else if column === 'gpus'}
 			<span class="block truncate">{gpus(run.gpu_type, run.gpu_count) ?? '–'}</span>
 		{:else if column === 'runtime'}
