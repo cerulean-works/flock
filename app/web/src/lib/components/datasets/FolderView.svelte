@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { accountHref } from '#lib/settings.ts';
 	import { hint } from '#lib/hint.svelte.ts';
+	import OriginMark from './OriginMark.svelte';
 	import type { Scope } from '#lib/scope.ts';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FileIcon from '@lucide/svelte/icons/file';
@@ -223,8 +224,9 @@
 			<span>
 				Tools that can’t run <code class="font-mono text-[0.9em]">flock</code> can use a long-lived
 				key from your
-				<a class="text-link underline-offset-3 hover:underline" href="{accountHref('keys')}?keys=s3"
-					>account page</a
+				<a
+					class="text-link underline-offset-3 hover:underline"
+					href={accountHref('keys', { keys: 's3' })}>account page</a
 				>.
 			</span>
 		{/snippet}
@@ -257,10 +259,8 @@
 					>
 						{row.name}
 					</a>
-					{#if row.origin}
-						<span class="flex-none rounded bg-muted px-1.5 text-[11px] text-muted-foreground">
-							{row.origin}
-						</span>
+					{#if row.origin === 'blend' || row.origin === 'fork'}
+						<OriginMark origin={row.origin} />
 					{/if}
 				</span>
 			{:else if column === 'version'}

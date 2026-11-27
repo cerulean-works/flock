@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
+	import OriginMark from './OriginMark.svelte';
 	import type { Scope } from '#lib/scope.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
@@ -200,8 +201,8 @@
 		/>
 	{/if}
 	{#if info?.origin?.kind === 'blend'}
-		<!-- The list's look for a dataset's kind: one grey pill wherever it shows. -->
-		<span class="rounded bg-muted px-1.5 text-[11px] text-muted-foreground">blend</span>
+		<!-- The list's mark for a dataset's kind, wherever it shows. -->
+		<OriginMark origin="blend" />
 	{/if}
 	{#if isPublic}
 		<span
