@@ -73,6 +73,8 @@
 	import ColumnResizer from './ColumnResizer.svelte';
 	import RunEye from './RunEye.svelte';
 	import RunMenu from './RunMenu.svelte';
+	import RunMenuItems from './RunMenuItems.svelte';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import StateBadge from './StateBadge.svelte';
 
 	interface Props {
@@ -526,6 +528,19 @@
 		if (charting) ws.hover = null;
 	}
 
+	/** A right-click's row and where it was: the row's menu opens there, at the cursor. */
+	let menuAt = $state<{ x: number; y: number; row: number } | null>(null);
+	let menuOpen = $state(false);
+
+	function oncontextmenu(e: MouseEvent) {
+		if (readonly) return;
+		const r = rowFromEvent(e);
+		if (r == null) return;
+		e.preventDefault();
+		menuAt = { x: e.clientX, y: e.clientY, row: r };
+		menuOpen = true;
+	}
+
 	/** The column last jumped to, marked for a moment so the eye finds it. */
 	let jumped = $state<string | null>(null);
 	let unmark: ReturnType<typeof setTimeout> | undefined;
@@ -757,6 +772,7 @@
 		style:width="{nameW + totalW}px"
 		{onpointerover}
 		{onpointerleave}
+		{oncontextmenu}
 	>
 		{#if wide && primaryCount}
 			<div
@@ -775,7 +791,8 @@
 			{@const shown = !ws.hidden.has(run.id)}
 			{@const pinned = ws.pinned === r}
 			{@const selected = selectable && ws.selected.has(run.id)}
-			{@const focused = (charting && ws.focus === r) || cursor === r}
+			{@const focused =
+				(charting && ws.focus === r) || cursor === r || (menuOpen && menuAt?.row === r)}
 			<div
 				class={[
 					'row group/row absolute inset-x-0 flex h-(--row-h) items-stretch border-b border-divider text-[13px] tabular-nums',
@@ -865,6 +882,21 @@
 		{/each}
 	</div>
 </div>
+
+{#if menuAt}
+	<DropdownMenu.Root bind:open={menuOpen}>
+		<!-- Where the right-click was: the menu opens from that point. -->
+		<DropdownMenu.Trigger
+			class="pointer-events-none fixed size-px opacity-0"
+			style="left: {menuAt.x}px; top: {menuAt.y}px"
+			tabindex={-1}
+			aria-label="Actions for {ws.nameOf(menuAt.row)}"
+		/>
+		<DropdownMenu.Content align="start" sideOffset={2} class="w-48">
+			<RunMenuItems row={menuAt.row} />
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
+{/if}
 
 {#if cutRight}
 	<!-- Over the table's right edge, under its scrollbar: more columns that way. -->

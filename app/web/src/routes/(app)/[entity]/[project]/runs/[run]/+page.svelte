@@ -22,7 +22,7 @@
 	import RunOverview from '#lib/components/run/RunOverview.svelte';
 	import RunResults from '#lib/components/run/RunResults.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
-	import TagRunsDialog from '#lib/components/TagRunsDialog.svelte';
+	import TagsEditor from '#lib/components/TagsEditor.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { projectUrl } from '#lib/data/cache.ts';
@@ -169,9 +169,12 @@
 			<DropdownMenu.Item onSelect={() => ws.openDialog('edit', 0)}>
 				<PencilIcon /> Edit run…
 			</DropdownMenu.Item>
-			<DropdownMenu.Item onSelect={() => ws.openDialog('tag', 0)}>
-				<TagIcon /> Tags…
-			</DropdownMenu.Item>
+			<DropdownMenu.Sub>
+				<DropdownMenu.SubTrigger><TagIcon /> Tags</DropdownMenu.SubTrigger>
+				<DropdownMenu.SubContent class="w-72 p-0" sideOffset={6}>
+					<TagsEditor ids={[ws.page.runs[0].id]} />
+				</DropdownMenu.SubContent>
+			</DropdownMenu.Sub>
 			<DropdownMenu.Item onSelect={() => ws.openDialog('move', 0)}>
 				<FolderInputIcon /> Move to project…
 			</DropdownMenu.Item>
@@ -304,7 +307,6 @@
 	<EditRunDialog
 		gpu={{ type: data.run.gpu_type, count: data.run.gpu_count, detected: data.run.gpu_detected }}
 	/>
-	<TagRunsDialog />
 	<MoveRunsDialog leave={(to) => runHref(data.run.entity, to, data.run.id)} />
 	<DeleteRunsDialog leave={() => projectHref(data.run.entity, data.run.project)} />
 {/if}

@@ -11,14 +11,10 @@
 </script>
 
 <script lang="ts">
-	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
-	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import TagIcon from '@lucide/svelte/icons/tag';
 	import ClipboardCheckIcon from '@lucide/svelte/icons/clipboard-check';
 	import Columns2Icon from '@lucide/svelte/icons/columns-2';
 	import Rows2Icon from '@lucide/svelte/icons/rows-2';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import type { Snippet } from 'svelte';
@@ -29,7 +25,6 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
-	import { compareHref } from '#lib/evals.ts';
 	import { EvalsView } from '#lib/evals-view.svelte.ts';
 	import { hint } from '#lib/hint.svelte.ts';
 	import type { Crumb } from '#lib/storage.ts';
@@ -59,7 +54,6 @@
 	import RunFilters from './RunFilters.svelte';
 	import RunSearch from './RunSearch.svelte';
 	import RunsTable from './RunsTable.svelte';
-	import TagRunsDialog from './TagRunsDialog.svelte';
 
 	/**
 	 * A page of runs with the Runs page's tools: the table, the charts, or both side by side,
@@ -404,7 +398,6 @@
 	const tableShown = $derived(view !== 'charts');
 	const chartsShown = $derived(view !== 'table');
 	/** Runs are picked in the table: the toolbar is their actions'. */
-	const selecting = $derived(tableShown && ws.selectedRows.length > 0 && !readonly);
 	/** Where the charts start: past the names, or past the table beside them. */
 	const below = $derived(view === 'visualize' && stacked);
 	const paneLeft = $derived(below ? 0 : view === 'visualize' ? shownTableW : nameW);
@@ -419,11 +412,7 @@
 >
 	<PageHeader {title} {trail} {subtitleTitle} {leading} {badges} {subtitle} {actions}>
 		{#snippet toolbar()}
-			<Tabs.Root
-				value={view}
-				onValueChange={(v) => setView(v as ProjectView)}
-				class={selecting ? 'max-sm:hidden' : undefined}
-			>
+			<Tabs.Root value={view} onValueChange={(v) => setView(v as ProjectView)}>
 				<!-- No counts, so the toggle keeps its width from page to page. -->
 				<Tabs.List aria-label="View">
 					<Tabs.Trigger value="table" {@attach hint('Table  T')}>Table</Tabs.Trigger>
@@ -455,55 +444,18 @@
 			</Tabs.Root>
 			<span class="flex-1"></span>
 
-			{#if selecting}
-				<span
-					class="selection-count mr-1 text-[13px] font-medium whitespace-nowrap tabular-nums"
-					role="status"
-				>
-					{ws.selectedRows.length} selected
-				</span>
-				<!-- Two eval runs, doc by doc (025 D185): not offered for a run known not to be one. A
-				pair without results files reaches the page, which says why. -->
-				{#if ws.selectedRows.length === 2 && ws.selectedRows.every( (r) => [undefined, 'eval'].includes(ws.cell(r, 'job_type') as string | undefined) )}
-					{@const [a, b] = ws.selectedRows.map((r) => ws.page.runs[r].id)}
-					<Button
-						variant="quiet"
-						size="bar"
-						data-sveltekit-preload-data="tap"
-						href={compareHref(
-							ws.meta.entity,
-							ws.meta.project,
-							a,
-							`${ws.meta.entity}/${ws.meta.project}/${b}`
-						)}
-					>
-						<GitCompareArrowsIcon /> <span class="max-sm:sr-only">Compare items</span>
-					</Button>
-				{/if}
-				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('tag')}
-					><TagIcon /> <span class="max-sm:sr-only">Tags</span></Button
-				>
-				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('move')}>
-					<FolderInputIcon /> <span class="max-sm:sr-only">Move</span>
-				</Button>
+			<!-- Before the icons: its words change width (Show / Hide), so the icons stay put. -->
+			{#if evalsShown && evalsView.others}
 				<Button
 					variant="quiet"
 					size="bar"
-					class="hover:text-destructive"
-					onclick={() => ws.openDialog('delete')}
+					onclick={() => (evalsView.showOther = !evalsView.showOther)}
 				>
-					<Trash2Icon /> <span class="max-sm:sr-only">Delete</span>
+					{evalsView.showOther ? 'Hide' : 'Show'}
+					{evalsView.others} on other settings
 				</Button>
-				<Button
-					variant="quiet"
-					size="icon-bar"
-					{@attach hint('Clear selection  Esc')}
-					aria-label="Clear selection"
-					onclick={() => ws.selected.clear()}
-				>
-					<XIcon />
-				</Button>
-			{:else if ws.page.total > 0 || narrowed}
+			{/if}
+			{#if ws.page.total > 0 || narrowed}
 				<!-- On a phone the controls fold behind one button and open as a row under the bar. -->
 				<Button
 					variant={more ? 'quiet-on' : 'quiet'}
@@ -565,24 +517,13 @@
 					{/if}
 				</div>
 			{/if}
-			<!-- Outside the selection's actions too: the second run to compare may be one of these. -->
-			{#if evalsShown && evalsView.others}
-				<Button
-					variant="quiet"
-					size="bar"
-					onclick={() => (evalsView.showOther = !evalsView.showOther)}
-				>
-					{evalsView.showOther ? 'Hide' : 'Show'}
-					{evalsView.others} on other settings
-				</Button>
-			{/if}
 			{@render trailing?.()}
-			{#if chartsShown && chartTools && !selecting}
+			{#if chartsShown && chartTools}
 				{@render chartTools()}
 			{/if}
 		{/snippet}
 	</PageHeader>
-	{#if ws.page.query.filters.length && !selecting}
+	{#if ws.page.query.filters.length}
 		<!-- The filters in effect, one chip each: a click edits them, the cross drops one. -->
 		<div
 			class="flex min-h-9 flex-none flex-wrap items-center gap-1.5 border-b border-divider py-1 pr-4 pl-5"
@@ -712,7 +653,6 @@
 <PanelEditor />
 {#if !readonly}
 	<EditRunDialog />
-	<TagRunsDialog />
 	<MoveRunsDialog />
 	<DeleteRunsDialog />
 {/if}

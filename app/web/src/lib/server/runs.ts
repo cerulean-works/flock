@@ -46,7 +46,6 @@ export const runActions = {
 				group: formText(form, 'group') || null,
 				job_type: formText(form, 'job_type') || null,
 				notes: formText(form, 'notes') || null,
-				tags: parseTags(formText(form, 'tags')),
 				...gpu
 			}
 		);
