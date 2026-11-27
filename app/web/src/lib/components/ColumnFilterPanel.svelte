@@ -175,7 +175,8 @@
 		</Button>
 	</div>
 {:else if kind === 'range'}
-	<div class="grid grid-cols-2 gap-2 px-3 pb-3">
+	<!-- Dates stack: a date and time field needs the panel's width, or its picker icon covers it. -->
+	<div class={['grid gap-2 px-3 pb-3', !date && 'grid-cols-2']}>
 		{#each ['min', 'max'] as const as k, i (k)}
 			<label class="grid gap-1 text-xs text-muted-foreground">
 				{k === 'min' ? (date ? 'From' : 'At least') : date ? 'To' : 'At most'}
