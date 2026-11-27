@@ -5,6 +5,7 @@
 	import { hint } from '#lib/hint.svelte.ts';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import BudgetPanel from '#lib/components/home/BudgetPanel.svelte';
 	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
 	import LatestRuns from '#lib/components/home/LatestRuns.svelte';
 	import PublicOrg from '#lib/components/home/PublicOrg.svelte';
@@ -23,7 +24,7 @@
 	$effect(() => pollFeed());
 
 	// Nothing logged yet: how to log the first run, instead of an empty table.
-	const fresh = $derived(!data.mine && !data.project && !data.feed?.items.length);
+	const fresh = $derived(!data.mine && !data.project && !data.state && !data.feed?.items.length);
 
 	let creating = $state(false);
 </script>
@@ -33,6 +34,15 @@
 </svelte:head>
 
 {#snippet actions()}
+	<!-- The org's month: one line here, its breakdown on request (on a phone, above the list). -->
+	{#if data.budget}
+		<BudgetPanel
+			budget={data.budget}
+			thisMonth={data.thisMonth}
+			admin={data.shell.access === 'admin'}
+			class="max-sm:hidden"
+		/>
+	{/if}
 	<Button
 		variant="quiet"
 		size="icon-bar"
@@ -55,7 +65,11 @@
 
 <!-- The feed's own controls, under the title once there are runs to show. -->
 {#snippet feedControls()}
-	<FeedFilters projects={data.shell.projects.map((p) => p.name)} project={data.project} />
+	<FeedFilters
+		projects={data.shell.projects.map((p) => p.name)}
+		project={data.project}
+		state={data.state}
+	/>
 	<Button
 		variant={data.mine ? 'quiet-on' : 'quiet'}
 		size="bar"
@@ -64,7 +78,7 @@
 		data-sveltekit-replacestate
 		{@attach hint(data.mine ? 'Show everyone’s runs' : 'Show only the runs you logged')}
 	>
-		<UserIcon /> My runs
+		<UserIcon /> <span class="max-sm:sr-only">My runs</span>
 	</Button>
 {/snippet}
 
@@ -114,17 +128,27 @@
 		</EmptyState>
 	{:else}
 		{@const feed = data.feed}
+		{#if data.budget}
+			<BudgetPanel
+				budget={data.budget}
+				thisMonth={data.thisMonth}
+				admin={data.shell.access === 'admin'}
+				class="mx-3 mt-2 sm:hidden"
+			/>
+		{/if}
 		{#key JSON.stringify(data.query)}
 			<LatestRuns
 				first={() => feed}
 				query={data.query}
 				now={data.now}
 				mine={data.mine}
-				empty={data.project
-					? `No runs in ${data.project}${data.mine ? ' by you' : ''} yet.`
-					: data.mine
-						? 'You haven’t logged any runs here yet.'
-						: 'No runs yet.'}
+				empty={data.state
+					? `No ${data.state === 'failed' ? 'failed' : 'finished'} runs${data.project ? ` in ${data.project}` : ''}${data.mine ? ' by you' : ''}.`
+					: data.project
+						? `No runs in ${data.project}${data.mine ? ' by you' : ''} yet.`
+						: data.mine
+							? 'You haven’t logged any runs here yet.'
+							: 'No runs yet.'}
 			/>
 		{/key}
 	{/if}

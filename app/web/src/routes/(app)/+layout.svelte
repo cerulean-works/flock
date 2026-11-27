@@ -5,7 +5,6 @@
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
-	import HouseIcon from '@lucide/svelte/icons/house';
 	import LayersIcon from '@lucide/svelte/icons/layers';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import MenuIcon from '@lucide/svelte/icons/menu';
@@ -133,21 +132,6 @@
 					<PanelLeftOpenIcon />
 				</Button>
 			</div>
-			{#if signedIn}
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					class={[
-						'mt-1 text-muted-foreground',
-						page.route.id === '/(app)' && 'bg-sidebar-accent text-foreground'
-					]}
-					href={resolve('/(app)')}
-					aria-label="Home"
-					{@attach hint('Home  G then H')}
-				>
-					<HouseIcon />
-				</Button>
-			{/if}
 			{#if outside && data.shell.org}
 				<a
 					class="mt-3 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"

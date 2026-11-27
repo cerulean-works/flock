@@ -5,7 +5,6 @@
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
-	import HouseIcon from '@lucide/svelte/icons/house';
 	import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SearchIcon from '@lucide/svelte/icons/search';
@@ -381,16 +380,6 @@
 						class="mx-1 size-4 rounded-[4px] text-[9px]"
 					/>
 					<span class="min-w-0 flex-1 truncate">{orgName ?? org}</span>
-				</a>
-			{/if}
-			{#if signedIn}
-				<a
-					class={ITEM}
-					href={resolve('/(app)')}
-					aria-current={route === '/(app)' ? 'page' : undefined}
-					{@attach hint('Go to Home  G then H')}
-				>
-					<HouseIcon /> Home
 				</a>
 			{/if}
 			{#if org && !outside}

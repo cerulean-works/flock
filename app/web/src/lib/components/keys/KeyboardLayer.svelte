@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { datasetsHref } from '#lib/datasets.ts';
 	import { layerOpen, typing } from '#lib/keys.svelte.ts';
@@ -23,7 +22,6 @@
 	);
 
 	function destination(key: string): string | null {
-		if (key === 'h') return resolve('/(app)');
 		if (!org) return null;
 		if (key === 'r') return entityHref(org);
 		if (key === 's') return orgHref(org);

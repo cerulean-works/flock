@@ -30,7 +30,7 @@
 	}
 
 	const sections = $derived.by((): [string, Entry[]][] => {
-		const go: Entry[] = [{ label: 'Home', href: resolve('/(app)'), hint: 'G H' }];
+		const go: Entry[] = [];
 		if (org) {
 			go.push({ label: 'Runs', href: entityHref(org), hint: 'G R' });
 			if (shell?.s3) {

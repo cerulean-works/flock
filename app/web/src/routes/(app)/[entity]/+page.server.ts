@@ -1,14 +1,16 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { change, projectPath, refused, flock } from '#lib/server/flock.ts';
-import { FEED } from '#lib/data/feed.svelte.ts';
-import type { FeedPage, OrgInfo, ProjectInfo } from '#lib/types.ts';
-import { formText, projectNameError } from '#lib/utils.ts';
+import { FEED, runStateKinds } from '#lib/data/feed.svelte.ts';
+import type { Budget, FeedPage, OrgInfo, ProjectInfo } from '#lib/types.ts';
+import { formText, monthOf, projectNameError } from '#lib/utils.ts';
 import { entityHref, projectHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
- * An organization's latest runs, newest first: the feed's `run_started` items. `?runs=mine`
- * keeps them to the user's own, `?project=` to one project.
+ * An organization's runs, newest first: the feed's `run_started` items, one row a run. The way
+ * in (Home was folded in here), so its budget comes too. `?runs=mine` keeps them to the user's
+ * own, `?project=` to one project, `?state=finished|failed` to the runs that ended so;
+ * `?month=YYYY-MM` shows an earlier month's budget.
  *
  * Outside the org (signed out, or not one of its members), its public projects instead (D114):
  * the sidebar's, which lists only public ones to outsiders.
@@ -24,6 +26,9 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 		query: {},
 		mine: false,
 		project: null,
+		state: null,
+		budget: null,
+		thisMonth: monthOf(now),
 		now
 	});
 	// Signed out there's no feed to read: the org is someone else's. (A 404, an org with
@@ -32,9 +37,10 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 
 	const mine = url.searchParams.get('runs') === 'mine';
 	const project = url.searchParams.get('project') || null;
+	const state = runStateKinds(url.searchParams.get('state'));
 	const query: Record<string, string> = {
 		org: params.entity,
-		kinds: 'run_started',
+		kinds: state?.kinds ?? 'run_started',
 		limit: '50',
 		...(mine && { owner: 'me' }),
 		...(project && { project })
@@ -46,11 +52,27 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 		(r) => r.json() as Promise<FeedPage>
 	);
 	feeding.catch(() => {});
+	const month = url.searchParams.get('month');
+	const budgeting = flock(
+		`${orgPath}/budget${month && /^\d{4}-\d{2}$/.test(month) ? `?month=${month}` : ''}`
+	).then((r) => r.json() as Promise<Budget>);
+	budgeting.catch(() => {});
 	const org = await flock(orgPath).then((r) => r.json() as Promise<OrgInfo>);
 	if (!org.role) return outside(org);
-	const feed = await feeding;
+	const [feed, budget] = await Promise.all([feeding, budgeting]);
 	// Relative times are computed against this, so SSR and hydration print the same text.
-	return { org, outside: false as const, feed, query, mine, project, now };
+	return {
+		org,
+		outside: false as const,
+		feed,
+		query,
+		mine,
+		project,
+		state: state?.value ?? null,
+		budget,
+		thisMonth: monthOf(now),
+		now
+	};
 };
 
 /**

@@ -2,18 +2,18 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import * as Select from '#lib/components/ui/select/index.js';
-	import { FEED_KINDS } from '#lib/data/feed.svelte.ts';
+	import { RUN_STATES } from '#lib/data/feed.svelte.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 
 	interface Props {
 		/** The org's projects, to keep the feed to one of them. */
 		projects: readonly string[];
 		project: string | null;
-		/** The kinds shown (`?kinds=`); leave out for a feed without that choice. */
-		kinds?: string | null;
+		/** The runs' state shown (`?state=`); leave out for a list without that choice. */
+		state?: string | null;
 	}
 
-	let { projects, project, kinds }: Props = $props();
+	let { projects, project, state }: Props = $props();
 
 	// Quiet view-bar controls: borderless until hovered, muted until set.
 	const QUIET =
@@ -31,15 +31,15 @@
 </script>
 
 <div class="flex items-center gap-1">
-	{#if kinds !== undefined}
-		<Select.Root type="single" value={kinds ?? ALL} onValueChange={(v) => set('kinds', v)}>
-			<Select.Trigger class={QUIET} aria-label="Kind of activity">
-				{FEED_KINDS.find(([k]) => k === kinds)?.[1] ?? 'All activity'}
+	{#if state !== undefined}
+		<Select.Root type="single" value={state ?? ALL} onValueChange={(v) => set('state', v)}>
+			<Select.Trigger class={QUIET} aria-label="State">
+				{RUN_STATES.find((s) => s.value === state)?.label ?? 'All states'}
 			</Select.Trigger>
 			<Select.Content side="bottom" align="start">
-				<Select.Item value={ALL} label="All activity">All activity</Select.Item>
-				{#each FEED_KINDS as [value, label] (value)}
-					<Select.Item {value} {label}>{label}</Select.Item>
+				<Select.Item value={ALL} label="All states">All states</Select.Item>
+				{#each RUN_STATES as s (s.value)}
+					<Select.Item value={s.value} label={s.label}>{s.label}</Select.Item>
 				{/each}
 			</Select.Content>
 		</Select.Root>

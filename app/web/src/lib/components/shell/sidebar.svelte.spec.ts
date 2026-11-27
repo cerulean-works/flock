@@ -59,7 +59,7 @@ describe('the sidebar from outside the org', () => {
 		await expect.element(link('Sign in')).toBeVisible();
 		expect(link('Sign in').element().getAttribute('href')).toBe('/login?next=%2Facme');
 		// None of the members' pages, nothing to change, and nobody's account.
-		for (const name of ['Home', 'Runs', 'Datasets', 'Models', 'Storage'])
+		for (const name of ['Runs', 'Datasets', 'Models', 'Storage'])
 			await expect.element(link(name)).not.toBeInTheDocument();
 		await expect
 			.element(screen.getByRole('button', { name: 'New project' }))
@@ -83,8 +83,8 @@ describe('the sidebar from outside the org', () => {
 		});
 		await expect.element(link('Acme')).toBeVisible();
 		await expect.element(link('bert')).toBeVisible();
-		await expect.element(link('Home')).toBeVisible();
-		for (const name of ['Runs', 'Datasets', 'Models', 'Storage', 'Sign in'])
+		// Home was folded into Runs: the visitor's way back is the wordmark.
+		for (const name of ['Home', 'Runs', 'Datasets', 'Models', 'Storage', 'Sign in'])
 			await expect.element(link(name)).not.toBeInTheDocument();
 		// The switcher names their own orgs, not the one visited.
 		const menu = screen.getByRole('button', { name: 'No organization, signed in as Ada' });
@@ -107,7 +107,7 @@ describe('the sidebar for members', () => {
 			access: 'member',
 			signedIn: true
 		});
-		for (const name of ['Home', 'Runs', 'Datasets', 'Models', 'Storage'])
+		for (const name of ['Runs', 'Datasets', 'Models', 'Storage'])
 			await expect.element(link(name)).toBeVisible();
 		await expect.element(screen.getByRole('heading', { name: 'Projects' })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'New project' })).toBeVisible();
@@ -143,7 +143,6 @@ describe('the sidebar on a project’s pages (D169)', () => {
 		// The org's pages stay where they were: the sidebar doesn't change shape.
 		await expect.element(link('Storage')).toBeVisible();
 		expect(link('Storage').element().closest('[inert]')).toBeNull();
-		await expect.element(link('Home')).toBeVisible();
 	});
 
 	it('marks Runs on a run’s page, and shows outsiders only the runs', async () => {
