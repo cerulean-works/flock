@@ -78,6 +78,7 @@
 	import RunEye from './RunEye.svelte';
 	import RunMenu from './RunMenu.svelte';
 	import RunMenuItems from './RunMenuItems.svelte';
+	import NewGroupForm from './groups/NewGroupForm.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import StateBadge from './StateBadge.svelte';
 
@@ -981,6 +982,9 @@
 		{/each}
 	</div>
 </div>
+
+<!-- New group… from a row's menu opens this, which outlives the menu. -->
+{#if !readonly}<NewGroupForm {ws} />{/if}
 
 {#if menuAt}
 	<DropdownMenu.Root bind:open={menuOpen}>

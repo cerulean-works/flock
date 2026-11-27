@@ -8,10 +8,17 @@ import { columnDef } from '#lib/data/snapshot.ts';
 import { page, refreshAll, resetApp } from '#lib/testing/app.svelte.ts';
 import type { ProjectInfo, RunDetail } from '#lib/types.ts';
 import Page from './+page.svelte';
+import { toast } from 'svelte-sonner';
 
 vi.mock('$app/forms', () => import('#lib/testing/app.svelte.ts'));
 vi.mock('$app/navigation', () => import('#lib/testing/app.svelte.ts'));
 vi.mock('$app/state', () => import('#lib/testing/app.svelte.ts'));
+vi.mock('svelte-sonner', async (original) => {
+	const real = await original<typeof import('svelte-sonner')>();
+	// The real toasts, with success and error watched.
+	const toast = Object.assign(vi.fn(), real.toast, { success: vi.fn(), error: vi.fn() });
+	return { ...real, toast };
+});
 
 /** The page's live stream, which only sends what a spec tells it to. */
 class FakeSource {
@@ -284,5 +291,59 @@ describe('the Evals preset', () => {
 		await expect
 			.element(screen.getByRole('checkbox', { name: 'Select olmo' }))
 			.not.toBeInTheDocument();
+	});
+});
+
+describe('a run’s menu', () => {
+	it('makes a group of the runs it acts on, named in place, and stays on the page', async () => {
+		const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			void input;
+			const body = JSON.parse(String(init?.body ?? '{}'));
+			return new Response(JSON.stringify({ id: 7, name: body.name }), { status: 201 });
+		});
+		vi.stubGlobal('fetch', fetch);
+		const { meta, page: runs } = runWorkspace(
+			RUN,
+			{ x: '_step', series: {} },
+			{ x: '_runtime', series: {} },
+			1_790_000_200
+		);
+		const data = {
+			meta,
+			runs,
+			project: project('private'),
+			people: [],
+			groups: { groups: [], ungrouped_count: 1 },
+			shell: { access: 'member', me: null, orgName: 'Acme', nameW: 280, projectView: 'table' }
+		};
+		resetApp('http://flock.test/acme/bert', data);
+		page.params = { entity: 'acme', project: 'bert' };
+		// @ts-expect-error -- a page's props: only what the workspace reads
+		render(Page, { data });
+
+		await screen.getByText('warm-sun-1').first().click({ button: 'right' });
+		await screen.getByRole('menuitem', { name: 'Add to group' }).click();
+		await screen.getByRole('menuitem', { name: 'New group…' }).click();
+		const field = screen.getByRole('textbox', { name: 'Group name' });
+		await expect.element(field).toHaveFocus();
+		await field.fill('warmup');
+		await screen.getByRole('button', { name: 'Create · 1 run' }).click();
+
+		await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+		const [url, init] = fetch.mock.calls[0];
+		expect(String(url)).toMatch(/\/acme\/bert\/groups$/);
+		expect(init?.method).toBe('POST');
+		expect(JSON.parse(String(init?.body))).toEqual({
+			name: 'warmup',
+			filter: {},
+			runs: ['abc123']
+		});
+		await vi.waitFor(() =>
+			expect(toast.success).toHaveBeenCalledWith(
+				'Created warmup · 1 run',
+				expect.objectContaining({ action: expect.objectContaining({ label: 'Open' }) })
+			)
+		);
+		await expect.element(field).not.toBeInTheDocument();
 	});
 });

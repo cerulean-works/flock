@@ -1,6 +1,7 @@
 import type { Component } from 'svelte';
 import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
+import LayersIcon from '@lucide/svelte/icons/layers';
 import PencilIcon from '@lucide/svelte/icons/pencil';
 import TagIcon from '@lucide/svelte/icons/tag';
 import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -31,7 +32,7 @@ export function menuRows(ws: Workspace, row: number): number[] {
 /**
  * What can be done to `rows` (page rows), in one order everywhere: Compare when they are two
  * eval runs (025 D185: not offered for a run known not to be one), Edit for one run, then
- * Tags, Move and Delete. `selection`: the rows are the selection, which the dialogs read.
+ * Tags, Add to group, Move and Delete. `selection`: the rows are the selection, which the dialogs read.
  */
 export function runActions(
 	ws: Workspace,
@@ -63,6 +64,8 @@ export function runActions(
 	out.push(
 		// Tags edit in a submenu beside the menu (TagsEditor), not a dialog.
 		{ key: 'tag', label: 'Tags', icon: TagIcon },
+		// The project's groups in a submenu, with New group… at its foot (RunMenuItems).
+		{ key: 'group', label: 'Add to group', icon: LayersIcon },
 		{ key: 'move', label: 'Move to project…', icon: FolderInputIcon, run: open('move') },
 		{
 			key: 'delete',
