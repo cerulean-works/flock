@@ -3,12 +3,14 @@
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import CopyButton from '#lib/components/CopyButton.svelte';
+	import DataTable, { type Column } from '#lib/components/DataTable.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import InfoHint from '#lib/components/InfoHint.svelte';
 	import EvalItems from '#lib/components/run/EvalItems.svelte';
 	import { RESULT_SCHEMAS, formatScore } from '#lib/evals.ts';
 	import { versionHref } from '#lib/models.ts';
 	import type { EvalResults, ItemsView, RunDetail, RunModels } from '#lib/types.ts';
+	import { dateTime, relativeTime } from '#lib/utils.ts';
 
 	/**
 	 * An eval run's results file (025 D184): suites, tasks and what produced them. `models` names
@@ -69,42 +71,105 @@
 	const scored = $derived(models?.scored?.[0] ?? null);
 	// A column that's all zeros says nothing: shown only when a task lost tokens.
 	const truncated = $derived(results.tasks.some((t) => t.truncation.docs > 0));
+
+	// When it was scored: relative, the date and time in the hint.
+	const scoredAt = $derived(Date.parse(p.created_at) / 1000);
+
+	const SUITE_COLUMNS: Column[] = [
+		{ id: 'name', label: 'Suite' },
+		{ id: 'score', label: 'Score', align: 'end' },
+		{ id: 'metric', label: 'Metric', size: 'fit' },
+		{ id: 'members', label: 'Members', align: 'end' }
+	];
+	const taskColumns = $derived<Column[]>([
+		{ id: 'name', label: 'Task' },
+		{ id: 'score', label: 'Score', align: 'end' },
+		{ id: 'metric', label: 'Primary metric', size: 'fit' },
+		{ id: 'docs', label: 'Docs', align: 'end' },
+		{ id: 'dataset', label: 'Dataset', from: 'md' },
+		...(truncated ? [{ id: 'cut', label: 'Docs cut', align: 'end' as const }] : [])
+	]);
+	type Suite = EvalResults['suites'][number];
+	type Task = EvalResults['tasks'][number];
 </script>
 
-{#snippet hash(value: string)}
-	<span class="inline-flex items-center gap-1">
-		<span class="font-mono text-[12px] text-muted-foreground" {@attach hint(value)}
-			>{value.slice(0, 12)}</span
-		>
-		<CopyButton text={value} label="Copy hash" class="size-6" />
+<!-- A suite's or task's name; its hash in the hint, a copy away on hover. -->
+{#snippet name(text: string, hash: string)}
+	<span class="flex min-w-0 items-center gap-1">
+		<span class="truncate" {@attach hint(`${text}\nHash ${hash.slice(0, 12)}`)}>{text}</span>
+		<CopyButton
+			text={hash}
+			label="Copy the hash"
+			class="relative z-1 -my-1 size-6 flex-none opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 [&_svg]:size-3.5"
+		/>
 	</span>
 {/snippet}
 
-<!--
-	Both tables share the first five columns' widths, so a suite's score sits above its tasks'
-	scores; the rest of the width goes to the tasks' datasets.
--->
-{#snippet columns()}
-	<colgroup>
-		<col class="w-[15rem]" />
-		<col class="w-[5.5rem]" />
-		<col class="w-[8rem]" />
-		<col class="w-[5rem]" />
-		<col class="w-[8.5rem]" />
-		<col />
-		{#if truncated}<col class="w-[6rem]" />{/if}
-	</colgroup>
+{#snippet suiteCell(s: Suite, col: string)}
+	{#if col === 'name'}
+		{@render name(s.suite, s.suite_hash)}
+	{:else if col === 'score'}
+		<span
+			class={s.score == null ? 'text-faint' : undefined}
+			{@attach hint(
+				s.score == null
+					? 'No score: it groups other suites, or its mean isn’t finite'
+					: String(s.score)
+			)}>{formatScore(s.score, s.metric)}</span
+		>
+	{:else if col === 'metric'}
+		<span
+			class="text-muted-foreground"
+			{@attach hint(s.metric ?? 'Each member task’s primary metric')}>{s.metric ?? 'primary'}</span
+		>
+	{:else}
+		<span {@attach hint(s.members.join(', '))}>{s.members.length}</span>
+	{/if}
 {/snippet}
 
-<div class="absolute inset-0 overflow-y-auto">
+{#snippet taskCell(t: Task, col: string)}
+	{@const value = t.metrics[t.primary_metric]}
+	{#if col === 'name'}
+		{@render name(t.task, t.task_hash)}
+	{:else if col === 'score'}
+		<span
+			class={value == null ? 'text-faint' : undefined}
+			{@attach hint(value == null ? 'Not a finite number' : String(value))}
+			>{formatScore(value, t.primary_metric)}</span
+		>
+	{:else if col === 'metric'}
+		<span class="text-muted-foreground">{t.primary_metric}</span>
+	{:else if col === 'docs'}
+		{t.num_docs}{t.limit != null ? ` (limit ${t.limit})` : ''}
+	{:else if col === 'dataset'}
+		<span
+			class="block truncate text-muted-foreground"
+			{@attach hint(
+				`${t.dataset.repo}@${t.dataset.revision} ${t.dataset.subset ?? ''} ${t.dataset.split}`
+			)}
+		>
+			{#if t.dataset.private}
+				<LockIcon class="mr-1 inline size-3.5" aria-label="Private dataset" />
+			{/if}
+			{t.dataset.repo}{t.dataset.subset ? ` · ${t.dataset.subset}` : ''}
+		</span>
+	{:else}
+		<span
+			class={!t.truncation.docs ? 'text-faint' : undefined}
+			{@attach hint('Docs whose context lost tokens to fit the model')}>{t.truncation.docs}</span
+		>
+	{/if}
+{/snippet}
+
+<div class="@container absolute inset-0 overflow-y-auto">
 	{#if !RESULT_SCHEMAS.includes(results.schema_version)}
 		<EmptyState>
 			This run’s results file has schema {results.schema_version}; the dashboard reads schemas
 			{RESULT_SCHEMAS.join(', ')}.
 		</EmptyState>
 	{:else}
-		<div class="grid grid-cols-[minmax(0,1fr)] gap-8 px-5 pt-5 pb-16 text-[13px]">
-			<p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+		<div class="grid grid-cols-[minmax(0,1fr)] pb-16 text-[13px]">
+			<p class="flex flex-wrap items-center gap-x-2 gap-y-1 px-5 pt-5 text-muted-foreground">
 				Scored
 				{#if scored}
 					<a
@@ -121,7 +186,7 @@
 							: scored.name}@{scored.number}
 					</a>
 				{:else}
-					<span class="font-mono text-[12.5px] text-foreground">{p.model}</span>
+					<span class="min-w-0 break-all text-foreground">{p.model}</span>
 				{/if}
 				{#if p.model_digest}
 					<span aria-hidden="true">·</span>
@@ -129,144 +194,44 @@
 						>{p.model_digest.slice(0, 12)}</span
 					>
 				{/if}
-				<span aria-hidden="true">·</span>
-				<span>{p.created_at}</span>
+				{#if Number.isFinite(scoredAt)}
+					<span aria-hidden="true">·</span>
+					<span {@attach hint(dateTime(scoredAt))}>{relativeTime(scoredAt, Date.now() / 1000)}</span
+					>
+				{/if}
 			</p>
 
 			{#if results.suites.length}
 				<section aria-labelledby="results-suites">
-					<h2 id="results-suites" class="mb-2 text-[15px]">Suites</h2>
-					<div class="overflow-x-auto">
-						<table class="w-full min-w-[52rem] table-fixed border-t border-divider">
-							{@render columns()}
-							<thead class="border-b text-xs text-muted-foreground">
-								<tr>
-									<th class="px-3 py-2 text-left font-medium">Suite</th>
-									<th class="px-3 py-2 text-right font-medium">Score</th>
-									<th class="px-3 py-2 text-left font-medium">Metric</th>
-									<th class="px-3 py-2 text-right font-medium">Members</th>
-									<th class="px-3 py-2 text-left font-medium">Hash</th>
-									<th></th>
-									{#if truncated}<th></th>{/if}
-								</tr>
-							</thead>
-							<tbody>
-								{#each results.suites as s (s.suite)}
-									<tr class="border-b border-divider hover:bg-muted">
-										<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" {@attach hint(s.suite)}
-											>{s.suite}</td
-										>
-										<td
-											class={[
-												'px-3 py-1.5 text-right tabular-nums',
-												s.score == null && 'text-faint'
-											]}
-											{@attach hint(
-												s.score == null
-													? 'No score: it groups other suites, or its mean isn’t finite'
-													: String(s.score)
-											)}
-										>
-											{formatScore(s.score, s.metric)}
-										</td>
-										<td
-											class="truncate px-3 py-1.5 text-muted-foreground"
-											{@attach hint(s.metric ?? 'Each member task’s primary metric')}
-										>
-											{s.metric ?? 'primary'}
-										</td>
-										<td
-											class="px-3 py-1.5 text-right tabular-nums"
-											{@attach hint(s.members.join(', '))}
-										>
-											{s.members.length}
-										</td>
-										<td class="px-3 py-1.5">{@render hash(s.suite_hash)}</td>
-										<td></td>
-										{#if truncated}<td></td>{/if}
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+					<h2 id="results-suites" class="px-5 pt-6 pb-2 text-[15px] font-medium">Suites</h2>
+					<DataTable
+						columns={SUITE_COLUMNS}
+						rows={results.suites}
+						key={(s) => s.suite}
+						cell={suiteCell}
+						dense
+						label="Suites"
+					/>
 				</section>
 			{/if}
 
 			<section aria-labelledby="results-tasks">
-				<h2 id="results-tasks" class="mb-2 text-[15px]">Tasks</h2>
-				<div class="overflow-x-auto">
-					<table class="w-full min-w-[52rem] table-fixed border-t border-divider">
-						{@render columns()}
-						<thead class="border-b text-xs text-muted-foreground">
-							<tr>
-								<th class="px-3 py-2 text-left font-medium">Task</th>
-								<th class="px-3 py-2 text-right font-medium">Score</th>
-								<th class="px-3 py-2 text-left font-medium">Primary metric</th>
-								<th class="px-3 py-2 text-right font-medium">Docs</th>
-								<th class="px-3 py-2 text-left font-medium">Hash</th>
-								<th class="px-3 py-2 text-left font-medium">Dataset</th>
-								{#if truncated}
-									<th class="px-3 py-2 text-right font-medium">Docs cut</th>
-								{/if}
-							</tr>
-						</thead>
-						<tbody>
-							{#each results.tasks as t (t.task)}
-								{@const value = t.metrics[t.primary_metric]}
-								<tr class="border-b border-divider hover:bg-muted">
-									<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" {@attach hint(t.task)}
-										>{t.task}</td
-									>
-									<td
-										class={['px-3 py-1.5 text-right tabular-nums', value == null && 'text-faint']}
-										{@attach hint(value == null ? 'Not a finite number' : String(value))}
-									>
-										{formatScore(value, t.primary_metric)}
-									</td>
-									<td
-										class="truncate px-3 py-1.5 text-muted-foreground"
-										{@attach hint(t.primary_metric)}>{t.primary_metric}</td
-									>
-									<td class="px-3 py-1.5 text-right tabular-nums">
-										{t.num_docs}{t.limit != null ? ` (limit ${t.limit})` : ''}
-									</td>
-									<td class="px-3 py-1.5">{@render hash(t.task_hash)}</td>
-									<td
-										class="truncate px-3 py-1.5 text-muted-foreground"
-										{@attach hint(
-											`${t.dataset.repo}@${t.dataset.revision} ${t.dataset.subset ?? ''} ${
-												t.dataset.split
-											}`
-										)}
-									>
-										{#if t.dataset.private}
-											<LockIcon class="mr-1 inline size-3.5" aria-label="Private dataset" />
-										{/if}
-										{t.dataset.repo}{t.dataset.subset ? ` · ${t.dataset.subset}` : ''}
-									</td>
-									{#if truncated}
-										<td
-											class={[
-												'px-3 py-1.5 text-right tabular-nums',
-												!t.truncation.docs && 'text-faint'
-											]}
-											{@attach hint('Docs whose context lost tokens to fit the model')}
-										>
-											{t.truncation.docs}
-										</td>
-									{/if}
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
+				<h2 id="results-tasks" class="px-5 pt-6 pb-2 text-[15px] font-medium">Tasks</h2>
+				<DataTable
+					columns={taskColumns}
+					rows={results.tasks}
+					key={(t) => t.task}
+					cell={taskCell}
+					dense
+					label="Tasks"
+				/>
 			</section>
 
 			{#if itemTasks.length}
-				<section aria-labelledby="results-items">
-					<h2 id="results-items" class="mb-2 text-[15px]">Items</h2>
+				<section class="px-5 pt-6" aria-labelledby="items-title">
 					<!-- Text came with schema 11: an older run's items can't be read, only scored again. -->
 					{#if results.schema_version < 11}
+						<h2 id="items-title" class="pb-2 text-[15px] font-medium">Items</h2>
 						<p class="text-muted-foreground">
 							This run’s predictions hold no text (results schema {results.schema_version}). Score
 							the model again with this flock to read its items.
@@ -279,6 +244,8 @@
 								project={run.project}
 								run={run.id}
 								sides={['This run']}
+								title="Items"
+								bleed
 								tasks={itemTasks}
 								keeps={[
 									{ keep: 'wrong', label: 'Wrong' },
@@ -293,8 +260,8 @@
 				</section>
 			{/if}
 
-			<section aria-labelledby="results-provenance">
-				<h2 id="results-provenance" class="mb-2 flex items-center gap-1.5 text-[15px]">
+			<section class="px-5 pt-6" aria-labelledby="results-provenance">
+				<h2 id="results-provenance" class="mb-2 flex items-center gap-1.5 text-[15px] font-medium">
 					Provenance
 					<InfoHint label="About this results file">
 						Schema {results.schema_version}, from <span class="font-mono">results.json</span> of

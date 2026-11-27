@@ -55,6 +55,8 @@
 		fallback?: Snippet<[string, ItemKeep]>;
 		/** On a `home` page: the table's box spans the page, from under the text to its edges. */
 		bleed?: boolean;
+		/** A heading over the list (one run's Items), the score beside it in muted type. */
+		title?: string;
 		/** Where a link left the list; a part that doesn't fit these tasks or keeps is ignored. */
 		view?: ItemsView;
 		/** Told the list's state whenever the reader changes it, so the page's link can follow. */
@@ -71,6 +73,7 @@
 		keeps,
 		fallback,
 		bleed = false,
+		title,
 		view = {},
 		onview
 	}: Props = $props();
@@ -383,7 +386,7 @@
 		const { right = 0, all = 0 } = counts;
 		// Two runs' scores and flips are the counts table's, under the list (D202).
 		if (other || !all) return null;
-		return `${(right / all).toFixed(4)}: ${right} of ${all} docs right`;
+		return `${(100 * (right / all)).toFixed(1)}% · ${right} of ${all} right`;
 	});
 
 	// The tint's full strength: the page's largest margin.
@@ -398,7 +401,7 @@
 <!-- A column heading with the handle that resizes its column. -->
 <!-- The text truncates, not the cell, so the handle on its edge isn't clipped. -->
 {#snippet head(text: string, column: Column | null)}
-	<th class="relative px-2 py-1.5 text-left font-medium">
+	<th class="relative h-9 px-2 text-left font-medium">
 		<span class="block truncate">{text}</span>
 		{#if column}
 			<ResizeHandle
@@ -415,58 +418,27 @@
 <svelte:window {onkeydown} />
 
 <div class="grid gap-3" bind:this={root}>
-	<div class="flex flex-wrap items-center gap-2">
-		<PickerField
-			bind:open={picking}
-			onOpenChange={(next) => {
-				if (!next) return;
-				taskQuery = '';
-				taskActive = Math.max(
-					0,
-					tasks.findIndex((t) => t.task === task)
-				);
-			}}
-			aria-label="Task: {task}"
-			class="h-7 max-w-80 min-w-56 font-mono text-[12.5px]"
-		>
-			<span class="min-w-0 flex-1 truncate">{task}</span>
-			{#snippet list()}
-				<PickerList
-					options={taskChoices}
-					key={(t) => t.task}
-					current={(t) => t.task === task}
-					noun="tasks"
-					label="Search tasks"
-					placeholder="Search tasks…"
-					class="max-h-96"
-					bind:query={taskQuery}
-					bind:active={taskActive}
-					onpick={(t) => {
-						picking = false;
-						if (t.task === task) return;
-						task = t.task;
-						at = 1;
-						total = null;
-						open = null; // doc ids repeat across tasks
-						tell();
-					}}
-				>
-					{#snippet row(t: (typeof tasks)[number])}
-						<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{t.task}</span>
-						<span class="text-xs text-muted-foreground tabular-nums">{t.counts[keep] ?? ''}</span>
-					{/snippet}
-				</PickerList>
-			{/snippet}
-		</PickerField>
-		<div class="flex flex-wrap gap-1" role="radiogroup" aria-label="Docs shown">
+	{#if title}
+		<h2 id="items-title" class="flex items-baseline gap-2 text-[15px] font-medium">
+			{title}
+			{#if summary}<span class="text-[13px] font-normal text-muted-foreground tabular-nums"
+					>{summary}</span
+				>{/if}
+		</h2>
+	{/if}
+	<!-- One 36px row: the keeps as underline tabs, whose line lands on the table's top rule; the
+	     task and the order quiet at the right. -->
+	<div class={['flex h-9 min-w-0 items-center gap-2', !other && '-mb-3', bleed && 'bleed px-5']}>
+		<div class="flex h-full flex-none items-center gap-4" role="radiogroup" aria-label="Docs shown">
 			{#each keeps as k (k.keep)}
 				<button
 					type="button"
 					role="radio"
 					aria-checked={k.keep === keep}
 					class={[
-						'rounded-md border px-2.5 py-1 text-[13px] hover:bg-muted aria-checked:border-ring aria-checked:bg-accent',
-						lifted === k.keep && 'bg-muted'
+						'relative flex h-full items-center gap-1.5 px-0.5 text-[13px] font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset aria-checked:text-foreground',
+						'after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 after:transition-opacity aria-checked:after:opacity-100',
+						lifted === k.keep && 'text-foreground'
 					]}
 					onmouseenter={() => (lifted = k.keep)}
 					onmouseleave={() => (lifted = null)}
@@ -480,45 +452,87 @@
 					}}
 				>
 					{k.label}
-					<span class="ml-1 text-muted-foreground tabular-nums">{counts[k.keep] ?? ''}</span>
+					<span class="font-normal text-muted-foreground tabular-nums">{counts[k.keep] ?? ''}</span>
 				</button>
 			{/each}
 		</div>
-		<!-- What an opened doc's tokens are tinted by, for every doc of the list: each click the
-		     next, as the order's button turns. -->
-		<Button
-			variant="ghost"
-			size="sm"
-			class="ml-auto text-muted-foreground"
-			{@attach hint(`Tokens: ${tint.now.hint}. Click for ${tint.next.label}.`)}
-			onclick={() => (heat = tint.next.heat)}
-		>
-			<FlameIcon />
-			{tint.now.label}
-		</Button>
-		<Button
-			variant="ghost"
-			size="sm"
-			class="text-muted-foreground"
-			{@attach hint(
-				sort === 'margin'
-					? other
-						? 'The biggest gap between the runs’ margins first'
-						: 'The surest first, right or wrong'
-					: 'The dataset’s order'
-			)}
-			onclick={() => {
-				sort = sort === 'margin' ? 'doc' : 'margin';
-				at = 1;
-				open = null;
-				tell();
-			}}
-		>
-			{#if sort === 'margin'}<ArrowDownWideNarrowIcon />{:else}<ArrowDownUpIcon />{/if}
-			{sort === 'margin' ? 'Margin' : 'Doc order'}
-		</Button>
+		<div class="ml-auto flex min-w-0 items-center gap-0.5">
+			<PickerField
+				bind:open={picking}
+				onOpenChange={(next) => {
+					if (!next) return;
+					taskQuery = '';
+					taskActive = Math.max(
+						0,
+						tasks.findIndex((t) => t.task === task)
+					);
+				}}
+				aria-label="Task: {task}"
+				class="h-7 w-auto max-w-60 gap-1 rounded-md border-0 bg-transparent px-2 text-[13px] text-subtle hover:bg-muted data-[state=open]:bg-muted dark:bg-transparent [&>svg]:size-3.5"
+			>
+				<span class="min-w-0 truncate">{task}</span>
+				{#snippet list()}
+					<PickerList
+						options={taskChoices}
+						key={(t) => t.task}
+						current={(t) => t.task === task}
+						noun="tasks"
+						label="Search tasks"
+						placeholder="Search tasks…"
+						class="max-h-96"
+						bind:query={taskQuery}
+						bind:active={taskActive}
+						onpick={(t) => {
+							picking = false;
+							if (t.task === task) return;
+							task = t.task;
+							at = 1;
+							total = null;
+							open = null; // doc ids repeat across tasks
+							tell();
+						}}
+					>
+						{#snippet row(t: (typeof tasks)[number])}
+							<span class="min-w-0 flex-1 truncate">{t.task}</span>
+							<span class="text-xs text-muted-foreground tabular-nums">{t.counts[keep] ?? ''}</span>
+						{/snippet}
+					</PickerList>
+				{/snippet}
+			</PickerField>
+			<!-- What an opened doc's tokens are tinted by, for every doc of the list: each click the
+			     next, as the order's button turns. -->
+			<Button
+				variant="quiet"
+				size="bar"
+				{@attach hint(`Tokens: ${tint.now.hint}. Click for ${tint.next.label}.`)}
+				onclick={() => (heat = tint.next.heat)}
+			>
+				<FlameIcon />
+				<span class="max-sm:sr-only">{tint.now.label}</span>
+			</Button>
+			<Button
+				variant="quiet"
+				size="bar"
+				{@attach hint(
+					sort === 'margin'
+						? other
+							? 'The biggest gap between the runs’ margins first'
+							: 'The surest first, right or wrong'
+						: 'The dataset’s order'
+				)}
+				onclick={() => {
+					sort = sort === 'margin' ? 'doc' : 'margin';
+					at = 1;
+					open = null;
+					tell();
+				}}
+			>
+				{#if sort === 'margin'}<ArrowDownWideNarrowIcon />{:else}<ArrowDownUpIcon />{/if}
+				<span class="max-sm:sr-only">{sort === 'margin' ? 'Margin' : 'Doc order'}</span>
+			</Button>
+		</div>
 	</div>
-	{#if summary}
+	{#if summary && !title}
 		<p class="text-xs text-muted-foreground tabular-nums">{summary}</p>
 	{/if}
 
@@ -546,7 +560,10 @@
 		     `bleed` the box spans the page, edge to edge, as the dataset rows do. -->
 		<div class={['overflow-x-auto', bleed && 'bleed']}>
 			<table
-				class="w-full table-fixed border-t border-divider text-[13px]"
+				class={[
+					'w-full table-fixed border-t border-divider text-[13px]',
+					bleed && '[&_tr>*:first-child]:pl-5'
+				]}
 				style:min-width="{tableWidth}px"
 			>
 				<colgroup>
@@ -567,7 +584,7 @@
 						<!-- The runs share one width: only the first has a handle, so an edge moves
 						     with the pointer. -->
 						{#each sides as side, i (side)}{@render head(side, i === 0 ? 'run' : null)}{/each}
-						{#if other}<th class="px-2 py-1.5 text-right font-medium">Δ</th>{/if}
+						{#if other}<th class="h-9 px-2 text-right font-medium">Δ</th>{/if}
 						<th></th>
 					</tr>
 				</thead>
@@ -692,11 +709,5 @@
 				tell();
 			}}
 		/>
-	{/if}
-	<!-- The keys, named as the pickers name theirs. -->
-	{#if found?.items.length}
-		<p class="flex gap-3 text-[11px] text-muted-foreground" aria-hidden="true">
-			<span>j k move</span><span>↵ o open</span><span>esc close</span>
-		</p>
 	{/if}
 </div>

@@ -373,7 +373,7 @@ describe('eval items', () => {
 		const side = square.element().getBoundingClientRect().width;
 		const onlyB = screen.getByRole('radio', { name: /Only B right/ });
 		await userEvent.hover(square, { position: { x: side / 4, y: side / 4 } });
-		await expect.element(onlyB).toHaveClass('bg-muted');
+		await expect.element(onlyB).toHaveClass('text-foreground');
 		await expect.element(screen.getByText('Only B right 3', { exact: true })).toBeVisible();
 
 		// A click there shows that cell of the task shown (the suite holds arc_easy), page 1.

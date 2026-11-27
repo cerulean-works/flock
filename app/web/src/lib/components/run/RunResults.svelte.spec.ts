@@ -71,14 +71,15 @@ afterEach(() => {
 });
 
 describe('the Results tab', () => {
-	it('shows suites, each task’s primary metric with its hash and dataset, and the provenance', async () => {
+	it('shows suites, each task’s primary metric, its hash to copy and dataset, and the provenance', async () => {
 		noText();
 		render(RunResults, { run: run('r1'), results: RESULTS });
 		const task = screen.getByRole('row').filter({ hasText: 'tw_exam' });
 		await expect.element(task).toBeVisible();
 		await expect.element(task.getByText('acc_per_char')).toBeVisible();
 		await expect.element(task.getByText('571')).toBeVisible();
-		await expect.element(task.getByText('eeeeeeeeeeee')).toBeVisible();
+		// The hash isn't a column: a copy away on the name's row.
+		await expect.element(task.getByRole('button', { name: 'Copy the hash' })).toBeInTheDocument();
 		await expect.element(task.getByLabelText('Private dataset')).toBeInTheDocument();
 		await expect.element(screen.getByText('EFFICIENT_ATTENTION')).toBeVisible();
 		await expect
