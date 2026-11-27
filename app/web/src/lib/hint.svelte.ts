@@ -49,10 +49,15 @@ function show(owner: Element, text: string, x: number, y: number, below = false)
 function hide(owner: Element) {
 	clearTimeout(timer);
 	if (tip.owner !== owner) return;
-	tip.owner = null;
-	warm = true;
-	clearTimeout(cooled);
-	cooled = setTimeout(() => (warm = false), WARM);
+	// A microtask later: an element being removed blurs, and may be torn down inside an update,
+	// where state can't be written.
+	queueMicrotask(() => {
+		if (tip.owner !== owner) return;
+		tip.owner = null;
+		warm = true;
+		clearTimeout(cooled);
+		cooled = setTimeout(() => (warm = false), WARM);
+	});
 }
 
 /** A hover hint of `text`; none when it's empty. */

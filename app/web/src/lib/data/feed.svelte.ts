@@ -13,6 +13,10 @@ export const RUN_STATES = [
 	{ value: 'failed', label: 'Failed or crashed', kinds: 'run_failed,run_crashed' }
 ] as const;
 
+/** The org runs list's column filters, each a comma list in the URL: `?owner=me,12&state=failed`. */
+export const RUN_FILTERS = ['owner', 'project', 'state', 'group', 'job_type', 'gpu'] as const;
+export type RunFilters = Record<(typeof RUN_FILTERS)[number], string[]>;
+
 /** A `?state=` the table offers, else null for every run. */
 export const runStateKinds = (param: string | null) =>
 	RUN_STATES.find((s) => s.value === param) ?? null;

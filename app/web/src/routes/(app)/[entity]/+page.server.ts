@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { change, projectPath, refused, flock } from '#lib/server/flock.ts';
-import { FEED, runStateKinds } from '#lib/data/feed.svelte.ts';
-import type { Budget, FeedPage, Member, OrgInfo, ProjectInfo } from '#lib/types.ts';
+import { FEED, RUN_FILTERS, runStateKinds, type RunFilters } from '#lib/data/feed.svelte.ts';
+import type { Budget, FeedPage, Member, OrgInfo, ProjectInfo, RunFacets } from '#lib/types.ts';
 import { formText, monthOf, projectNameError } from '#lib/utils.ts';
 import { entityHref, projectHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -19,16 +19,26 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 	depends(FEED);
 	const now = Date.now() / 1000;
 	const orgPath = `/api/v1/orgs/${encodeURIComponent(params.entity)}`;
+	const list = (key: string) =>
+		(url.searchParams.get(key) ?? '')
+			.split(',')
+			.map((v) => v.trim())
+			.filter(Boolean);
+	const filters = Object.fromEntries(RUN_FILTERS.map((k) => [k, list(k)])) as RunFilters;
+	// Home's old `?runs=mine` link: the viewer's own runs.
+	if (url.searchParams.get('runs') === 'mine' && !filters.owner.includes('me'))
+		filters.owner.push('me');
+	filters.owner = filters.owner.filter((v) => v === 'me' || /^\d+$/.test(v));
+	filters.state = filters.state.filter((v) => runStateKinds(v));
 	const outside = (org: OrgInfo) => ({
 		org,
 		outside: true as const,
 		feed: null,
 		query: {},
+		filters,
 		mine: false,
-		project: null,
-		state: null,
-		owner: null,
 		members: [] as Pick<Member, 'id' | 'name' | 'avatar_url'>[],
+		facets: null as RunFacets | null,
 		budget: null,
 		thisMonth: monthOf(now),
 		now
@@ -37,50 +47,49 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 	// no public project, sends the visitor to sign in.)
 	if (!locals.token) return outside(await flock(orgPath).then((r) => r.json() as Promise<OrgInfo>));
 
-	// Whose runs: `?runs=mine`, or any member's by id (`?owner=`), which the Owner column offers.
-	const ownerParam = url.searchParams.get('owner');
-	const owner = ownerParam && /^\d+$/.test(ownerParam) ? Number(ownerParam) : null;
-	const mine = owner === null && url.searchParams.get('runs') === 'mine';
-	const project = url.searchParams.get('project') || null;
-	const state = runStateKinds(url.searchParams.get('state'));
+	// The states chosen as the feed kinds that say them; else every run, once, by its start.
+	const kinds = filters.state.flatMap((v) => runStateKinds(v)!.kinds.split(','));
 	const query: Record<string, string> = {
 		org: params.entity,
-		kinds: state?.kinds ?? 'run_started',
-		limit: '50',
-		...(mine && { owner: 'me' }),
-		...(owner !== null && { owner: String(owner) }),
-		...(project && { project })
+		kinds: kinds.length ? kinds.join(',') : 'run_started',
+		limit: '50'
 	};
+	for (const key of ['owner', 'project', 'group', 'job_type', 'gpu'] as const)
+		if (filters[key].length) query[key] = filters[key].join(',');
 	// The org answers 404 to non-members unless it has public projects, and says they have no
 	// role. The feed is members' only, a 404 to anyone else: it's read alongside, and its
 	// failure only matters once the org says the viewer is a member.
-	const feeding = flock(`/api/v1/feed?${new URLSearchParams(query)}`).then(
-		(r) => r.json() as Promise<FeedPage>
-	);
-	feeding.catch(() => {});
+	const read = <T>(path: string) => {
+		const p = flock(path).then((r) => r.json() as Promise<T>);
+		p.catch(() => {});
+		return p;
+	};
+	const feeding = read<FeedPage>(`/api/v1/feed?${new URLSearchParams(query)}`);
 	const month = url.searchParams.get('month');
-	const budgeting = flock(
+	const budgeting = read<Budget>(
 		`${orgPath}/budget${month && /^\d{4}-\d{2}$/.test(month) ? `?month=${month}` : ''}`
-	).then((r) => r.json() as Promise<Budget>);
-	budgeting.catch(() => {});
-	const membering = flock(`${orgPath}/members`).then(
-		(r) => r.json() as Promise<{ members: Member[] }>
 	);
-	membering.catch(() => {});
+	const membering = read<{ members: Member[] }>(`${orgPath}/members`);
+	// What each column can be filtered to, with counts, across all the org's runs.
+	const faceting = read<RunFacets>(`${orgPath}/run-facets`);
 	const org = await flock(orgPath).then((r) => r.json() as Promise<OrgInfo>);
 	if (!org.role) return outside(org);
-	const [feed, budget, { members }] = await Promise.all([feeding, budgeting, membering]);
+	const [feed, budget, { members }, facets] = await Promise.all([
+		feeding,
+		budgeting,
+		membering,
+		faceting
+	]);
 	// Relative times are computed against this, so SSR and hydration print the same text.
 	return {
 		org,
 		outside: false as const,
 		feed,
 		query,
-		mine,
-		project,
-		state: state?.value ?? null,
-		owner,
+		filters,
+		mine: filters.owner.length === 1 && filters.owner[0] === 'me',
 		members: members.map(({ id, name, avatar_url }) => ({ id, name, avatar_url })),
+		facets,
 		budget,
 		thisMonth: monthOf(now),
 		now
