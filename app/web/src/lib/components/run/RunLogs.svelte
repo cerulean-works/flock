@@ -48,9 +48,18 @@
 		start: number;
 		/** For the downloaded file's name. */
 		name: string;
+		/** The page's view bar: the log's controls go there, rather than in a row of their own. */
+		bar?: HTMLElement | null;
 	}
 
-	let { url, total, live, start, name }: Props = $props();
+	let { url, total, live, start, name, bar = null }: Props = $props();
+
+	/** Moves the controls into the view bar, and takes them out with the log. */
+	const into = (target: HTMLElement | null) => (node: HTMLElement) => {
+		if (!target) return;
+		target.append(node);
+		return () => node.remove();
+	};
 
 	/** Lines fetched at first, and by each "Show earlier" / "Show later". */
 	const CHUNK = 1000;
@@ -68,6 +77,14 @@
 	let failed = $state(false);
 	let scroller = $state<HTMLDivElement>();
 	let input = $state<HTMLInputElement>();
+	/** The search: an icon in the view bar that opens into a field, open while it holds text. */
+	let searching = $state(false);
+	async function openSearch() {
+		searching = true;
+		await tick();
+		input?.focus();
+		input?.select();
+	}
 
 	// ---------------------------------------------------------------------------- view options
 
@@ -176,8 +193,7 @@
 	function onwindowkey(e: KeyboardEvent) {
 		if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'f') {
 			e.preventDefault();
-			input?.focus();
-			input?.select();
+			void openSearch();
 		} else if (e.key === 'F3' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g')) {
 			if (!q) return;
 			e.preventDefault();
@@ -501,65 +517,99 @@
 
 <!-- A log panel in the page's own theme, one step deeper than the page like a chart panel. -->
 <div class="absolute inset-0 flex flex-col bg-card text-foreground">
+	<!-- The log's controls: in the page's view bar when it gives one (`bar`), quiet like every
+	     control there; otherwise a row of their own above the lines. -->
 	<div
-		class="flex min-h-10 flex-none flex-wrap items-center gap-1.5 border-b border-divider bg-background px-5 py-1"
+		class={[
+			'flex flex-none items-center gap-0.5',
+			!bar && 'min-h-9 flex-wrap border-b border-divider bg-background px-5 py-1'
+		]}
+		{@attach into(bar)}
 	>
-		<label
-			class="flex h-7 max-w-md min-w-48 flex-1 items-center gap-2 rounded-[min(var(--radius-md),10px)] border border-input bg-background pr-1 pl-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
-		>
-			<SearchIcon class="size-3.5 flex-none text-muted-foreground" />
-			<input
-				bind:this={input}
-				class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
-				placeholder="Search the log"
+		{#if searching || q}
+			<label
+				class="flex h-7 w-56 min-w-0 items-center gap-1.5 rounded-md bg-muted/60 pr-0.5 pl-2 focus-within:ring-3 focus-within:ring-ring/50 max-sm:w-28"
+			>
+				<SearchIcon class="size-3.5 flex-none text-muted-foreground" />
+				<input
+					bind:this={input}
+					class="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
+					placeholder="Search the log"
+					aria-label="Search the log"
+					bind:value={query}
+					oninput={onquery}
+					onkeydown={(e) => {
+						if (e.key === 'Escape' && !query) {
+							searching = false;
+							return;
+						}
+						onsearchkey(e);
+					}}
+					onblur={() => {
+						if (!query) searching = false;
+					}}
+				/>
+				{#if q}
+					<span class="flex-none text-xs text-muted-foreground tabular-nums" aria-live="polite">
+						{#if matches.length}
+							{(cur + 1).toLocaleString('en-US')} / {matches.length.toLocaleString(
+								'en-US'
+							)}{matches.length >= 10_000 ? '+' : ''}
+						{:else}
+							No matches
+						{/if}
+					</span>
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						{@attach hint('Previous match  Shift Enter')}
+						aria-label="Previous match"
+						disabled={!matches.length}
+						onclick={() => step(-1)}
+					>
+						<ChevronUpIcon />
+					</Button>
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						{@attach hint('Next match  Enter')}
+						aria-label="Next match"
+						disabled={!matches.length}
+						onclick={() => step(1)}
+					>
+						<ChevronDownIcon />
+					</Button>
+				{/if}
+			</label>
+		{:else}
+			<Button
+				variant="quiet"
+				size="icon-bar"
 				aria-label="Search the log"
-				bind:value={query}
-				oninput={onquery}
-				onkeydown={onsearchkey}
-			/>
-			{#if q}
-				<span class="flex-none text-xs text-muted-foreground tabular-nums" aria-live="polite">
-					{#if matches.length}
-						{(cur + 1).toLocaleString('en-US')} / {matches.length.toLocaleString(
-							'en-US'
-						)}{matches.length >= 10_000 ? '+' : ''}
-					{:else}
-						No matches
-					{/if}
-				</span>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					{@attach hint('Previous match (Shift+Enter)')}
-					aria-label="Previous match"
-					disabled={!matches.length}
-					onclick={() => step(-1)}
-				>
-					<ChevronUpIcon />
-				</Button>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					{@attach hint('Next match (Enter)')}
-					aria-label="Next match"
-					disabled={!matches.length}
-					onclick={() => step(1)}
-				>
-					<ChevronDownIcon />
-				</Button>
-			{/if}
-		</label>
+				{@attach hint('Search the log  ⌘ F')}
+				onclick={() => void openSearch()}
+			>
+				<SearchIcon />
+			</Button>
+		{/if}
 
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
-					<Button {...props} variant="ghost" size="sm" {@attach hint('Filter by level')}>
+					<Button
+						{...props}
+						variant={hidden.length ? 'quiet-on' : 'quiet'}
+						size="bar"
+						{@attach hint('Filter by level')}
+					>
 						<ListFilterIcon />
-						{levelsShown === LEVEL_KEYS.length ? 'All levels' : `${levelsShown} levels`}
+						<span class="max-sm:sr-only"
+							>{levelsShown === LEVEL_KEYS.length ? 'All levels' : `${levelsShown} levels`}</span
+						>
 					</Button>
 				{/snippet}
 			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="start" class="w-48">
+			<DropdownMenu.Content align="end" class="w-48">
 				<DropdownMenu.Group>
 					<DropdownMenu.Label>Levels</DropdownMenu.Label>
 					{#each LEVEL_KEYS as k (k)}
@@ -598,13 +648,19 @@
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
-					<Button {...props} variant="ghost" size="sm" {@attach hint('Timestamps')}>
+					<Button
+						{...props}
+						variant="quiet"
+						size="bar"
+						class={bar ? 'max-sm:hidden' : undefined}
+						{@attach hint('Timestamps')}
+					>
 						<ClockIcon />
 						<span class="max-sm:hidden">{STAMPS.find((s) => s.value === stamps)?.label}</span>
 					</Button>
 				{/snippet}
 			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="start" class="w-56">
+			<DropdownMenu.Content align="end" class="w-56">
 				<DropdownMenu.Group>
 					<DropdownMenu.Label>Timestamps</DropdownMenu.Label>
 					<DropdownMenu.RadioGroup
@@ -620,9 +676,9 @@
 		</DropdownMenu.Root>
 
 		<Button
-			variant="ghost"
-			size="icon-sm"
-			class="aria-pressed:bg-muted aria-pressed:text-foreground"
+			variant={wrap ? 'quiet-on' : 'quiet'}
+			size="icon-bar"
+			class={bar ? 'max-sm:hidden' : undefined}
 			{@attach hint(wrap ? 'Don’t wrap long lines' : 'Wrap long lines')}
 			aria-label="Wrap long lines"
 			aria-pressed={wrap}
@@ -632,9 +688,8 @@
 		</Button>
 		{#if live}
 			<Button
-				variant="ghost"
-				size="sm"
-				class="aria-pressed:bg-muted aria-pressed:text-foreground"
+				variant={following ? 'quiet-on' : 'quiet'}
+				size="bar"
 				{@attach hint(
 					following ? 'Stop following new lines' : 'Follow new lines as they’re printed'
 				)}
@@ -642,14 +697,15 @@
 				onclick={follow}
 			>
 				<ArrowDownToLineIcon />
-				Follow
+				<span class="max-sm:sr-only">Follow</span>
 			</Button>
 		{/if}
 
-		<span class="ml-auto"></span>
+		{#if !bar}<span class="ml-auto"></span>{/if}
 		<Button
-			variant="ghost"
-			size="icon-sm"
+			variant="quiet"
+			size="icon-bar"
+			class={bar ? 'max-sm:hidden' : undefined}
 			{@attach hint('Copy the lines loaded')}
 			aria-label="Copy the lines loaded"
 			disabled={!shown.lines.length}
@@ -658,8 +714,9 @@
 			<CopyIcon />
 		</Button>
 		<Button
-			variant="ghost"
-			size="icon-sm"
+			variant="quiet"
+			size="icon-bar"
+			class={bar ? 'max-sm:hidden' : undefined}
 			{@attach hint('Download all of it')}
 			aria-label="Download the console output"
 			disabled={downloading || !known}
@@ -749,9 +806,8 @@
 									]}
 								>
 									{#if l.at != null}
-										<span
-											class="mt-px inline-flex h-[18px] items-center rounded-[4px] bg-muted px-1.5 align-top text-[11px] text-muted-foreground tabular-nums"
-											{@attach hint(dateTime(l.at))}>{stampOf(l)}</span
+										<span class="text-muted-foreground tabular-nums" {@attach hint(dateTime(l.at))}
+											>{stampOf(l)}</span
 										>
 									{/if}
 								</span>
@@ -772,14 +828,12 @@
 			</div>
 			<div class="px-5 py-3 text-xs text-muted-foreground">
 				{#if laterCount > 0}
-					<Button variant="outline" size="sm" onclick={later} pending={loadingLater}>
+					<Button variant="quiet" size="bar" onclick={later} pending={loadingLater}>
 						Show later lines
 					</Button>
 					<span class="ml-2"
 						>{laterCount.toLocaleString('en-US')} later{q ? ', not searched' : ''}</span
 					>
-				{:else if live}
-					{known.toLocaleString('en-US')} lines so far, and new ones appear as the run prints them
 				{/if}
 			</div>
 		{/if}

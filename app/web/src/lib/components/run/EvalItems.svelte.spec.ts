@@ -230,15 +230,18 @@ describe('eval items', () => {
 		// 4 nats of 8: half of the full tint.
 		expect(venus.element().getAttribute('style')).toContain('var(--primary) 30%');
 
-		// The toolbar's button turns the heat for every doc: rank, then entropy.
-		await screen.getByRole('button', { name: 'Surprisal' }).click();
-		await screen.getByRole('button', { name: 'Rank' }).click();
-		await expect.element(screen.getByRole('button', { name: 'Entropy' })).toBeVisible();
+		// The toolbar's Tint menu sets the heat for every doc.
+		const pickTint = async (from: string, to: string) => {
+			await screen.getByRole('button', { name: `Tint: ${from}` }).click();
+			await screen.getByRole('menuitemradio', { name: to }).click();
+			await userEvent.keyboard('{Escape}');
+			await expect.element(screen.getByRole('button', { name: `Tint: ${to}` })).toBeVisible();
+		};
+		await pickTint('Surprisal', 'Entropy');
 		// 1.5 nats of 6.
 		expect(venus.element().getAttribute('style')).toContain('var(--primary) 15%');
 		// B has no tokens, so A vs B tints nothing.
-		await screen.getByRole('button', { name: 'Entropy' }).click();
-		await expect.element(screen.getByRole('button', { name: 'A vs B' })).toBeVisible();
+		await pickTint('Entropy', 'A vs B');
 		expect(venus.element().getAttribute('style')).toContain(' 0%');
 	});
 
@@ -305,10 +308,11 @@ describe('eval items', () => {
 		const fetch = answer(200, rows([ROW]));
 		const onview = vi.fn();
 		render(EvalItems, { ...PAIR, onview });
-		await screen.getByRole('button', { name: 'Margin' }).click();
+		await screen.getByRole('button', { name: 'Order: Margin' }).click();
+		await screen.getByRole('menuitemradio', { name: 'Doc order' }).click();
 		await vi.waitFor(() => expect(lists(fetch)).toHaveLength(2));
 		expect(lists(fetch)[1].searchParams.get('sort')).toBe('doc');
-		await expect.element(screen.getByRole('button', { name: 'Doc order' })).toBeVisible();
+		await expect.element(screen.getByRole('button', { name: 'Order: Doc order' })).toBeVisible();
 		expect(onview).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'doc' }));
 	});
 
@@ -373,7 +377,7 @@ describe('eval items', () => {
 		const side = square.element().getBoundingClientRect().width;
 		const onlyB = screen.getByRole('radio', { name: /Only B right/ });
 		await userEvent.hover(square, { position: { x: side / 4, y: side / 4 } });
-		await expect.element(onlyB).toHaveClass('bg-muted');
+		await expect.element(onlyB).toHaveClass('text-foreground');
 		await expect.element(screen.getByText('Only B right 3', { exact: true })).toBeVisible();
 
 		// A click there shows that cell of the task shown (the suite holds arc_easy), page 1.

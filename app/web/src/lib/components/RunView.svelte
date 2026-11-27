@@ -21,21 +21,24 @@
 	import Rows2Icon from '@lucide/svelte/icons/rows-2';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import type { Snippet } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ResolvedPathname } from '$app/types';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
 	import { compareHref } from '#lib/evals.ts';
 	import { EvalsView } from '#lib/evals-view.svelte.ts';
 	import { hint } from '#lib/hint.svelte.ts';
+	import type { Crumb } from '#lib/storage.ts';
 	import { clampWidth, NAME_W, saveWidth, STACKED_COOKIE, TABLE_H, TABLE_W } from '#lib/widths.ts';
 	import { describeFilters } from '#lib/workspace/filters.ts';
+	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
+	import { keyboard } from '#lib/keys.svelte.ts';
 	import {
 		isProjectView,
 		rememberView,
@@ -69,6 +72,8 @@
 	 */
 	interface Props {
 		title: string;
+		/** The header's steps between the project and the title (see PageHeader). */
+		trail?: Crumb[];
 		subtitleTitle?: string;
 		leading?: Snippet;
 		badges?: Snippet;
@@ -112,6 +117,7 @@
 
 	let {
 		title,
+		trail,
 		subtitleTitle,
 		leading,
 		badges,
@@ -332,8 +338,33 @@
 			openPanel(neighbours.next);
 		} else if (fullscreen == null && KEYS[e.key]) {
 			setView(KEYS[e.key]);
+		} else if (fullscreen == null && e.key === 'f' && filterControl) {
+			e.preventDefault();
+			filterControl.pick();
 		}
 	}
+
+	// What this page offers the palette (Cmd+K): its views, its filter and its runs.
+	$effect(() => {
+		keyboard.views = [
+			{ label: 'Table', key: 't', set: () => setView('table') },
+			{ label: 'Visualize', key: 'v', set: () => setView('visualize') },
+			{ label: 'Charts', key: 'c', set: () => setView('charts') }
+		];
+		keyboard.filter = () => filterControl?.pick();
+		return () => {
+			keyboard.views = [];
+			keyboard.filter = null;
+		};
+	});
+	$effect(() => {
+		const { entity, project } = ws.meta;
+		keyboard.runs = ws.page.runs.map((r, i) => ({
+			label: ws.nameOf(i),
+			href: runHref(entity, project, r.id)
+		}));
+		return () => (keyboard.runs = []);
+	});
 
 	// Keep the neighbouring pages warm so paging is instant. Runs in idle time after hydration
 	// and after every page change; the cache dedupes and keeps a handful of pages.
@@ -356,12 +387,27 @@
 	const focusPinned = $derived(ws.focus != null && ws.pinned === ws.focus && ws.hover == null);
 
 	/** The runs shown are a search's or a filter's, not all of the page's. */
+	let more = $state(false);
+	let filterControl = $state<{ edit: () => void; pick: () => void } | null>(null);
+	const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
+
+	/** The filters without the one at `i`, from the first page. */
+	function dropFilter(i: number) {
+		const params = new URLSearchParams(page.url.search);
+		applyRunQuery(params, {
+			...ws.page.query,
+			filters: ws.page.query.filters.filter((_, j) => j !== i),
+			page: 1
+		});
+		ws.selected.clear();
+		void goto(ws.href(params), { reset: false });
+	}
+
 	const narrowed = $derived(!!ws.page.query.search || ws.page.query.filters.length > 0);
 
 	const noMatch = $derived.by(() => {
 		const { search, filters } = ws.page.query;
 		if (!filters.length) return `No run’s name or id contains “${search}”.`;
-		const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
 		const where = describeFilters(filters, kindOf, false, ws.people);
 		if (!search) return `No run matches ${where}.`;
 		return `No run matching “${search}” has ${where}.`;
@@ -383,12 +429,16 @@
 	data-sveltekit-reset={false}
 	style="--name-w: {nameW}px; --table-w: {shownTableW}px; --table-h: {tableHCss}; --pane-left: {paneLeft}px"
 >
-	<PageHeader {title} {subtitleTitle} {leading} {badges} {subtitle} {actions}>
+	<PageHeader {title} {trail} {subtitleTitle} {leading} {badges} {subtitle} {actions}>
 		{#snippet toolbar()}
-			<Tabs.Root value={view} onValueChange={(v) => setView(v as ProjectView)}>
+			<Tabs.Root
+				value={view}
+				onValueChange={(v) => setView(v as ProjectView)}
+				class={selecting ? 'max-sm:hidden' : undefined}
+			>
 				<!-- No counts, so the toggle keeps its width from page to page. -->
 				<Tabs.List aria-label="View">
-					<Tabs.Trigger value="table" {@attach hint('Table (T)')}>Table</Tabs.Trigger>
+					<Tabs.Trigger value="table" {@attach hint('Table  T')}>Table</Tabs.Trigger>
 					<!-- Clicked again while on, it flips the table and charts between side by side and
 					     stacked; its icon shows which. -->
 					<Tabs.Trigger
@@ -405,20 +455,23 @@
 						}}
 						{@attach hint(
 							stacked
-								? 'Table above the charts (V). Click again for side by side'
-								: 'Table and charts side by side (V). Click again to stack them'
+								? 'Table above the charts  V\nClick again for side by side'
+								: 'Table and charts side by side  V\nClick again to stack them'
 						)}
 					>
 						{#if stacked}<Rows2Icon />{:else}<Columns2Icon />{/if}
 						Visualize
 					</Tabs.Trigger>
-					<Tabs.Trigger value="charts" {@attach hint('Charts (C)')}>Charts</Tabs.Trigger>
+					<Tabs.Trigger value="charts" {@attach hint('Charts  C')}>Charts</Tabs.Trigger>
 				</Tabs.List>
 			</Tabs.Root>
-			<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
+			<span class="flex-1"></span>
 
 			{#if selecting}
-				<span class="selection-count mr-1 text-[13px] font-medium tabular-nums" role="status">
+				<span
+					class="selection-count mr-1 text-[13px] font-medium whitespace-nowrap tabular-nums"
+					role="status"
+				>
 					{ws.selectedRows.length} selected
 				</span>
 				<!-- Two eval runs, doc by doc (025 D185): not offered for a run known not to be one. A
@@ -426,7 +479,8 @@
 				{#if ws.selectedRows.length === 2 && ws.selectedRows.every( (r) => [undefined, 'eval'].includes(ws.cell(r, 'job_type') as string | undefined) )}
 					{@const [a, b] = ws.selectedRows.map((r) => ws.page.runs[r].id)}
 					<Button
-						variant="outline"
+						variant="quiet"
+						size="bar"
 						data-sveltekit-preload-data="tap"
 						href={compareHref(
 							ws.meta.entity,
@@ -435,77 +489,102 @@
 							`${ws.meta.entity}/${ws.meta.project}/${b}`
 						)}
 					>
-						<GitCompareArrowsIcon /> Compare items
+						<GitCompareArrowsIcon /> <span class="max-sm:sr-only">Compare items</span>
 					</Button>
 				{/if}
-				<Button variant="outline" onclick={() => ws.openDialog('tag')}><TagIcon /> Tags</Button>
-				<Button variant="outline" onclick={() => ws.openDialog('move')}>
-					<FolderInputIcon /> Move
-				</Button>
-				<Button variant="outline" class="text-destructive" onclick={() => ws.openDialog('delete')}>
-					<Trash2Icon /> Delete
+				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('tag')}
+					><TagIcon /> <span class="max-sm:sr-only">Tags</span></Button
+				>
+				<Button variant="quiet" size="bar" onclick={() => ws.openDialog('move')}>
+					<FolderInputIcon /> <span class="max-sm:sr-only">Move</span>
 				</Button>
 				<Button
-					variant="ghost"
-					size="icon"
-					{@attach hint('Clear selection (Esc)')}
+					variant="quiet"
+					size="bar"
+					class="hover:text-destructive"
+					onclick={() => ws.openDialog('delete')}
+				>
+					<Trash2Icon /> <span class="max-sm:sr-only">Delete</span>
+				</Button>
+				<Button
+					variant="quiet"
+					size="icon-bar"
+					{@attach hint('Clear selection  Esc')}
 					aria-label="Clear selection"
 					onclick={() => ws.selected.clear()}
 				>
 					<XIcon />
 				</Button>
-			{:else}
-				<RunSearch />
-				<RunFilters noMine={!mine} compact={compactTools} />
+			{:else if ws.page.total > 0 || narrowed}
+				<!-- On a phone the controls fold behind one button and open as a row under the bar. -->
+				<Button
+					variant={more ? 'quiet-on' : 'quiet'}
+					size="icon-bar"
+					class="sm:hidden"
+					aria-label="More controls"
+					aria-expanded={more}
+					onclick={() => (more = !more)}
+				>
+					<EllipsisIcon />
+				</Button>
+				<div
+					class={[
+						'flex items-center gap-1',
+						more
+							? 'max-sm:absolute max-sm:inset-x-0 max-sm:top-full max-sm:z-20 max-sm:flex-wrap max-sm:border-b max-sm:border-divider max-sm:bg-background max-sm:px-3 max-sm:py-1.5'
+							: 'max-sm:hidden'
+					]}
+				>
+					<!-- With no runs yet, only the view tabs: nothing here could act. -->
+					<RunSearch />
+					<RunFilters bind:this={filterControl} noMine={!mine} compact={compactTools} />
 
-				{#if tableShown}
-					{#if hasEvals && view === 'table'}
-						<Button
-							variant={evals ? 'secondary' : 'outline'}
-							aria-pressed={evals}
-							href={hrefWith(
-								evals
-									? { preset: evalsFirst ? 'off' : null, view: 'table' }
-									: { preset: evalsFirst ? null : 'evals' }
-							)}
-							data-sveltekit-replacestate
-							{@attach hint('Eval runs by suites, ranked')}
-						>
-							<ClipboardCheckIcon /> Evals
+					{#if tableShown}
+						{#if hasEvals && view === 'table'}
+							<Button
+								variant={evals ? 'quiet-on' : 'quiet'}
+								size="bar"
+								aria-pressed={evals}
+								href={hrefWith(
+									evals
+										? { preset: evalsFirst ? 'off' : null, view: 'table' }
+										: { preset: evalsFirst ? null : 'evals' }
+								)}
+								data-sveltekit-replacestate
+								{@attach hint('Eval runs by suites, ranked')}
+							>
+								<ClipboardCheckIcon /> Evals
+							</Button>
+						{/if}
+						{#if evalsShown}
+							<ColumnsMenu
+								keys={evalsView.keys}
+								onjump={(key) => evalsTable?.scrollToColumn(key)}
+							/>
+						{:else}
+							<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} compact={compactTools} />
+						{/if}
+					{/if}
+					{#if chartsShown}
+						<PlotSettings compact={compactTools} />
+						<!-- Named in every view, Visualize too; on a phone the icon alone. -->
+						<Button variant="quiet" size="bar" onclick={() => ws.newPanel()}>
+							<PlusIcon /> <span class="max-sm:sr-only">Add panel</span>
 						</Button>
 					{/if}
-					{#if evalsShown}
-						<ColumnsMenu keys={evalsView.keys} onjump={(key) => evalsTable?.scrollToColumn(key)} />
-					{:else}
-						<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} compact={compactTools} />
-					{/if}
-				{/if}
-				{#if chartsShown}
-					<PlotSettings compact={compactTools} />
-					{#if view === 'charts'}
-						<Button variant="outline" onclick={() => ws.newPanel()}><PlusIcon /> Add panel</Button>
-					{:else}
-						<Button
-							variant="outline"
-							size="icon"
-							{@attach hint('Add panel')}
-							aria-label="Add panel"
-							onclick={() => ws.newPanel()}
-						>
-							<PlusIcon />
-						</Button>
-					{/if}
-				{/if}
+				</div>
 			{/if}
 			<!-- Outside the selection's actions too: the second run to compare may be one of these. -->
 			{#if evalsShown && evalsView.others}
-				<Button variant="outline" onclick={() => (evalsView.showOther = !evalsView.showOther)}>
+				<Button
+					variant="quiet"
+					size="bar"
+					onclick={() => (evalsView.showOther = !evalsView.showOther)}
+				>
 					{evalsView.showOther ? 'Hide' : 'Show'}
 					{evalsView.others} on other settings
 				</Button>
 			{/if}
-
-			<span class="flex-1"></span>
 			{#if view === 'charts' && focusLabel}
 				<Badge
 					variant="secondary"
@@ -522,6 +601,36 @@
 			{/if}
 		{/snippet}
 	</PageHeader>
+	{#if ws.page.query.filters.length && !selecting}
+		<!-- The filters in effect, one chip each: a click edits them, the cross drops one. -->
+		<div
+			class="flex min-h-9 flex-none flex-wrap items-center gap-1.5 border-b border-divider py-1 pr-4 pl-5"
+			aria-label="Filters"
+			role="group"
+		>
+			{#each ws.page.query.filters as f, i (i)}
+				{@const text = describeFilters([f], kindOf, false, ws.people)}
+				<span class="inline-flex h-6 max-w-80 items-center rounded-md bg-muted text-xs">
+					<button
+						type="button"
+						class="min-w-0 truncate rounded-l-md py-0.5 pr-1 pl-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+						onclick={() => filterControl?.edit()}
+						{@attach hint(text)}
+					>
+						{text}
+					</button>
+					<button
+						type="button"
+						class="grid h-6 w-6 flex-none place-items-center rounded-r-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+						aria-label="Remove filter {text}"
+						onclick={() => dropFilter(i)}
+					>
+						<XIcon class="size-3" />
+					</button>
+				</span>
+			{/each}
+		</div>
+	{/if}
 
 	<main
 		class="relative min-h-0 flex-1"
@@ -539,7 +648,7 @@
 			{panelHref}
 			onfullscreen={openPanel}
 			{below}
-			pack={view !== 'visualize' || below}
+			pack={false}
 		/>
 		{#if ws.page.total === 0 && narrowed}
 			<EmptyState

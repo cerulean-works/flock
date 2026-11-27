@@ -23,12 +23,13 @@
 	});
 </script>
 
-<section class="border-t border-divider px-4 py-3" aria-label={title}>
-	<h3 class="flex items-center justify-between font-medium">
+<!-- In the run's properties pane: a group's title row, then one version a line. -->
+<section class="text-[13px]" aria-label={title}>
+	<h3 class="flex h-8 items-center gap-1.5 font-medium">
 		{title}
-		<span class="text-xs font-normal text-muted-foreground tabular-nums">{versions.length}</span>
+		<span class="font-normal text-muted-foreground tabular-nums">{versions.length}</span>
 	</h3>
-	<ul class="mt-1.5 grid gap-1">
+	<ul class="grid gap-1 pb-1">
 		{#each versions as v (`${v.model}@${v.number}`)}
 			{@const tags = sortTags(v.tags)}
 			<li class="flex min-w-0 items-baseline gap-2">

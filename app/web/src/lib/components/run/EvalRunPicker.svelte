@@ -26,11 +26,22 @@
 		/** Opened from outside too, by the page's A and B shortcuts. */
 		open?: boolean;
 		onpick: (entity: string, project: string, run: string) => void;
+		/** The other side's run, `entity/project/id`: left out, a run isn't compared with itself. */
+		exclude?: string;
 		/** The field's content: the run on this side, which the whole field opens the list from. */
 		children: Snippet;
 	}
 
-	let { side, entity, project, run, open = $bindable(false), onpick, children }: Props = $props();
+	let {
+		side,
+		entity,
+		project,
+		run,
+		open = $bindable(false),
+		onpick,
+		exclude,
+		children
+	}: Props = $props();
 
 	const id = $props.id();
 	let mode = $state<'runs' | 'projects'>('runs');
@@ -67,10 +78,10 @@
 					);
 					if (!res.ok) throw new Error(`Couldn’t list the runs of ${e}/${p} (${res.status})`);
 					const got = ((await res.json()) as { runs: EvalRunChoice[] }).runs;
-					runs = got;
+					runs = got.filter((c) => `${e}/${p}/${c.id}` !== exclude);
 					failed = null;
 					// Unsearched, the list starts on the run this side shows.
-					const at = q ? -1 : got.findIndex((c) => c.id === run && e === entity && p === project);
+					const at = q ? -1 : runs.findIndex((c) => c.id === run && e === entity && p === project);
 					active = Math.max(0, at);
 				} catch (err) {
 					if (!controller.signal.aborted) failed = (err as Error).message;
@@ -161,28 +172,22 @@
 <Popover.Root bind:open>
 	<Popover.Trigger>
 		{#snippet child({ props })}
-			<!-- The side itself is the field, like a select: it reads as changeable on sight. -->
+			<!-- A quiet control in the view bar: the side's letter, the run, a caret. -->
 			<button
 				{...props}
 				type="button"
-				{@attach hint(`Change run ${side} (${side})`)}
-				class="group/field flex w-full min-w-0 items-start gap-3 rounded-lg border border-transparent bg-card px-4 py-3 text-left transition-colors outline-none hover:border-input hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:border-ring"
+				{@attach hint(`Change run ${side}  ${side}`)}
+				class="group/field flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-[13px] text-subtle transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:bg-muted data-[state=open]:text-foreground"
 			>
-				<span
-					class="mt-0.5 flex size-5 flex-none items-center justify-center rounded bg-secondary text-xs font-medium text-muted-foreground"
-					>{side}</span
-				>
-				<span class="min-w-0 flex-1">{@render children()}</span>
+				<span class="flex-none text-muted-foreground">{side}</span>
+				<span class="min-w-0 truncate">{@render children()}</span>
 				<ChevronDownIcon
-					class="mt-1 size-4 flex-none text-muted-foreground transition-transform group-hover/field:text-foreground group-data-[state=open]/field:rotate-180"
+					class="size-3.5 flex-none text-muted-foreground transition-transform group-data-[state=open]/field:rotate-180"
 				/>
 			</button>
 		{/snippet}
 	</Popover.Trigger>
-	<Popover.Content
-		align="start"
-		class="w-(--bits-popover-anchor-width) max-w-[calc(100vw-2rem)] min-w-[22rem] gap-0 p-0"
-	>
+	<Popover.Content align="start" class="w-[28rem] max-w-[calc(100vw-2rem)] gap-0 p-0">
 		<div class="flex items-center gap-1.5 border-b border-divider px-2 py-1.5">
 			{#if mode === 'runs'}
 				<button
@@ -244,9 +249,11 @@
 						onclick={() => pick(r)}
 					>
 						<CheckIcon class={['size-3.5 flex-none', !current && 'invisible']} />
-						<span class="min-w-0 flex-1 truncate">{r.display_name ?? r.id}</span>
-						<span class="flex-none font-mono text-[11.5px] text-muted-foreground"
-							>{shortModel(r.model)}</span
+						<!-- The name comes first and keeps its room; the model gives way. -->
+						<span class="max-w-[75%] flex-none truncate">{r.display_name ?? r.id}</span>
+						<span
+							class="min-w-0 flex-1 truncate text-right text-muted-foreground"
+							{@attach hint(r.model ?? undefined)}>{shortModel(r.model)}</span
 						>
 						<span class="w-14 flex-none text-right text-xs text-faint"
 							>{relativeTime(r.created_at, now)}</span
@@ -281,12 +288,5 @@
 				{/each}
 			{/if}
 		</div>
-		<p
-			class="flex gap-3 border-t border-divider px-3 py-1.5 text-[11px] text-muted-foreground"
-			aria-hidden="true"
-		>
-			<span>↑↓ move</span><span>↵ {mode === 'runs' ? 'pick' : 'open'}</span>
-			{#if mode === 'runs'}<span>⌫ change project</span>{:else}<span>esc back</span>{/if}
-		</p>
 	</Popover.Content>
 </Popover.Root>

@@ -62,7 +62,7 @@
 <!-- The item's last choice closes it with a rule. -->
 <tr class={['align-top', choice === item.choices.length - 1 && 'border-b border-divider']}>
 	<td></td>
-	<th scope="row" class="px-2 py-1 text-left font-normal">
+	<th scope="row" class="px-3 py-1 text-left font-normal">
 		<!-- Text as scored, whitespace included. A choice with its own context
 			     (Winogrande) reads after it. -->
 		<span class="whitespace-pre-wrap"
@@ -70,7 +70,7 @@
 				>{/if}{item.choices[choice]}</span
 		>
 	</th>
-	<td class="px-2 py-1">
+	<td class="px-3 py-1">
 		{#if choice === item.gold}
 			<span
 				class="inline-flex items-center gap-0.5 rounded bg-secondary px-1 text-[11px] text-muted-foreground"
@@ -92,7 +92,7 @@
 			.join(' · ')}
 		<!-- The run's pick: its bar solid and its numbers dark, the others lighter.
 			     Right or wrong is the row's own icon, above. -->
-		<td class="px-2 py-1" aria-label="{sides[side]}{picked ? ' (its pick)' : ''}: {said}">
+		<td class="px-3 py-1" aria-label="{sides[side]}{picked ? ' (its pick)' : ''}: {said}">
 			<!-- The share as a meter (reading blue, design.md): near even under a
 				     length-normalized metric, as it is. `acc_greedy` has none. -->
 			{#if answer.share}
