@@ -45,7 +45,8 @@
 	{/each}
 </ul>
 {#if pages.hasPrev || pages.hasNext}
-	<div class="mt-3">
+	<!-- Pinned at the scroll's foot, at the runs table pager's place (16px in). -->
+	<div class="sticky bottom-3.5 z-5 mt-3 -ml-1 w-fit">
 		<InlinePager
 			label="Activity pages"
 			from={pages.from}

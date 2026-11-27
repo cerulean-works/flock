@@ -3,6 +3,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { hint } from '#lib/hint.svelte.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import { PAGER_PILL } from './Pager.svelte';
 
 	interface Props {
 		/** The rows shown, 1-based, and how many there are (`many` while more can load). */
@@ -28,17 +29,19 @@
 	}
 </script>
 
-<!-- The pager's inline form (Nov 24): under a list that's part of a page, not floating. -->
-<nav bind:this={nav} class="flex items-center gap-1 text-[13px] tabular-nums" aria-label={label}>
+<!-- The runs table's floating pager (Gate 2), for a list that loads as it pages: the same pill,
+     the same buttons. Its place (pinned at the scroll's foot) is the page's to set. -->
+<nav bind:this={nav} class={PAGER_PILL} aria-label={label}>
 	<span>{from}–{to}</span>
 	<!-- A total only once it's known: the feed loads as it pages. -->
 	{#if total !== 'many'}<span class="mr-1 text-muted-foreground">of {total}</span>{:else}<span
 			class="mr-1"
 		></span>{/if}
 	<Button
-		variant="quiet"
-		size="icon-bar"
+		variant="ghost"
+		size="icon-sm"
 		disabled={!onprev}
+		class="disabled:opacity-40"
 		aria-label="Newer"
 		{@attach hint('Newer')}
 		onclick={() => turn(onprev)}
@@ -46,9 +49,10 @@
 		<ChevronLeftIcon />
 	</Button>
 	<Button
-		variant="quiet"
-		size="icon-bar"
+		variant="ghost"
+		size="icon-sm"
 		disabled={!onnext}
+		class="disabled:opacity-40"
 		{pending}
 		aria-label="Older"
 		{@attach hint('Older')}
@@ -56,5 +60,5 @@
 	>
 		<ChevronRightIcon />
 	</Button>
-	{#if failed}<span class="text-destructive">Couldn’t load more</span>{/if}
+	{#if failed}<span class="px-2 text-destructive">Couldn’t load more</span>{/if}
 </nav>

@@ -1,3 +1,9 @@
+<script lang="ts" module>
+	/** The floating pager's pill, on the runs table and under Home's feed alike. */
+	export const PAGER_PILL =
+		'flex h-10 items-center gap-1 rounded-xl bg-popover py-1 pr-1 pl-3.5 text-[13px] tabular-nums shadow-md ring-1 ring-foreground/10';
+</script>
+
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
@@ -36,7 +42,7 @@
 
 <!-- Only when there's more than one page. Links preload on hover (SvelteKit) on top of the idle prefetch of both neighbours. -->
 {#if pages > 1}<nav
-		class="pager absolute bottom-[var(--pager-bottom,0.875rem)] left-4 z-5 flex h-10 items-center gap-1 rounded-xl bg-popover py-1 pr-1 pl-3.5 text-[13px] tabular-nums shadow-md ring-1 ring-foreground/10"
+		class={['pager absolute bottom-[var(--pager-bottom,0.875rem)] left-4 z-5', PAGER_PILL]}
 		aria-label="Run pages"
 	>
 		<span>{first + 1}–{first + ws.page.runs.length}</span>
