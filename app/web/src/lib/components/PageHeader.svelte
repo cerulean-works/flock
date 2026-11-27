@@ -143,7 +143,7 @@
 						{orgName}
 					</a>
 					<ChevronRightIcon
-						class="size-3.5 flex-none translate-y-px self-center text-faint max-sm:hidden"
+						class="size-3.5 flex-none self-center text-faint max-sm:hidden"
 						aria-hidden="true"
 					/>
 				{/if}
@@ -152,15 +152,15 @@
 					{@const far = i < steps.length - 1 && 'max-sm:hidden'}
 					<a href={step.href} class={[far, CRUMB]} {@attach hint(step.label)}>{step.label}</a>
 					<ChevronRightIcon
-						class={['size-3.5 flex-none translate-y-px self-center text-faint', far]}
+						class={['size-3.5 flex-none self-center text-faint', far]}
 						aria-hidden="true"
 					/>
 				{/each}
 				{#if leading}
-					<!-- On the text's line, centred on its x-height like an icon in a sentence, not on
-					     the trail's box (which a version picker makes taller). -->
-					<div class="flex-none self-baseline leading-5 *:inline-block *:align-middle">
-						{@render leading()}&#8203;
+					<!-- Every mark in the trail (the org's, chevrons, a swatch, badges) centres on one
+					     line: the trail's box, where the org's mark sits. -->
+					<div class="flex h-5 flex-none items-center self-center">
+						{@render leading()}
 					</div>
 				{/if}
 				<h1
@@ -171,10 +171,9 @@
 				</h1>
 				<!-- In the trail, in a box of the text's height: taller controls (a version picker, a
 				     ⋯ button) overflow it rather than stretch the trail, so the trail's marks stay
-				     centred on its text. Chevrons and badges sit 1px low of the box's centre, which is
-				     where the crumbs' capitals centre (the org's mark, 16px, needs no nudge). -->
+				     centred on its text, on the org's mark's line. -->
 				{#if badges}
-					<div class="ml-1 flex h-5 flex-none translate-y-px items-center gap-2 self-center">
+					<div class="ml-1 flex h-5 flex-none items-center gap-2 self-center">
 						{@render badges()}
 					</div>
 				{/if}
