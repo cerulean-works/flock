@@ -10,10 +10,18 @@ import type { Attachment } from 'svelte/attachments';
  * shows it under the element, and touch never does.
  */
 
-export const tip = $state<{ text: string; x: number; y: number; owner: Element | null }>({
+/** `below`: shown under the element (keyboard focus), not off the pointer. */
+export const tip = $state<{
+	text: string;
+	x: number;
+	y: number;
+	below: boolean;
+	owner: Element | null;
+}>({
 	text: '',
 	x: 0,
 	y: 0,
+	below: false,
 	owner: null
 });
 
@@ -24,16 +32,17 @@ const CONTROL_DELAY = 600;
 const INFO_DELAY = 250;
 const WARM = 400;
 const CONTROL =
-	'a, button, input, select, textarea, label, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], [role="checkbox"]';
+	'a, button, input, select, textarea, label, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], [role="checkbox"], [role="separator"]';
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 let cooled: ReturnType<typeof setTimeout> | undefined;
 let warm = false;
 
-function show(owner: Element, text: string, x: number, y: number) {
+function show(owner: Element, text: string, x: number, y: number, below = false) {
 	tip.text = text;
 	tip.x = x;
 	tip.y = y;
+	tip.below = below;
 	tip.owner = owner;
 }
 
@@ -81,7 +90,7 @@ export function hint(text: string | null | undefined): Attachment<HTMLElement | 
 		const focus = () => {
 			if (!node.matches(':focus-visible')) return;
 			const box = node.getBoundingClientRect();
-			show(node, label, box.left, box.bottom + 18);
+			show(node, label, box.left, box.bottom + 6, true);
 		};
 
 		node.addEventListener('pointerenter', enter as EventListener);

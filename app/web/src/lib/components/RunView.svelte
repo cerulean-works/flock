@@ -455,8 +455,8 @@
 						}}
 						{@attach hint(
 							stacked
-								? 'Table above the charts  V. Click again for side by side'
-								: 'Table and charts side by side  V. Click again to stack them'
+								? 'Table above the charts  V\nClick again for side by side'
+								: 'Table and charts side by side  V\nClick again to stack them'
 						)}
 					>
 						{#if stacked}<Rows2Icon />{:else}<Columns2Icon />{/if}

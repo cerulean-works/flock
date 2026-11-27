@@ -43,6 +43,9 @@
 		el.setPointerCapture(e.pointerId);
 		const at = (ev: PointerEvent) => (axis === 'x' ? ev.clientX : ev.clientY);
 		const p0 = at(e);
+		const x0 = e.clientX;
+		const y0 = e.clientY;
+		const t0 = e.timeStamp;
 		const w0 = value;
 		let last = w0;
 		dragging = true;
@@ -52,8 +55,9 @@
 		};
 		const up = (ev: PointerEvent) => {
 			dragging = false;
-			// Barely moved: a click.
-			if (oncollapse && ev.type === 'pointerup' && Math.abs(at(ev) - p0) < 3) {
+			// A click: short, and barely moved either way.
+			const still = Math.abs(ev.clientX - x0) < 3 && Math.abs(ev.clientY - y0) < 3;
+			if (oncollapse && ev.type === 'pointerup' && still && ev.timeStamp - t0 < 400) {
 				el.removeEventListener('pointermove', move);
 				el.removeEventListener('pointerup', up);
 				el.removeEventListener('pointercancel', up);

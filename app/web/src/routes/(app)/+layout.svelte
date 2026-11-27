@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { hint } from '#lib/hint.svelte.ts';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import BoxIcon from '@lucide/svelte/icons/box';
@@ -36,9 +37,15 @@
 	let sidebarW = $derived(data.shell.sidebarW);
 	let drawer = $state(false);
 
-	function setCollapsed(value: boolean) {
+	async function setCollapsed(value: boolean) {
 		collapsed = value;
 		document.cookie = `flock_sidebar=${value ? 'collapsed' : 'open'}; path=/; max-age=31536000; samesite=lax`;
+		// Focus left with the control that was removed: onto the one that undoes it.
+		await tick();
+		if (!document.activeElement || document.activeElement === document.body)
+			document
+				.querySelector<HTMLElement>(`[aria-label="${value ? 'Show sidebar' : 'Hide sidebar'}"]`)
+				?.focus();
 	}
 
 	afterNavigate(() => (drawer = false));
@@ -121,7 +128,7 @@
 					]}
 					href={resolve('/(app)')}
 					aria-label="Home"
-					{@attach hint('Home')}
+					{@attach hint('Home  G then H')}
 				>
 					<HouseIcon />
 				</Button>
@@ -145,7 +152,7 @@
 					]}
 					href={entityHref(data.shell.org)}
 					aria-label="Runs"
-					{@attach hint('Runs')}
+					{@attach hint('Runs  G then R')}
 				>
 					<ActivityIcon />
 				</Button>
@@ -173,7 +180,7 @@
 					]}
 					href={datasetsHref(data.shell.org)}
 					aria-label="Datasets"
-					{@attach hint('Datasets')}
+					{@attach hint('Datasets  G then D')}
 				>
 					<DatabaseIcon />
 				</Button>
@@ -186,7 +193,7 @@
 					]}
 					href={modelsHref(data.shell.org)}
 					aria-label="Models"
-					{@attach hint('Models')}
+					{@attach hint('Models  G then M')}
 				>
 					<BoxIcon />
 				</Button>
