@@ -106,7 +106,6 @@
 	<AnchoredForm
 		bind:open
 		{anchor}
-		align="end"
 		title="Rename {nameOf(path)}/"
 		submit="Rename"
 		{pending}

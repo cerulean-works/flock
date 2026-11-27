@@ -61,7 +61,6 @@
 <AnchoredForm
 	bind:open
 	{anchor}
-	align="end"
 	title="Tag version {version}"
 	submit={taken !== null ? 'Move tag' : 'Add tag'}
 	{pending}

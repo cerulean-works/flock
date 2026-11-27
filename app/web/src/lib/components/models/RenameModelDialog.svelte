@@ -26,7 +26,12 @@
 
 	async function submit() {
 		const target = to.trim();
-		const invalid = target === name ? 'Enter a new name' : modelNameError(target);
+		// Unchanged: nothing to do.
+		if (target === name) {
+			open = false;
+			return;
+		}
+		const invalid = modelNameError(target);
 		if (invalid) {
 			error = invalid;
 			return;
@@ -50,7 +55,6 @@
 <AnchoredForm
 	bind:open
 	{anchor}
-	align="end"
 	title="Rename {name}"
 	submit="Rename"
 	{pending}
@@ -64,7 +68,7 @@
 	<Input
 		aria-label="New name"
 		placeholder="e.g., olmo2-1b-sft"
-		class="font-mono text-[13px]"
+		class="font-mono text-base sm:text-[13px]"
 		bind:value={to}
 		disabled={pending}
 		autocomplete="off"

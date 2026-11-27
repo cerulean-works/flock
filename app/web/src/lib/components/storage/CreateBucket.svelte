@@ -33,7 +33,6 @@
 <AnchoredForm
 	bind:open
 	anchor={button}
-	align="end"
 	title="Create bucket"
 	submit="Create bucket"
 	action="?/createBucket"
@@ -56,7 +55,7 @@
 		autocomplete="off"
 		spellcheck="false"
 		maxlength={nameLimit}
-		class="font-mono text-[13px] placeholder:font-sans"
+		class="font-mono text-base placeholder:font-sans sm:text-[13px]"
 	/>
 	{#snippet note()}
 		Lowercase letters, digits, hyphens and dots, up to {nameLimit} characters. Names can’t be changed

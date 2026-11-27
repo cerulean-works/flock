@@ -62,7 +62,7 @@
 		onclosed,
 		children,
 		note,
-		align = 'start',
+		align = 'end',
 		wide = false
 	}: Props = $props();
 
@@ -95,9 +95,22 @@
 		void onsubmit?.();
 	}
 
-	/** A click on the control it opens from toggles it, rather than closing and reopening it. */
+	// The ⋯ it came from opens its menu again: the form gives way to it.
+	$effect(() => {
+		if (!open || !anchor || anchor.getAttribute('aria-haspopup') !== 'menu') return;
+		const el = anchor;
+		const close = () => setOpen(false);
+		el.addEventListener('pointerdown', close);
+		return () => el.removeEventListener('pointerdown', close);
+	});
+
+	/**
+	 * A click on the button it opens from toggles it, rather than closing and reopening it. A ⋯
+	 * menu it came from just closes it, as any click elsewhere does.
+	 */
 	function outside(e: PointerEvent) {
-		if (anchor?.contains(e.target as Node)) e.preventDefault();
+		if (anchor?.contains(e.target as Node) && anchor.getAttribute('aria-haspopup') !== 'menu')
+			e.preventDefault();
 	}
 </script>
 
@@ -136,6 +149,7 @@
 			side="bottom"
 			showCloseButton={false}
 			class="rounded-t-xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+			role="dialog"
 			aria-labelledby={titleId}
 			onOpenAutoFocus={focusField}
 			onCloseAutoFocus={focusBack}
@@ -162,6 +176,7 @@
 			sideOffset={6}
 			collisionPadding={16}
 			class={[wide ? 'w-96' : 'w-80', 'p-3']}
+			role="dialog"
 			aria-labelledby={titleId}
 			onOpenAutoFocus={focusField}
 			onCloseAutoFocus={focusBack}

@@ -36,7 +36,12 @@
 
 	async function submit() {
 		const target = to.trim();
-		const invalid = target === path ? 'Enter a new path' : pathError(target);
+		// Unchanged: nothing to do.
+		if (target === path) {
+			open = false;
+			return;
+		}
+		const invalid = pathError(target);
 		if (invalid) {
 			error = invalid;
 			return;
@@ -64,7 +69,6 @@
 <AnchoredForm
 	bind:open
 	{anchor}
-	align="end"
 	wide
 	title="Rename {path}{folder ? '/' : ''}"
 	submit="Rename"
@@ -79,7 +83,7 @@
 	<Input
 		aria-label="New path"
 		placeholder="e.g., eval/mmlu-v2"
-		class="font-mono text-[13px]"
+		class="font-mono text-base sm:text-[13px]"
 		bind:value={to}
 		disabled={pending}
 		autocomplete="off"
