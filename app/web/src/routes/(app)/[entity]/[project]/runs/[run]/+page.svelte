@@ -143,6 +143,9 @@
 		void goto(withParam(page.url, 'panel', null), { replace: true, reset: false });
 	}
 
+	/** The view bar's place for the log's controls, while Logs is open. */
+	let logBar = $state<HTMLElement | null>(null);
+
 	const base = $derived(
 		`${projectUrl(data.run.entity, data.run.project)}/runs/${encodeURIComponent(data.run.id)}`
 	);
@@ -206,6 +209,9 @@
 			>
 				<GitCompareArrowsIcon /> Compare with…
 			</Button>
+		{:else if tab === 'logs'}
+			<!-- The log's own controls land here. -->
+			<div class="flex items-center gap-0.5" bind:this={logBar}></div>
 		{/if}
 	{/snippet}
 	{#snippet properties()}
@@ -267,6 +273,7 @@
 				live={LIVE_STATES.has(runState)}
 				start={data.run.created_at}
 				{name}
+				bar={logBar}
 			/>
 		{/key}
 	{:else}

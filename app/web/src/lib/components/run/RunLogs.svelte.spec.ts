@@ -57,7 +57,9 @@ describe('RunLogs', () => {
 		mockFetch();
 		render(RunLogs, { url: '/logs', total: TOTAL, live: false, start: 0, name: 'run' });
 		await expect.element(page.getByText('RuntimeError: CUDA out of memory')).toBeVisible();
-		await page.getByRole('textbox', { name: 'Search the log' }).click();
+		// The search is an icon until opened, then a field with the focus.
+		await page.getByRole('button', { name: 'Search the log' }).click();
+		await expect.element(page.getByRole('textbox', { name: 'Search the log' })).toHaveFocus();
 		await userEvent.keyboard('checkpoint');
 		// One every 50 lines in the 1000 loaded.
 		await expect.element(page.getByText(/^\d+ \/ 20$/)).toBeVisible();
