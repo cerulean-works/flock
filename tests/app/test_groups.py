@@ -112,6 +112,11 @@ def test_create_from_a_filter_by_hand_and_both(api: Client) -> None:
     assert by_hand["filter"] == {}
     assert new_ids(api, by_hand["id"]) == []  # no filter: never any new matches
 
+    # Runs logged later aren't offered either.
+    log(api, "d", {"opt": "sgd", "lr": 0.3})
+    assert new_ids(api, by_hand["id"]) == []
+    assert listed(api)["picked"]["new_count"] == 0
+
     # The filter's runs, plus one ticked by hand, minus one unticked: dropped, never offered.
     both = create(api, name="both", filter=ADAM, runs=["a", "c"])
     assert both["runs"] == ["a", "c"]
@@ -126,6 +131,15 @@ def test_create_from_a_filter_by_hand_and_both(api: Client) -> None:
     assert api.post(G, {"name": "  ", "runs": []}).status == 422
     assert api.post(G, {"name": "x", "color": "red"}).status == 422
     assert set(listed(api)) == {"adam", "picked", "both"}
+
+
+def test_a_filter_empty_in_effect_offers_no_new_matches(api: Client) -> None:
+    three_runs(api)
+    for empty in ({"$and": []}, {"$or": []}):
+        hollow = create(api, name=f"hollow {next(iter(empty))}", filter=empty, runs=["a"])
+        log(api, f"later{len(listed(api))}", {"opt": "adam"})
+        assert new_ids(api, hollow["id"]) == []
+        assert listed(api)[hollow["name"]]["new_count"] == 0
 
 
 def test_a_matching_run_logged_later_is_offered_not_added(api: Client) -> None:

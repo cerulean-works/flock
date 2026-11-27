@@ -77,7 +77,8 @@ A group stores:
 
 - **its runs**, by id. This list is the group. Nothing changes it except you.
 - **its filter**: the Mongo-style filter it was built with, the same JSON that
-  `POST .../runs/query` takes and `query.py` compiles (D77). It may be empty.
+  `POST .../runs/query` takes and `query.py` compiles (D77). It may be empty: `{}`, or `$and` /
+  `$or` lists with no condition in them. Such a group is made by hand and has no new matches.
 - **when it last loaded runs**: set at creation and at each load.
 - **dropped runs**: runs you removed. They are never offered again.
 
