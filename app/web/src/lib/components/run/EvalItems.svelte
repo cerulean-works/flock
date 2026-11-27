@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
+	import { SCROLL_FADE, scrollFade } from '#lib/scroll-fade.ts';
 	import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
 	import ArrowDownWideNarrowIcon from '@lucide/svelte/icons/arrow-down-wide-narrow';
 	import FlameIcon from '@lucide/svelte/icons/flame';
@@ -610,7 +611,7 @@
 		<!-- As wide as its box, the Question column taking what the others leave; never narrower
 		     than the columns as the reader dragged them, past which it scrolls sideways. With
 		     `bleed` the box spans the page, edge to edge, as the dataset rows do. -->
-		<div class={['relative overflow-x-auto', bleed && 'bleed']}>
+		<div class={['relative overflow-x-auto', SCROLL_FADE, bleed && 'bleed']} {@attach scrollFade}>
 			<table
 				class={[
 					'w-full table-fixed border-t border-divider text-[13px]',

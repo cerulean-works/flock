@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { hint } from '#lib/hint.svelte.ts';
+	import { SCROLL_FADE, scrollFade } from '#lib/scroll-fade.ts';
 	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
 	import ArrowUpDownIcon from '@lucide/svelte/icons/arrow-up-down';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
@@ -394,7 +395,7 @@
 								of the doc where it has none. Counts only: no test of significance.
 							</InfoHint>
 						</h2>
-						<div class="relative bleed overflow-x-auto">
+						<div class={['relative bleed overflow-x-auto', SCROLL_FADE]} {@attach scrollFade}>
 							<table
 								class="w-full min-w-[66rem] table-fixed border-t border-divider [&_tr>*:first-child]:pl-5 [&_tr>*:last-child]:pr-5"
 							>
@@ -487,7 +488,7 @@
 							<h2 id="not-compared" class="mb-2 text-[15px] font-medium">
 								{diff.not_compared.length} tasks not compared
 							</h2>
-							<div class="relative bleed overflow-x-auto">
+							<div class={['relative bleed overflow-x-auto', SCROLL_FADE]} {@attach scrollFade}>
 								<table
 									class="w-full min-w-[66rem] table-fixed border-t border-divider [&_tr>*:first-child]:pl-5 [&_tr>*:last-child]:pr-5"
 								>
