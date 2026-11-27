@@ -21,17 +21,23 @@ export const keyboard = $state<{
 export function typing(e: KeyboardEvent): boolean {
 	if (e.metaKey || e.ctrlKey || e.altKey) return true;
 	const t = e.target;
-	return t instanceof Element && !!t.closest('input, textarea, select, [contenteditable]');
+	// A field in a layer that is closing (⌘K animating out) keeps focus a moment: not typing.
+	return (
+		t instanceof Element &&
+		!!t.closest('input, textarea, select, [contenteditable]') &&
+		!t.closest('[data-state="closed"]')
+	);
 }
 
 /** A dialog, menu or list box is open, and takes the keys itself. */
 export function layerOpen(): boolean {
-	// One closing (still animating out) has let go: a key pressed right after closing ⌘K counts.
-	return !!document.querySelector(
-		['dialog', 'alertdialog', 'menu', 'listbox']
-			.map((r) => `[role="${r}"]:not([data-state="closed"])`)
-			.join(', ')
-	);
+	// One closing (still animating out) has let go, with all inside it: a key pressed right after
+	// closing ⌘K counts.
+	return [
+		...document.querySelectorAll(
+			'[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
+		)
+	].some((el) => !el.closest('[data-state="closed"]'));
 }
 
 /**
