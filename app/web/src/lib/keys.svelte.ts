@@ -6,7 +6,11 @@ import type { Attachment } from 'svelte/attachments';
  */
 export const keyboard = $state<{
 	/** The runs on the page, to jump to. */
-	runs: { label: string; href: string }[];
+	runs: {
+		label: string;
+		href: string;
+		/** Where the run lives, shown beside it. */ project: string;
+	}[];
 	/** The page's views, to switch between. */
 	views: { label: string; key: string; set: () => void }[];
 	/** Opens the page's filter, when it has one. */

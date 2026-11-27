@@ -353,7 +353,8 @@
 		const { entity, project } = ws.meta;
 		keyboard.runs = ws.page.runs.map((r, i) => ({
 			label: ws.nameOf(i),
-			href: runHref(entity, project, r.id)
+			href: runHref(entity, project, r.id),
+			project
 		}));
 		return () => (keyboard.runs = []);
 	});

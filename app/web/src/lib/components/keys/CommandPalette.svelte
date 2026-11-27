@@ -27,6 +27,8 @@
 		href?: string;
 		run?: () => void;
 		hint?: string;
+		/** Muted after the label: a run's project. */
+		detail?: string;
 	}
 
 	const sections = $derived.by((): [string, Entry[]][] => {
@@ -72,7 +74,15 @@
 			]);
 		out.push(['Go to', go]);
 		if (keyboard.runs.length)
-			out.push(['Runs', keyboard.runs.map((r) => ({ label: r.label, href: r.href }))]);
+			out.push([
+				'Runs',
+				keyboard.runs.map((r) => ({
+					label: r.label,
+					href: r.href,
+					keywords: [r.project],
+					detail: r.project
+				}))
+			]);
 		out.push([
 			'Appearance',
 			[
@@ -102,7 +112,7 @@
 		showCloseButton={false}
 	>
 		<Dialog.Title class="sr-only">Command menu</Dialog.Title>
-		<Command.Root loop>
+		<Command.Root loop class="min-w-0">
 			<Command.Input
 				class="h-11 w-full border-b border-divider bg-transparent px-4 text-[14px] outline-none placeholder:text-faint"
 				placeholder="Search or jump to…"
@@ -128,7 +138,10 @@
 										keywords={[e.label, ...(e.keywords ?? [])]}
 										onSelect={() => choose(e)}
 									>
-										<span class="min-w-0 flex-1 truncate">{e.label}</span>
+										<span class="min-w-0 truncate">{e.label}</span>
+										<span class="min-w-0 flex-1 truncate text-muted-foreground"
+											>{e.detail ?? ''}</span
+										>
 										{#if e.hint}
 											<span class="text-[11px] text-faint">{e.hint}</span>
 										{/if}

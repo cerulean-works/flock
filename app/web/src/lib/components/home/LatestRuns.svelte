@@ -10,6 +10,7 @@
 	import type { Snippet } from 'svelte';
 	import { dateTime, duration, gpus, relativeTime } from '#lib/utils.ts';
 	import { runHref } from '#lib/workspace/url.ts';
+	import { keyboard } from '#lib/keys.svelte.ts';
 
 	interface Props {
 		/** The newest runs, from the page load (polling refreshes it). */
@@ -50,6 +51,17 @@
 	// A page short of rows (merged events) loads more before it shows.
 	$effect(() => {
 		void pages.fill();
+	});
+	// ⌘K jumps to the runs listed, each with its project.
+	$effect(() => {
+		keyboard.runs = pages.shown
+			.filter((item) => item.run)
+			.map((item) => ({
+				label: item.run!.display_name ?? item.run!.id,
+				href: runHref(item.org, item.project, item.run!.id),
+				project: item.project
+			}));
+		return () => (keyboard.runs = []);
 	});
 </script>
 
