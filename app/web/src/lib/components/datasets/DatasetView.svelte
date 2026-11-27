@@ -41,6 +41,7 @@
 	import DatasetProperties from './DatasetProperties.svelte';
 	import DeleteDatasetDialog from './DeleteDatasetDialog.svelte';
 	import RenameDialog from './RenameDialog.svelte';
+	import { openMenuTrigger } from '../AnchoredForm.svelte';
 	import RowsTab from './RowsTab.svelte';
 	import S3AccessDialog from './S3AccessDialog.svelte';
 	import SchemaTab from './SchemaTab.svelte';
@@ -176,6 +177,7 @@
 	});
 	let accessing = $state(false);
 	let renaming = $state(false);
+	let renameAnchor = $state<HTMLElement | null>(null);
 	let deleting = $state(false);
 	let publishing = $state(false);
 
@@ -247,7 +249,10 @@
 				<DropdownMenu.Item
 					disabled={!!held}
 					{@attach hint(held ?? undefined)}
-					onSelect={() => (renaming = true)}
+					onSelect={() => {
+						renameAnchor = openMenuTrigger();
+						renaming = true;
+					}}
 				>
 					<PencilIcon /> Rename…
 				</DropdownMenu.Item>
@@ -341,7 +346,7 @@
 
 {#if access !== 'public'}
 	<S3AccessDialog bind:open={accessing} {scope} {path} {objectKey} {s3} />
-	<RenameDialog bind:open={renaming} {scope} {path} />
+	<RenameDialog bind:open={renaming} anchor={renameAnchor} {scope} {path} />
 	<DeleteDatasetDialog bind:open={deleting} {scope} {path} />
 	{#if info}
 		<ForkDialog bind:open={forking} {scope} {path} version={info.version} {projects} />

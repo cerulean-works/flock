@@ -30,6 +30,7 @@
 	import MoveDatasetsDialog from './MoveDatasetsDialog.svelte';
 	import ForkDialog from './ForkDialog.svelte';
 	import RenameDialog from './RenameDialog.svelte';
+	import { openMenuTrigger } from '../AnchoredForm.svelte';
 
 	interface Props {
 		scope: Scope;
@@ -48,6 +49,8 @@
 	}
 
 	let { scope, path, folder, now, selection, projects = [] }: Props = $props();
+	/** The ⋯ menu a rename opened from. */
+	let renameAnchor = $state<HTMLElement | null>(null);
 
 	// The server's first page, then pages loaded here with "Load more". Datasets come first in
 	// each page, then folders, then files (D87).
@@ -256,7 +259,10 @@
 		<RowMenu
 			name={row.name}
 			onfork={row.kind === 'dataset' ? () => selection.act('fork', [row.key]) : undefined}
-			onrename={() => selection.act('rename', [row.key])}
+			onrename={() => {
+				renameAnchor = openMenuTrigger();
+				selection.act('rename', [row.key]);
+			}}
 			onmove={() => selection.act('move', [row.key])}
 			ondelete={() => selection.act('delete', [row.key])}
 		/>
@@ -296,6 +302,7 @@
 	/>
 	<RenameDialog
 		bind:open={() => selection.action === 'rename', (o) => o || selection.close('rename')}
+		anchor={renameAnchor}
 		{scope}
 		path={one.path}
 		folder={one.folder}

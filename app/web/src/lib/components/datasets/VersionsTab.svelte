@@ -15,6 +15,7 @@
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
 	import TagDialog from './TagDialog.svelte';
+	import { openMenuTrigger } from '../AnchoredForm.svelte';
 	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
@@ -75,6 +76,7 @@
 	}
 
 	const tagging = new DialogSubject<number>();
+	let tagAnchor = $state<HTMLElement | null>(null);
 	const removing = new DialogSubject<{ tag: string; version: number }>();
 
 	/** The message a writer gave Lance's commit; it reads as the change's description. */
@@ -147,7 +149,12 @@
 			<EllipsisIcon class="size-4" />
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content align="end" class="w-40">
-			<DropdownMenu.Item onSelect={() => tagging.show(v.version)}>
+			<DropdownMenu.Item
+				onSelect={() => {
+					tagAnchor = openMenuTrigger();
+					tagging.show(v.version);
+				}}
+			>
 				<TagIcon /> Add tag…
 			</DropdownMenu.Item>
 		</DropdownMenu.Content>
@@ -185,6 +192,7 @@
 {#if !readonly}
 	<TagDialog
 		bind:open={tagging.open}
+		anchor={tagAnchor}
 		{scope}
 		{path}
 		version={tagging.value ?? 0}

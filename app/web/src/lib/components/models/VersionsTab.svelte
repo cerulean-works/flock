@@ -21,6 +21,7 @@
 	import MakePrimaryDialog from './MakePrimaryDialog.svelte';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
 	import TagDialog from './TagDialog.svelte';
+	import { openMenuTrigger } from '../AnchoredForm.svelte';
 	import Skeleton from '#lib/components/Skeleton.svelte';
 
 	interface Props {
@@ -81,6 +82,7 @@
 	}
 
 	const tagging = new DialogSubject<number>();
+	let tagAnchor = $state<HTMLElement | null>(null);
 	const removing = new DialogSubject<{ tag: string; version: number }>();
 	// The primary is kept from when the dialog opened: the page reads it again after the change.
 	const promoting = new DialogSubject<{ number: number; current: number | null }>();
@@ -152,7 +154,12 @@
 			>
 				<StarIcon /> Make primary
 			</DropdownMenu.Item>
-			<DropdownMenu.Item onSelect={() => tagging.show(v.number)}>
+			<DropdownMenu.Item
+				onSelect={() => {
+					tagAnchor = openMenuTrigger();
+					tagging.show(v.number);
+				}}
+			>
 				<TagIcon /> Add tag…
 			</DropdownMenu.Item>
 			<DropdownMenu.Separator />
@@ -203,6 +210,7 @@
 />
 <TagDialog
 	bind:open={tagging.open}
+	anchor={tagAnchor}
 	{scope}
 	{name}
 	version={tagging.value ?? 0}

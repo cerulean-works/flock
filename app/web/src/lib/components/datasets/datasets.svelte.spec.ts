@@ -706,6 +706,9 @@ describe('CellView', () => {
 	});
 });
 
+/** The ⋯ button a one-field form opens under. */
+const menuButton = () => document.body.appendChild(document.createElement('button'));
+
 describe('the dialogs', () => {
 	it('deletes after the path is typed, then goes to the nearest folder left', async () => {
 		const calls = serve({
@@ -743,9 +746,12 @@ describe('the dialogs', () => {
 					: { path: 'eval/mmlu' }
 		});
 		render(RenameDialog, {
-			open: true,
-			scope: { org: 'acme', project: null },
-			path: 'scratch/mmlu'
+			props: {
+				open: true,
+				anchor: menuButton(),
+				scope: { org: 'acme', project: null },
+				path: 'scratch/mmlu'
+			}
 		});
 		await expect
 			.element(
@@ -780,11 +786,14 @@ describe('the dialogs', () => {
 		});
 		const ontagged = vi.fn();
 		render(TagDialog, {
-			open: true,
-			scope: { org: 'acme', project: null },
-			path: 'eval/mmlu',
-			version: 7,
-			ontagged
+			props: {
+				open: true,
+				anchor: menuButton(),
+				scope: { org: 'acme', project: null },
+				path: 'eval/mmlu',
+				version: 7,
+				ontagged
+			}
 		});
 		await screen.getByLabelText('Name').fill('123');
 		await screen.getByRole('button', { name: 'Add tag' }).click();

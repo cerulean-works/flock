@@ -2,15 +2,14 @@
 	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
-	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import { datasetCall, datasetsApi, datasetsHref, pathError } from '#lib/datasets.ts';
-	import FormError from '../FormError.svelte';
+	import AnchoredForm from '../AnchoredForm.svelte';
 
 	interface Props {
 		open: boolean;
+		/** The ⋯ menu it opens from. */
+		anchor?: HTMLElement | null;
 		scope: Scope;
 		/** The dataset's or folder's path now. */
 		path: string;
@@ -20,9 +19,16 @@
 		onrenamed?: (to: string) => void | Promise<void>;
 	}
 
-	let { open = $bindable(), scope, path, folder = false, onrenamed }: Props = $props();
+	let {
+		open = $bindable(),
+		anchor = null,
+		scope,
+		path,
+		folder = false,
+		onrenamed
+	}: Props = $props();
 
-	// Starts as the current path, a rename being a move too. Reset once the dialog has closed,
+	// Starts as the current path, a rename being a move too. Reset once the form has closed,
 	// so its text stays put while it animates closed.
 	let to = $derived(path);
 	let error = $state<string | null>(null);
@@ -54,54 +60,34 @@
 	}
 </script>
 
-<!-- While the copy runs, the dialog can't be closed: the request decides how it ends. -->
-<Dialog.Root
-	bind:open={() => open, (o) => (open = pending ? true : o)}
-	onOpenChangeComplete={(o) => {
-		if (o) return;
+<!-- While the copy runs, the form stays open: the request decides how it ends. -->
+<AnchoredForm
+	bind:open
+	{anchor}
+	align="end"
+	wide
+	title="Rename {path}{folder ? '/' : ''}"
+	submit="Rename"
+	{pending}
+	{error}
+	onsubmit={submit}
+	onclosed={() => {
 		to = path;
 		error = null;
 	}}
 >
-	<Dialog.Content
-		class="sm:max-w-lg"
-		showCloseButton={!pending}
-		escapeKeydownBehavior={pending ? 'ignore' : 'close'}
-		interactOutsideBehavior={pending ? 'ignore' : 'close'}
-	>
-		<Dialog.Header>
-			<Dialog.Title class="break-all">Rename {path}{folder ? '/' : ''}</Dialog.Title>
-			<Dialog.Description>
-				{#if folder}Everything in it moves with it.{/if}
-				Anything still writing to the old path will create a new dataset there.
-			</Dialog.Description>
-		</Dialog.Header>
-		<form
-			class="grid gap-4"
-			onsubmit={(e) => {
-				e.preventDefault();
-				void submit();
-			}}
-		>
-			<div class="grid gap-2">
-				<Label for="rename-path">New path</Label>
-				<Input
-					id="rename-path"
-					placeholder="e.g., eval/mmlu-v2"
-					class="font-mono text-[13px]"
-					bind:value={to}
-					disabled={pending}
-					autocomplete="off"
-					spellcheck="false"
-				/>
-			</div>
-			<FormError {error} />
-			<Dialog.Footer>
-				<Button type="button" variant="outline" disabled={pending} onclick={() => (open = false)}>
-					Cancel
-				</Button>
-				<Button type="submit" {pending}>Rename</Button>
-			</Dialog.Footer>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
+	<Input
+		aria-label="New path"
+		placeholder="e.g., eval/mmlu-v2"
+		class="font-mono text-[13px]"
+		bind:value={to}
+		disabled={pending}
+		autocomplete="off"
+		spellcheck="false"
+		aria-invalid={!!error}
+	/>
+	{#snippet note()}
+		{#if folder}Everything in it moves with it.{/if}
+		Anything still writing to the old path will create a new dataset there.
+	{/snippet}
+</AnchoredForm>

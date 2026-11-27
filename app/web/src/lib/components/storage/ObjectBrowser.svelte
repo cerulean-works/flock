@@ -160,6 +160,7 @@
 	}
 
 	let creatingFolder = $state(false);
+	let folderButton = $state<HTMLElement | null>(null);
 	let filtering = $state(false);
 	let filterInput = $state<HTMLInputElement>();
 	// The header leads with the org: Storage › bucket › folders, the last the title.
@@ -169,7 +170,12 @@
 
 {#snippet actions()}
 	{#if !readOnly}
-		<Button variant="quiet" size="bar" onclick={() => (creatingFolder = true)}>
+		<Button
+			variant={creatingFolder ? 'quiet-on' : 'quiet'}
+			size="bar"
+			bind:ref={folderButton}
+			onclick={() => (creatingFolder = !creatingFolder)}
+		>
 			<FolderPlusIcon /> <span class="max-sm:sr-only">Create folder</span>
 		</Button>
 		<Button variant="quiet" size="bar" onclick={() => picker?.click()}>
@@ -356,7 +362,14 @@
 	{/if}
 {/snippet}
 
-<CreateFolderDialog bind:open={creatingFolder} {org} {bucket} {prefix} oncreated={() => load()} />
+<CreateFolderDialog
+	bind:open={creatingFolder}
+	anchor={folderButton}
+	{org}
+	{bucket}
+	{prefix}
+	oncreated={() => load()}
+/>
 <DeleteObjectsDialog
 	bind:open={deleting}
 	{org}

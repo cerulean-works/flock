@@ -22,6 +22,7 @@
 	import ModelProperties from './ModelProperties.svelte';
 	import OverviewTab from './OverviewTab.svelte';
 	import RenameModelDialog from './RenameModelDialog.svelte';
+	import { openMenuTrigger } from '../AnchoredForm.svelte';
 	import VersionsTab from './VersionsTab.svelte';
 
 	interface Props {
@@ -86,6 +87,7 @@
 
 	let loading = $state(false);
 	let renaming = $state(false);
+	let renameAnchor = $state<HTMLElement | null>(null);
 	let deleting = $state(false);
 </script>
 
@@ -120,7 +122,12 @@
 			{/snippet}
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content align="end" class="w-48">
-			<DropdownMenu.Item onSelect={() => (renaming = true)}>
+			<DropdownMenu.Item
+				onSelect={() => {
+					renameAnchor = openMenuTrigger();
+					renaming = true;
+				}}
+			>
 				<PencilIcon /> Rename…
 			</DropdownMenu.Item>
 			{#if filesHref}
@@ -186,5 +193,5 @@
 {#if version}
 	<LoadDialog bind:open={loading} {scope} name={info.name} number={version.number} />
 {/if}
-<RenameModelDialog bind:open={renaming} {scope} name={info.name} />
+<RenameModelDialog bind:open={renaming} anchor={renameAnchor} {scope} name={info.name} />
 <DeleteModelDialog bind:open={deleting} {scope} {info} />

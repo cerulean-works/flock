@@ -19,6 +19,7 @@
 	import DeleteModelDialog from './DeleteModelDialog.svelte';
 	import DeleteModelsDialog from './DeleteModelsDialog.svelte';
 	import FolderDialog from './FolderDialog.svelte';
+	import { openMenuTrigger } from '../AnchoredForm.svelte';
 	import MoveModelsDialog from './MoveModelsDialog.svelte';
 	import RenameModelDialog from './RenameModelDialog.svelte';
 
@@ -70,8 +71,11 @@
 
 	/** The folder whose ⋯ menu was used, and what for. */
 	let folderAction = $state<'rename' | 'move' | 'delete' | null>(null);
+	/** The ⋯ menu a rename opened from. */
+	let renameAnchor = $state<HTMLElement | null>(null);
 	let folderOf = $state.raw<{ path: string; models: number }>({ path: '', models: 0 });
 	function onFolder(f: { path: string; models: number }, action: 'rename' | 'move' | 'delete') {
+		renameAnchor = openMenuTrigger();
 		folderOf = f;
 		folderAction = action;
 	}
@@ -216,7 +220,10 @@
 	{#if selection && r.kind === 'model'}
 		<RowMenu
 			name={nameOf(r.m.name)}
-			onrename={() => selection.act('rename', [r.m.name])}
+			onrename={() => {
+				renameAnchor = openMenuTrigger();
+				selection.act('rename', [r.m.name]);
+			}}
 			onmove={() => selection.act('move', [r.m.name])}
 			ondelete={() => selection.act('delete', [r.m.name])}
 		/>
@@ -244,6 +251,7 @@
 	<FolderDialog
 		bind:open={() => folderAction !== null, (o) => o || (folderAction = null)}
 		action={folderAction ?? 'rename'}
+		anchor={renameAnchor}
 		{scope}
 		path={folderOf.path}
 		models={folderOf.models}
@@ -271,6 +279,7 @@
 	/>
 	<RenameModelDialog
 		bind:open={() => selection.action === 'rename', (o) => o || selection.close('rename')}
+		anchor={renameAnchor}
 		{scope}
 		name={one.name}
 		onrenamed={(to) => renamed(one.name, to)}

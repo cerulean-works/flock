@@ -1,15 +1,14 @@
 <script lang="ts">
 	import type { Scope } from '#lib/scope.ts';
-	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import { DatasetError, datasetCall, datasetsApi, tagError } from '#lib/datasets.ts';
 	import { toast } from 'svelte-sonner';
-	import FormError from '../FormError.svelte';
+	import AnchoredForm from '../AnchoredForm.svelte';
 
 	interface Props {
 		open: boolean;
+		/** The ⋯ menu it opens from. */
+		anchor?: HTMLElement | null;
 		scope: Scope;
 		path: string;
 		/** The version to tag. */
@@ -18,13 +17,13 @@
 		ontagged: () => void;
 	}
 
-	let { open = $bindable(), scope, path, version, ontagged }: Props = $props();
+	let { open = $bindable(), anchor = null, scope, path, version, ontagged }: Props = $props();
 
-	// Reset once the dialog has closed, so its text stays put while it animates closed.
+	// Reset once the form has closed, so its text stays put while it animates closed.
 	let name = $state('');
 	let error = $state<string | null>(null);
 	let pending = $state(false);
-	/** The version the name is already on, when it is: the dialog then offers to move it. */
+	/** The version the name is already on, when it is: the form then offers to move it. */
 	let taken = $state<number | null>(null);
 
 	function reset() {
@@ -59,48 +58,33 @@
 	}
 </script>
 
-<Dialog.Root bind:open onOpenChangeComplete={(o) => o || reset()}>
-	<Dialog.Content class="sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>Tag version {version}</Dialog.Title>
-			<Dialog.Description>
-				Lance keeps tagged versions when it cleans up old ones.
-			</Dialog.Description>
-		</Dialog.Header>
-		<form
-			class="grid gap-4"
-			onsubmit={(e) => {
-				e.preventDefault();
-				void submit(taken !== null);
-			}}
-		>
-			<div class="grid gap-2">
-				<Label for="tag-name">Name</Label>
-				<Input
-					id="tag-name"
-					bind:value={name}
-					oninput={() => (taken = null)}
-					placeholder="e.g., v1.0"
-					autocomplete="off"
-					spellcheck="false"
-				/>
-			</div>
-			{#if taken !== null}
-				<p class="text-[13px]" role="status">
-					{name} is on version {taken}. Move it to version {version}?
-				</p>
-			{/if}
-			<FormError {error} />
-			<Dialog.Footer>
-				<Button type="button" variant="outline" onclick={() => (open = false)}>Cancel</Button>
-				<Button type="submit" {pending}>
-					{#if taken !== null}
-						Move tag
-					{:else}
-						Add tag
-					{/if}
-				</Button>
-			</Dialog.Footer>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
+<AnchoredForm
+	bind:open
+	{anchor}
+	align="end"
+	title="Tag version {version}"
+	submit={taken !== null ? 'Move tag' : 'Add tag'}
+	{pending}
+	{error}
+	onsubmit={() => submit(taken !== null)}
+	onclosed={reset}
+>
+	<Input
+		bind:value={name}
+		oninput={() => (taken = null)}
+		aria-label="Name"
+		placeholder="e.g., v1.0"
+		autocomplete="off"
+		spellcheck="false"
+		aria-invalid={!!error}
+	/>
+	{#snippet note()}
+		{#if taken !== null}
+			<p class="text-foreground" role="status">
+				{name} is on version {taken}. Move it to version {version}?
+			</p>
+		{:else}
+			<p>Lance keeps tagged versions when it cleans up old ones.</p>
+		{/if}
+	{/snippet}
+</AnchoredForm>

@@ -2,15 +2,14 @@
 	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
-	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import { modelApi, modelCall, modelNameError, modelsHref } from '#lib/models.ts';
-	import FormError from '../FormError.svelte';
+	import AnchoredForm from '../AnchoredForm.svelte';
 
 	interface Props {
 		open: boolean;
+		/** The ⋯ menu it opens from. */
+		anchor?: HTMLElement | null;
 		scope: Scope;
 		/** The model's name now. */
 		name: string;
@@ -18,9 +17,9 @@
 		onrenamed?: (to: string) => void | Promise<void>;
 	}
 
-	let { open = $bindable(), scope, name, onrenamed }: Props = $props();
+	let { open = $bindable(), anchor = null, scope, name, onrenamed }: Props = $props();
 
-	// Reset once the dialog has closed, so its text stays put while it animates closed.
+	// Reset once the form has closed, so its text stays put while it animates closed.
 	let to = $derived(name);
 	let error = $state<string | null>(null);
 	let pending = $state(false);
@@ -48,52 +47,31 @@
 	}
 </script>
 
-<Dialog.Root
-	bind:open={() => open, (o) => (open = pending ? true : o)}
-	onOpenChangeComplete={(o) => {
-		if (o) return;
+<AnchoredForm
+	bind:open
+	{anchor}
+	align="end"
+	title="Rename {name}"
+	submit="Rename"
+	{pending}
+	{error}
+	onsubmit={submit}
+	onclosed={() => {
 		to = name;
 		error = null;
 	}}
 >
-	<Dialog.Content
-		class="sm:max-w-md"
-		showCloseButton={!pending}
-		escapeKeydownBehavior={pending ? 'ignore' : 'close'}
-		interactOutsideBehavior={pending ? 'ignore' : 'close'}
-	>
-		<Dialog.Header>
-			<Dialog.Title class="break-all">Rename {name}</Dialog.Title>
-			<Dialog.Description>
-				Code that loads it by its old name stops working. Its files stay where they are.
-			</Dialog.Description>
-		</Dialog.Header>
-		<form
-			class="grid gap-4"
-			onsubmit={(e) => {
-				e.preventDefault();
-				void submit();
-			}}
-		>
-			<div class="grid gap-2">
-				<Label for="rename-model-name">New name</Label>
-				<Input
-					id="rename-model-name"
-					placeholder="e.g., olmo2-1b-sft"
-					class="font-mono text-[13px]"
-					bind:value={to}
-					disabled={pending}
-					autocomplete="off"
-					spellcheck="false"
-				/>
-			</div>
-			<FormError {error} />
-			<Dialog.Footer>
-				<Button type="button" variant="outline" disabled={pending} onclick={() => (open = false)}>
-					Cancel
-				</Button>
-				<Button type="submit" {pending}>Rename</Button>
-			</Dialog.Footer>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
+	<Input
+		aria-label="New name"
+		placeholder="e.g., olmo2-1b-sft"
+		class="font-mono text-[13px]"
+		bind:value={to}
+		disabled={pending}
+		autocomplete="off"
+		spellcheck="false"
+		aria-invalid={!!error}
+	/>
+	{#snippet note()}
+		Code that loads it by its old name stops working. Its files stay where they are.
+	{/snippet}
+</AnchoredForm>

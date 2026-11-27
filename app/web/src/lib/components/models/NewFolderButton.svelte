@@ -2,12 +2,10 @@
 	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
 	import { invalidateAll } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import { modelCall, modelNameError, modelsApi } from '#lib/models.ts';
 	import type { Scope } from '#lib/scope.ts';
-	import FormError from '../FormError.svelte';
+	import AnchoredForm from '../AnchoredForm.svelte';
 
 	// An empty folder of a scope's models (D158), which stays until it's deleted. The page reads
 	// the listing again once it's made.
@@ -20,12 +18,12 @@
 	let { scope, path }: Props = $props();
 
 	let open = $state(false);
+	let button = $state<HTMLElement | null>(null);
 	let name = $state('');
 	let pending = $state(false);
 	let error = $state<string | null>(null);
 
-	async function create(e: SubmitEvent) {
-		e.preventDefault();
+	async function create() {
 		const target = name.trim();
 		error = target.includes('/')
 			? 'Enter one folder name, without slashes'
@@ -47,37 +45,33 @@
 	}
 </script>
 
-<Button variant="quiet" size="bar" onclick={() => (open = true)}>
+<Button
+	variant={open ? 'quiet-on' : 'quiet'}
+	size="bar"
+	bind:ref={button}
+	onclick={() => (open = !open)}
+>
 	<FolderPlusIcon /> <span class="max-sm:sr-only">New folder</span>
 </Button>
-<Dialog.Root
+<AnchoredForm
 	bind:open
-	onOpenChangeComplete={(o) => {
-		if (o) return;
+	anchor={button}
+	title="New folder"
+	submit="Create folder"
+	{pending}
+	{error}
+	onsubmit={create}
+	onclosed={() => {
 		name = '';
 		error = null;
 	}}
 >
-	<Dialog.Content class="sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>New folder</Dialog.Title>
-		</Dialog.Header>
-		<form class="grid gap-4" onsubmit={create}>
-			<div class="grid gap-2">
-				<Label for="model-folder-name">Name</Label>
-				<Input
-					id="model-folder-name"
-					bind:value={name}
-					autocomplete="off"
-					spellcheck="false"
-					autofocus
-					aria-invalid={!!error}
-				/>
-			</div>
-			<FormError {error} />
-			<Dialog.Footer>
-				<Button type="submit" {pending}>Create folder</Button>
-			</Dialog.Footer>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
+	<Input
+		bind:value={name}
+		aria-label="Name"
+		placeholder="Name"
+		autocomplete="off"
+		spellcheck="false"
+		aria-invalid={!!error}
+	/>
+</AnchoredForm>

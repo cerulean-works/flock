@@ -1,10 +1,7 @@
 <script lang="ts">
 	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
-	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import {
 		ModelError,
 		isCheckpoint,
@@ -13,10 +10,12 @@
 		modelRef,
 		tagError
 	} from '#lib/models.ts';
-	import FormError from '../FormError.svelte';
+	import AnchoredForm from '../AnchoredForm.svelte';
 
 	interface Props {
 		open: boolean;
+		/** The ⋯ menu it opens from. */
+		anchor?: HTMLElement | null;
 		scope: Scope;
 		name: string;
 		/** The version to tag. */
@@ -25,13 +24,13 @@
 		ontagged: () => void;
 	}
 
-	let { open = $bindable(), scope, name, version, ontagged }: Props = $props();
+	let { open = $bindable(), anchor = null, scope, name, version, ontagged }: Props = $props();
 
-	// Reset once the dialog has closed, so its text stays put while it animates closed.
+	// Reset once the form has closed, so its text stays put while it animates closed.
 	let tag = $state('');
 	let error = $state<string | null>(null);
 	let pending = $state(false);
-	/** The version the tag is already on, when it can move: the dialog then offers to. */
+	/** The version the tag is already on, when it can move: the form then offers to. */
 	let taken = $state<number | null>(null);
 	/** The version a checkpoint tag is already on. It never moves (D107). */
 	let fixed = $state<number | null>(null);
@@ -69,55 +68,42 @@
 	}
 </script>
 
-<Dialog.Root bind:open onOpenChangeComplete={(o) => o || reset()}>
-	<Dialog.Content class="sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>Tag version {version}</Dialog.Title>
-			<Dialog.Description>
-				Load it as {modelRef(scope, name)}@{tag || 'tag'} once it’s tagged.
-			</Dialog.Description>
-		</Dialog.Header>
-		<form
-			class="grid gap-4"
-			onsubmit={(e) => {
-				e.preventDefault();
-				void submit(taken !== null);
-			}}
-		>
-			<div class="grid gap-2">
-				<Label for="model-tag-name">Name</Label>
-				<Input
-					id="model-tag-name"
-					bind:value={tag}
-					oninput={() => {
-						taken = fixed = null;
-						error = null;
-					}}
-					placeholder="e.g., release"
-					autocomplete="off"
-					spellcheck="false"
-				/>
-			</div>
-			{#if taken !== null}
-				<p class="text-[13px]" role="status">
-					{tag} is on version {taken}. Move it to version {version}?
-				</p>
-			{:else if fixed !== null}
-				<p class="text-[13px] text-destructive" role="alert">
-					{tag} is on version {fixed}. Checkpoint tags don’t move.
-				</p>
-			{/if}
-			<FormError {error} />
-			<Dialog.Footer>
-				<Button type="button" variant="outline" onclick={() => (open = false)}>Cancel</Button>
-				<Button type="submit" {pending}>
-					{#if taken !== null}
-						Move tag
-					{:else}
-						Add tag
-					{/if}
-				</Button>
-			</Dialog.Footer>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
+<AnchoredForm
+	bind:open
+	{anchor}
+	align="end"
+	title="Tag version {version}"
+	submit={taken !== null ? 'Move tag' : 'Add tag'}
+	{pending}
+	{error}
+	onsubmit={() => submit(taken !== null)}
+	onclosed={reset}
+>
+	<Input
+		bind:value={tag}
+		oninput={() => {
+			taken = fixed = null;
+			error = null;
+		}}
+		aria-label="Name"
+		placeholder="e.g., release"
+		autocomplete="off"
+		spellcheck="false"
+		aria-invalid={!!error}
+	/>
+	{#snippet note()}
+		{#if taken !== null}
+			<p class="text-foreground" role="status">
+				{tag} is on version {taken}. Move it to version {version}?
+			</p>
+		{:else if fixed !== null}
+			<p class="text-destructive" role="alert">
+				{tag} is on version {fixed}. Checkpoint tags don’t move.
+			</p>
+		{:else}
+			<p>
+				Load it as <span class="font-mono">{modelRef(scope, name)}@{tag || 'tag'}</span> once it’s tagged.
+			</p>
+		{/if}
+	{/snippet}
+</AnchoredForm>
