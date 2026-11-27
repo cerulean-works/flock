@@ -10,7 +10,7 @@
 	import { RESULT_SCHEMAS, formatScore } from '#lib/evals.ts';
 	import { versionHref } from '#lib/models.ts';
 	import type { EvalResults, ItemsView, RunDetail, RunModels } from '#lib/types.ts';
-	import { dateTime, relativeTime } from '#lib/utils.ts';
+	import { dateTime, formatValue, relativeTime } from '#lib/utils.ts';
 
 	/**
 	 * An eval run's results file (025 D184): suites, tasks and what produced them. `models` names
@@ -52,6 +52,15 @@
 		['Scored at', p.created_at],
 		['Command', p.command]
 	]);
+
+	/** A value as the pane shows its kind: numbers grouped, the time as a date. */
+	function shown(label: string, value: string | number | boolean) {
+		if (label === 'Scored at') {
+			const at = Date.parse(String(value)) / 1000;
+			return Number.isFinite(at) ? dateTime(at) : String(value);
+		}
+		return typeof value === 'number' ? formatValue(value) : String(value);
+	}
 
 	// The tasks whose docs are right or wrong (eval's `acc_*` metrics) and that have a score,
 	// for the items. Docs right are the accuracy times the docs scored.
@@ -262,34 +271,31 @@
 				</section>
 			{/if}
 
-			<section class="px-5 pt-6" aria-labelledby="results-provenance">
-				<h2 id="results-provenance" class="mb-2 flex items-center gap-1.5 text-[15px] font-medium">
+			<section class="pt-6" aria-labelledby="results-provenance">
+				<h2
+					id="results-provenance"
+					class="mb-2 flex items-center gap-1.5 px-5 text-[15px] font-medium"
+				>
 					Provenance
 					<InfoHint label="About this results file">
 						Schema {results.schema_version}, from <span class="font-mono">results.json</span> of
 						{run.display_name ?? run.id}.
 					</InfoHint>
 				</h2>
-				<div class="relative overflow-x-auto">
-					<table class="w-full min-w-[52rem] table-fixed border-t border-divider">
-						<colgroup>
-							<col class="w-[15rem]" />
-							<col />
-						</colgroup>
-						<tbody>
-							{#each provenance as [label, value] (label)}
-								{#if value != null}
-									<tr class="border-b border-divider hover:bg-muted">
-										<th scope="row" class="px-3 py-1.5 text-left font-normal text-muted-foreground"
-											>{label}</th
-										>
-										<td class="px-3 py-1.5 font-mono text-[12.5px] break-all">{String(value)}</td>
-									</tr>
-								{/if}
-							{/each}
-						</tbody>
-					</table>
-				</div>
+				<!-- The list tables' rows: to the page's edges, 36px, the label muted, the value in the
+				     shared formats so it reads as the pane's Config does. -->
+				<dl class="border-t border-divider text-[13px]">
+					{#each provenance as [label, value] (label)}
+						{#if value != null}
+							<div
+								class="grid min-h-9 grid-cols-[8rem_minmax(0,1fr)] items-baseline gap-x-5 border-b border-divider px-5 py-2 hover:bg-muted sm:grid-cols-[15rem_minmax(0,1fr)]"
+							>
+								<dt class="text-muted-foreground">{label}</dt>
+								<dd class="min-w-0 font-mono text-[12px] break-words">{shown(label, value)}</dd>
+							</div>
+						{/if}
+					{/each}
+				</dl>
 			</section>
 		</div>
 	{/if}
