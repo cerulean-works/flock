@@ -222,7 +222,7 @@
 			currency={data.currency}
 			models={data.models}
 			now={data.now}
-			onlogs={() => setTab('logs')}
+			onlogs={tab === 'logs' ? undefined : () => setTab('logs')}
 		/>
 	{/snippet}
 	{#snippet summary()}
@@ -240,9 +240,14 @@
 				onfullscreen={openPanel}
 			/>
 		{:else}
-			<EmptyState variant="onboarding" title="No metrics yet">
-				{#snippet lead()}Charts appear once the run logs a metric.{/snippet}
-			</EmptyState>
+			<!-- A live run may still log some; an ended one never will. -->
+			{#if LIVE_STATES.has(runState)}
+				<EmptyState variant="onboarding" title="No metrics yet">
+					{#snippet lead()}Charts appear once the run logs a metric.{/snippet}
+				</EmptyState>
+			{:else}
+				<EmptyState variant="onboarding" title="No metrics logged" />
+			{/if}
 		{/if}
 	{:else if tab === 'results'}
 		{#if data.results}

@@ -58,6 +58,15 @@
 		return t ? rows.filter(([k]) => k.toLowerCase().includes(t)) : rows;
 	};
 
+	/** Closed, the focus goes back to the icon that opened it. */
+	async function closeSearch(title: string) {
+		queries[title] = null;
+		await tick();
+		document
+			.querySelector<HTMLElement>(`[aria-label="Find a ${title.toLowerCase()} key"]`)
+			?.focus();
+	}
+
 	async function openSearch(title: string, details: HTMLDetailsElement | null) {
 		queries[title] = '';
 		if (details) details.open = true;
@@ -116,7 +125,7 @@
 								if (e.key === ' ') e.stopPropagation();
 								if (e.key === 'Escape') {
 									e.stopPropagation();
-									queries[title] = null;
+									closeSearch(title);
 								}
 							}}
 							onkeyup={(e) => e.key === ' ' && e.preventDefault()}
@@ -128,7 +137,7 @@
 							aria-label="Close the search"
 							onclick={(e) => {
 								e.preventDefault();
-								queries[title] = null;
+								closeSearch(title);
 							}}
 						>
 							<XIcon class="size-3.5" />
