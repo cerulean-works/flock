@@ -1,4 +1,5 @@
 <script lang="ts" generics="T extends string">
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import PanelRightIcon from '@lucide/svelte/icons/panel-right';
 	import type { Snippet } from 'svelte';
 	import { hint } from '#lib/hint.svelte.ts';
@@ -31,10 +32,15 @@
 		tabsLabel?: string;
 		/** The view bar's right side (the title row's, without tabs): the page's actions, quiet. */
 		controls?: Snippet;
-		/** The properties pane: right of the content, above it on a phone. `]` hides it. */
+		/** The properties pane: right of the content, folded into a Details row above it on a
+		 * phone. `]` hides it. */
 		properties?: Snippet;
+		/** Muted beside the phone's Details row: the one or two facts worth seeing folded. */
+		summary?: Snippet;
 		/** The content runs to the edges, as a full-page table does: no gutter or top padding. */
 		flush?: boolean;
+		/** The content fills the page and scrolls itself (charts, a log): flush, no bottom room. */
+		fill?: boolean;
 		/** The content, the part that scrolls. */
 		children: Snippet;
 	}
@@ -52,11 +58,15 @@
 		tabsLabel,
 		controls,
 		properties,
+		summary,
 		flush = false,
+		fill = false,
 		children
 	}: Props = $props();
 
 	const shown = $derived(!!properties && pane.open);
+	/** The phone's Details row, open: for this page only. */
+	let details = $state(false);
 
 	function onkeydown(e: KeyboardEvent) {
 		if (!properties || e.key !== ']' || e.defaultPrevented || typing(e) || layerOpen()) return;
@@ -125,30 +135,63 @@
 		actions={headerActions}
 		toolbar={tabs ? bar : undefined}
 	/>
-	<!-- On a phone the content and its properties scroll as one, the facts first. -->
-	<div class="flex min-h-0 flex-1 max-md:flex-col max-md:overflow-y-auto">
+	<div class="flex min-h-0 flex-1 max-md:flex-col">
 		{#if properties}
 			<aside
 				aria-label="Properties"
 				class={[
-					'flex-none px-5 py-4 md:order-last md:w-70 md:overflow-y-auto md:border-l md:border-divider',
+					'flex-none md:order-last md:w-70 md:overflow-y-auto md:border-l md:border-divider',
 					'max-md:border-b max-md:border-divider',
 					!shown && 'md:hidden'
 				]}
 			>
-				{@render properties()}
+				<!-- On a phone the pane folds into one row above the content, so the content leads. -->
+				<button
+					type="button"
+					class="flex h-9 w-full items-center gap-2 px-5 text-left text-[13px] outline-none focus-visible:bg-muted md:hidden"
+					aria-expanded={details}
+					aria-controls="detail-properties"
+					onclick={() => (details = !details)}
+				>
+					<span class="flex-none font-medium">Details</span>
+					{#if summary}
+						<span class="flex min-w-0 items-center gap-2 truncate text-muted-foreground"
+							>{@render summary()}</span
+						>
+					{/if}
+					<ChevronDownIcon
+						class={[
+							'ml-auto size-4 flex-none text-muted-foreground transition-transform',
+							details && 'rotate-180'
+						]}
+					/>
+				</button>
+				<div
+					id="detail-properties"
+					class={[
+						'px-5 py-4 max-md:max-h-[55dvh] max-md:overflow-y-auto max-md:pt-0',
+						!details && 'max-md:hidden'
+					]}
+				>
+					{@render properties()}
+				</div>
 			</aside>
 		{/if}
-		<main
-			class={[
-				'@container relative min-w-0 flex-1 md:overflow-y-auto',
-				!flush && 'px-5 pt-5',
-				properties && 'max-md:flex-none'
-			]}
-		>
-			<!-- The bottom room is inside, not the scroll's padding: that would hold a floating
-			     pager that far off the scroll's foot. -->
-			<div class="pb-16">{@render children()}</div>
-		</main>
+		{#if fill}
+			<main class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+				{@render children()}
+			</main>
+		{:else}
+			<main
+				class={[
+					'@container relative min-h-0 min-w-0 flex-1 overflow-y-auto',
+					!flush && 'px-5 pt-5'
+				]}
+			>
+				<!-- The bottom room is inside, not the scroll's padding: that would hold a floating
+				     pager that far off the scroll's foot. -->
+				<div class="pb-16">{@render children()}</div>
+			</main>
+		{/if}
 	</div>
 </Page>

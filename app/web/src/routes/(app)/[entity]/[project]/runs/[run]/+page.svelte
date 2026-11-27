@@ -1,25 +1,21 @@
 <script lang="ts">
-	import { hint } from '#lib/hint.svelte.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
-	import PanelRightIcon from '@lucide/svelte/icons/panel-right';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import XIcon from '@lucide/svelte/icons/x';
-	import { onMount, untrack } from 'svelte';
-	import { MediaQuery } from 'svelte/reactivity';
+	import { untrack } from 'svelte';
 	import { goto, invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import ChartsPane from '#lib/components/ChartsPane.svelte';
+	import DetailPage from '#lib/components/DetailPage.svelte';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
 	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
 	import PanelEditor from '#lib/components/PanelEditor.svelte';
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
-	import PageHeader from '#lib/components/PageHeader.svelte';
 	import PlotSettings from '#lib/components/PlotSettings.svelte';
 	import RunFiles from '#lib/components/run/RunFiles.svelte';
 	import RunLogs from '#lib/components/run/RunLogs.svelte';
@@ -29,16 +25,15 @@
 	import TagRunsDialog from '#lib/components/TagRunsDialog.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import { Separator } from '#lib/components/ui/separator/index.js';
-	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { projectUrl } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
 	import { runWorkspace } from '#lib/data/run.ts';
 	import { compareHref, itemsViewOf, withItemsView } from '#lib/evals.ts';
+	import { duration } from '#lib/utils.ts';
+	import { pane } from '#lib/components/pane.svelte.ts';
 	import { LIVE_STATES } from '#lib/types.ts';
 	import { entityHref, projectHref, runHref, withParam } from '#lib/workspace/url.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
-	import Page from '#lib/components/Page.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -104,46 +99,12 @@
 		}).finally(() => (tabOverride = null));
 	}
 
-	// The overview: a sidebar beside every tab. Open by default on wide screens, where the choice
-	// is remembered; on narrow ones it opens over the tab, for this visit only.
-	const SIDEBAR = 'flock:run-sidebar';
-	const wide = new MediaQuery('(min-width: 64rem)', true);
-	let mounted = $state(false);
-	let widePref = $state(true);
-	let narrowOpen = $state(false);
-	const sidebar = $derived(wide.current ? widePref : narrowOpen);
-
-	onMount(() => {
-		try {
-			const saved = localStorage.getItem(SIDEBAR);
-			// An old overview link opens it, whatever was chosen before (see below).
-			if (saved != null && page.url.searchParams.get('tab') !== 'overview')
-				widePref = saved !== 'closed';
-		} catch {
-			// Open, the default.
-		}
-		mounted = true;
-	});
-
-	function setSidebar(open: boolean, remember = true) {
-		if (!wide.current) {
-			narrowOpen = open;
-			return;
-		}
-		widePref = open;
-		if (!remember) return;
-		try {
-			localStorage.setItem(SIDEBAR, open ? 'open' : 'closed');
-		} catch {
-			// For this visit only.
-		}
-	}
-
-	// The overview used to be a tab: its links land on the first tab, with the sidebar open.
+	// The overview used to be a tab, then a sidebar: its links land on the first tab, with the
+	// properties pane open.
 	$effect(() => {
 		if (page.url.searchParams.get('tab') !== 'overview') return;
 		untrack(() => {
-			setSidebar(true, false);
+			pane.open = true;
 			void goto(withParam(page.url, 'tab', null), { replace: true, reset: false });
 		});
 	});
@@ -224,140 +185,96 @@
 	</DropdownMenu.Root>
 {/snippet}
 
-<Page width="full">
-	<PageHeader title={name}>
-		{#snippet badges()}
-			{#if !readonly}{@render runMenu()}{/if}
-		{/snippet}
-		<!-- The run's state at the row's end, apart from its menu: two marks side by side read
-		     as one cluster. -->
-		{#snippet actions()}
-			<StateBadge state={runState} />
-		{/snippet}
-		{#snippet toolbar()}
-			<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
-				<Tabs.List aria-label="Run">
-					{#each TABS as t (t.value)}
-						<Tabs.Trigger value={t.value}>{t.label}</Tabs.Trigger>
-					{/each}
-				</Tabs.List>
-			</Tabs.Root>
-			{#if tab === 'charts'}
-				<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
-				<PlotSettings />
-			{:else if tab === 'results' && !readonly}
-				<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
-				<Button
-					variant="outline"
-					data-sveltekit-preload-data="tap"
-					href={compareHref(data.run.entity, data.run.project, data.run.id)}
-				>
-					<GitCompareArrowsIcon /> Compare with…
-				</Button>
-			{/if}
-			<!-- On the tabs' row, at the end above the sidebar it opens. -->
+<DetailPage title={name} org tabs={TABS} {tab} ontab={setTab} tabsLabel="Run" fill>
+	{#snippet badges()}
+		{#if !readonly}{@render runMenu()}{/if}
+	{/snippet}
+	<!-- The run's state at the row's end, apart from its menu: two marks side by side read as
+	     one cluster. -->
+	{#snippet actions()}
+		<StateBadge state={runState} />
+	{/snippet}
+	{#snippet controls()}
+		{#if tab === 'charts'}
+			<PlotSettings />
+		{:else if tab === 'results' && !readonly}
 			<Button
-				variant="ghost"
-				size="sm"
-				class="ml-auto aria-pressed:bg-muted aria-pressed:text-foreground"
-				aria-pressed={sidebar}
-				aria-controls="run-overview"
-				{@attach hint(sidebar ? 'Hide the overview' : 'Show the overview')}
-				onclick={() => setSidebar(!sidebar)}
+				variant="quiet"
+				size="bar"
+				data-sveltekit-preload-data="tap"
+				href={compareHref(data.run.entity, data.run.project, data.run.id)}
 			>
-				<PanelRightIcon />
-				<span class="max-sm:sr-only">Overview</span>
+				<GitCompareArrowsIcon /> Compare with…
 			</Button>
-		{/snippet}
-	</PageHeader>
-
-	<div class="relative flex min-h-0 flex-1">
-		<main class="relative min-h-0 min-w-0 flex-1">
-			{#if tab === 'charts'}
-				{#if ws.meta.metrics.length}
-					<ChartsPane
-						shown
-						active={fullscreen == null}
-						beside={false}
-						{panelHref}
-						onfullscreen={openPanel}
-					/>
-				{:else}
-					<EmptyState>This run hasn’t logged any metrics.</EmptyState>
-				{/if}
-			{:else if tab === 'results'}
-				{#if data.results}
-					{#key data.run.id}
-						<RunResults
-							run={data.run}
-							results={data.results}
-							models={data.models}
-							view={itemsViewOf(page.url.searchParams)}
-							onview={(view) => replaceState(withItemsView(page.url, view), page.state)}
-						/>
-					{/key}
-				{:else}
-					<EmptyState>
-						This eval run has no results file. Runs logged with
-						<code class="font-mono text-[0.95em]">flock eval run --wandb-project</code> upload their
-						<code class="font-mono text-[0.95em]">results.json</code> and predictions.
-					</EmptyState>
-				{/if}
-			{:else if tab === 'logs'}
-				{#key data.run.id}
-					<RunLogs
-						url="{base}/logs"
-						total={data.run.log_line_count}
-						live={LIVE_STATES.has(runState)}
-						start={data.run.created_at}
-						{name}
-					/>
-				{/key}
-			{:else}
-				{#key data.run.id}
-					<RunFiles url="{base}/files" now={data.now} />
-				{/key}
-			{/if}
-		</main>
-		<!-- Before hydration, CSS stands in for the defaults: open on wide screens, closed on narrow. -->
-		{#if sidebar || !mounted}
-			<aside
-				id="run-overview"
-				aria-label="Overview"
-				class={[
-					'flex w-[22rem] flex-none flex-col border-l bg-background',
-					'max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:w-[min(22rem,100%)] max-lg:shadow-xl',
-					!mounted && 'max-lg:hidden'
-				]}
-			>
-				<div
-					class="flex h-10 flex-none items-center justify-between border-b border-divider pr-2 pl-4"
-				>
-					<h2 class="text-[13px] font-medium">Overview</h2>
-					<Button
-						variant="ghost"
-						size="icon-xs"
-						aria-label="Hide the overview"
-						{@attach hint('Hide the overview')}
-						onclick={() => setSidebar(false)}
-					>
-						<XIcon />
-					</Button>
-				</div>
-				<div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-					<RunOverview
-						run={data.run}
-						{runState}
-						owner={data.owner}
-						currency={data.currency}
-						models={data.models}
-						now={data.now}
-					/>
-				</div>
-			</aside>
 		{/if}
-	</div>
-</Page>
+	{/snippet}
+	{#snippet properties()}
+		<RunOverview
+			run={data.run}
+			{runState}
+			owner={data.owner}
+			currency={data.currency}
+			models={data.models}
+			now={data.now}
+			onlogs={() => setTab('logs')}
+		/>
+	{/snippet}
+	{#snippet summary()}
+		<StateBadge state={runState} />
+		{#if data.run.runtime}<span>· {duration(data.run.runtime)}</span>{/if}
+	{/snippet}
+
+	{#if tab === 'charts'}
+		{#if ws.meta.metrics.length}
+			<ChartsPane
+				shown
+				active={fullscreen == null}
+				beside={false}
+				{panelHref}
+				onfullscreen={openPanel}
+			/>
+		{:else}
+			<EmptyState variant="onboarding" title="No metrics yet">
+				{#snippet lead()}Charts appear once the run logs a metric.{/snippet}
+			</EmptyState>
+		{/if}
+	{:else if tab === 'results'}
+		{#if data.results}
+			{#key data.run.id}
+				<RunResults
+					run={data.run}
+					results={data.results}
+					models={data.models}
+					view={itemsViewOf(page.url.searchParams)}
+					onview={(view) => replaceState(withItemsView(page.url, view), page.state)}
+				/>
+			{/key}
+		{:else}
+			<EmptyState variant="onboarding" title="No results yet">
+				{#snippet lead()}
+					Runs logged with <code class="font-mono text-[0.95em]"
+						>flock eval run --wandb-project</code
+					>
+					upload their results and predictions.
+				{/snippet}
+			</EmptyState>
+		{/if}
+	{:else if tab === 'logs'}
+		{#key data.run.id}
+			<RunLogs
+				url="{base}/logs"
+				total={data.run.log_line_count}
+				live={LIVE_STATES.has(runState)}
+				start={data.run.created_at}
+				{name}
+			/>
+		{/key}
+	{:else}
+		{#key data.run.id}
+			<RunFiles url="{base}/files" now={data.now} />
+		{/key}
+	{/if}
+</DetailPage>
 
 {#if fullscreen != null}
 	<FullscreenPanel

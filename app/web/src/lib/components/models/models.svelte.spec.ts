@@ -323,8 +323,10 @@ describe('ModelView', () => {
 		await expect.element(screen.getByRole('rowheader', { name: 'attention.heads' })).toBeVisible();
 		await expect.element(screen.getByText('2,048')).toBeVisible();
 		await expect.element(screen.getByRole('rowheader', { name: 'architecture' })).toBeVisible();
-		// The version's facts, in the properties pane.
+		// The version's facts, in the properties pane: folded into a Details row on a phone.
 		const pane = screen.getByRole('complementary', { name: 'Properties' });
+		await expect.element(pane.getByText('Digest', { exact: true })).not.toBeVisible();
+		await pane.getByRole('button', { name: 'Details' }).click();
 		await expect.element(pane.getByText('Digest', { exact: true })).toBeVisible();
 		await expect.element(pane.getByText('3.0 GB', { exact: true })).toBeVisible();
 		await expect.element(pane.getByText('Made primary', { exact: true })).toBeVisible();
