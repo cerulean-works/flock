@@ -233,6 +233,7 @@
 			project={run.project}
 			run={run.id}
 			bind:open={pickingA}
+			exclude={data.b ? pathOf(data.b) : undefined}
 			onpick={(e, p, r) => show([e, p, r], data.b ? pathOf(data.b) : '')}
 		>
 			{@render field()}
@@ -245,6 +246,7 @@
 			project={run?.project ?? data.a.project}
 			run={run?.id ?? ''}
 			bind:open={pickingB}
+			exclude={pathOf(data.a)}
 			onpick={(e, p, r) => show(data.a, `${e}/${p}/${r}`)}
 		>
 			{@render field()}

@@ -26,11 +26,22 @@
 		/** Opened from outside too, by the page's A and B shortcuts. */
 		open?: boolean;
 		onpick: (entity: string, project: string, run: string) => void;
+		/** The other side's run, `entity/project/id`: left out, a run isn't compared with itself. */
+		exclude?: string;
 		/** The field's content: the run on this side, which the whole field opens the list from. */
 		children: Snippet;
 	}
 
-	let { side, entity, project, run, open = $bindable(false), onpick, children }: Props = $props();
+	let {
+		side,
+		entity,
+		project,
+		run,
+		open = $bindable(false),
+		onpick,
+		exclude,
+		children
+	}: Props = $props();
 
 	const id = $props.id();
 	let mode = $state<'runs' | 'projects'>('runs');
@@ -67,10 +78,10 @@
 					);
 					if (!res.ok) throw new Error(`Couldn’t list the runs of ${e}/${p} (${res.status})`);
 					const got = ((await res.json()) as { runs: EvalRunChoice[] }).runs;
-					runs = got;
+					runs = got.filter((c) => `${e}/${p}/${c.id}` !== exclude);
 					failed = null;
 					// Unsearched, the list starts on the run this side shows.
-					const at = q ? -1 : got.findIndex((c) => c.id === run && e === entity && p === project);
+					const at = q ? -1 : runs.findIndex((c) => c.id === run && e === entity && p === project);
 					active = Math.max(0, at);
 				} catch (err) {
 					if (!controller.signal.aborted) failed = (err as Error).message;
