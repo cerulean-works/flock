@@ -9,6 +9,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { hint } from '#lib/hint.svelte.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { RunQuery } from '#lib/types.ts';
 	import { applyRunQuery, PAGE_SIZES } from '#lib/workspace/url.ts';
@@ -37,8 +38,12 @@
 		class={['pager absolute bottom-[var(--pager-bottom,0.875rem)] left-4 z-5', PAGER_PILL]}
 		aria-label="Run pages"
 	>
-		<span>{first + 1}–{first + ws.page.runs.length}</span>
-		<span class="of mr-1 text-muted-foreground">of {ws.page.total}</span>
+		<span
+			>{(first + 1).toLocaleString('en-US')}–{(first + ws.page.runs.length).toLocaleString(
+				'en-US'
+			)}</span
+		>
+		<span class="of mr-1 text-muted-foreground">of {ws.page.total.toLocaleString('en-US')}</span>
 		<Button
 			variant="ghost"
 			size="icon-sm"
@@ -46,6 +51,7 @@
 			disabled={q.page <= 1}
 			class="aria-disabled:pointer-events-none aria-disabled:opacity-40"
 			aria-label="Previous page"
+			{@attach hint('Previous page')}
 			data-sveltekit-preload-data="hover"
 		>
 			<ChevronLeftIcon />
@@ -57,6 +63,7 @@
 			disabled={q.page >= pages}
 			class="aria-disabled:pointer-events-none aria-disabled:opacity-40"
 			aria-label="Next page"
+			{@attach hint('Next page')}
 			data-sveltekit-preload-data="hover"
 		>
 			<ChevronRightIcon />

@@ -51,18 +51,18 @@
 <!-- The runs table's floating pager (Gate 2), for a list that loads as it pages: the same pill,
      the same buttons. Its place (pinned at the scroll's foot) is the page's to set. -->
 <nav bind:this={nav} class={PAGER_PILL} aria-label={label}>
-	<span>{from}–{to}</span>
+	<span>{from.toLocaleString('en-US')}–{to.toLocaleString('en-US')}</span>
 	<!-- A total only once it's known: the feed loads as it pages. -->
-	{#if total !== 'many'}<span class="mr-1 text-muted-foreground">of {total}</span>{:else}<span
-			class="mr-1"
-		></span>{/if}
+	{#if total !== 'many'}<span class="mr-1 text-muted-foreground"
+			>of {Number(total).toLocaleString('en-US')}</span
+		>{:else}<span class="mr-1"></span>{/if}
 	<Button
 		variant="ghost"
 		size="icon-sm"
 		disabled={!onprev}
 		class="disabled:opacity-40"
-		aria-label="Newer"
-		{@attach hint('Newer')}
+		aria-label="Previous page"
+		{@attach hint('Previous page')}
 		onclick={() => turn(onprev)}
 	>
 		<ChevronLeftIcon />
@@ -73,8 +73,8 @@
 		disabled={!onnext}
 		class="disabled:opacity-40"
 		{pending}
-		aria-label="Older"
-		{@attach hint('Older')}
+		aria-label="Next page"
+		{@attach hint('Next page')}
 		onclick={() => turn(onnext)}
 	>
 		<ChevronRightIcon />

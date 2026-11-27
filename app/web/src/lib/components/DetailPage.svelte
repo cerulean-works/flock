@@ -141,12 +141,14 @@
 		{/if}
 		<main
 			class={[
-				'@container relative min-w-0 flex-1 pb-16 md:overflow-y-auto',
+				'@container relative min-w-0 flex-1 md:overflow-y-auto',
 				!flush && 'px-5 pt-5',
 				properties && 'max-md:flex-none'
 			]}
 		>
-			{@render children()}
+			<!-- The bottom room is inside, not the scroll's padding: that would hold a floating
+			     pager that far off the scroll's foot. -->
+			<div class="pb-16">{@render children()}</div>
 		</main>
 	</div>
 </Page>
