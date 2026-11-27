@@ -103,9 +103,24 @@
 		</aside>
 	{:else}
 		<aside
-			class="hidden w-12 flex-none flex-col items-center border-r border-divider bg-sidebar md:flex"
+			class="relative hidden w-12 flex-none flex-col items-center border-r border-divider bg-sidebar md:flex"
 			aria-label="Sidebar"
 		>
+			<!-- The edge opens it again, as a click on the open sidebar's edge closes it: the same
+			     7px target and hover line. The Show sidebar button is its keyboard way. -->
+			<button
+				type="button"
+				tabindex="-1"
+				aria-hidden="true"
+				class="group/edge absolute inset-y-0 -right-[4px] z-10 w-[7px] cursor-e-resize outline-none"
+				aria-label="Show sidebar"
+				{@attach hint('Click to open  [')}
+				onclick={() => setCollapsed(false)}
+			>
+				<span
+					class="absolute inset-y-0 left-[3px] w-px bg-transparent transition-colors group-hover/edge:bg-border"
+				></span>
+			</button>
 			<div class="flex h-10 flex-none items-center">
 				<Button
 					variant="ghost"
