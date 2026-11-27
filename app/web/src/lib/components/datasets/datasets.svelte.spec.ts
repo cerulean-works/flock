@@ -67,7 +67,7 @@ describe('FolderView', () => {
 		cursor: 'next'
 	};
 
-	it('lists folders, then datasets, then files, and loads more pages', async () => {
+	it('lists folders, then datasets, then files, and loads more pages below what is shown', async () => {
 		const calls = serve({
 			'/api/datasets/acme/at': () => ({
 				...folder,
@@ -100,7 +100,7 @@ describe('FolderView', () => {
 			'/storage/acme/flock-datasets/eval/notes.md'
 		);
 		await screen.getByRole('button', { name: 'Load more' }).click();
-		await vi.waitFor(() => expect(names()).toEqual(['deep', 'mmlu', 'old', 'notes.md']));
+		await vi.waitFor(() => expect(names()).toEqual(['deep', 'mmlu', 'notes.md', 'old']));
 		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval&cursor=next&details=true');
 		await expect.element(screen.getByText('Unknown')).toBeInTheDocument();
 		await expect.element(screen.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();

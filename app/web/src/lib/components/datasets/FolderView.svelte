@@ -79,7 +79,10 @@
 		size?: number | null;
 		updated?: number | null;
 	}
-	const rows = $derived<Row[]>([
+	// Each page is listed as loaded, its folders first: a later page only ever adds rows below
+	// the ones shown, never above them. `order` holds the keys shown before the latest page.
+	let order = $state<string[]>([]);
+	const listed = $derived<Row[]>([
 		...folders.map((f) => ({
 			kind: 'folder' as const,
 			key: f.path,
@@ -105,6 +108,13 @@
 			updated: f.last_modified
 		}))
 	]);
+	const rows = $derived.by(() => {
+		if (!order.length) return listed;
+		const at = new Map(order.map((k, i) => [k, i]));
+		const before = listed.filter((r) => at.has(r.key));
+		before.sort((a, b) => at.get(a.key)! - at.get(b.key)!);
+		return [...before, ...listed.filter((r) => !at.has(r.key))];
+	});
 	const ICONS = { dataset: DatabaseIcon, folder: FolderIcon, file: FileIcon };
 	// Version and size show from small windows up. A level of folders alone (the root) has none of
 	// them to show, so it lists names only rather than three empty columns.
@@ -117,7 +127,7 @@
 	const COLUMNS = $derived(datasets.length || files.length ? ALL_COLUMNS : ALL_COLUMNS.slice(0, 1));
 
 	// Datasets and folders can be checked; loose files can't (D130).
-	const keys = $derived([...folders.map((f) => f.path), ...datasets.map((d) => d.path)]);
+	const keys = $derived(rows.filter((r) => r.kind !== 'file').map((r) => r.key));
 	$effect.pre(() => {
 		if (selection) selection.keys = keys;
 	});
@@ -170,6 +180,7 @@
 			const page = await datasetCall<DatasetFolder>(
 				datasetsApi(scope, 'at', { path, cursor, details: 'true' })
 			);
+			order = rows.map((r) => r.key);
 			datasets = [...datasets, ...page.datasets];
 			folders = [...folders, ...page.folders];
 			files = [...files, ...page.files];

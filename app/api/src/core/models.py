@@ -598,8 +598,9 @@ class Models:
             {"name": sub, "path": f"{prefix}{sub}", "models": n}
             for sub, n in sorted(counts.items())
         ]
-        # One sequence, models first, paged by the last entry's key.
-        entries = [("m", m["name"], m) for m in models] + [("f", f["path"], f) for f in folders]
+        # One sequence, folders first (as Storage and a file browser list them), paged by the last
+        # entry's key: later pages only ever add models below what's shown.
+        entries = [("f", f["path"], f) for f in folders] + [("m", m["name"], m) for m in models]
         start = 0
         if cursor:
             keys = [f"{kind}:{key}" for kind, key, _ in entries]
