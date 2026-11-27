@@ -350,7 +350,7 @@
 			class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
 		>
 			<LogoMark class="mx-1 size-4" />
-			<span class="text-[14px] font-medium tracking-[-0.01em]">Flock</span>
+			<span class="text-[14px] font-semibold tracking-[-0.01em]">Flock</span>
 		</a>
 		{#if oncollapse}
 			<Button

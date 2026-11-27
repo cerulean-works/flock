@@ -246,7 +246,7 @@
 				class="flex items-center gap-2 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
 			>
 				<LogoMark class="size-4" />
-				<span class="text-[14px] font-medium tracking-[-0.01em]">Flock</span>
+				<span class="text-[14px] font-semibold tracking-[-0.01em]">Flock</span>
 			</a>
 		</header>
 		{@render children()}
