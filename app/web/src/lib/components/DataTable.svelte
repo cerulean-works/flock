@@ -190,17 +190,28 @@
 							<div class="min-w-0 flex-1">{@render cell(row, c.id)}</div>
 						</div>
 					{:else}
-						<div class={cellClass(c, i)} role="cell">{@render cell(row, c.id)}</div>
+						<!-- The last cell gives way to the row's menu, which takes its place on hover. -->
+						{@const under = menu && i === columns.length - 1}
+						<div
+							class={[
+								cellClass(c, i),
+								under &&
+									'group-focus-within/row:invisible group-hover/row:invisible group-has-data-[state=open]/row:invisible pointer-coarse:invisible'
+							]}
+							role="cell"
+						>
+							{@render cell(row, c.id)}
+						</div>
 					{/if}
 				{/each}
 				{#if menu}
 					<!--
 						Over the row's end rather than in a column of its own, so every table's last
 						column ends at the page's edge. Shown on hover, focus or while open; always on
-						touch screens, where it sits in the edge without a backdrop.
+						touch screens.
 					-->
 					<span
-						class="absolute inset-y-0 right-0 z-1 flex items-center bg-linear-to-r from-transparent to-muted to-30% pr-6 pl-10 opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:bg-none pointer-coarse:pr-0.5 pointer-coarse:pl-0 pointer-coarse:opacity-100"
+						class="absolute inset-y-0 right-0 z-1 flex items-center pr-6 opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 has-data-[state=open]:opacity-100 pointer-coarse:bg-none pointer-coarse:pr-0.5 pointer-coarse:pl-0 pointer-coarse:opacity-100"
 						role="cell"
 					>
 						{@render menu(row)}
