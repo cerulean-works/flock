@@ -104,9 +104,6 @@
 				<span class="text-[24px] leading-none tracking-[-0.02em] tabular-nums">
 					{fmt(credits.balance)}
 				</span>
-				<span class="whitespace-nowrap text-muted-foreground">
-					left of {fmt(credits.granted)}
-				</span>
 			</p>
 			<div
 				class="h-1 overflow-hidden rounded-full bg-muted"

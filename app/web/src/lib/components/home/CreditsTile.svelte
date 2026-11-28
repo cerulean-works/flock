@@ -21,7 +21,7 @@
 	);
 </script>
 
-<!-- A 1x1 number, as the credit dashboard reads the NCHC wallet: what's left of what was granted,
+<!-- A 1x1 number, as the credit dashboard reads the NCHC wallet: what's left,
      and a bar as long as what's left. Opens the dashboard. -->
 <Tile kind="number" title="Credits" bare {index}>
 	{#if credits}
@@ -30,9 +30,7 @@
 			<p class="text-[28px] leading-none font-semibold tracking-[-0.02em] tabular-nums">
 				{fmt(credits.balance)}
 			</p>
-			<p class="mt-1.5 text-[12px] text-muted-foreground">
-				credits left of {fmt(credits.granted)}
-			</p>
+			<p class="mt-1.5 text-[12px] text-muted-foreground">credits left</p>
 			<div class="mt-auto h-1 overflow-hidden rounded-full bg-muted">
 				<div class="bar h-full rounded-full {tone}" style:width="{left * 100}%"></div>
 			</div>
