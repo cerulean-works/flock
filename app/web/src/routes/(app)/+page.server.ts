@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { refreshUser } from '#lib/server/auth.ts';
 import { change, flock, refused } from '#lib/server/flock.ts';
 import { runsOf } from '#lib/home/runs.ts';
+import { creditsConfigured, creditsSummary } from '#lib/server/credits.ts';
 import { clusterGlance, slurmConfigured } from '#lib/server/slurm.ts';
 import { LIVE_STATES, type Budget, type FeedPage } from '#lib/types.ts';
 import { formText, monthOf } from '#lib/utils.ts';
@@ -39,11 +40,14 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	const feed = (q: Record<string, string>) =>
 		read<FeedPage>(`/api/v1/feed?${new URLSearchParams({ org, ...q })}`);
 	const now = Date.now() / 1000;
-	const [mine, everyone, budget, cluster] = await Promise.all([
+	// The credit dashboard, when Flock is told where it is, stands in for Flock's own budget.
+	const walleted = creditsConfigured();
+	const [mine, everyone, budget, credits, cluster] = await Promise.all([
 		feed({ owner: 'me', kinds: RUN_KINDS, limit: '100' }),
 		// Everyone's, for the team's tile: what teammates have going and just finished.
 		feed({ kinds: RUN_KINDS, limit: '100' }),
-		read<Budget>(`/api/v1/orgs/${encodeURIComponent(org)}/budget`),
+		walleted ? null : read<Budget>(`/api/v1/orgs/${encodeURIComponent(org)}/budget`),
+		creditsSummary(),
 		// The Slurm dashboard, when Flock is told where it is.
 		clusterGlance()
 	]);
@@ -56,6 +60,9 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 				(LIVE_STATES.has(r.state) || r.at > now - TEAM_DAYS * 86_400)
 		),
 		budget,
+		credits,
+		/** Configured but not answering: its tile says so. */
+		creditsDown: !credits && walleted,
 		cluster,
 		/** Configured but not answering: the ops line says so. */
 		clusterDown: !cluster && slurmConfigured(),

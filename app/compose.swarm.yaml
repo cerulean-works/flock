@@ -35,6 +35,10 @@ services:
       FLOCK_SLURM_PUBLIC_URL: ${FLOCK_SLURM_PUBLIC_URL:-}
       FLOCK_SLURM_ACCESS_ID: ${FLOCK_SLURM_ACCESS_ID:-}
       FLOCK_SLURM_ACCESS_SECRET: ${FLOCK_SLURM_ACCESS_SECRET:-}
+      # Home's budget cell and the org's runs read the credit dashboard's wallet when this is set.
+      FLOCK_CREDITS_URL: ${FLOCK_CREDITS_URL:-}
+      FLOCK_CREDITS_PROJECT: ${FLOCK_CREDITS_PROJECT:-}
+      FLOCK_CREDITS_TOKEN: ${FLOCK_CREDITS_TOKEN:-}
     networks:
       - dokploy-network
       - internal

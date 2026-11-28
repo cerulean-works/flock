@@ -8,6 +8,7 @@
 	import { onMount } from 'svelte';
 	import Page from '#lib/components/Page.svelte';
 	import BudgetTile from '#lib/components/home/BudgetTile.svelte';
+	import CreditsTile from '#lib/components/home/CreditsTile.svelte';
 	import ClusterTile from '#lib/components/home/ClusterTile.svelte';
 	import PlotTile from '#lib/components/home/PlotTile.svelte';
 	import RunRows from '#lib/components/home/RunRows.svelte';
@@ -249,7 +250,9 @@
 					{/if}
 					<!-- Right of the runs (2x2): Budget and Cluster a cell each, then the first pin (or the
 				     live runs) as a 2x1 strip; more pins follow as strips. -->
-					{#if data.budget}
+					{#if data.credits || data.creditsDown}
+						<CreditsTile credits={data.credits} down={data.creditsDown} index={next() + 1} />
+					{:else if data.budget}
 						<BudgetTile budget={data.budget} index={next() + 1} />
 					{/if}
 					<!-- Always its cell: faded when no Slurm dashboard is connected, so the grid keeps its shape. -->

@@ -10,6 +10,9 @@ const loaded = new SvelteMap<string, RunValues>();
 // Not reactive: asking happens while deriving what a header shows.
 let asked: Record<string, true> = {};
 
+/** Flock counts at most this many columns' values a request: more are asked in turns. */
+const KEYS_PER_REQUEST = 32;
+
 /**
  * The values of `keys` among a project's runs (or a group's), with counts: what each column's
  * header filters to. Read once per page visit and kept; until then, nothing.
@@ -23,7 +26,18 @@ export function runValues(
 	if (!keys.length) return {};
 	const base = projectUrl(entity, project);
 	const from = group == null ? `${base}/runs/values` : `${base}/groups/${group}/runs/values`;
-	const url = `${from}?keys=${encodeURIComponent([...keys].sort().join(','))}`;
+	// A project with many config columns lists more than Flock counts at once; the rest
+	// (owner among them, sorted after config.*) would come back empty.
+	const sorted = [...keys].sort();
+	if (sorted.length <= KEYS_PER_REQUEST) return read(from, sorted);
+	const out: RunValues = {};
+	for (let i = 0; i < sorted.length; i += KEYS_PER_REQUEST)
+		Object.assign(out, read(from, sorted.slice(i, i + KEYS_PER_REQUEST)));
+	return out;
+}
+
+function read(from: string, keys: readonly string[]): RunValues {
+	const url = `${from}?keys=${encodeURIComponent(keys.join(','))}`;
 	if (!asked[url] && typeof window !== 'undefined') {
 		asked[url] = true;
 		fetch(url)
