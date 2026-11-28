@@ -1,4 +1,69 @@
 import type { Attachment } from 'svelte/attachments';
+import type { ColumnKind, SortOrder } from '#lib/types.ts';
+import type { ColumnFilterProps } from '#lib/workspace/column-filter.ts';
+import type { RunFilter } from '#lib/workspace/filters.ts';
+
+/** A column the palette can filter or sort by, named as the table names it. */
+export interface PaletteColumn {
+	key: string;
+	label: string;
+	kind?: ColumnKind;
+}
+
+/** The page's filters, as the palette edits them (the same state as the headers' funnels). */
+export interface PaletteFilters {
+	columns: () => PaletteColumn[];
+	/** The column's filter now: read inside the palette, so it follows each change. */
+	props: (key: string) => ColumnFilterProps;
+	/** Any filter in use. */
+	active: () => boolean;
+	/** The filters in effect, and a way to set them all (the match switch). */
+	applied: () => readonly RunFilter[];
+	set: (filters: RunFilter[]) => void;
+	/** A chip's words after its column's name: "is any of Failed, Crashed", "≥ 0.001". */
+	describe: (chip: RunFilter) => string;
+	clear: () => void;
+	/** The and/or builder. */
+	advanced: () => void;
+}
+
+/** The runs selected on the page, and what the palette can do to them. */
+export interface PaletteSelection {
+	count: number;
+	/** The project's tags, each with how many of the selected runs have it. */
+	/** Each tag: how many of the selected runs have it, and how many runs in the project. */
+	tags: () => { tag: string; on: number; runs: number }[];
+	tag: (tag: string, on: boolean) => void;
+	/** Takes a tag off every run in the project that has it. */
+	deleteTag: (tag: string) => void;
+	/** The project's saved groups, when it has them. */
+	groups: () => { id: number; name: string; color: string }[] | null;
+	addToGroup: (id: number) => void;
+	/** Opens the New group form for them, with a name typed in the palette when there is one. */
+	newGroup: (name?: string) => void;
+	/** Two eval runs, to compare (on a benchmark picked next). */
+	pair: { a: { id: string; label: string }; b: { id: string; label: string } } | null;
+}
+
+/** The page's runs, to tick in the palette: ticking selects them in the table too. */
+export interface PalettePick {
+	runs: () => { id: string; label: string; state: string; on: boolean }[];
+	toggle: (id: string) => void;
+}
+
+/** The project's eval runs, to compare two of from the palette. */
+export interface PaletteCompare {
+	entity: string;
+	project: string;
+}
+
+/** The page's sort. */
+export interface PaletteSort {
+	columns: () => PaletteColumn[];
+	current: () => { key: string; order: SortOrder; byDefault: boolean };
+	set: (key: string, order: SortOrder) => void;
+	reset: () => void;
+}
 
 /**
  * The keyboard layer (stage 260): what the page in view offers the palette (Cmd+K), filled by
@@ -12,12 +77,38 @@ export const keyboard = $state<{
 		/** Where the run lives, shown beside it. */ project: string;
 	}[];
 	/** The page's views, to switch between. */
-	views: { label: string; key: string; set: () => void }[];
+	views: {
+		label: string;
+		key: string;
+		set: () => void;
+		on?: boolean;
+		/** Ways the view lays out (Visualize: side by side or stacked), each a row of its own. */
+		layouts?: { label: string; set: () => void; on: boolean }[];
+	}[];
 	/** Opens the page's filter, when it has one. */
 	filter: (() => void) | null;
 	/** Home's own command field: Cmd+K puts the cursor there instead of opening the dialog. */
 	search: (() => void) | null;
-}>({ runs: [], views: [], filter: null, search: null });
+	/** The page's filters and sort, which the palette opens into (F, Shift+S). */
+	filters: PaletteFilters | null;
+	sort: PaletteSort | null;
+	selection: PaletteSelection | null;
+	compare: PaletteCompare | null;
+	pick: PalettePick | null;
+	/** Opens the palette, inside Filter or Sort when asked (set by the keyboard layer). */
+	palette: ((at?: 'filter' | 'sort') => void) | null;
+}>({
+	runs: [],
+	views: [],
+	filter: null,
+	search: null,
+	filters: null,
+	sort: null,
+	selection: null,
+	compare: null,
+	pick: null,
+	palette: null
+});
 
 /** A key meant for a field, or one with a modifier: not the layer's to take. */
 export function typing(e: KeyboardEvent): boolean {
@@ -88,4 +179,26 @@ export function listKeys(): Attachment<HTMLElement> {
 			node.removeEventListener('pointermove', onpointermove);
 		};
 	};
+}
+
+/**
+ * A submenu's field takes what's typed wherever focus is in the submenu: moving the pointer over
+ * its rows moves focus onto them (as menus do), which would otherwise send the letters to the
+ * menu's typeahead instead of the search. Backspace edits the field too.
+ */
+export function typeInto(input: HTMLInputElement): () => void {
+	const menu = input.closest<HTMLElement>('[role=menu]');
+	if (!menu) return () => {};
+	const onkeydown = (e: KeyboardEvent) => {
+		if (e.target === input || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+		const printable = e.key.length === 1 && e.key !== ' ';
+		if (!printable && !(e.key === 'Backspace' && input.value)) return;
+		e.preventDefault();
+		e.stopPropagation();
+		input.focus();
+		input.value = printable ? input.value + e.key : input.value.slice(0, -1);
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+	};
+	menu.addEventListener('keydown', onkeydown, true);
+	return () => menu.removeEventListener('keydown', onkeydown, true);
 }

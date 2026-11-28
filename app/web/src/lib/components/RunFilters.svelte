@@ -34,8 +34,9 @@
 	import FormError from './FormError.svelte';
 	import ColumnFilterPanel from './ColumnFilterPanel.svelte';
 	import { columnFilterProps } from '#lib/workspace/column-filter.ts';
-	import { columnFilterKind } from '#lib/workspace/filters.ts';
+	import { chipParts, columnFilterKind } from '#lib/workspace/filters.ts';
 	import { runValues } from '#lib/data/run-values.svelte.ts';
+	import { keyboard } from '#lib/keys.svelte.ts';
 
 	interface Props {
 		/**
@@ -275,6 +276,39 @@
 			me,
 			show
 		);
+
+	// What the palette (Cmd+K, F) filters with: every column by the name it has here, each
+	// column's filter the same state its header funnel edits. The counts are read for the
+	// palette whether or not this menu is open.
+	$effect(() => {
+		if (!ws) return;
+		const w = ws;
+		keyboard.filters = {
+			columns: () => known.map((c) => ({ key: c.key, label: fieldName(c), kind: c.kind })),
+			props: (key) => {
+				const c = known.find((k) => k.key === key) ?? { key };
+				const values = runValues(w.meta.entity, w.meta.project, listed, w.group);
+				return columnFilterProps(c, fieldName(c), applied, values, people, me, show);
+			},
+			active: () => applied.length > 0,
+			applied: () => applied,
+			set: show,
+			describe: (chip) => {
+				const parts = chipParts(chip, {
+					kind: kindOf,
+					label: (key) => fieldName(known.find((c) => c.key === key) ?? { key }),
+					people,
+					me
+				});
+				return [parts.op, parts.value].filter(Boolean).join(' ');
+			},
+			clear: () => show([]),
+			advanced: edit
+		};
+		return () => {
+			keyboard.filters = null;
+		};
+	});
 
 	/** F, or the palette: the field list, to add a condition. */
 	export function pick() {

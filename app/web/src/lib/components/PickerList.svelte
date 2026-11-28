@@ -76,7 +76,7 @@
 			// Never the submit of a dialog's form around the picker.
 			e.preventDefault();
 			if (options[active] !== undefined) onpick(options[active]);
-		} else if (e.key === 'Backspace' && !query && onup) {
+		} else if (e.key === 'Backspace' && !e.repeat && !query && onup) {
 			e.preventDefault();
 			onup();
 		}

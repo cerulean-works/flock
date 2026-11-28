@@ -2,7 +2,10 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import CommandMenu from './CommandMenu.svelte';
 
-	let { open = $bindable(false) }: { open?: boolean } = $props();
+	let {
+		open = $bindable(false),
+		start = $bindable(null)
+	}: { open?: boolean; start?: 'filter' | 'sort' | null } = $props();
 	let menu = $state<ReturnType<typeof CommandMenu> | null>(null);
 </script>
 
@@ -17,6 +20,6 @@
 		}}
 	>
 		<Dialog.Title class="sr-only">Command menu</Dialog.Title>
-		<CommandMenu bind:this={menu} bind:open />
+		<CommandMenu bind:this={menu} bind:open bind:start />
 	</Dialog.Content>
 </Dialog.Root>

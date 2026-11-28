@@ -27,7 +27,9 @@ class Recent {
 	all = $state<Visit[]>(typeof localStorage === 'undefined' ? [] : read());
 
 	record(visit: Visit) {
-		this.all = [visit, ...this.all.filter((v) => v.href !== visit.href)].slice(0, MAX);
+		// One entry a page: a project seen with other filters or sorts is the same place.
+		const at = pathOf(visit.href);
+		this.all = [visit, ...this.all.filter((v) => pathOf(v.href) !== at)].slice(0, MAX);
 		try {
 			localStorage.setItem(KEY, JSON.stringify(this.all));
 		} catch {
@@ -37,6 +39,9 @@ class Recent {
 }
 
 export const recent = new Recent();
+
+/** A page's path, without its query. */
+export const pathOf = (href: string) => href.split(/[?#]/)[0];
 
 /** The kind of page a route is, if it's one worth going back to. */
 export function visitKind(route: string | null): Visit['kind'] | null {

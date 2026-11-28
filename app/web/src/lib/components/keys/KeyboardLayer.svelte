@@ -16,6 +16,17 @@
 	let { ontogglesidebar }: { ontogglesidebar?: () => void } = $props();
 
 	let palette = $state(false);
+	/** Where the palette opens: inside Filter or Sort (F, Shift+S), else at its top. */
+	let start = $state<'filter' | 'sort' | null>(null);
+	$effect(() => {
+		keyboard.palette = (at) => {
+			start = at ?? null;
+			palette = true;
+		};
+		return () => {
+			keyboard.palette = null;
+		};
+	});
 	let sheet = $state(false);
 	/** "g" was pressed: the next key says where to go. */
 	let going = false;
@@ -87,5 +98,5 @@
 </script>
 
 <svelte:window {onkeydown} />
-<CommandPalette bind:open={palette} />
+<CommandPalette bind:open={palette} bind:start />
 <ShortcutSheet bind:open={sheet} />

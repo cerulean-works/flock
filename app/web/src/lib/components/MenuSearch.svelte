@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { HTMLInputAttributes } from 'svelte/elements';
+	import { typeInto } from '#lib/keys.svelte.ts';
 
 	/**
 	 * A popover's or menu's search: its top row, a bare 36px field over a divider, as Linear's
@@ -58,9 +59,11 @@
 			input.focus();
 		};
 		m?.addEventListener('keydown', up, true);
+		const typing = typeInto(input);
 		return () => {
 			cancelAnimationFrame(frame);
 			m?.removeEventListener('keydown', up, true);
+			typing();
 		};
 	}
 

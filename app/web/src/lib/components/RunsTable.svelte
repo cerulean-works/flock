@@ -64,6 +64,7 @@
 	import { runValues } from '#lib/data/run-values.svelte.ts';
 	import { moveKey } from '#lib/workspace/layout.ts';
 	import { DEFAULT_ORDER, DEFAULT_SORT, applyRunQuery, runHref } from '#lib/workspace/url.ts';
+	import { keyboard } from '#lib/keys.svelte.ts';
 	import { layerOpen, typing } from '#lib/keys.svelte.ts';
 	import { goto } from '$app/navigation';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
@@ -403,6 +404,23 @@
 		return ws.href(params);
 	}
 
+	// What the palette sorts by (Cmd+K, Shift+S): the columns shown, by their header's name.
+	$effect(() => {
+		keyboard.sort = {
+			columns: () => columns.map((c, i) => ({ key: c.key, label: labels[i], kind: c.kind })),
+			current: () => ({
+				key: query.sort,
+				order: query.order,
+				byDefault: query.sort === DEFAULT_SORT && query.order === DEFAULT_ORDER
+			}),
+			set: (key, order) => void goto(sortHrefIn(key, order), { reset: false }),
+			reset: () => void goto(sortHrefIn(DEFAULT_SORT, DEFAULT_ORDER), { reset: false })
+		};
+		return () => {
+			keyboard.sort = null;
+		};
+	});
+
 	let intent: ReturnType<typeof setTimeout> | undefined;
 	function hoverSort(key: string) {
 		clearTimeout(intent);
@@ -619,8 +637,9 @@
 	const someShown = $derived(ws.visible.length > 0);
 
 	/**
-	 * The keyboard's row (j and k, or the arrows once there is one): Enter opens it, x selects it,
-	 * Esc lets go. The pointer takes over as soon as it moves over the table.
+	 * The keyboard's row: the arrows (or j and k) pick one from the first press. Enter ticks it,
+	 * so several are chosen without the mouse (Harry); → or o opens it; Esc lets go. The pointer
+	 * takes over as soon as it moves over the table.
 	 */
 	let cursor = $state<number | null>(null);
 
@@ -637,14 +656,18 @@
 
 	function onkeydown(e: KeyboardEvent) {
 		if (e.defaultPrevented || typing(e) || layerOpen() || !runs.length) return;
-		const down = e.key === 'j' || (cursor != null && e.key === 'ArrowDown');
-		const up = e.key === 'k' || (cursor != null && e.key === 'ArrowUp');
+		const down = e.key === 'j' || e.key === 'ArrowDown';
+		const up = e.key === 'k' || e.key === 'ArrowUp';
+		const open = e.key === 'ArrowRight' || e.key === 'o';
 		if (down || up) {
 			e.preventDefault();
 			const at = cursor == null ? 0 : cursor + (down ? 1 : -1);
 			cursor = Math.max(0, Math.min(runs.length - 1, at));
 			reveal(cursor);
-		} else if (cursor != null && e.key === 'Enter') {
+		} else if (cursor != null && e.key === 'Enter' && selectable) {
+			e.preventDefault();
+			ws.toggleSelected(cursor);
+		} else if (cursor != null && (open || e.key === 'Enter')) {
 			e.preventDefault();
 			void goto(runHref(ws.meta.entity, ws.meta.project, runs[cursor].id));
 		} else if (cursor != null && e.key === 'x' && selectable) {
