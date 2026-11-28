@@ -108,6 +108,10 @@ def test_compose_configuration(compose: str, configured: bool) -> None:
             "FLOCK_SLURM_PUBLIC_URL": "",
             "FLOCK_SLURM_ACCESS_ID": "",
             "FLOCK_SLURM_ACCESS_SECRET": "",
+            # The credit dashboard's wallet, off unless it's configured.
+            "FLOCK_CREDITS_URL": "",
+            "FLOCK_CREDITS_PROJECT": "",
+            "FLOCK_CREDITS_TOKEN": "",
         }
         assert all("ports" not in service for service in services.values())
     else:
