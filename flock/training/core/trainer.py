@@ -48,6 +48,7 @@ class TrainerConfig(PydanticBaseModel):
             This is not passed to `wandb.init` as the tracking run's name.
         input_column (`str`): Text column read from each Lance row.
         batch_size (`int`): Positive number of dataset items per rank per optimizer update; chunks when using a token cache, or rows when it packs them.
+        ddp_bucket_cap_mb (`int`, *optional*): Gradient bucket capacity in MiB for DDP. Omit to use PyTorch's default.
         max_steps (`int`, *optional*):
             Positive cap on optimizer updates. The run ends at the cap, or at the end of
             the pass if that comes first. Fractional schedule times are fractions of the
@@ -115,6 +116,7 @@ class TrainerConfig(PydanticBaseModel):
 
     input_column: str
     batch_size: int = Field(gt=0)
+    ddp_bucket_cap_mb: int | None = Field(default=None, gt=0)
     max_steps: int | None = Field(default=None, gt=0)
 
     optimizer_config: OptimizerConfig
@@ -589,7 +591,11 @@ class Trainer:
 
         self.model = model.to(self.device)
         self.training_model = (
-            DDP(self.model, device_ids=[self.device.index] if self.device.type == "cuda" else None)
+            DDP(
+                self.model,
+                device_ids=[self.device.index] if self.device.type == "cuda" else None,
+                bucket_cap_mb=config.ddp_bucket_cap_mb,
+            )
             if self.runtime.enabled
             else self.model
         )

@@ -202,6 +202,7 @@ def _check_distributed_step_budget(
                         run_name="step-budget",
                         input_column="text",
                         batch_size=2,
+                        ddp_bucket_cap_mb=100,
                         max_steps=max_steps,
                         optimizer_config=AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
                         lr_scheduler_config=LRSchedulerConfig(
@@ -228,6 +229,7 @@ def _check_distributed_step_budget(
                     runtime=DistributedRuntime(rank, rank, 2, torch.device("cpu")),
                 )
                 assert isinstance(trainer.training_model, DDP)
+                assert trainer.training_model.bucket_bytes_cap == 100 * 1024**2
                 assert trainer.total_steps == trainer.lr_scheduler.total_steps == expected_steps
                 assert len(trainer._get_training_dataloader()) == expected_steps
                 collator = LanceBatchCollator(tokenizer, "text")

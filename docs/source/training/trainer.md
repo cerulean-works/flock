@@ -320,6 +320,9 @@ rank too. Rank zero scores the tasks and broadcasts completion or an exception.
 Rank zero also owns the W&B run. Check
 `trainer.run is not None` before finishing it, as in the example.
 
+You can tune communication overlap by setting `ddp_bucket_cap_mb` in `TrainerConfig`.
+For example, compare `ddp_bucket_cap_mb=250` with the default using the same number of ranks and tokens per rank.
+
 ### Launch across hosts
 
 For two hosts with four GPUs each, run the same script and configuration on both
