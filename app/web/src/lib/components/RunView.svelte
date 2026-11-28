@@ -45,7 +45,7 @@
 	import { columnLabel } from '#lib/workspace/columns.ts';
 	import FilterChip from '#lib/components/FilterChip.svelte';
 	import { applyRunQuery, runHref } from '#lib/workspace/url.ts';
-	import { keyboard } from '#lib/keys.svelte.ts';
+	import { keyboard, type PaletteRun } from '#lib/keys.svelte.ts';
 	import {
 		isProjectView,
 		rememberView,
@@ -390,7 +390,15 @@
 			keyboard.filter = null;
 		};
 	});
-	// The selection, for the palette: tag it, add it to a group, compare two eval runs.
+	/** A page row as the palette compares it. */
+	const paletteRun = (row: number): PaletteRun => ({
+		entity: ws.meta.entity,
+		project: ws.meta.project,
+		id: ws.page.runs[row].id,
+		label: ws.nameOf(row),
+		job: (ws.cell(row, 'job_type') as string | null | undefined) ?? null
+	});
+	// The selection, for the palette: tag it, add it to a group, compare two runs.
 	$effect(() => {
 		const ids = [...ws.selected];
 		if (!ids.length) {
@@ -432,10 +440,7 @@
 			},
 			newGroup: (name) => openNewGroup(ws, rows, null, name),
 			pair: runActions(ws, rows, true).some((a) => a.key === 'compare')
-				? {
-						a: { id: ws.page.runs[rows[0]].id, label: ws.nameOf(rows[0]) },
-						b: { id: ws.page.runs[rows[1]].id, label: ws.nameOf(rows[1]) }
-					}
+				? { a: paletteRun(rows[0]), b: paletteRun(rows[1]) }
 				: null
 		};
 		return () => {
@@ -461,10 +466,9 @@
 			keyboard.pick = null;
 		};
 	});
-	// Eval runs here: the palette offers to compare two (choosing A, B and the benchmark).
+	// The palette offers to compare two runs (choosing A, B and, for two evals, the benchmark).
 	$effect(() => {
-		const evals = ws.page.runs.some((_, i) => ws.cell(i, 'job_type') === 'eval');
-		keyboard.compare = evals ? { entity: ws.meta.entity, project: ws.meta.project } : null;
+		keyboard.compare = { entity: ws.meta.entity, project: ws.meta.project };
 		return () => {
 			keyboard.compare = null;
 		};

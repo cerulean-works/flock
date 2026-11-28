@@ -28,6 +28,7 @@
 	import { projectUrl } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
 	import { runWorkspace } from '#lib/data/run.ts';
+	import { keyboard } from '#lib/keys.svelte.ts';
 	import { compareHref, itemsViewOf, withItemsView } from '#lib/evals.ts';
 	import { duration } from '#lib/utils.ts';
 	import { pane } from '#lib/components/pane.svelte.ts';
@@ -109,11 +110,19 @@
 		});
 	});
 
-	// Doc by doc against another eval run (025 D185): the compare page, asking for the other run.
+	// Against another run, any project's: the compare page, asking for the other run.
 	function compare() {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- compareHref resolves it
 		void goto(compareHref(data.run.entity, data.run.project, data.run.id));
 	}
+
+	// The palette's Compare lists this project's runs first.
+	$effect(() => {
+		keyboard.compare = { entity: data.run.entity, project: data.run.project };
+		return () => {
+			keyboard.compare = null;
+		};
+	});
 
 	// Full-screen panels, as on the project's page: `?panel=<panel id>`.
 	const fullscreen = $derived.by(() => {
@@ -178,11 +187,9 @@
 			<DropdownMenu.Item onSelect={() => ws.openDialog('move', 0)}>
 				<FolderInputIcon /> Move to project…
 			</DropdownMenu.Item>
-			{#if hasResults}
-				<DropdownMenu.Item onSelect={() => compare()}>
-					<GitCompareArrowsIcon /> Compare with…
-				</DropdownMenu.Item>
-			{/if}
+			<DropdownMenu.Item onSelect={() => compare()}>
+				<GitCompareArrowsIcon /> Compare with…
+			</DropdownMenu.Item>
 			<DropdownMenu.Separator />
 			<DropdownMenu.Item variant="destructive" onSelect={() => ws.openDialog('delete', 0)}>
 				<Trash2Icon /> Delete run…

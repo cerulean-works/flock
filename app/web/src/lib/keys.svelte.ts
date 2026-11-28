@@ -41,8 +41,8 @@ export interface PaletteSelection {
 	addToGroup: (id: number) => void;
 	/** Opens the New group form for them, with a name typed in the palette when there is one. */
 	newGroup: (name?: string) => void;
-	/** Two eval runs, to compare (on a benchmark picked next). */
-	pair: { a: { id: string; label: string }; b: { id: string; label: string } } | null;
+	/** Two runs, to compare (two eval runs on a benchmark picked next). */
+	pair: { a: PaletteRun; b: PaletteRun } | null;
 }
 
 /** The page's runs, to tick in the palette: ticking selects them in the table too. */
@@ -51,7 +51,16 @@ export interface PalettePick {
 	toggle: (id: string) => void;
 }
 
-/** The project's eval runs, to compare two of from the palette. */
+/** A run the palette compares, with its job type: two eval runs go on to their benchmarks. */
+export interface PaletteRun {
+	entity: string;
+	project: string;
+	id: string;
+	label: string;
+	job: string | null;
+}
+
+/** The project in view, whose runs Compare lists first (the org's join as the search grows). */
 export interface PaletteCompare {
 	entity: string;
 	project: string;

@@ -81,6 +81,7 @@
 		ModelVersionsPage,
 		ItemSuites,
 		ProjectInfo,
+		RunChoice,
 		SortOrder,
 		VersionsPage
 	} from '#lib/types.ts';
@@ -314,8 +315,8 @@
 	const tabHref = (href: string, tab: string) => `${href}?tab=${tab}`;
 
 	/**
-	 * A run: its tabs. An eval run's open on Results and add Compare with…; a run listed without
-	 * its job type (the page's runs) is asked for it when opened.
+	 * A run: its tabs and Compare with…. An eval run's open on Results; a run listed without its
+	 * job type (the page's runs) is asked for it when opened.
 	 */
 	const runLevel = (
 		o: string,
@@ -348,7 +349,7 @@
 				{ label: 'Charts', href: tabHref(href, 'charts'), icon: ChartLineIcon },
 				{ label: 'Logs', href: tabHref(href, 'logs'), icon: ScrollTextIcon },
 				{ label: 'Files', href: tabHref(href, 'files'), icon: FileIcon },
-				...(evals ? [{ label: 'Compare with…', href: `${href}/compare`, icon: Columns2Icon }] : [])
+				{ label: 'Compare with…', href: `${href}/compare`, icon: Columns2Icon }
 			];
 			return [['Pages', pages]];
 		}
@@ -897,44 +898,54 @@
 		};
 	}
 
-	/** Compare, step by step: run A, then B (both eval runs here), then the benchmark. */
-	function compareLevel(c: PaletteCompare, a?: { id: string; label: string }): Level {
+	/** One side of a comparison, wherever its project. */
+	type Side = { entity: string; project: string; id: string; label: string; job: string | null };
+	const sidePath = (r: Side) => `${r.entity}/${r.project}/${r.id}`;
+
+	/**
+	 * Where a pair goes once B is picked: two eval runs on to their benchmarks, any other pair
+	 * straight to its compare page (which opens on the charts).
+	 */
+	const pairEnd = (a: Side, b: Side): Pick<Entry, 'href' | 'level' | 'icon'> =>
+		a.job === 'eval' && b.job === 'eval'
+			? { level: remote(() => benchmarkLevel(a, b)) }
+			: { href: compareHref(a.entity, a.project, a.id, sidePath(b)) };
+
+	/**
+	 * Compare, step by step: run A, then B, then for two eval runs the benchmark. Any job type
+	 * here; from three letters on the org's other projects' runs join (`run-choices`), ranked
+	 * there, each marked with its project.
+	 */
+	function compareLevel(c: PaletteCompare, a?: Side): Level {
 		return {
 			label: a ? `${a.label} vs` : 'Compare',
-			key: `compare:${c.entity}/${c.project}/${a?.id ?? ''}`,
+			key: `compare:${c.entity}/${c.project}/${a ? sidePath(a) : ''}`,
 			searched: true,
 			async load(q, signal) {
 				const base = `/api/projects/${encodeURIComponent(c.entity)}/${encodeURIComponent(c.project)}`;
-				const filter = flockFilter(q, [{ key: 'job_type', op: 'eq', value: 'eval' }]);
-				const runs = await getJson<{ ids: string[]; data: Record<string, unknown[]> }>(
-					`${base}/runs/query`,
-					signal,
-					{
-						method: 'POST',
-						headers: { 'content-type': 'application/json' },
-						body: JSON.stringify({
-							filter,
-							sort: ['-created_at'],
-							limit: 50,
-							columns: ['display_name', 'state']
-						})
-					}
+				const { runs } = await getJson<{ runs: RunChoice[] }>(
+					`${base}/run-choices?${new URLSearchParams({ q })}`,
+					signal
 				);
-				const rows = runs.ids
-					.map((id, i) => ({
-						id,
-						label: String(runs.data.display_name?.[i] ?? id),
-						state: String(runs.data.state?.[i] ?? '')
+				const sides = runs
+					.map((r) => ({
+						entity: r.entity,
+						project: r.project,
+						id: r.id,
+						label: r.display_name ?? r.id,
+						job: r.job_type,
+						state: r.state
 					}))
-					.filter((r) => r.id !== a?.id);
+					.filter((r) => !a || sidePath(r) !== sidePath(a));
 				return [
 					[
 						a ? 'Run B' : 'Run A',
-						rows.map((r) => ({
+						sides.map((r) => ({
 							label: r.label,
-							keywords: [r.id],
+							keywords: [r.id, r.project],
 							state: r.state,
-							level: remote(() => (a ? benchmarkLevel(c, a, r) : compareLevel(c, r)))
+							detail: r.entity !== c.entity || r.project !== c.project ? r.project : undefined,
+							...(a ? pairEnd(a, r) : { level: remote(() => compareLevel(c, r)) })
 						}))
 					]
 				];
@@ -943,17 +954,13 @@
 	}
 
 	/** The benchmarks both runs scored, each a way into their compare page. */
-	function benchmarkLevel(
-		c: PaletteCompare,
-		a: { id: string; label: string },
-		b: { id: string; label: string }
-	): Level {
-		const href = compareHref(c.entity, c.project, a.id, `${c.entity}/${c.project}/${b.id}`);
-		const base = `/api/projects/${encodeURIComponent(c.entity)}/${encodeURIComponent(c.project)}`;
-		const suites = `${base}/runs/${encodeURIComponent(a.id)}/items/suites?with=${encodeURIComponent(`${c.entity}/${c.project}/${b.id}`)}`;
+	function benchmarkLevel(a: Side, b: Side): Level {
+		const href = compareHref(a.entity, a.project, a.id, sidePath(b));
+		const base = `/api/projects/${encodeURIComponent(a.entity)}/${encodeURIComponent(a.project)}`;
+		const suites = `${base}/runs/${encodeURIComponent(a.id)}/items/suites?with=${encodeURIComponent(sidePath(b))}`;
 		return {
 			label: b.label,
-			key: `benchmarks:${c.entity}/${c.project}/${a.id}/${b.id}`,
+			key: `benchmarks:${sidePath(a)}/${sidePath(b)}`,
 			// The squares take Flock seconds for a pair it hasn't kept: started as the list opens,
 			// so the compare page finds them done or under way. Never read ahead: Flock draws
 			// one pair's squares at a time.
@@ -1234,8 +1241,8 @@
 			...(keyboard.compare
 				? [
 						{
-							label: 'Compare evals…',
-							keywords: ['compare', 'diff', 'versus', 'vs'],
+							label: 'Compare…',
+							keywords: ['compare', 'diff', 'versus', 'vs', 'evals'],
 							icon: GitCompareArrowsIcon,
 							level: (
 								(c: PaletteCompare) => () =>
@@ -1339,18 +1346,25 @@
 			out.push([
 				'Selected',
 				[
-					// Enter, then Enter again on All benchmarks; or pick one.
-					...(sel.pair && keyboard.compare
+					// Two eval runs: Enter, then Enter again on All benchmarks, or pick one. Any other
+					// two: straight to their compare page.
+					...(sel.pair
 						? [
-								{
-									label: `Compare ${what}…`,
-									keywords: ['compare', 'diff', 'vs'],
-									icon: GitCompareArrowsIcon,
-									level: ((c: PaletteCompare, pair: NonNullable<typeof sel.pair>) => () => ({
-										...benchmarkLevel(c, pair.a, pair.b),
-										label: `${pair.a.label} vs ${pair.b.label}`
-									}))(keyboard.compare, sel.pair)
-								}
+								((pair: NonNullable<typeof sel.pair>) => {
+									const end = pairEnd(pair.a, pair.b);
+									return {
+										label: `Compare ${what}…`,
+										keywords: ['compare', 'diff', 'vs'],
+										icon: GitCompareArrowsIcon,
+										href: end.href,
+										level: end.level
+											? () => ({
+													...benchmarkLevel(pair.a, pair.b),
+													label: `${pair.a.label} vs ${pair.b.label}`
+												})
+											: undefined
+									};
+								})(sel.pair)
 							]
 						: []),
 					{ label: `Tag ${what}…`, keywords: ['tags', 'label'], icon: TagIcon, level: tagLevel },

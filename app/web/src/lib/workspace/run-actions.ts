@@ -31,8 +31,8 @@ export function menuRows(ws: Workspace, row: number): number[] {
 
 /**
  * What can be done to `rows` (page rows), in one order everywhere: Compare when they are two
- * eval runs (025 D185: not offered for a run known not to be one), Edit for one run, then
- * Tags, Add to group, Move and Delete. `selection`: the rows are the selection, which the dialogs read.
+ * runs, Edit for one run, then Tags, Add to group, Move and Delete. `selection`: the rows are
+ * the selection, which the dialogs read.
  */
 export function runActions(
 	ws: Workspace,
@@ -43,14 +43,11 @@ export function runActions(
 	const open = (kind: 'edit' | 'move' | 'delete') => () =>
 		selection ? ws.openDialog(kind) : ws.openDialog(kind, rows[0]);
 	const out: RunAction[] = [];
-	const evals = rows.every((r) =>
-		[undefined, null, 'eval'].includes(ws.cell(r, 'job_type') as string | null | undefined)
-	);
-	if (rows.length === 2 && evals) {
+	if (rows.length === 2) {
 		const [a, b] = rows.map((r) => ws.page.runs[r].id);
 		out.push({
 			key: 'compare',
-			label: 'Compare items',
+			label: 'Compare',
 			icon: GitCompareArrowsIcon,
 			href: compareHref(
 				ws.meta.entity,

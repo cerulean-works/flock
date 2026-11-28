@@ -9,6 +9,8 @@ import RunResults from './RunResults.svelte';
 
 vi.mock('$app/navigation', () => import('#lib/testing/app.svelte.ts'));
 vi.mock('$app/state', () => import('#lib/testing/app.svelte.ts'));
+// The compare page's charts reach the run dialogs' forms.
+vi.mock('$app/forms', () => import('#lib/testing/app.svelte.ts'));
 
 const run = (id: string, display_name: string | null = null) =>
 	({ id, entity: 'acme', project: 'evals', display_name }) as RunDetail;

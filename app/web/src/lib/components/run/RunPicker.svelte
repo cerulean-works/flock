@@ -7,16 +7,16 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { tick, type Snippet } from 'svelte';
 	import * as Popover from '#lib/components/ui/popover/index.js';
-	import type { EvalRunChoice, ProjectInfo } from '#lib/types.ts';
-	import type { RunValues } from '#lib/data/run-values.svelte.ts';
+	import type { ProjectInfo, RunChoice } from '#lib/types.ts';
 	import { relativeTime } from '#lib/utils.ts';
 	import Skeleton from '#lib/components/Skeleton.svelte';
 	import MenuSearch from '#lib/components/MenuSearch.svelte';
 
 	/**
 	 * Picks one side of a comparison (025 D185) from the keyboard: the search box has focus, ↑↓
-	 * move, Enter picks. It lists the eval runs of one project, the side's own at first; Backspace
-	 * in an empty box (or the project chip) lists the org's projects to switch to.
+	 * move, Enter picks. It lists the runs of one project, the side's own at first, and from three
+	 * letters on the org's other projects' matches too, in one ranked list. Backspace in an empty
+	 * box (or the project chip) lists the org's projects to browse one.
 	 */
 	interface Props {
 		/** `A` or `B`, on the trigger and in labels. */
@@ -52,7 +52,7 @@
 	const scope = $derived(chosen ?? { entity, project });
 	let query = $state('');
 	let active = $state(0);
-	let runs = $state<EvalRunChoice[] | null>(null);
+	let runs = $state<RunChoice[] | null>(null);
 	let projects = $state<ProjectInfo[] | null>(null);
 	let failed = $state<string | null>(null);
 
@@ -65,7 +65,7 @@
 		failed = null;
 	});
 
-	// The runs of the project listed, searched as typed.
+	// The runs of the project listed, searched as typed (and the org's, past two letters).
 	$effect(() => {
 		if (!open || mode !== 'runs') return;
 		const { entity: e, project: p } = scope;
@@ -75,15 +75,17 @@
 			async () => {
 				try {
 					const res = await fetch(
-						`/api/projects/${encodeURIComponent(e)}/${encodeURIComponent(p)}/eval-runs?${new URLSearchParams({ q })}`,
+						`/api/projects/${encodeURIComponent(e)}/${encodeURIComponent(p)}/run-choices?${new URLSearchParams({ q })}`,
 						{ signal: controller.signal }
 					);
 					if (!res.ok) throw new Error(`Couldn’t list the runs of ${e}/${p} (${res.status})`);
-					const got = ((await res.json()) as { runs: EvalRunChoice[] }).runs;
-					runs = got.filter((c) => `${e}/${p}/${c.id}` !== exclude);
+					const got = ((await res.json()) as { runs: RunChoice[] }).runs;
+					runs = got.filter((c) => `${c.entity}/${c.project}/${c.id}` !== exclude);
 					failed = null;
 					// Unsearched, the list starts on the run this side shows.
-					const at = q ? -1 : runs.findIndex((c) => c.id === run && e === entity && p === project);
+					const at = q
+						? -1
+						: runs.findIndex((c) => c.id === run && c.entity === entity && c.project === project);
 					active = Math.max(0, at);
 				} catch (err) {
 					if (!controller.signal.aborted) failed = (err as Error).message;
@@ -97,27 +99,15 @@
 		};
 	});
 
-	// The org's projects with eval runs, read once, the first time they're listed: a project's
-	// job types say whether it has any.
+	// The org's projects with runs, read once, the first time they're listed.
 	$effect(() => {
 		if (!open || mode !== 'projects' || projects) return;
 		const controller = new AbortController();
 		const { signal } = controller;
-		const hasEvals = async (p: ProjectInfo) => {
-			if (!p.run_count) return false;
-			const res = await fetch(
-				`/api/projects/${encodeURIComponent(p.entity)}/${encodeURIComponent(p.name)}/runs/values?keys=job_type`,
-				{ signal }
-			);
-			if (!res.ok) return false;
-			const { values } = (await res.json()) as { values: RunValues };
-			return (values.job_type ?? []).some((v) => v.value === 'eval' && v.runs > 0);
-		};
 		fetch(`/api/projects?${new URLSearchParams({ entity })}`, { signal })
 			.then((res) => res.json() as Promise<{ projects: ProjectInfo[] }>)
-			.then(async (got) => {
-				const evals = await Promise.all(got.projects.map(hasEvals));
-				projects = got.projects.filter((_, i) => evals[i]);
+			.then((got) => {
+				projects = got.projects.filter((p) => p.run_count > 0);
 				active = Math.max(
 					0,
 					projects.findIndex((p) => p.name === scope.project)
@@ -157,9 +147,9 @@
 		runs = null;
 	}
 
-	function pick(choice: EvalRunChoice) {
+	function pick(choice: RunChoice) {
 		open = false;
-		onpick(scope.entity, scope.project, choice.id);
+		onpick(choice.entity, choice.project, choice.id);
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -223,8 +213,8 @@
 			aria-expanded="true"
 			aria-controls="{id}-list"
 			aria-activedescendant={count ? `${id}-${mode}-${active}` : undefined}
-			label={mode === 'runs' ? `Search eval runs for ${side}` : 'Search projects'}
-			placeholder={mode === 'runs' ? 'Search eval runs…' : 'Search projects…'}
+			label={mode === 'runs' ? `Search runs for ${side}` : 'Search projects'}
+			placeholder={mode === 'runs' ? 'Search runs…' : 'Search projects…'}
 			bind:value={query}
 			oninput={() => (active = 0)}
 			{onkeydown}
@@ -272,8 +262,9 @@
 				{#if runs === null}
 					<Skeleton shape="lines" class="px-2" />
 				{/if}
-				{#each runs ?? [] as r, i (r.id)}
-					{@const current = scope.entity === entity && scope.project === project && r.id === run}
+				{#each runs ?? [] as r, i (`${r.entity}/${r.project}/${r.id}`)}
+					{@const current = r.entity === entity && r.project === project && r.id === run}
+					{@const away = r.entity !== scope.entity || r.project !== scope.project}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<div
 						id="{id}-runs-{i}"
@@ -287,7 +278,11 @@
 						<CheckIcon class={['size-3.5 flex-none', !current && 'invisible']} />
 						<!-- Three columns: the name takes the room, the model and the age one width each, so
 						     every row's model starts at one x. -->
-						<span class="min-w-0 flex-1 truncate">{r.display_name ?? r.id}</span>
+						<!-- Another project's run carries its project, faint, after the name. -->
+						<span class="flex min-w-0 flex-1 items-baseline gap-1.5">
+							<span class="min-w-0 truncate">{r.display_name ?? r.id}</span>
+							{#if away}<span class="flex-none truncate text-xs text-faint">{r.project}</span>{/if}
+						</span>
 						<span
 							class="w-32 flex-none truncate text-muted-foreground max-sm:hidden"
 							{@attach hint(r.model ?? undefined)}>{shortModel(r.model)}</span
@@ -299,7 +294,7 @@
 				{:else}
 					{#if runs}
 						<p class="px-2 py-2 text-xs text-muted-foreground">
-							No eval runs {query.trim() ? 'match' : 'in this project'}.
+							No runs {query.trim() ? 'match' : 'in this project'}.
 						</p>
 					{/if}
 				{/each}
@@ -325,7 +320,7 @@
 				{:else}
 					{#if projects}
 						<p class="px-2 py-2 text-xs text-muted-foreground">
-							{query.trim() ? 'No projects match.' : 'No projects have eval runs.'}
+							{query.trim() ? 'No projects match.' : 'No projects have runs.'}
 						</p>
 					{/if}
 				{/each}
