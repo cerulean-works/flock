@@ -121,7 +121,7 @@
 	{#if end && last}
 		<span
 			class={[
-				'pointer-events-none absolute right-0 text-right leading-tight',
+				'end-halo pointer-events-none absolute right-0 text-right leading-tight',
 				draw && 'spark-fade'
 			]}
 			style:bottom={endAbove ? `${H - lastY + 10}px` : undefined}
@@ -152,6 +152,12 @@
 	.spark-fade {
 		opacity: 0;
 		animation: spark-fade 600ms ease-out 600ms forwards;
+	}
+	/* The end's reading over a curve that runs through it: outlined in the tile's colour, so the
+	   line breaks around the text instead of striking it. */
+	.end-halo :global(*) {
+		-webkit-text-stroke: 4px var(--card);
+		paint-order: stroke fill;
 	}
 	/* A live run's end: a ring that breathes slowly, saying it is still logging. */
 	.breathe {
