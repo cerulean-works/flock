@@ -156,6 +156,7 @@ def test_0002_upgrades_existing_data(postgres: Any, make_flock: Flocks, tmp_path
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
 
     server = make_flock(database_url=url)  # the backfill rebuilds system metrics' chunks
@@ -251,6 +252,7 @@ def test_0003_creates_projects_from_runs(postgres: Any, make_flock: Flocks, tmp_
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
 
     api = make_flock(database_url=url).client()
@@ -312,6 +314,7 @@ def test_0004_creates_orgs_from_entities(postgres: Any, make_flock: Flocks, tmp_
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
 
     async def rows() -> list:
@@ -401,6 +404,7 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
     # Flock's first files directory (see ``Flocks``) already holds the upload.
     metadata = tmp_path / "flock-files-0" / str(run_pk) / "wandb-metadata.json"
@@ -461,6 +465,7 @@ def test_0008_shows_existing_orgs_by_their_name(
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
 
     async def nullable() -> str:
@@ -535,6 +540,7 @@ def test_0009_keeps_the_spend_of_projects_deleted_before_it(
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
     api = make_flock(database_url=url).client()
     (deleted,) = api.get("/api/v1/orgs/flock/budget/deleted-projects").json()["deleted_projects"]
@@ -588,6 +594,7 @@ def test_0012_refuses_an_org_named_storage(postgres: Any, tmp_path: Path) -> Non
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
 
 
@@ -667,6 +674,7 @@ def test_0013_moves_runs_into_the_run_table_and_series_chunks(
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
 
     reports = []
@@ -788,6 +796,7 @@ def test_0014_refuses_an_org_named_datasets(postgres: Any, tmp_path: Path) -> No
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
 
 
@@ -829,6 +838,7 @@ def test_0015_refuses_an_org_named_models(postgres: Any, tmp_path: Path) -> None
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
 
 
@@ -867,6 +877,7 @@ def test_0016_leaves_existing_projects_and_datasets_private(postgres: Any, tmp_p
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
     rows = asyncio.run(run("SELECT name, visibility FROM projects ORDER BY name"))
     assert [tuple(row) for row in rows] == [("a", "private"), ("b", "private")]
@@ -934,6 +945,7 @@ def test_0017_credits_each_project_to_its_earliest_runs_owner(
         "0025_eval_links",
         "0026_run_groups",
         "0027_assistant_settings",
+        "0028_project_pins",
     ]
     rows = asyncio.run(
         run(
@@ -978,6 +990,7 @@ def test_dataset_grants_close_all_orgs_and_keep_old_workers_compatible(
                 "0025_eval_links",
                 "0026_run_groups",
                 "0027_assistant_settings",
+                "0028_project_pins",
             ]
             assert await Migrations().apply(url) == []
             assert await conn.fetch("SELECT * FROM private_datasets") == flags
