@@ -11,7 +11,7 @@ With Compose, a redeploy stops the old API before the new one is healthy, and Tr
 - An S3 server for the proxy to front, such as Ceph RGW, and its administrative access key. The stack always runs the S3 proxy.
 - Admin access to the Flock repository on GitHub, to set a variable and a secret.
 
-The stack assumes one Swarm node. With more nodes, use the `s3` [files backend](operations#run-files), because the run files volume lives on one node.
+The API, the dashboard and PostgreSQL run on the manager node, the server Dokploy runs on, because their volumes live there. Other nodes only run the S3 proxy, if you [give it nodes of its own](#s3-edge-nodes).
 
 ## 1. Check Dokploy's Traefik
 
@@ -156,6 +156,96 @@ Check that a run survives a redeploy before relying on it:
 
 4. Check the run in the dashboard. It keeps logging and doesn't show as crashed.
 
+## Run the S3 proxy on separate nodes[[s3-edge-nodes]]
+
+Every byte read or written through S3 passes through the proxy twice: once between the client and the proxy, and once between the proxy and the S3 server. On one server, that traffic competes with the API and the dashboard for its network. The stack's `flock-s3-edge` service moves it to worker nodes of their own:
+- One task runs on each node labelled `flock-s3=true`. Without such a node the service runs nothing, so it costs nothing on a one-node stack.
+- Each task serves HTTPS on its node's port 443 itself. Traffic doesn't pass through Dokploy's Traefik or the manager node.
+- A DNS load balancer in front of the nodes sends each client to a healthy one.
+- Only PostgreSQL traffic, which is small, crosses between the nodes.
+
+### What you need
+
+- One server per edge node, on the same private network as the manager. Each needs a public IP that clients reach.
+- A DNS load balancer that checks each node's health and answers only with healthy ones, such as Cloudflare Load Balancing. Keep it DNS-only. A proxying load balancer would carry all the traffic itself, and may limit upload sizes.
+- A certificate for the S3 domain on every edge node, from Let's Encrypt with a DNS challenge, for example. An HTTP challenge fails, because the load balancer sends it to any node.
+
+### 1. Open the ports
+
+Allow these between the manager and the edge nodes, on the private network, in each server's firewall and in any cloud security group:
+
+| Port | Open on | Used for |
+|---|---|---|
+| TCP 2377 | the manager | joining the Swarm |
+| TCP and UDP 7946 | every node | Swarm's node-to-node messages |
+| UDP 4789 | every node | the overlay network that reaches PostgreSQL |
+
+Then open TCP 443 to clients on the edge nodes.
+
+### 2. Join the nodes
+
+On the manager, print the command that joins a worker:
+
+```bash
+docker swarm join-token worker
+```
+
+Run it on each edge node, with `--advertise-addr` set to the node's private address so the Swarm's traffic stays on the private network. If you added the node to Dokploy as a remote server, don't run Dokploy's **Setup Server** on it: that makes it a Swarm of its own and starts a Traefik on port 443.
+
+A new node runs nothing yet, because no service is placed on unlabelled nodes. If GHCR's packages are private and a task on the node later stays stuck pulling the image, sign in to `ghcr.io` on that node with the token from [step 2](#2-publish-the-images).
+
+### 3. Add the certificate
+
+On each edge node, put the certificate chain and its key in `/etc/flock/s3-tls`. The proxy runs as user `10001`, so the key must be readable by it:
+
+```bash
+sudo install -d /etc/flock/s3-tls
+sudo install -m 644 fullchain.pem /etc/flock/s3-tls/fullchain.pem
+sudo install -m 600 -o 10001 privkey.pem /etc/flock/s3-tls/privkey.pem
+```
+
+The proxy reads the files when it starts. After renewing them on every node, restart the service, which goes one node at a time:
+
+```bash
+docker service update --force flock-stack-abc123_flock-s3-edge
+```
+
+### 4. Label the nodes
+
+On the manager, label each edge node:
+
+```bash
+docker node update --label-add flock-s3=true flock-s3-1
+```
+
+Swarm starts a task on the node within seconds. Check that it runs, and that the node answers for the S3 domain:
+
+```bash
+docker service ps flock-stack-abc123_flock-s3-edge
+curl --fail --resolve s3.flock.example.com:443:203.0.113.10 https://s3.flock.example.com/healthz
+```
+
+### 5. Point the domain at the nodes
+
+1. In the load balancer, add the nodes' public IPs, with a health check of `GET /healthz` on port 443 that sends the S3 domain as its `Host` header. Make the S3 domain answer with the load balancer, with a short TTL such as 30 seconds.
+2. Keep `FLOCK_S3_PUBLIC_URL` as it is. Clients keep the same address.
+3. Once the old DNS answers have expired, remove the S3 domain from `flock-s3` under **Domains**. `flock-s3` keeps running on the manager, so you can keep its address as the load balancer's fallback.
+
+### Settings
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOCK_S3_EDGE_WORKERS` | `4` | Worker processes on each edge node. Each one uses at most one CPU core. |
+| `FLOCK_S3_EDGE_TLS_DIR` | `/etc/flock/s3-tls` | Folder on each edge node holding `fullchain.pem` and `privkey.pem`. |
+
+Each edge worker opens database connections like any proxy worker, so count them in [Database connections](operations#database-connections).
+
+### Redeploys
+
+A new task can't bind port 443 while the old one holds it, so each node stops its old task before starting the new one. Swarm updates one node at a time and waits 30 seconds between them, so the other nodes keep serving. The old task stops taking connections and gets 2 minutes for open downloads, like `flock-s3`.
+
+While a node restarts, connecting to it is refused. Clients that got several addresses from DNS try the next one at once, and the load balancer's health check takes the node out of its answers until it's back.
+
 ## Move from Compose[[move-from-compose]]
 
 If Flock already runs as a Dokploy Compose service, the move has one short outage, because the Compose service and the stack can't both use the same domains and the same PostgreSQL volume. Pick a quiet time and tell your users.
@@ -187,3 +277,6 @@ The old and new release share the database for a minute or more while the new on
 | The workflow fails at **Deploy to Dokploy** with `Dokploy answered 301` | Dokploy's branch check failed. Check that the service's branch is `main`. |
 | The workflow fails at **Deploy to Dokploy** with `Dokploy answered 400` | **Autodeploy** is off for the service. |
 | The API refuses to start with `database has contract migrations this release doesn't know` | A release older than the database's schema was deployed. Deploy `main`, or a later commit. |
+| A `flock-s3-edge` task is rejected with `bind source path does not exist` | The node has no `/etc/flock/s3-tls`, or `FLOCK_S3_EDGE_TLS_DIR` names another folder. [Add the certificate](#3-add-the-certificate) on that node. |
+| A `flock-s3-edge` task keeps restarting and its logs show a permission error on `privkey.pem` | The key isn't readable by user `10001`. Install it as shown in [step 3](#3-add-the-certificate). |
+| A `flock-s3-edge` task can't reach PostgreSQL | UDP 4789 or port 7946 is closed between the node and the manager. Check the firewalls and security groups from [step 1](#1-open-the-ports). |

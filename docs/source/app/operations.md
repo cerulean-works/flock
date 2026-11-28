@@ -210,6 +210,8 @@ Each process keeps a pool of connections. It opens them as requests need them, u
 
 The default stack, one API replica and `FLOCK_S3_WORKERS` (4) proxy workers, uses at most 17 + 4 × 5 = 37 connections. During a [Swarm redeploy](deploy-dokploy) the old and new release run side by side, which doubles it to 74. That fits under PostgreSQL's default `max_connections` of 100, with room for a backup or a `psql` session. If you raise worker counts, replicas or pool sizes, count the overlap too, and raise `max_connections` if needed.
 
+Each [S3 edge node](deploy-dokploy#s3-edge-nodes) adds `FLOCK_S3_EDGE_WORKERS` more proxy workers. Edge nodes stop their old task before starting the new one, so their connections don't double during a redeploy. Four edge nodes with 4 workers each add 4 × 4 × 5 = 80 connections. Setting `FLOCK_S3_POOL_SIZE` to 2 brings that to 4 × 4 × 3 = 48. The proxy caches what it reads, so 2 connections per worker are enough.
+
 With a pooler such as PgBouncer in transaction mode, which drops `LISTEN`, point `FLOCK_LISTEN_DATABASE_URL` at PostgreSQL directly.
 
 

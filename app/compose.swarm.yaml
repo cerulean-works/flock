@@ -12,8 +12,12 @@
 
 # The same update for every app service: start the new task, wait until it's healthy, watch it
 # for 30 seconds, and only then stop the old one. A task that fails in that time rolls back.
+# App services stay on the manager node, next to Traefik and the volumes. Without this, a stack
+# with worker nodes (for flock-s3-edge) could move the API away from its run files.
 x-start-first: &start-first
   replicas: 1
+  placement:
+    constraints: [node.role == manager]
   update_config:
     order: start-first
     parallelism: 1
@@ -23,6 +27,22 @@ x-start-first: &start-first
     order: start-first
   restart_policy:
     condition: any
+
+# The settings both S3 proxy services read.
+x-s3-environment: &s3-environment
+  FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+  FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
+  FLOCK_S3_UPSTREAM_ENDPOINT: ${FLOCK_S3_UPSTREAM_ENDPOINT:-}
+  FLOCK_S3_UPSTREAM_REGION: ${FLOCK_S3_UPSTREAM_REGION:-}
+  FLOCK_S3_UPSTREAM_ACCESS_KEY_ID: ${FLOCK_S3_UPSTREAM_ACCESS_KEY_ID:-}
+  FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY: ${FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY:-}
+  FLOCK_S3_BUCKET_PREFIX: ${FLOCK_S3_BUCKET_PREFIX:-}
+  FLOCK_S3_PUBLIC_URL: ${FLOCK_S3_PUBLIC_URL:-}
+  FLOCK_S3_TRASH_BUCKET: ${FLOCK_S3_TRASH_BUCKET:-}
+  FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
+  FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
+  FLOCK_S3_POOL_SIZE: ${FLOCK_S3_POOL_SIZE:-}
+  FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
 
 services:
   ui:
@@ -125,20 +145,7 @@ services:
     networks:
       - dokploy-network
       - internal
-    environment:
-      FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
-      FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
-      FLOCK_S3_UPSTREAM_ENDPOINT: ${FLOCK_S3_UPSTREAM_ENDPOINT:-}
-      FLOCK_S3_UPSTREAM_REGION: ${FLOCK_S3_UPSTREAM_REGION:-}
-      FLOCK_S3_UPSTREAM_ACCESS_KEY_ID: ${FLOCK_S3_UPSTREAM_ACCESS_KEY_ID:-}
-      FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY: ${FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY:-}
-      FLOCK_S3_BUCKET_PREFIX: ${FLOCK_S3_BUCKET_PREFIX:-}
-      FLOCK_S3_PUBLIC_URL: ${FLOCK_S3_PUBLIC_URL:-}
-      FLOCK_S3_TRASH_BUCKET: ${FLOCK_S3_TRASH_BUCKET:-}
-      FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
-      FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
-      FLOCK_S3_POOL_SIZE: ${FLOCK_S3_POOL_SIZE:-}
-      FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
+    environment: *s3-environment
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2)"]
       interval: 10s
@@ -153,6 +160,53 @@ services:
         - traefik.enable=true
         - traefik.swarm.lbswarm=true
         - traefik.swarm.network=dokploy-network
+
+  # The S3 proxy on worker nodes of their own, so S3 traffic skips the manager and its Traefik.
+  # One task runs on each node labelled flock-s3=true, and none without such a node, so the
+  # service is idle on a one-node stack. Each serves HTTPS on the node's port 443 itself, with
+  # the certificate in FLOCK_S3_EDGE_TLS_DIR on that node, and a DNS load balancer in front of
+  # the nodes picks one. Only PostgreSQL traffic crosses the overlay network.
+  flock-s3-edge:
+    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-api:${FLOCK_VERSION:-main}
+    command: ["uvicorn", "app.api.src.s3_proxy.app:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "${FLOCK_S3_EDGE_WORKERS:-4}", "--ssl-certfile", "/run/flock-s3-tls/fullchain.pem", "--ssl-keyfile", "/run/flock-s3-tls/privkey.pem"]
+    networks:
+      - internal
+    # Published on the node itself, not through Swarm's routing mesh, which would forward
+    # requests between nodes.
+    ports:
+      - target: 8090
+        published: 443
+        protocol: tcp
+        mode: host
+    volumes:
+      - type: bind
+        source: ${FLOCK_S3_EDGE_TLS_DIR:-/etc/flock/s3-tls}
+        target: /run/flock-s3-tls
+        read_only: true
+    environment: *s3-environment
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://127.0.0.1:8090/healthz', timeout=2, context=ssl._create_unverified_context())"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+    stop_grace_period: 120s
+    # A new task can't bind port 443 while the old one holds it, so each node stops its old task
+    # first. One node at a time, so the others keep serving while the load balancer moves off it.
+    deploy:
+      mode: global
+      placement:
+        constraints: [node.labels.flock-s3 == true]
+      update_config:
+        order: stop-first
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+        monitor: 30s
+      rollback_config:
+        order: stop-first
+        parallelism: 1
+      restart_policy:
+        condition: any
 
   # One replica, stopped before a new one starts, since two PostgreSQL processes must never share
   # a data directory. Pinned to the manager node so its volume never moves (D144). Its tag is
