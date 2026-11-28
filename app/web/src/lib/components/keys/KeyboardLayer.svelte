@@ -10,6 +10,7 @@
 	import { storageHref } from '#lib/storage.ts';
 	import { entityHref, orgHref } from '#lib/workspace/url.ts';
 	import CommandPalette from './CommandPalette.svelte';
+	import { warm } from './palette-data.svelte.ts';
 	import ShortcutSheet from './ShortcutSheet.svelte';
 
 	/** Hides or shows the sidebar ([). */
@@ -35,6 +36,15 @@
 	const org = $derived(
 		page.data.shell?.access === 'public' ? null : (page.data.shell?.org ?? null)
 	);
+
+	// What ⌘K searches, read once the app is idle, so the first ⌘K has it (palette-data).
+	$effect(() => {
+		const o = org;
+		if (!o || !page.data.shell?.s3) return;
+		const idle = window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1000));
+		const handle = idle(() => warm(o));
+		return () => (window.cancelIdleCallback ?? clearTimeout)(handle as number);
+	});
 
 	// Each page worth going back to joins Recent, named by its title's first part ("mix-w0.8 ·
 	// pretrain-350m · Flock" reads as the run, in its project).

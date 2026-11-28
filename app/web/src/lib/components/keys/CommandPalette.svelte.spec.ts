@@ -56,6 +56,22 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('the command menu', () => {
+	it('shows a place opened before at once, while Flock is read again', async () => {
+		render(CommandPalette, { open: true });
+		await userEvent.keyboard('bert');
+		await userEvent.keyboard('{Tab}');
+		await expect.element(screen.getByRole('option', { name: /lr-sweep-2/ })).toBeVisible();
+		await userEvent.keyboard('{Backspace}');
+
+		// Flock stops answering: bert's runs are still there, as kept.
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(() => new Promise(() => {}))
+		);
+		await userEvent.keyboard('{Tab}');
+		await expect.element(screen.getByRole('option', { name: /lr-sweep-2/ })).toBeVisible();
+	});
+
 	it('opens a project in place with Tab, goes back up with Backspace, and goes with Enter', async () => {
 		render(CommandPalette, { open: true });
 		const field = screen.getByRole('combobox', { name: 'Search or jump to' });
