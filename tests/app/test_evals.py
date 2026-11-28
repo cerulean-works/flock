@@ -414,6 +414,11 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     margins = [round(m["margin"], 3) for m in listed.json()["items"][0]["runs"]]
     assert [*margins, 1, 0, 0, "d-1"] in rows["s"]["dots"]
 
+    # Names only (the command menu's benchmarks): the same suites and tasks, without the squares.
+    named = api.get(route, names="true", **{"with": "flock/p/b"})
+    assert named.status == 200, named.body
+    assert named.json()["suites"] == [{"suite": k, "tasks": r["tasks"]} for k, r in rows.items()]
+
     # The same pair again is the kept answer, byte for byte.
     assert api.get(route, **{"with": "flock/p/b"}).body == found.body
     # A predictions file uploaded again under the same results file is a new answer. Its outcomes
@@ -439,6 +444,8 @@ def test_the_row_has_a_square_per_accuracy_suite_with_its_counts_and_dots(
     assert outside.status == 200, outside.body
     counts = {row["suite"]: row["counts"] for row in outside.json()["suites"]}
     assert counts["s"] == {"only_a": 1, "only_b": 1, "both_wrong": 1, "both_right": 3}
+    named = flock.anonymous().get(route, names="true", **{"with": "flock/p/b"})
+    assert {row["suite"]: row["tasks"] for row in named.json()["suites"]}["s"] == ["t", "u"]
 
 
 def test_the_row_is_refused_as_the_list_is(api: Client, tmp_path: Path) -> None:

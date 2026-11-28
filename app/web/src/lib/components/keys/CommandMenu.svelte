@@ -44,7 +44,7 @@
 	import { cubicOut } from 'svelte/easing';
 	import { fly } from 'svelte/transition';
 	import { searchScore } from '#lib/search.ts';
-	import type { Component, Snippet } from 'svelte';
+	import { untrack, type Component, type Snippet } from 'svelte';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import PinIcon from '@lucide/svelte/icons/pin';
@@ -66,6 +66,7 @@
 	import { folderApi, modelApi, modelCall, modelsHref } from '#lib/models.ts';
 	import { bucketApi, nameOf, objectHref, storageHref } from '#lib/storage.ts';
 	import { setTheme } from '#lib/theme.svelte.ts';
+	import { cached, keep, orgData, pending, prefetch, warm } from './palette-data.svelte.ts';
 	import type {
 		Bucket,
 		DatasetAt,
@@ -139,7 +140,7 @@
 		state?: string;
 		/** A place Tab opens here, listing what's in it. Enter opens it too when the row has
 		 *  nowhere to go and nothing to run. */
-		level?: () => Level;
+		level?: Opens;
 		/** A value in a checklist: ticked or not, and what ticking it does. */
 		checked?: boolean;
 		toggle?: () => void;
@@ -162,6 +163,8 @@
 	/** A place opened in the menu: its chip, and what's in it (searched by Flock when `searched`). */
 	interface Level {
 		label: string;
+		/** Where it reads from, when it reads: its answers are kept by it (palette-data). */
+		key?: string;
 		searched?: boolean;
 		load?: (query: string, signal: AbortSignal) => Promise<Sections>;
 		/** Rows read live (a filter's values follow each tick), instead of loaded once. */
@@ -170,6 +173,8 @@
 		checklist?: boolean;
 		/** ⌃X anywhere in it: clears what it sets (a column's filter). */
 		clear?: () => void;
+		/** Called once it's open (not when read ahead): what its next step will want, started. */
+		opened?: () => void;
 		/** Called when come back to from a level inside: reads again what it froze. */
 		refresh?: () => void;
 		/** The field takes a value instead of searching: Tab flips the way, Enter applies. */
@@ -187,11 +192,16 @@
 		return (await res.json()) as T;
 	}
 
+	/** A place that only reads (no state of the menu's touched): read ahead of its opening. */
+	type Opens = (() => Level) & { remote?: true };
+	const remote = (f: () => Level): Opens => Object.assign(f, { remote: true as const });
+
 	// ---- The places that open ------------------------------------------------------------
 
 	/** A project: its groups, then its latest runs (Flock searches them as you type). */
 	const projectLevel = (o: string, name: string): Level => ({
 		label: name,
+		key: `project:${o}/${name}`,
 		searched: true,
 		async load(query, signal) {
 			const base = `/api/projects/${encodeURIComponent(o)}/${encodeURIComponent(name)}`;
@@ -238,6 +248,7 @@
 	/** A folder of the org's datasets (`path` empty for the top). */
 	const datasetLevel = (o: string, path: string): Level => ({
 		label: nameOf(path),
+		key: `datasets:${o}/${path}`,
 		async load(_, signal) {
 			const at = await datasetCall<DatasetFolder | DatasetAt>(datasetsApi(o, 'at', { path }), {
 				signal
@@ -251,7 +262,7 @@
 						label: d.name,
 						href: datasetsHref(o, d.path),
 						icon: DatabaseIcon,
-						level: () => datasetItemLevel(o, d.path, d.version)
+						level: remote(() => datasetItemLevel(o, d.path, d.version))
 					}))
 				]
 			];
@@ -262,12 +273,13 @@
 		keywords: [path],
 		href: datasetsHref(o, path),
 		icon: FolderIcon,
-		level: () => datasetLevel(o, path)
+		level: remote(() => datasetLevel(o, path))
 	});
 
 	/** A folder of the org's models (`path` empty for the top). */
 	const modelLevel = (o: string, path: string): Level => ({
 		label: nameOf(path),
+		key: `models:${o}/${path}`,
 		async load(_, signal) {
 			const at = await datasetCall<ModelFolder | ModelAt>(folderApi(o, path), { signal });
 			if (at.kind !== 'folder') return [];
@@ -280,7 +292,7 @@
 						keywords: [m.name],
 						href: modelsHref(o, m.name),
 						icon: BoxIcon,
-						level: () => modelItemLevel(o, m.name, m.primary)
+						level: remote(() => modelItemLevel(o, m.name, m.primary))
 					}))
 				]
 			];
@@ -291,7 +303,7 @@
 		keywords: [path],
 		href: modelsHref(o, path),
 		icon: FolderIcon,
-		level: () => modelLevel(o, path)
+		level: remote(() => modelLevel(o, path))
 	});
 
 	/** A page of an item at one of its tabs. */
@@ -309,6 +321,7 @@
 		job?: string | null
 	): Level => ({
 		label,
+		key: `run:${o}/${project}/${id}`,
 		async load(_, signal) {
 			let kind = job;
 			if (kind === undefined) {
@@ -349,12 +362,13 @@
 		href: runHref(o, project, id),
 		detail,
 		icon: ActivityIcon,
-		level: () => runLevel(o, project, id, label, job)
+		level: remote(() => runLevel(o, project, id, label, job))
 	});
 
 	/** A dataset: its tabs, then its versions (the newest page of them). */
 	const datasetItemLevel = (o: string, path: string, primary: number | null): Level => ({
 		label: nameOf(path),
+		key: `dataset:${o}/${path}`,
 		async load(_, signal) {
 			const href = datasetsHref(o, path);
 			const list = await datasetCall<VersionsPage>(datasetsApi(o, 'versions', { path }), {
@@ -389,6 +403,7 @@
 	/** A model: its tabs, then its versions (the newest page of them). */
 	const modelItemLevel = (o: string, name: string, primary: number | null): Level => ({
 		label: nameOf(name),
+		key: `model:${o}/${name}`,
 		async load(_, signal) {
 			const href = modelsHref(o, name);
 			const list = await modelCall<ModelVersionsPage>(modelApi(o, name, 'versions'), {
@@ -423,6 +438,7 @@
 	/** A folder of a bucket (`prefix` empty for its top, else ending in `/`). */
 	const bucketLevel = (o: string, bucket: string, prefix: string): Level => ({
 		label: prefix ? nameOf(prefix) : bucket,
+		key: `bucket:${o}/${bucket}/${prefix}`,
 		async load(_, signal) {
 			const at = await getJson<Listing>(
 				`${bucketApi(o, bucket, 'objects')}?${new URLSearchParams({ prefix })}`,
@@ -436,7 +452,7 @@
 						keywords: [key],
 						href: objectHref(o, bucket, key),
 						icon: FolderIcon,
-						level: () => bucketLevel(o, bucket, key)
+						level: remote(() => bucketLevel(o, bucket, key))
 					}))
 				],
 				[
@@ -881,6 +897,7 @@
 	function compareLevel(c: PaletteCompare, a?: { id: string; label: string }): Level {
 		return {
 			label: a ? `${a.label} vs` : 'Compare',
+			key: `compare:${c.entity}/${c.project}/${a?.id ?? ''}`,
 			searched: true,
 			async load(q, signal) {
 				const base = `/api/projects/${encodeURIComponent(c.entity)}/${encodeURIComponent(c.project)}`;
@@ -913,7 +930,7 @@
 							label: r.label,
 							keywords: [r.id],
 							state: r.state,
-							level: () => (a ? benchmarkLevel(c, a, r) : compareLevel(c, r))
+							level: remote(() => (a ? benchmarkLevel(c, a, r) : compareLevel(c, r)))
 						}))
 					]
 				];
@@ -928,14 +945,18 @@
 		b: { id: string; label: string }
 	): Level {
 		const href = compareHref(c.entity, c.project, a.id, `${c.entity}/${c.project}/${b.id}`);
+		const base = `/api/projects/${encodeURIComponent(c.entity)}/${encodeURIComponent(c.project)}`;
+		const suites = `${base}/runs/${encodeURIComponent(a.id)}/items/suites?with=${encodeURIComponent(`${c.entity}/${c.project}/${b.id}`)}`;
 		return {
 			label: b.label,
+			key: `benchmarks:${c.entity}/${c.project}/${a.id}/${b.id}`,
+			// The squares take Flock seconds for a pair it hasn't kept: started as the list opens,
+			// so the compare page finds them done or under way. Never read ahead: Flock draws
+			// one pair's squares at a time.
+			opened: () => void fetch(suites).catch(() => {}),
 			async load(_, signal) {
-				const base = `/api/projects/${encodeURIComponent(c.entity)}/${encodeURIComponent(c.project)}`;
-				const found = await getJson<ItemSuites>(
-					`${base}/runs/${encodeURIComponent(a.id)}/items/suites?with=${encodeURIComponent(`${c.entity}/${c.project}/${b.id}`)}`,
-					signal
-				).catch(() => null);
+				// The names alone, from the results files: the squares aren't needed to list them.
+				const found = await getJson<ItemSuites>(`${suites}&names=true`, signal).catch(() => null);
 				const out: Sections = [
 					['Compare', [{ label: 'All benchmarks', href, icon: GitCompareArrowsIcon }]]
 				];
@@ -1042,6 +1063,7 @@
 	/** The org's buckets. */
 	const storageLevel = (o: string): Level => ({
 		label: 'Storage',
+		key: `storage:${o}`,
 		async load(_, signal) {
 			const b = await getJson<{ buckets: Bucket[] }>(
 				`/api/storage/${encodeURIComponent(o)}`,
@@ -1056,7 +1078,7 @@
 							label: x.name,
 							href: objectHref(o, x.name),
 							icon: HardDriveIcon,
-							level: () => bucketLevel(o, x.name, '')
+							level: remote(() => bucketLevel(o, x.name, ''))
 						}))
 				]
 			];
@@ -1065,97 +1087,50 @@
 
 	// ---- The top level -------------------------------------------------------------------
 
-	// The org's top dataset and model folders and its buckets, read once when the menu first
-	// opens (per org), so the top level lists them too.
-	let tops = $state<{ org: string; datasets: Entry[]; models: Entry[]; buckets: Entry[] } | null>(
-		null
-	);
+	// The org's top dataset and model folders and its buckets, and every dataset and model the
+	// walk found (Flock has no search across folders), read for the session (palette-data):
+	// at idle once the app is up, again on opening once they're old.
 	$effect(() => {
-		if (!open || !org || !shell?.s3 || tops?.org === org) return;
-		const o = org;
-		const controller = new AbortController();
-		const { signal } = controller;
-		void Promise.all([
-			datasetCall<DatasetFolder | DatasetAt>(datasetsApi(o, 'at', { path: '' }), { signal })
-				.then((at) => (at.kind === 'folder' ? at.folders.map((f) => datasetFolder(o, f.path)) : []))
-				.catch(() => []),
-			datasetCall<ModelFolder | ModelAt>(folderApi(o, ''), { signal })
-				.then((at) => (at.kind === 'folder' ? at.folders.map((f) => modelFolder(o, f.path)) : []))
-				.catch(() => []),
-			getJson<{ buckets: Bucket[] }>(`/api/storage/${encodeURIComponent(o)}`, signal)
-				.then((b) =>
-					b.buckets
-						.filter((x) => x.deleted_at === undefined || x.deleted_at === null)
-						.map((x): Entry => ({
-							label: x.name,
-							href: objectHref(o, x.name),
-							icon: HardDriveIcon,
-							level: () => bucketLevel(o, x.name, '')
-						}))
-				)
-				.catch(() => [])
-		]).then(([datasets, models, buckets]) => {
-			if (!signal.aborted) tops = { org: o, datasets, models, buckets };
-		});
-		return () => controller.abort();
+		if (open && org && shell?.s3) warm(org);
 	});
-
-	// Every dataset and model in the org's folders, found by walking them in the background once
-	// the menu opens (Flock has no search across folders), so typing finds one without Tab. Kept
-	// to the first 60 folders read, four at a time.
-	let deep = $state<{ org: string; datasets: Entry[]; models: Entry[] } | null>(null);
-	$effect(() => {
-		if (!open || !org || !shell?.s3 || deep?.org === org) return;
-		const o = org;
-		const controller = new AbortController();
-		const { signal } = controller;
-		const found = { org: o, datasets: [] as Entry[], models: [] as Entry[] };
-		let budget = 60;
-		async function walk(paths: string[], read: (path: string) => Promise<string[]>) {
-			const queue = [...paths];
-			const worker = async () => {
-				while (queue.length && budget > 0 && !signal.aborted) {
-					budget--;
-					queue.push(...(await read(queue.shift()!).catch(() => [])));
-				}
-			};
-			await Promise.all([worker(), worker()]);
-		}
-		void Promise.all([
-			walk([''], async (path) => {
-				const at = await datasetCall<DatasetFolder | DatasetAt>(datasetsApi(o, 'at', { path }), {
-					signal
-				});
-				if (at.kind !== 'folder') return [];
-				for (const d of at.datasets)
-					found.datasets.push({
-						label: d.name,
-						keywords: [d.path],
-						detail: d.path.includes('/') ? d.path.slice(0, d.path.lastIndexOf('/')) : undefined,
-						href: datasetsHref(o, d.path),
-						icon: DatabaseIcon,
-						level: () => datasetItemLevel(o, d.path, d.version)
-					});
-				return at.folders.map((f) => f.path);
-			}),
-			walk([''], async (path) => {
-				const at = await datasetCall<ModelFolder | ModelAt>(folderApi(o, path), { signal });
-				if (at.kind !== 'folder') return [];
-				for (const m of at.models)
-					found.models.push({
-						label: nameOf(m.name),
-						keywords: [m.name],
-						detail: m.name.includes('/') ? m.name.slice(0, m.name.lastIndexOf('/')) : undefined,
-						href: modelsHref(o, m.name),
-						icon: BoxIcon,
-						level: () => modelItemLevel(o, m.name, m.primary)
-					});
-				return at.folders.map((f) => f.path);
-			})
-		]).then(() => {
-			if (!signal.aborted) deep = found;
-		});
-		return () => controller.abort();
+	const read = $derived(org && shell?.s3 && orgData.current?.org === org ? orgData.current : null);
+	const tops = $derived.by(() => {
+		const o = read?.org;
+		const t = read?.tops;
+		if (!o || !t) return null;
+		return {
+			datasets: t.datasets.map((path) => datasetFolder(o, path)),
+			models: t.models.map((path) => modelFolder(o, path)),
+			buckets: t.buckets.map((name): Entry => ({
+				label: name,
+				href: objectHref(o, name),
+				icon: HardDriveIcon,
+				level: remote(() => bucketLevel(o, name, ''))
+			}))
+		};
+	});
+	const deep = $derived.by(() => {
+		const o = read?.org;
+		const d = read?.deep;
+		if (!o || !d) return null;
+		return {
+			datasets: d.datasets.map((x): Entry => ({
+				label: x.name,
+				keywords: [x.path],
+				detail: x.path.includes('/') ? x.path.slice(0, x.path.lastIndexOf('/')) : undefined,
+				href: datasetsHref(o, x.path),
+				icon: DatabaseIcon,
+				level: remote(() => datasetItemLevel(o, x.path, x.version))
+			})),
+			models: d.models.map((m): Entry => ({
+				label: nameOf(m.name),
+				keywords: [m.name],
+				detail: m.name.includes('/') ? m.name.slice(0, m.name.lastIndexOf('/')) : undefined,
+				href: modelsHref(o, m.name),
+				icon: BoxIcon,
+				level: remote(() => modelItemLevel(o, m.name, m.primary))
+			}))
+		};
 	});
 
 	const VISIT_ICONS: Record<Visit['kind'], Component> = {
@@ -1168,11 +1143,11 @@
 	};
 
 	/** A recent page that opens in place too: a project (its groups and runs), a run (its tabs). */
-	function visitLevel(v: Visit): (() => Level) | undefined {
+	function visitLevel(v: Visit): Opens | undefined {
 		const [, o, p, kind, id] = pathOf(v.href).split('/').map(decodeURIComponent);
 		if (!o || !p) return undefined;
-		if (v.kind === 'project' && !kind) return () => projectLevel(o, p);
-		if (v.kind === 'run' && kind === 'runs' && id) return () => runLevel(o, p, id, v.label);
+		if (v.kind === 'project' && !kind) return remote(() => projectLevel(o, p));
+		if (v.kind === 'run' && kind === 'runs' && id) return remote(() => runLevel(o, p, id, v.label));
 		return undefined;
 	}
 
@@ -1195,21 +1170,21 @@
 					href: datasetsHref(o),
 					hint: 'G D',
 					icon: DatabaseIcon,
-					level: () => ({ ...datasetLevel(o, ''), label: 'Datasets' })
+					level: remote(() => ({ ...datasetLevel(o, ''), label: 'Datasets' }))
 				});
 				go.push({
 					label: 'Models',
 					href: modelsHref(o),
 					hint: 'G M',
 					icon: BoxIcon,
-					level: () => ({ ...modelLevel(o, ''), label: 'Models' })
+					level: remote(() => ({ ...modelLevel(o, ''), label: 'Models' }))
 				});
 				go.push({
 					label: 'Storage',
 					href: storageHref(o),
 					hint: 'G S',
 					icon: HardDriveIcon,
-					level: () => storageLevel(o)
+					level: remote(() => storageLevel(o))
 				});
 			}
 			go.push({ label: 'Settings', href: orgHref(org), hint: 'G ,', icon: SettingsIcon });
@@ -1398,7 +1373,7 @@
 					keywords: p.description ? [p.description] : [],
 					href: projectHref(o, p.name),
 					icon: FolderIcon,
-					level: () => projectLevel(o, p.name)
+					level: remote(() => projectLevel(o, p.name))
 				}))
 			]);
 		}
@@ -1457,14 +1432,13 @@
 							};
 				})
 			]);
-		const read = tops;
-		if (read && read.org === org) {
-			if (read.datasets.length) out.push(['Dataset folders', read.datasets]);
-			if (read.models.length) out.push(['Model folders', read.models]);
-			if (read.buckets.length) out.push(['Buckets', read.buckets]);
+		if (tops) {
+			if (tops.datasets.length) out.push(['Dataset folders', tops.datasets]);
+			if (tops.models.length) out.push(['Model folders', tops.models]);
+			if (tops.buckets.length) out.push(['Buckets', tops.buckets]);
 		}
 		// Found only by typing: listed whole, they'd bury everything else.
-		if (query.trim() && deep && deep.org === org) {
+		if (query.trim() && deep) {
 			if (deep.datasets.length) out.push(['Datasets', deep.datasets]);
 			if (deep.models.length) out.push(['Models', deep.models]);
 		}
@@ -1500,11 +1474,21 @@
 	// While the inline list closes it keeps the rows it last showed: clearing the peek would
 	// otherwise swap in the whole list for the frames the height takes to fold (a tall snap).
 	let lastShown: Sections = [];
-	const sections = $derived.by((): Sections => {
+	const full = $derived.by((): Sections => {
 		if (inline && !visible) return lastShown;
 		lastShown = shownSections();
 		return lastShown;
 	});
+	// Each section shows its first rows only (best first once something's typed): a project's
+	// thousands of columns, all in the page, made each key take a second (bits-ui looks the whole
+	// list up again for every row that comes or goes). The rest are a search away.
+	const PER_SECTION = 50;
+	const sections = $derived(
+		full.map(([name, entries]): [string, Entry[]] => [name, entries.slice(0, PER_SECTION)])
+	);
+	const more = $derived(
+		Object.fromEntries(full.map(([name, entries]) => [name, entries.length - PER_SECTION]))
+	);
 	function shownSections(): Sections {
 		if (!level) return peeking ? top.slice(0, 1) : matched(top, true);
 		// A value typed into an input level is not a search.
@@ -1562,24 +1546,34 @@
 		return null;
 	});
 
-	// What's in the level open: read again as the search changes where Flock searches it.
+	// What's in the level open: read again as the search changes where Flock searches it. A
+	// place read before (or ahead, as the cursor rested on its row) shows at once, and is read
+	// again behind it, quietly.
 	const levelQuery = $derived(level?.searched ? query.trim() : '');
 	$effect(() => {
 		const l = level;
 		if (!l?.load) return;
+		untrack(() => l.opened?.());
 		const load = l.load;
 		const q = levelQuery;
+		const key = l.key ? `${l.key}?${q}` : null;
+		const hit = key ? cached<Sections>(key) : undefined;
 		const controller = new AbortController();
-		loading = true;
+		if (hit) inside = hit;
+		loading = !hit;
 		failed = false;
+		const land = (s: Sections) => {
+			if (controller.signal.aborted) return;
+			inside = s.filter(([, e]) => e.length);
+			if (key) keep(key, inside);
+		};
+		const ahead = key ? pending<Sections>(key) : undefined;
 		const timer = setTimeout(
 			() => {
-				load(q, controller.signal)
-					.then((s) => {
-						if (!controller.signal.aborted) inside = s.filter(([, e]) => e.length);
-					})
+				(ahead ?? load(q, controller.signal))
+					.then(land)
 					.catch(() => {
-						if (!controller.signal.aborted) {
+						if (!controller.signal.aborted && !hit) {
 							inside = [];
 							failed = true;
 						}
@@ -1588,12 +1582,25 @@
 						if (!controller.signal.aborted) loading = false;
 					});
 			},
-			q ? 200 : 0
+			q && !hit ? 80 : 0
 		);
 		return () => {
 			clearTimeout(timer);
 			controller.abort();
 		};
+	});
+
+	// The row the cursor rests on, when it opens a place Flock reads: read ahead, so Tab (or
+	// Enter) finds it there. A moment's rest, so running the cursor down the list reads nothing.
+	$effect(() => {
+		const opens = activeEntry?.level;
+		if (!opens?.remote || !visible) return;
+		const timer = setTimeout(() => {
+			const next = opens();
+			const load = next.load;
+			if (next.key && load) prefetch(`${next.key}?`, () => load('', new AbortController().signal));
+		}, 80);
+		return () => clearTimeout(timer);
 	});
 
 	/** Which way the list last moved: 1 into a level, -1 back out (its slide). */
@@ -2102,6 +2109,11 @@
 												{/if}
 											</Command.Item>
 										{/each}
+										{#if more[name] > 0}
+											<div class="flex h-8 items-center pr-2 pl-[30px] text-[12px] text-faint">
+												{more[name].toLocaleString()} more · type to narrow
+											</div>
+										{/if}
 									</Command.GroupItems>
 								</Command.Group>
 							{/each}

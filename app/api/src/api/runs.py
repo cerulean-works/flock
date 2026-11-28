@@ -846,16 +846,50 @@ SQUARE_ANSWERS: OrderedDict[tuple[str, ...], bytes] = OrderedDict()
 SQUARES_RUNNING: dict[tuple[str, ...], asyncio.Future[tuple[bytes, bool]]] = {}
 
 
+async def _suite_names(
+    readers: list[tuple[str, Callable[[str], str | None], Callable[[str], bytes | None]]],
+    public: list[bool],
+) -> Response:
+    """The suites ``run_items_suites`` draws, by name with their tasks, from the results files
+    alone. On the diffs' pool, not the squares' one worker, so it never waits behind a pair."""
+
+    def read() -> bytes:
+        runs = [WrittenResults.read(source, text) for source, text, _ in readers]
+        private = set()
+        for written, outsider in zip(runs, public, strict=True):
+            if outsider:
+                private |= {t.task for t in written.tasks if t.dataset.private}
+        rows = []
+        for suite, tasks in _accuracy_suites(*runs).items():
+            shown = [task for task in tasks if task not in private]
+            if shown:
+                rows.append({"suite": suite, "tasks": shown})
+        return orjson.dumps({"suites": rows})
+
+    try:
+        answer = await asyncio.get_running_loop().run_in_executor(DIFFS, read)
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:
+        raise APIError(409, str(exc)) from exc
+    return Response(answer, media_type="application/json")
+
+
 @public.get("/projects/{entity}/{project}/runs/{run}/items/suites")
 async def run_items_suites(
     run: ReadableRunDep,
     store: StoreDep,
     viewer: ViewerDep,
     other: Annotated[str, Query(alias="with", description="the other run, as entity/project/id")],
+    names: Annotated[
+        bool, Query(description="only each suite's name and tasks, read from the results files")
+    ] = False,
 ) -> Response:
     """The compare page's row of suite squares for two runs (029): each suite both runs recorded alike that holds a task of its own, with its tasks (every accuracy task under it both scored under one hash), the number of docs in each cell of their diff, and up to 800 of its docs as ``[A's margin, B's margin, cell, task, place, id]`` (the cell an index into eval's ``CELLS``, the task one into ``tasks``, the place the doc's in that task's cell in the list's default order), taken evenly through each cell in the list's default order, margins rounded to 3 decimals.
 
-    Each task is computed once for all its suites. A task a run has no predictions for, or whose predictions the viewer can't read (a private dataset's, outside the organization), is left out of its suites. The answer is kept for the last 8 pairs. 404 as ``.../items`` for a run unknown, unreadable or without results; 409 with eval's reason otherwise."""
+    Each task is computed once for all its suites. A task a run has no predictions for, or whose predictions the viewer can't read (a private dataset's, outside the organization), is left out of its suites. The answer is kept for the last 8 pairs. 404 as ``.../items`` for a run unknown, unreadable or without results; 409 with eval's reason otherwise.
+
+    With ``names``, each suite's name and tasks only (the command menu's benchmarks), read from the two results files without their predictions: the time of a read, not of the squares (seconds for a pair not kept). A task still uploading is listed; an outsider's private one is not."""
     loop = asyncio.get_running_loop()
     readers = await eval_readers(run, other, store, viewer)
     # Whether the viewer reads each run as an outsider, who gets no private dataset's predictions,
@@ -864,6 +898,8 @@ async def run_items_suites(
     other_project = await get_readable_project(entity, project, store, viewer)
     pair = [run, await find_run(store, other_project, name)]
     public = [store.accounts.access(viewer, r.project) == "public" for r in pair]
+    if names:
+        return await _suite_names(readers, public)
     # Every file of both runs, by name, size and time: any upload, a predictions file replaced
     # under the same results file too, is a new key. Read here, so a kept answer is served
     # without waiting behind another pair's computation on `SQUARES`.
