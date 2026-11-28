@@ -30,7 +30,7 @@
 			<p class="text-[28px] leading-none font-semibold tracking-[-0.02em] tabular-nums">
 				{fmt(credits.balance)}
 			</p>
-			<p class="mt-1.5 text-[12px] text-muted-foreground">credits left</p>
+			<p class="mt-1.5 text-[12px] text-muted-foreground">NTD credits left</p>
 			<div class="mt-auto h-1 overflow-hidden rounded-full bg-muted">
 				<div class="bar h-full rounded-full {tone}" style:width="{left * 100}%"></div>
 			</div>
@@ -48,7 +48,7 @@
 <style>
 	.bar {
 		transform-origin: left;
-		animation: bar-in 700ms cubic-bezier(0.25, 0.8, 0.3, 1) calc(200ms + var(--i, 0) * 45ms) both;
+		animation: bar-in 700ms cubic-bezier(0.25, 0.8, 0.3, 1) calc(360ms + var(--i, 0) * 45ms) both;
 	}
 	@keyframes bar-in {
 		from {

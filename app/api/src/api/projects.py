@@ -62,7 +62,7 @@ async def list_projects(
         org = await store.find_org(entity)
         found = await store.projects([org]) if org is not None else []
         projects = [p for p in found if accounts.access(viewer, p)]
-    return JSONResponse({"projects": await store.project_infos(projects)})
+    return JSONResponse({"projects": await store.project_infos(projects, viewer)})
 
 
 @router.post("/projects", status_code=201)
@@ -83,7 +83,7 @@ async def get_project(project: ReadableProjectDep, store: StoreDep, viewer: View
     """The project, with the caller's ``access``: ``admin``, ``member`` or ``public`` (read
     only, D111)."""
     access = store.accounts.access(viewer, project)
-    return JSONResponse({**await store.project_info(project), "access": access})
+    return JSONResponse({**await store.project_info(project, viewer), "access": access})
 
 
 @public.get("/projects/{entity}/{project}/owners")
@@ -148,7 +148,21 @@ async def update_project(
     except NotFound as exc:
         raise APIError(404, str(exc)) from exc
     access = "admin" if admin else "member"
-    return JSONResponse({**await store.project_info(project), "access": access})
+    return JSONResponse({**await store.project_info(project, user), "access": access})
+
+
+@router.put("/projects/{entity}/{project}/pin", status_code=204)
+async def pin_project(project: MemberProjectDep, store: StoreDep, user: UserDep) -> Response:
+    """Pin the project to the top of the caller's own sidebar; pinning it again does nothing."""
+    await store.pin_project(project, user, True)
+    return Response(status_code=204)
+
+
+@router.delete("/projects/{entity}/{project}/pin", status_code=204)
+async def unpin_project(project: MemberProjectDep, store: StoreDep, user: UserDep) -> Response:
+    """Unpin the project from the caller's sidebar."""
+    await store.pin_project(project, user, False)
+    return Response(status_code=204)
 
 
 @router.delete("/projects/{entity}/{project}", status_code=204)

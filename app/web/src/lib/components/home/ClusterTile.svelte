@@ -48,7 +48,7 @@
 			{#if share != null}
 				<div class="mt-auto h-1 overflow-hidden rounded-full bg-muted">
 					<div
-						class={['h-full rounded-full', over ? 'bg-state-preempting' : 'bg-foreground/35']}
+						class={['bar h-full rounded-full', over ? 'bg-state-preempting' : 'bg-foreground/35']}
 						style:width="{share * 100}%"
 					></div>
 				</div>
@@ -65,3 +65,20 @@
 		{/if}
 	</a>
 </Tile>
+
+<style>
+	.bar {
+		transform-origin: left;
+		animation: bar-in 700ms cubic-bezier(0.25, 0.8, 0.3, 1) calc(360ms + var(--i, 0) * 45ms) both;
+	}
+	@keyframes bar-in {
+		from {
+			transform: scaleX(0);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.bar {
+			animation: none;
+		}
+	}
+</style>

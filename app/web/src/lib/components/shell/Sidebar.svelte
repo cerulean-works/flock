@@ -6,7 +6,6 @@
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
-	import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
@@ -42,6 +41,9 @@
 		type Suggestion
 	} from '#lib/groups.ts';
 	import { modelsHref } from '#lib/models.ts';
+	import FolderPinIcon from '#lib/components/shell/FolderPinIcon.svelte';
+	import SidebarToggleIcon from '#lib/components/shell/SidebarToggleIcon.svelte';
+	import { pinnedAt, pinnedFirst, setPinned } from '#lib/project-pins.svelte.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import type { Access, OrgEntry, ProjectInfo } from '#lib/types.ts';
 	import { cn } from '#lib/utils.ts';
@@ -173,12 +175,15 @@
 	let searching = $state(false);
 	let query = $state('');
 	let active = $state(0);
+	// Pinned projects lead, in pin order, and always show; the rest by latest activity.
+	const ordered = $derived(pinnedFirst(projects));
+	const pinnedCount = $derived(ordered.filter((p) => pinnedAt(p) != null).length);
 	const matches = $derived(
 		query.trim()
-			? projects.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()))
-			: projects
+			? ordered.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()))
+			: ordered
 	);
-	const shown = $derived(showAll ? projects : projects.slice(0, SHOWN));
+	const shown = $derived(showAll ? ordered : ordered.slice(0, Math.max(SHOWN, pinnedCount)));
 
 	let creating = $state(false);
 
@@ -376,7 +381,7 @@
 				{@attach hint(drawer ? 'Close menu' : 'Hide sidebar  [')}
 				onclick={oncollapse}
 			>
-				{#if drawer}<XIcon />{:else}<PanelLeftCloseIcon />{/if}
+				{#if drawer}<XIcon />{:else}<SidebarToggleIcon open />{/if}
 			</Button>
 		{/if}
 	</div>
@@ -524,6 +529,7 @@
 				<ul class="grid grid-cols-1 gap-px">
 					{#each shown as p (p.name)}
 						{@const here = project === p.name}
+						{@const pinned = pinnedAt(p) != null}
 						<!-- The project's menu shows over the row's end while it's hovered, focused or open,
 						     in place of its live count. -->
 						<li>
@@ -534,8 +540,15 @@
 									class:font-medium={here}
 									{@attach hint(p.description)}
 								>
-									<!-- The project in view shows open, its pages nested under it. -->
-									{#if here}<FolderOpenIcon />{:else}<FolderIcon />{/if}
+									<!-- A pinned project's folder carries a star; the project in view shows open, its pages
+									     nested under it. The pin button covers the icon while the row is hovered. -->
+									{#if pinned}<FolderPinIcon
+											class={cn(!outside && 'group-hover/project:invisible')}
+										/>{:else if here}<FolderOpenIcon
+											class={cn(!outside && 'group-hover/project:invisible')}
+										/>{:else}<FolderIcon
+											class={cn(!outside && 'group-hover/project:invisible')}
+										/>{/if}
 									<span class="min-w-0 flex-1 truncate">{p.name}</span>
 									{#if p.active_run_count}
 										<span
@@ -556,6 +569,16 @@
 									{/if}
 								</a>
 								{#if !outside}
+									<button
+										type="button"
+										class="absolute inset-y-0 left-1 my-auto grid size-6 place-items-center rounded-sm text-muted-foreground opacity-0 outline-none group-hover/project:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 [&_svg]:stroke-[1.75]"
+										aria-label={pinned ? `Unpin ${p.name}` : `Pin ${p.name}`}
+										aria-pressed={pinned}
+										{@attach hint(pinned ? 'Unpin' : 'Pin to top')}
+										onclick={() => setPinned(org, p.name, !pinned)}
+									>
+										<FolderPinIcon filled={pinned} />
+									</button>
 									<div class="absolute inset-y-0 right-0.5 flex items-center">
 										<ProjectMenu
 											entity={org}
@@ -574,12 +597,12 @@
 						</li>
 					{/each}
 				</ul>
-				{#if projects.length > shown.length}
+				{#if ordered.length > shown.length}
 					<button
 						class="mt-1 px-2 text-xs text-muted-foreground hover:text-foreground"
 						onclick={() => (showAll = true)}
 					>
-						Show {projects.length - shown.length} more
+						Show {ordered.length - shown.length} more
 					</button>
 				{/if}
 				{#if project && !shown.some((p) => p.name === project) && (!page.error || projects.some((p) => p.name === project))}

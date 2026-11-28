@@ -23,6 +23,8 @@ export interface ProjectInfo {
 	visibility: Visibility;
 	/** The ID of the user who created it, who may change its visibility (D118); null if unknown. */
 	created_by: number | null;
+	/** When the viewer pinned it to the top of their sidebar (seconds), or null. */
+	pinned_at?: number | null;
 	/** What the caller may do with it; only the project's own GET says. */
 	access?: Access;
 }

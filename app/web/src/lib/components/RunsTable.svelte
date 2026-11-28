@@ -661,8 +661,14 @@
 		const open = e.key === 'ArrowRight' || e.key === 'o';
 		if (down || up) {
 			e.preventDefault();
+			const from = cursor;
 			const at = cursor == null ? 0 : cursor + (down ? 1 : -1);
 			cursor = Math.max(0, Math.min(runs.length - 1, at));
+			// Shift+arrows select the rows they pass, as a shift-click does.
+			if (e.shiftKey && selectable) {
+				if (from != null) ws.selectRow(from);
+				ws.selectRow(cursor);
+			}
 			reveal(cursor);
 		} else if (cursor != null && e.key === 'Enter' && selectable) {
 			e.preventDefault();
@@ -923,6 +929,15 @@
 				]}
 				data-row={r}
 				style:top="{r * rowH}px"
+				onmousedown={(e) => selectable && e.shiftKey && e.button === 0 && e.preventDefault()}
+				onclickcapture={(e) => {
+					// Shift-click anywhere on the row selects the range, as on its checkbox.
+					if (!selectable || !e.shiftKey || e.button !== 0) return;
+					if ((e.target as Element).closest('[role="checkbox"]')) return;
+					e.preventDefault();
+					e.stopPropagation();
+					ws.clickSelected(r, true);
+				}}
 			>
 				<div
 					class={[
@@ -936,8 +951,8 @@
 				>
 					{#if selectable}
 						<Checkbox
-							checked={selected}
-							onCheckedChange={() => ws.toggleSelected(r)}
+							bind:checked={() => selected, () => {}}
+							onclick={(e: MouseEvent) => ws.clickSelected(r, e.shiftKey)}
 							aria-label="Select {ws.nameOf(r)}"
 						/>
 					{:else}

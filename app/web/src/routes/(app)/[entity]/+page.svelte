@@ -110,7 +110,11 @@
 {#snippet actions()}
 	<!-- The org's month: one line here, its breakdown on request (on a phone, above the list). -->
 	{#if data.credits}
-		<CreditsPanel credits={data.credits} thisMonth={data.thisMonth} class="max-sm:hidden" />
+		{#await data.credits then credits}
+			{#if credits}
+				<CreditsPanel {credits} thisMonth={data.thisMonth} class="max-sm:hidden" />
+			{/if}
+		{/await}
 	{:else if data.budget}
 		<BudgetPanel
 			budget={data.budget}
@@ -192,7 +196,11 @@
 	{:else}
 		{@const feed = data.feed}
 		{#if data.credits}
-			<CreditsPanel credits={data.credits} thisMonth={data.thisMonth} class="mx-3 mt-2 sm:hidden" />
+			{#await data.credits then credits}
+				{#if credits}
+					<CreditsPanel {credits} thisMonth={data.thisMonth} class="mx-3 mt-2 sm:hidden" />
+				{/if}
+			{/await}
 		{:else if data.budget}
 			<BudgetPanel
 				budget={data.budget}

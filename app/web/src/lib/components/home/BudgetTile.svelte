@@ -44,7 +44,7 @@
 <style>
 	.bar {
 		transform-origin: left;
-		animation: bar-in 700ms cubic-bezier(0.25, 0.8, 0.3, 1) calc(200ms + var(--i, 0) * 45ms) both;
+		animation: bar-in 700ms cubic-bezier(0.25, 0.8, 0.3, 1) calc(360ms + var(--i, 0) * 45ms) both;
 	}
 	@keyframes bar-in {
 		from {

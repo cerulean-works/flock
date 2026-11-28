@@ -35,7 +35,14 @@
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import { SETTINGS_SUBHEADING } from '#lib/settings.ts';
 	import type { Role } from '#lib/types.ts';
-	import { dateTime, duration, formText, orgDisplayNameError, relativeTime } from '#lib/utils.ts';
+	import {
+		dateTime,
+		duration,
+		formText,
+		orgDisplayNameError,
+		relativeTime,
+		CREDITS
+	} from '#lib/utils.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -294,10 +301,10 @@
 	{#if has('budget')}
 		<SettingsSection id="budget" title={label('budget')}>
 			<section>
-				<BillingForm billing={data.billing} {admin} />
+				<BillingForm billing={data.billing} {admin} credits={data.credits} />
 			</section>
 
-			{#if admin && data.warnings}
+			{#if admin && data.warnings && !data.credits}
 				<section class="mt-12 scroll-mt-8" id="budget-warnings">
 					<h3 class={SETTINGS_SUBHEADING}>Budget warnings</h3>
 					<BudgetWarnings org={data.org.name} warnings={data.warnings} />
@@ -307,7 +314,10 @@
 			{#if admin && data.deletedProjects}
 				<section class="mt-12 scroll-mt-8" id="deleted-projects">
 					<h3 class={SETTINGS_SUBHEADING}>Spend of deleted projects</h3>
-					<DeletedProjectsSpend projects={data.deletedProjects} currency={data.billing.currency} />
+					<DeletedProjectsSpend
+						projects={data.deletedProjects}
+						currency={data.credits ? CREDITS : data.billing.currency}
+					/>
 				</section>
 			{/if}
 		</SettingsSection>

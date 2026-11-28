@@ -24,13 +24,20 @@ export interface OrgAccess {
 	s3: boolean;
 	/** Import from W&B: super admins, or anyone while an import is running or just ran. */
 	importing: boolean;
+	/** The NCHC credit dashboard stands in for the budget: only GPU rates, in credits, are left. */
+	credits?: boolean;
 }
 
-export function orgSections({ admin, s3, importing }: OrgAccess): SettingsSection[] {
+export function orgSections({
+	admin,
+	s3,
+	importing,
+	credits = false
+}: OrgAccess): SettingsSection[] {
 	return [
 		admin && { slug: 'general', label: 'General' },
 		{ slug: 'members', label: 'Members' },
-		{ slug: 'budget', label: 'Budget' },
+		{ slug: 'budget', label: credits ? 'GPU rates' : 'Budget' },
 		admin && s3 && { slug: 'storage', label: 'Storage' },
 		admin && { slug: 'assistant', label: 'Assistant' },
 		admin && s3 && { slug: 'deleted', label: 'Deleted data' },

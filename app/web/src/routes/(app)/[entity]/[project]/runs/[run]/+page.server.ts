@@ -1,4 +1,6 @@
 import { isHttpError } from '@sveltejs/kit';
+import { creditsConfigured } from '#lib/server/credits.ts';
+import { CREDITS } from '#lib/utils.ts';
 import { readEvalResults } from '#lib/server/evals.ts';
 import { projectPath, flock } from '#lib/server/flock.ts';
 import { runActions } from '#lib/server/runs.ts';
@@ -57,7 +59,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		history,
 		system,
 		owner: owner && { id: owner.id, name: owner.name, avatar_url: owner.avatar_url },
-		currency: billing?.currency ?? null,
+		currency: billing ? (creditsConfigured() ? CREDITS : billing.currency) : null,
 		models,
 		results,
 		/** Relative times are from the server's clock, so SSR and hydration agree. */

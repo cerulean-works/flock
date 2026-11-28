@@ -9,7 +9,16 @@
 	import { hours } from '#lib/utils.ts';
 
 	/** Admins change the budget and prices; members see them. */
-	let { billing, admin }: { billing: Billing; admin: boolean } = $props();
+	let {
+		billing,
+		admin,
+		credits = false
+	}: {
+		billing: Billing;
+		admin: boolean;
+		/** The NCHC credit dashboard stands in for the budget: only rates, in credits per GPU hour. */
+		credits?: boolean;
+	} = $props();
 
 	// Every GPU type the org's runs used, and any priced ahead of use.
 	const types = $derived.by(() => {
@@ -37,36 +46,44 @@
 </script>
 
 <form method="POST" action="?/billing" class="mt-4 grid gap-6" use:enhance={saving.enhance}>
-	<fieldset class="flex flex-wrap items-end gap-3" disabled={!admin}>
-		<div class="grid gap-2">
-			<Label for="monthly-budget">Monthly budget</Label>
-			<Input
-				id="monthly-budget"
-				name="monthly_budget"
-				type="number"
-				min="0"
-				step="any"
-				class="w-44"
-				placeholder="No budget"
-				value={billing.monthly_budget ?? ''}
-			/>
-		</div>
-		<div class="grid gap-2">
-			<Label for="currency">Currency</Label>
-			<Input
-				id="currency"
-				name="currency"
-				class="w-20 uppercase"
-				maxlength={3}
-				autocomplete="off"
-				spellcheck="false"
-				value={billing.currency}
-			/>
-		</div>
-	</fieldset>
+	{#if credits}
+		<!-- Kept as they are: the wallet, not a monthly budget, is what's watched. -->
+		<input type="hidden" name="monthly_budget" value={billing.monthly_budget ?? ''} />
+		<input type="hidden" name="currency" value={billing.currency} />
+	{:else}
+		<fieldset class="flex flex-wrap items-end gap-3" disabled={!admin}>
+			<div class="grid gap-2">
+				<Label for="monthly-budget">Monthly budget</Label>
+				<Input
+					id="monthly-budget"
+					name="monthly_budget"
+					type="number"
+					min="0"
+					step="any"
+					class="w-44"
+					placeholder="No budget"
+					value={billing.monthly_budget ?? ''}
+				/>
+			</div>
+			<div class="grid gap-2">
+				<Label for="currency">Currency</Label>
+				<Input
+					id="currency"
+					name="currency"
+					class="w-20 uppercase"
+					maxlength={3}
+					autocomplete="off"
+					spellcheck="false"
+					value={billing.currency}
+				/>
+			</div>
+		</fieldset>
+	{/if}
 
 	<div>
-		<h3 class="text-[13px] font-medium text-muted-foreground">Price per GPU hour</h3>
+		<h3 class="text-[13px] font-medium text-muted-foreground">
+			{credits ? 'NTD credits per GPU hour' : 'Price per GPU hour'}
+		</h3>
 		<div class="mt-2 border-t border-divider">
 			<div class={[GRID, 'h-9 border-b border-divider text-xs font-medium text-muted-foreground']}>
 				<span>GPU</span>
@@ -90,12 +107,12 @@
 							<Input
 								id="rate-{t.gpu_type}"
 								name="rate:{t.gpu_type}"
-								aria-label="{t.gpu_type} price per GPU hour"
+								aria-label="{t.gpu_type} {credits ? 'credits' : 'price'} per GPU hour"
 								type="number"
 								min="0"
 								step="any"
 								class="h-8"
-								placeholder="No price"
+								placeholder={credits ? 'No rate' : 'No price'}
 								value={t.hourly_cost ?? ''}
 							/>
 						</li>
@@ -125,7 +142,7 @@
 								min="0"
 								step="any"
 								class="h-8"
-								placeholder="e.g., 2.50"
+								placeholder={credits ? 'e.g., 160' : 'e.g., 2.50'}
 								aria-label="Its price per GPU hour"
 								bind:value={newRate}
 							/>
@@ -135,7 +152,9 @@
 			</fieldset>
 		</div>
 		<p class="mt-2 text-[13px] text-muted-foreground">
-			Budgets reset each UTC month. A price change also re-prices past months.
+			{credits
+				? 'A rate change also re-prices past runs.'
+				: 'Budgets reset each UTC month. A price change also re-prices past months.'}
 		</p>
 	</div>
 

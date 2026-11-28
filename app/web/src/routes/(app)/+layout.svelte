@@ -8,7 +8,7 @@
 	import LayersIcon from '@lucide/svelte/icons/layers';
 	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import MenuIcon from '@lucide/svelte/icons/menu';
-	import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open';
+	import SidebarToggleIcon from '#lib/components/shell/SidebarToggleIcon.svelte';
 	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -142,7 +142,7 @@
 					{@attach hint('Show sidebar  [')}
 					onclick={() => setCollapsed(false)}
 				>
-					<PanelLeftOpenIcon />
+					<SidebarToggleIcon open={false} />
 				</Button>
 			</div>
 			{#if outside && data.shell.org}

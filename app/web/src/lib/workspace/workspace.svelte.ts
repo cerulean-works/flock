@@ -22,6 +22,7 @@ import {
 	type RunPage,
 	type SectionDef
 } from '#lib/types.ts';
+import { clickSelect } from '#lib/storage.ts';
 import { scheme } from '#lib/theme.svelte.ts';
 import { toggle } from '#lib/utils.ts';
 import type { People } from './filters.ts';
@@ -572,6 +573,25 @@ export class Workspace {
 
 	toggleSelected(row: number) {
 		toggle(this.selected, this.page.runs[row].id);
+		this.#anchor = this.page.runs[row].id;
+	}
+
+	#anchor: string | null = null;
+
+	/** A click on a row's checkbox or, with shift, anywhere on it: shift takes the range from the last click. */
+	clickSelected(row: number, shift: boolean) {
+		const ids = this.page.runs.map((r) => r.id);
+		const id = ids[row];
+		const next = clickSelect(this.selected, ids, id, this.#anchor, shift);
+		for (const k of [...this.selected]) if (!next.has(k)) this.selected.delete(k);
+		for (const k of next) this.selected.add(k);
+		this.#anchor = id;
+	}
+
+	/** Make sure a row is selected (Shift+arrows), keeping it as the anchor. */
+	selectRow(row: number) {
+		this.selected.add(this.page.runs[row].id);
+		this.#anchor = this.page.runs[row].id;
 	}
 
 	/** Select every run on the page, or none if all are already selected. */

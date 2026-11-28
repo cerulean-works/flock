@@ -49,4 +49,15 @@ describe('greeting', () => {
 		const away = { ...base, lastVisit: base.now.getTime() - 20 * 86_400_000 };
 		expect(greeting(away).text).toMatch(/^(Been a while, Harry|Harry returns!)$/);
 	});
+
+	it('marks a lunar date as an egg', () => {
+		const ny = greeting({ ...base, now: new Date(2027, 1, 6, 10, 0) });
+		expect(ny.egg).toBe(true);
+		expect(ny.text).toMatch(/新年快樂, Harry|Happy Lunar New Year, Harry/);
+	});
+
+	it('leads with runs that landed while away', () => {
+		expect(greeting({ ...base, landed: 3 }).text).toBe('3 runs landed while you were away');
+		expect(greeting({ ...base, landed: 1 }).text).toBe('One run landed while you were away');
+	});
 });

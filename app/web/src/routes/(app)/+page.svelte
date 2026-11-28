@@ -90,6 +90,9 @@
 			now,
 			name: data.shell.me?.name?.split(' ')[0] ?? null,
 			live: mineAll.filter(isLive).map((r) => ({ name: r.name, runtime: r.runtime })),
+			landed: last
+				? mineAll.filter((r) => r.kind === 'run_finished' && r.at * 1000 > last).length
+				: 0,
 			lastVisit: last,
 			eggToday: store('flock:home:egg-day') === today,
 			roll: Math.random()
@@ -250,8 +253,13 @@
 					{/if}
 					<!-- Right of the runs (2x2): Budget and Cluster a cell each, then the first pin (or the
 				     live runs) as a 2x1 strip; more pins follow as strips. -->
-					{#if data.credits || data.creditsDown}
-						<CreditsTile credits={data.credits} down={data.creditsDown} index={next() + 1} />
+					{#if data.credits}
+						{@const i = next() + 1}
+						{#await data.credits}
+							<CreditsTile credits={null} index={i} />
+						{:then credits}
+							<CreditsTile {credits} down={!credits} index={i} />
+						{/await}
 					{:else if data.budget}
 						<BudgetTile budget={data.budget} index={next() + 1} />
 					{/if}
@@ -280,11 +288,17 @@
 {/if}
 
 <style>
-	/* The arrival (H13): the field rises into place, the tiles follow a beat apart. Movement is
+	/* The arrival (H13): the field rises into place, the rest follow a beat apart. Movement is
 	   small and quick; with reduced motion everything is simply there. */
-	.arrive :global(.rise),
+	.arrive :global(.rise) {
+		animation: rise 420ms cubic-bezier(0.2, 0.8, 0.25, 1) 60ms both;
+	}
+	/* The composer first, then the greeting over it, then the tiles a beat apart (Harry). */
+	.arrive .greet {
+		--d: 180ms;
+	}
 	.arrive :global(.tile) {
-		animation: rise 420ms cubic-bezier(0.2, 0.8, 0.25, 1) calc(var(--i, 0) * 45ms + 60ms) both;
+		animation: rise 420ms cubic-bezier(0.2, 0.8, 0.25, 1) calc(var(--i, 0) * 45ms + 220ms) both;
 	}
 	.greet {
 		animation: rise 500ms cubic-bezier(0.2, 0.8, 0.25, 1) var(--d, 0ms) both;
