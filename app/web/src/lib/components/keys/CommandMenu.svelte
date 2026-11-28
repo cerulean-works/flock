@@ -51,6 +51,7 @@
 	import { pins, mainMetric } from '#lib/home/pins.svelte.ts';
 	import { pathOf, recent, type Visit } from '#lib/recent.svelte.ts';
 	import { goto } from '$app/navigation';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import Keys from '#lib/components/Keys.svelte';
@@ -83,9 +84,11 @@
 		dropChip,
 		flockFilter,
 		joinSegments,
+		setColumnFilter,
+		writeFilters,
 		type RunFilter
 	} from '#lib/workspace/filters.ts';
-	import { entityHref, orgHref, projectHref, runHref } from '#lib/workspace/url.ts';
+	import { entityHref, orgHref, projectHref, runHref, workspaceHref } from '#lib/workspace/url.ts';
 
 	interface Props {
 		/** In use: the dialog is open, or Home's field has been used. Closed, it starts over. */
@@ -449,6 +452,41 @@
 		}
 	});
 
+	/**
+	 * A view (mine, failed) as filters added to the runs in view, the others kept: the table's
+	 * here, the org's runs on their page; elsewhere the project's runs so filtered, else the org's.
+	 */
+	function showRuns(org: string, mine: boolean, failed: boolean) {
+		const me = shell?.me?.id as number | undefined;
+		const narrowed = (filters: readonly RunFilter[]) => {
+			let out = [...filters];
+			if (mine && me != null) out = setColumnFilter(out, 'owner', 'user', { values: [String(me)] });
+			if (failed) out = setColumnFilter(out, 'state', 'state', { values: ['failed', 'crashed'] });
+			return out;
+		};
+		const f = keyboard.filters;
+		if (f) {
+			f.set(narrowed(f.applied()));
+			return;
+		}
+		if (page.route?.id === '/(app)/[entity]' && page.params.entity === org) {
+			const url = new URL(page.url.href);
+			if (mine) url.searchParams.set('owner', 'me');
+			if (failed) url.searchParams.set('state', 'failed');
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- this page, other params
+			void goto(url, { replace: true, reset: false });
+			return;
+		}
+		if (project && (me != null || !mine)) {
+			const filters = writeFilters(narrowed([])) ?? '';
+			void goto(workspaceHref(org, project, new SvelteURLSearchParams({ filters })));
+			return;
+		}
+		const params = [mine && 'owner=me', failed && 'state=failed'].filter(Boolean).join('&');
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- built with resolve()
+		void goto(`${entityHref(org)}?${params}`);
+	}
+
 	// ---- Filter and sort (the page's, as its headers edit them) ---------------------------
 
 	/** "Failed, Crashed", "≥ 0.001", "contains adam": what a column filters to now. */
@@ -481,6 +519,8 @@
 		let usedAtOpen = inUse();
 		// The switch, once shown, stays while the list is open (a filter removed doesn't shift it).
 		let matchAtOpen = usedAtOpen.size > 1;
+		// Taken off with ⌃X: gone from In use at once, ahead of the URL catching up (Harry).
+		let dropped = $state<string[]>([]);
 		return {
 			label: 'Filter',
 			refresh: () => {
@@ -491,7 +531,9 @@
 				const f = keyboard.filters;
 				if (!f) return [];
 				// What's in use is read from the chips, which see filters joined with or too.
-				const segments = chipSegments(f.applied());
+				const segments = chipSegments(f.applied())
+					.map((x) => x.filter((c) => !dropped.includes(chipKey(c))))
+					.filter((x) => x.length);
 				const chips = segments.flat();
 				const chipOf = (key: string) => chips.findIndex((x) => chipKey(x) === key);
 				// A filter set inside joins In use as it arrives; one removed here keeps its place.
@@ -503,12 +545,17 @@
 						keywords: [c.key],
 						detail: k >= 0 ? f.describe(chips[k]) : undefined,
 						icon: KIND_ICONS[c.kind ?? 'str'] ?? ListFilterIcon,
-						level: () => columnFilterLevel(c),
+						level: () => {
+							dropped = dropped.filter((x) => x !== c.key);
+							return columnFilterLevel(c);
+						},
 						// ⌃X: this filter goes, the others stay as they're joined.
 						remove:
 							k >= 0
 								? () => {
 										delete ticks[c.key];
+										usedAtOpen.delete(c.key);
+										dropped = [...dropped, c.key];
 										f.set(joinSegments(dropChip(segments, k)));
 									}
 								: undefined
@@ -1367,28 +1414,28 @@
 					}))
 				]
 			]);
-		// The lists asked for most, as commands (H11).
+		// The lists asked for most, as commands (H11): filters on the runs in view (Harry).
 		if (org) {
-			const runs = entityHref(org);
+			const o = org;
 			out.push([
 				'Views',
 				[
 					{
 						label: 'My runs',
 						keywords: ['mine', 'show'],
-						href: `${runs}?owner=me`,
+						run: () => showRuns(o, true, false),
 						icon: UserIcon
 					},
 					{
 						label: 'My failed runs',
 						keywords: ['mine', 'crashed', 'show'],
-						href: `${runs}?owner=me&state=failed`,
+						run: () => showRuns(o, true, true),
 						icon: ActivityIcon
 					},
 					{
 						label: 'Failed runs',
 						keywords: ['crashed', 'show', 'errors'],
-						href: `${runs}?state=failed`,
+						run: () => showRuns(o, false, true),
 						icon: ActivityIcon
 					}
 				]
@@ -1705,7 +1752,13 @@
 			const remove = activeEntry?.remove ?? level?.clear;
 			if (remove) {
 				e.preventDefault();
+				// The cursor keeps its place: on the row that comes up into it when this one goes.
+				const flat = () => sections.flatMap(([, entries]) => entries);
+				const at = activeEntry ? flat().indexOf(activeEntry) : -1;
 				remove();
+				const after = flat();
+				const next = at >= 0 ? after[Math.min(at, after.length - 1)] : undefined;
+				if (next) holdOn(next.label);
 				return;
 			}
 		}
