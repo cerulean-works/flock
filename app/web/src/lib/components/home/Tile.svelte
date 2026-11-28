@@ -33,6 +33,9 @@
 		...rest
 	}: Props = $props();
 
+	/** Scrolled down: the top edge fades too, as rows pass under it. */
+	let scrolled = $state(false);
+
 	// Static class strings, so Tailwind sees each one.
 	// Cells of a 4-column grid (Harry): a number is 1x1, a plot 2x1 (a wide strip), the runs
 	// 2x2. Phones: two columns, numbers side by side, the rest full width.
@@ -66,6 +69,8 @@
 	{#if scroll}
 		<div
 			class="tile-scroll -mx-4 -mb-4 min-h-0 flex-1 overflow-y-auto px-4 pt-0 pb-10 max-md:max-h-96"
+			class:scrolled
+			onscroll={(e) => (scrolled = e.currentTarget.scrollTop > 0)}
 		>
 			{@render children()}
 		</div>
@@ -75,9 +80,26 @@
 </section>
 
 <style>
-	/* Rows fade out at the bottom edge; the padding under the last row lets it scroll clear. */
+	/* The top fade's depth, typed so it eases in and out rather than snapping. */
+	@property --fade-top {
+		syntax: '<length>';
+		inherits: false;
+		initial-value: 0px;
+	}
+	/* Rows fade out at the bottom edge; the padding under the last row lets it scroll clear.
+	   Once scrolled, they fade at the top edge too. */
 	.tile-scroll {
-		mask-image: linear-gradient(to bottom, black calc(100% - 2.5rem), transparent);
+		mask-image: linear-gradient(
+			to bottom,
+			transparent,
+			black var(--fade-top),
+			black calc(100% - 2.5rem),
+			transparent
+		);
 		scrollbar-width: none;
+		transition: --fade-top 200ms ease-out;
+	}
+	.tile-scroll.scrolled {
+		--fade-top: 2rem;
 	}
 </style>

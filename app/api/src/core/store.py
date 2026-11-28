@@ -566,8 +566,11 @@ class Store:
         )
         return [Project.load(record) for record in records]
 
-    async def project_infos(self, projects: Sequence[Project]) -> list[dict[str, Any]]:
-        """What the API shows of each project, with its run and column counts."""
+    async def project_infos(
+        self, projects: Sequence[Project], viewer: User | None = None
+    ) -> list[dict[str, Any]]:
+        """What the API shows of each project, with its run and column counts, and when the
+        viewer pinned it (``pinned_at``, null if they didn't)."""
         counts = {
             pk: (runs, active)
             for pk, runs, active in await self.db.fetch(
@@ -594,6 +597,19 @@ class Store:
                 [project.pk for project in projects],
             )
         }
+        pins: dict[int, float] = (
+            {
+                pk: at
+                for pk, at in await self.db.fetch(
+                    "SELECT project_pk, extract(epoch FROM pinned_at)::float8 FROM project_pins "
+                    "WHERE user_pk = $1 AND project_pk = ANY($2)",
+                    viewer.pk,
+                    [project.pk for project in projects],
+                )
+            }
+            if viewer is not None
+            else {}
+        )
         out = []
         for project in projects:
             runs, active = counts.get(project.pk, (0, 0))
@@ -611,12 +627,30 @@ class Store:
                     "column_count": columns.get(project.pk, 0),
                     "visibility": project.visibility,
                     "created_by": project.created_by,
+                    "pinned_at": pins.get(project.pk),
                 }
             )
         return out
 
-    async def project_info(self, project: Project) -> dict[str, Any]:
-        return (await self.project_infos([project]))[0]
+    async def project_info(self, project: Project, viewer: User | None = None) -> dict[str, Any]:
+        return (await self.project_infos([project], viewer))[0]
+
+    async def pin_project(self, project: Project, user: User, pinned: bool) -> None:
+        """Pin the project to the top of the user's sidebar, or unpin it. Pinning again keeps
+        the first pin's time, so the order stays put."""
+        if pinned:
+            await self.db.execute(
+                "INSERT INTO project_pins (user_pk, project_pk) VALUES ($1, $2) "
+                "ON CONFLICT DO NOTHING",
+                user.pk,
+                project.pk,
+            )
+        else:
+            await self.db.execute(
+                "DELETE FROM project_pins WHERE user_pk = $1 AND project_pk = $2",
+                user.pk,
+                project.pk,
+            )
 
     async def get_run(self, entity: str, project: str, name: str) -> Run | None:
         found = await self.project(entity, project)

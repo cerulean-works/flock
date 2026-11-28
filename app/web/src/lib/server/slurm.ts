@@ -52,7 +52,10 @@ export async function clusterGlance(): Promise<ClusterGlance | null> {
 				const was = byTime.get(p.t);
 				byTime.set(p.t, p.allocated == null ? (was ?? null) : (was ?? 0) + p.allocated);
 			}
-		const capacities = use.series.map((s) => s.capacity);
+		// Classes with no capacity configured count only while none of their GPUs are held:
+		// an idle unconfigured class (no GB200 jobs yet) shouldn't hide the bar.
+		const counted = use.series.filter((s) => s.capacity != null || (s.current ?? 0) > 0);
+		const capacities = counted.map((s) => s.capacity);
 		let running = 0;
 		let pending = 0;
 		for (const j of jobs.data.jobs) {
@@ -62,9 +65,10 @@ export async function clusterGlance(): Promise<ClusterGlance | null> {
 		return {
 			href: FLOCK_SLURM_PUBLIC_URL ?? FLOCK_SLURM_URL,
 			allocated: use.series.reduce((n, s) => n + (s.current ?? 0), 0),
-			capacity: capacities.every((c) => c != null)
-				? capacities.reduce<number>((n, c) => n + c!, 0)
-				: null,
+			capacity:
+				capacities.length && capacities.every((c) => c != null)
+					? capacities.reduce<number>((n, c) => n + c!, 0)
+					: null,
 			points: [...byTime]
 				.map(([t, y]) => ({ x: Date.parse(t) / 1000, y }))
 				.sort((a, b) => a.x - b.x),

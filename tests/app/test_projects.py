@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from typing import Any
 
-    from tests.app.conftest import Client, EventStream, Flocks
+    from tests.app.conftest import Client, EventStream, Flocks, FlockServer
 
 
 PROJECTS = "/api/v1/projects"
@@ -32,6 +32,7 @@ def test_create_list_get_and_update(api: Client) -> None:
         "column_count": 0,
         "visibility": "private",
         "created_by": api.get("/api/v1/me").json()["id"],
+        "pinned_at": None,
     }
     duplicate = api.post(PROJECTS, {"entity": "flock", "name": "vision"})
     assert duplicate.status == 409
@@ -51,6 +52,35 @@ def test_create_list_get_and_update(api: Client) -> None:
     assert (cleared["name"], cleared["description"]) == ("vision", None)
     assert api.get(f"{PROJECTS}/flock/missing").status == 404
     assert api.patch(f"{PROJECTS}/flock/missing", {"description": "x"}).status == 404
+
+
+def test_pins_are_each_users_own_and_keep_their_order(api: Client, flock: FlockServer) -> None:
+    for name in ("a", "b", "c"):
+        assert api.post(PROJECTS, {"entity": "flock", "name": name}).status == 201
+    pinned = lambda client: [
+        p["name"]
+        for p in sorted(
+            (p for p in client.get(PROJECTS, entity="flock").json()["projects"] if p["pinned_at"]),
+            key=lambda p: p["pinned_at"],
+        )
+    ]
+    assert api.request("PUT", f"{PROJECTS}/flock/c/pin").status == 204
+    assert api.request("PUT", f"{PROJECTS}/flock/a/pin").status == 204
+    first = api.get(f"{PROJECTS}/flock/c").json()["pinned_at"]
+    assert api.request("PUT", f"{PROJECTS}/flock/c/pin").status == 204  # again: stays first
+    assert api.get(f"{PROJECTS}/flock/c").json()["pinned_at"] == first
+    assert pinned(api) == ["c", "a"]
+
+    member = flock.add_user("pins@example.com")
+    assert pinned(member.api) == []  # someone else's pins aren't theirs
+    assert member.api.request("PUT", f"{PROJECTS}/flock/b/pin").status == 204
+    assert pinned(member.api) == ["b"]
+
+    assert api.delete(f"{PROJECTS}/flock/c/pin").status == 204
+    assert api.delete(f"{PROJECTS}/flock/c/pin").status == 204  # already unpinned
+    assert pinned(api) == ["a"]
+    assert api.request("PUT", f"{PROJECTS}/flock/missing/pin").status == 404
+    assert flock.anonymous().request("PUT", f"{PROJECTS}/flock/a/pin").status == 401
 
 
 @pytest.mark.parametrize("name", ["", " padded", "a/b", "a:b", "50%", "x" * 129, "tab\there"])

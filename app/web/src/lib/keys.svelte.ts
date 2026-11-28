@@ -136,7 +136,7 @@ export function layerOpen(): boolean {
 /**
  * j and k (and the arrows, once a row is picked) move a cursor over a list's rows, those marked
  * `data-keyrow` inside the element; Enter opens the row's first link, x clicks its checkbox,
- * Esc lets go. The row in the cursor carries `data-cursor`, for its style.
+ * Shift+arrows tick the rows they pass, Esc lets go. The row in the cursor carries `data-cursor`, for its style.
  */
 export function listKeys(): Attachment<HTMLElement> {
 	return (node) => {
@@ -146,6 +146,10 @@ export function listKeys(): Attachment<HTMLElement> {
 			list.forEach((row, i) => row.toggleAttribute('data-cursor', i === cursor));
 			list[cursor]?.scrollIntoView({ block: 'nearest' });
 		};
+		const tick = (row: HTMLElement | undefined) => {
+			const box = row?.querySelector<HTMLElement>('[role="checkbox"]');
+			if (box && box.getAttribute('aria-checked') !== 'true') box.click();
+		};
 		const onkeydown = (e: KeyboardEvent) => {
 			if (e.defaultPrevented || typing(e) || layerOpen()) return;
 			const list = rows();
@@ -154,7 +158,10 @@ export function listKeys(): Attachment<HTMLElement> {
 			const up = e.key === 'k' || (cursor >= 0 && e.key === 'ArrowUp');
 			if (down || up) {
 				e.preventDefault();
+				const from = cursor;
 				cursor = Math.max(0, Math.min(list.length - 1, cursor < 0 ? 0 : cursor + (down ? 1 : -1)));
+				// Shift+arrows tick the rows passed over, as a shift-click does.
+				if (e.shiftKey) for (const i of [from, cursor]) tick(list[i]);
 				mark(list);
 			} else if (cursor >= 0 && e.key === 'Enter') {
 				e.preventDefault();

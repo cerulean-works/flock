@@ -1,4 +1,5 @@
 import { fail, isHttpError, redirect } from '@sveltejs/kit';
+import { creditsConfigured } from '#lib/server/credits.ts';
 import { authConfig, refreshUser } from '#lib/server/auth.ts';
 import { removeAvatar, setAvatar } from '#lib/server/avatar.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
@@ -89,8 +90,11 @@ export async function loadOrg({
 		sections: orgSections({
 			admin: org.role === 'admin',
 			s3: !!s3,
-			importing: me.is_superadmin || importShown(wandb, now)
+			importing: me.is_superadmin || importShown(wandb, now),
+			credits: creditsConfigured()
 		}),
+		/** The credit dashboard stands in for the budget: rates are in credits, no monthly budget. */
+		credits: creditsConfigured(),
 		members: members.members,
 		invites: invites?.invites ?? null,
 		import: wandb,

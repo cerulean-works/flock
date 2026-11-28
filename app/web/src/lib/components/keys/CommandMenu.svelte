@@ -43,11 +43,15 @@
 	import { Command } from 'bits-ui';
 	import { cubicOut } from 'svelte/easing';
 	import { fly } from 'svelte/transition';
+	import { pinnedAt, pinnedFirst, setPinned } from '#lib/project-pins.svelte.ts';
 	import { searchScore } from '#lib/search.ts';
 	import { untrack, type Component, type Snippet } from 'svelte';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import PinIcon from '@lucide/svelte/icons/pin';
+	import StarIcon from '@lucide/svelte/icons/star';
+	import FolderPinIcon from '#lib/components/shell/FolderPinIcon.svelte';
+	import StarOffIcon from '@lucide/svelte/icons/star-off';
 	import { pins, mainMetric } from '#lib/home/pins.svelte.ts';
 	import { pathOf, recent, type Visit } from '#lib/recent.svelte.ts';
 	import { goto } from '$app/navigation';
@@ -1287,6 +1291,20 @@
 					})
 				});
 		}
+		// In a project: pin it to the top of the sidebar, or unpin it.
+		const info =
+			org && project
+				? shell?.projects.find((p: ProjectInfo) => p.name === project && p.entity === org)
+				: undefined;
+		if (info) {
+			const on = pinnedAt(info) != null;
+			here.push({
+				label: on ? 'Unpin project' : 'Pin project',
+				keywords: ['star', 'favorite', 'sidebar'],
+				icon: on ? StarOffIcon : StarIcon,
+				run: () => setPinned(info.entity, info.name, !on)
+			});
+		}
 		const visits = recent.all
 			.filter(
 				(v, i, all) =>
@@ -1368,11 +1386,11 @@
 			const o = org;
 			out.push([
 				'Projects',
-				shell.projects.map((p: ProjectInfo) => ({
+				pinnedFirst(shell.projects as ProjectInfo[]).map((p) => ({
 					label: p.name,
 					keywords: p.description ? [p.description] : [],
 					href: projectHref(o, p.name),
-					icon: FolderIcon,
+					icon: pinnedAt(p) != null ? FolderPinIcon : FolderIcon,
 					level: remote(() => projectLevel(o, p.name))
 				}))
 			]);
@@ -1992,7 +2010,8 @@
 		{onfocus}
 		onblur={inline ? onfocusout : undefined}
 	/>
-	{#if loading && !sketching}
+	<!-- Home's field shows the wait on its top edge instead. -->
+	{#if loading && !sketching && !inline}
 		<LoaderCircleIcon class="size-3.5 flex-none animate-spin text-muted-foreground" />
 	{/if}
 {/snippet}
@@ -2173,6 +2192,11 @@
 						: 'shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_-4px_rgb(0_0_0/0.08)] ring-foreground/12 focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--color-link)_12%,transparent),0_0_32px_-4px_color-mix(in_oklab,var(--color-link)_30%,transparent)] focus-within:ring-link/30'
 				]}
 			>
+				<!-- The top edge (Raycast's line): a light crosses it once on focus, and keeps crossing
+				     while a level loads. -->
+				<span class="edge" data-loading={loading || undefined} aria-hidden="true"
+					><span class="beam"></span></span
+				>
 				<label class="flex h-15 min-w-0 cursor-text items-center gap-3 pr-4 pl-5">
 					<SearchIcon class="size-[18px] flex-none text-muted-foreground" aria-hidden="true" />
 					{@render chips()}
@@ -2215,3 +2239,64 @@
 		{@render list()}
 	{/if}
 </Command.Root>
+
+<style>
+	.edge {
+		position: absolute;
+		inset: 0 0 auto;
+		z-index: 1;
+		height: 1.5px;
+		overflow: hidden;
+		pointer-events: none;
+	}
+	.beam {
+		position: absolute;
+		inset-block: 0;
+		left: 0;
+		width: 35%;
+		opacity: 0;
+		background: linear-gradient(
+			90deg,
+			transparent,
+			var(--color-link) 45%,
+			color-mix(in oklab, var(--color-link) 55%, white) 55%,
+			transparent
+		);
+	}
+	/* Once per focus: it applies as focus comes in and resets when it leaves. */
+	[data-command-surface]:focus-within .beam {
+		animation: cross 850ms cubic-bezier(0.25, 0.75, 0.35, 1) both;
+	}
+	/* While a level loads, it keeps crossing, evenly, until the rows arrive. */
+	.edge[data-loading] .beam {
+		animation: cross 1300ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+	}
+	@keyframes cross {
+		0% {
+			transform: translateX(-100%);
+			opacity: 0;
+		}
+		15% {
+			opacity: 1;
+		}
+		80% {
+			opacity: 1;
+		}
+		100% {
+			transform: translateX(290%);
+			opacity: 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		[data-command-surface]:focus-within .beam {
+			animation: none;
+		}
+		/* Still say it's waiting, without the motion. */
+		.edge[data-loading] .beam {
+			animation: none;
+			left: 0;
+			width: 100%;
+			opacity: 0.5;
+		}
+	}
+</style>

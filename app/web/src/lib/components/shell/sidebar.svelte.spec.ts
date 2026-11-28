@@ -114,6 +114,46 @@ describe('the sidebar for members', () => {
 		await expect.element(screen.getByRole('button', { name: 'bert actions' })).toBeInTheDocument();
 		await expect.element(link('Sign in')).not.toBeInTheDocument();
 	});
+
+	it('lists pinned projects first, in pin order, and pins from the row', async () => {
+		open(ADA);
+		const project = (name: string, updated_at: number, pinned_at: number | null = null) => ({
+			...BERT,
+			name,
+			updated_at,
+			pinned_at
+		});
+		// The loader sorts by latest activity; pins lead whatever their activity.
+		const projects = [
+			project('fresh', 9),
+			project('later-pin', 5, 20),
+			project('older', 3),
+			project('first-pin', 1, 10)
+		];
+		// Still on its way: the row shows pinned before the sidebar's data comes back.
+		const fetch = vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
+		render(Sidebar, {
+			org: 'acme',
+			orgs: [{ ...OTHER, name: 'acme', display_name: 'Acme' }],
+			projects,
+			s3: true,
+			access: 'member',
+			signedIn: true
+		});
+		const order = () =>
+			[...document.querySelectorAll('nav ul a, aside ul a, ul a')]
+				.map((a) => a.textContent?.trim())
+				.filter((t) => projects.some((p) => p.name === t));
+		await expect.element(link('first-pin')).toBeVisible();
+		expect(order()).toEqual(['first-pin', 'later-pin', 'fresh', 'older']);
+
+		await screen.getByRole('button', { name: 'Pin older' }).click();
+		expect(order()).toEqual(['first-pin', 'later-pin', 'older', 'fresh']);
+		expect(fetch).toHaveBeenCalledWith('/api/projects/acme/older/pin', { method: 'PUT' });
+		await screen.getByRole('button', { name: 'Unpin first-pin' }).click();
+		expect(fetch).toHaveBeenCalledWith('/api/projects/acme/first-pin/pin', { method: 'DELETE' });
+		fetch.mockRestore();
+	});
 });
 
 describe('the sidebar on a project’s pages (D169)', () => {

@@ -1,9 +1,12 @@
 <script lang="ts">
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import StarIcon from '@lucide/svelte/icons/star';
+	import StarOffIcon from '@lucide/svelte/icons/star-off';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import { pinnedAt, setPinned } from '#lib/project-pins.svelte.ts';
 	import type { ProjectInfo } from '#lib/types.ts';
 	import DeleteProjectDialog from './DeleteProjectDialog.svelte';
 	import ProjectDialog from './ProjectDialog.svelte';
@@ -20,6 +23,7 @@
 
 	let editing = $state(false);
 	let deleting = $state(false);
+	const pinned = $derived(pinnedAt(project) != null);
 </script>
 
 <DropdownMenu.Root>
@@ -37,6 +41,9 @@
 		{/snippet}
 	</DropdownMenu.Trigger>
 	<DropdownMenu.Content align="end" class="w-44">
+		<DropdownMenu.Item onSelect={() => setPinned(entity, project.name, !pinned)}>
+			{#if pinned}<StarOffIcon /> Unpin{:else}<StarIcon /> Pin{/if}
+		</DropdownMenu.Item>
 		<DropdownMenu.Item onSelect={() => (editing = true)}>
 			<PencilIcon /> Edit project…
 		</DropdownMenu.Item>

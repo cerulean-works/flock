@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { change, projectPath, refused, flock } from '#lib/server/flock.ts';
+import type { Credits } from '#lib/home/credits.ts';
 import { creditsConfigured, creditsSummary } from '#lib/server/credits.ts';
 import { FEED, RUN_FILTERS, runStateKinds, type RunFilters } from '#lib/data/feed.svelte.ts';
 import type { Budget, FeedPage, Member, OrgInfo, ProjectInfo, RunFacets } from '#lib/types.ts';
@@ -41,7 +42,7 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 		members: [] as Pick<Member, 'id' | 'name' | 'avatar_url'>[],
 		facets: null as RunFacets | null,
 		budget: null,
-		credits: null,
+		credits: null as Promise<Credits | null> | null,
 		thisMonth: monthOf(now),
 		now
 	});
@@ -75,16 +76,16 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 		: read<Budget>(
 				`${orgPath}/budget${month && /^\d{4}-\d{2}$/.test(month) ? `?month=${month}` : ''}`
 			);
-	const crediting = creditsSummary(month);
+	// Streamed: the page doesn't wait on another service; the panel fills in when it answers.
+	const crediting = walleted ? creditsSummary(month, 10_000) : null;
 	const membering = read<{ members: Member[] }>(`${orgPath}/members`);
 	// What each column can be filtered to, with counts, across all the org's runs.
 	const faceting = read<RunFacets>(`${orgPath}/run-facets`);
 	const org = await flock(orgPath).then((r) => r.json() as Promise<OrgInfo>);
 	if (!org.role) return outside(org);
-	const [feed, budget, credits, { members }, facets] = await Promise.all([
+	const [feed, budget, { members }, facets] = await Promise.all([
 		feeding,
 		budgeting,
-		crediting,
 		membering,
 		faceting
 	]);
@@ -99,7 +100,7 @@ export const load: PageServerLoad = async ({ params, url, depends, locals }) => 
 		members: members.map(({ id, name, avatar_url }) => ({ id, name, avatar_url })),
 		facets,
 		budget,
-		credits,
+		credits: crediting,
 		thisMonth: monthOf(now),
 		now
 	};

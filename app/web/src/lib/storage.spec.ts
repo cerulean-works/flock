@@ -109,8 +109,8 @@ describe('the listing', () => {
 		// Shift-clicking a selected row clears the range.
 		selected = clickSelect(selected, keys, 'c', 'e', true);
 		expect([...selected]).toEqual(['b']);
-		// Without an anchor, shift-click toggles one row.
-		expect([...clickSelect(new Set(), keys, 'a/', null, true)]).toEqual(['a/']);
+		// Without an anchor, shift-click takes the rows from the top.
+		expect([...clickSelect(new Set(), keys, 'c', null, true)]).toEqual(['a/', 'b', 'c']);
 	});
 	it('checks folder names', () => {
 		expect(folderNameError('')).toBe('Enter a name');

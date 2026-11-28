@@ -58,7 +58,7 @@
 				]}
 				{@attach hint('Credits')}
 			>
-				{fmt(credits.balance)} credits left
+				{fmt(credits.balance)} NTD credits left
 				{#if !current}<span class="text-muted-foreground">· {monthName(month)}</span>{/if}
 				<ChevronDownIcon class={['transition-transform', open && 'rotate-180']} />
 			</Button>

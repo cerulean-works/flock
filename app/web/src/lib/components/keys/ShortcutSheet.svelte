@@ -35,6 +35,7 @@
 				['J  K', 'Next and previous row'],
 				['Enter', 'Open the row'],
 				['X', 'Select the row'],
+				['⇧ ↑  ⇧ ↓', 'Select rows as you go'],
 				['Esc', 'Let go, or clear the selection']
 			]
 		],

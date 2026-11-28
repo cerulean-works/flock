@@ -274,7 +274,12 @@ export function formatAxisStep(step: number): string {
 }
 
 /** An amount in an org's currency: cents only on small amounts (`$0`, `$2.50`, `$1,440`). */
+/** The unit costs are in while the NCHC credit dashboard stands in for the budget. */
+export const CREDITS = 'credits';
+
 export function money(v: number, currency: string): string {
+	// NCHC credits (CREDITS), whole for reading, as the wallet shows them.
+	if (currency === CREDITS) return `${Math.round(v).toLocaleString('en-US')} NTD credits`;
 	const digits = Math.abs(v) >= 100 || Number.isInteger(v) ? 0 : 2;
 	try {
 		return new Intl.NumberFormat('en-US', {

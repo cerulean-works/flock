@@ -120,6 +120,14 @@
 	);
 	/** The first column starts with a slot for the icon or the checkbox. */
 	const slotted = $derived(!!lead || !!selection);
+
+	/** The row under a shift-click that can be checked: it selects, rather than opening or marking text. */
+	function shiftRow(e: MouseEvent): T | null {
+		if (!e.shiftKey || e.button !== 0 || !selection) return null;
+		const at = (e.target as Element).closest<HTMLElement>('[data-row]')?.dataset.row;
+		const row = at == null ? undefined : rows[Number(at)];
+		return row !== undefined && selectable(row) ? row : null;
+	}
 	const ROW = 'col-span-full grid grid-cols-subgrid items-center';
 	const SHOWN = {
 		sm: 'hidden sm:block',
@@ -225,6 +233,15 @@
 		role="rowgroup"
 		{@attach listKeys()}
 		{oncontextmenu}
+		onmousedown={(e) => shiftRow(e) && e.preventDefault()}
+		onclickcapture={(e) => {
+			// Shift-click anywhere on a row selects the range, as on its checkbox.
+			const row = shiftRow(e);
+			if (!row || (e.target as Element).closest('[role="checkbox"]')) return;
+			e.preventDefault();
+			e.stopPropagation();
+			selection!.click(key(row), true);
+		}}
 	>
 		{#each rows as row, index (key(row))}
 			{@const on = !!selection?.has(key(row))}

@@ -239,7 +239,8 @@ export function clickSelect(
 ): Set<string> {
 	const out = new Set(selected);
 	const on = !selected.has(key);
-	const from = anchor === null ? -1 : keys.indexOf(anchor);
+	// With nothing clicked yet, a shift-click takes the rows from the top (Harry).
+	const from = anchor === null ? 0 : Math.max(0, keys.indexOf(anchor));
 	const to = keys.indexOf(key);
 	if (shift && from >= 0 && to >= 0) {
 		const [a, b] = from < to ? [from, to] : [to, from];
