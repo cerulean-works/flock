@@ -105,8 +105,10 @@ describe('a run row’s right-click', () => {
 		await screen.getByText('qwen', { exact: true }).click({ button: 'right' });
 		await expect.element(menu().getByText('2 selected')).toBeVisible();
 		await expect.element(menu().getByRole('menuitem', { name: 'Delete 2 runs…' })).toBeVisible();
-		// Two eval-able runs compare from either one's menu; one run's own Edit is left out.
-		await expect.element(menu().getByRole('menuitem', { name: 'Compare items' })).toBeVisible();
+		// Two runs compare from either one's menu; one run's own Edit is left out.
+		await expect
+			.element(menu().getByRole('menuitem', { name: 'Compare', exact: true }))
+			.toBeVisible();
 		expect(menu().getByRole('menuitem', { name: 'Edit run…' }).query()).toBeNull();
 	});
 

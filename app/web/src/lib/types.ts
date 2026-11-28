@@ -880,12 +880,18 @@ export interface ItemsView {
 export type ItemKeep =
 	'wrong' | 'right' | 'all' | 'only_a' | 'only_b' | 'both_wrong' | 'both_right';
 
-/** An eval run the compare page's picker offers (`GET /api/projects/…/eval-runs`). */
-export interface EvalRunChoice {
+/**
+ * A run the compare pickers offer (`GET /api/projects/…/run-choices`): the project's own, and
+ * once the search is specific enough, the org's other projects' too.
+ */
+export interface RunChoice {
+	entity: string;
+	project: string;
 	id: string;
 	display_name: string | null;
 	created_at: number;
 	state: string;
+	job_type: string | null;
 	/** The model its config names, `flock:org/path@N`, if any. */
 	model: string | null;
 }

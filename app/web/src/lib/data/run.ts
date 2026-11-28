@@ -103,3 +103,84 @@ export function flatten(value: Record<string, unknown>, prefix = ''): [string, u
 			: [[`${prefix}${k}`, v] as [string, unknown]]
 	);
 }
+
+/** One side of a pair: the run and its curves. */
+export interface PairSide {
+	run: RunDetail;
+	history: RunHistory;
+	system: RunHistory;
+}
+
+/**
+ * Two runs, from any projects, as a workspace of two (the compare page's charts): A on row 0, B
+ * on row 1, charting only the metrics both logged, so every panel has the two lines. The curves
+ * are all here, so nothing is read from either project. `only` lists the metrics one run
+ * logged and the other didn't, to name below the charts.
+ */
+export function pairWorkspace(
+	a: PairSide,
+	b: PairSide,
+	now: number
+): { data: WorkspaceData; only: { a: string[]; b: string[] } } {
+	const shared = (x: RunHistory, y: RunHistory) => {
+		const theirs = new Set(keysOf(y));
+		return keysOf(x).filter((k) => theirs.has(k));
+	};
+	const keys = shared(a.history, b.history);
+	const systemKeys = shared(a.system, b.system);
+	const without = (x: RunHistory, y: RunHistory) => {
+		const theirs = new Set(keysOf(y));
+		return keysOf(x).filter((k) => !theirs.has(k));
+	};
+	const defsA = a.run.metric_defs ?? [];
+	const defsB = b.run.metric_defs ?? [];
+	const steps = new Set([...defsA, ...defsB].flatMap((d) => (d.step ? [d.step] : [])));
+	const { metrics, panels, sections } = metricSections(
+		keys,
+		systemKeys,
+		hiddenMetrics(keys, [defsA, defsB])
+	);
+	const sides = [a, b];
+	return {
+		only: { a: without(a.history, b.history), b: without(b.history, a.history) },
+		data: {
+			meta: {
+				// A scope of its own: the plot settings set here (the x axis, smoothing) are kept
+				// for every comparison, and neither project's own layout is touched. Nothing is
+				// read through it: the curves are all here.
+				entity: a.run.entity,
+				project: '~compare',
+				pageSize: 2,
+				now,
+				columns: [],
+				groups: [],
+				metrics,
+				panels,
+				sections
+			},
+			page: {
+				query: { page: 1, sort: 'created_at', order: 'desc', size: 2, search: '', filters: [] },
+				total: 2,
+				projectTotal: 2,
+				active: 0,
+				runs: sides.map((s, i) => ({
+					id: s.run.id,
+					name: `${i ? 'B' : 'A'} · ${s.run.display_name || s.run.id}`,
+					state: s.run.state,
+					ordinal: i,
+					lines: s.run.history_line_count,
+					systemLines: s.run.system_line_count,
+					defs: s.run.metric_defs ?? []
+				})),
+				metricCount: metrics.length,
+				num: [],
+				text: [],
+				series: sides.flatMap((s) => [
+					...keys.map((k) => toSeries(s.history.series[k])),
+					...systemKeys.map((k) => toSeries(s.system.series[k]))
+				]),
+				axes: sides.map((s) => runAxes(s.history, s.system, steps))
+			}
+		}
+	};
+}
