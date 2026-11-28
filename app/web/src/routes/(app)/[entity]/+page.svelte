@@ -6,6 +6,7 @@
 	import ColumnFilter, { type FilterValue } from '#lib/components/ColumnFilter.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import BudgetPanel from '#lib/components/home/BudgetPanel.svelte';
+	import CreditsPanel from '#lib/components/home/CreditsPanel.svelte';
 	import type { Column } from '#lib/components/DataTable.svelte';
 	import LatestRuns from '#lib/components/home/LatestRuns.svelte';
 	import PublicOrg from '#lib/components/home/PublicOrg.svelte';
@@ -108,7 +109,9 @@
 
 {#snippet actions()}
 	<!-- The org's month: one line here, its breakdown on request (on a phone, above the list). -->
-	{#if data.budget}
+	{#if data.credits}
+		<CreditsPanel credits={data.credits} thisMonth={data.thisMonth} class="max-sm:hidden" />
+	{:else if data.budget}
 		<BudgetPanel
 			budget={data.budget}
 			thisMonth={data.thisMonth}
@@ -188,7 +191,9 @@
 		</EmptyState>
 	{:else}
 		{@const feed = data.feed}
-		{#if data.budget}
+		{#if data.credits}
+			<CreditsPanel credits={data.credits} thisMonth={data.thisMonth} class="mx-3 mt-2 sm:hidden" />
+		{:else if data.budget}
 			<BudgetPanel
 				budget={data.budget}
 				thisMonth={data.thisMonth}
