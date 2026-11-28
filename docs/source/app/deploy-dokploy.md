@@ -97,6 +97,12 @@ FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY=replace-with-upstream-secret
 
 Every other setting in [Settings](configuration), such as Google sign-in or `FLOCK_S3_WORKERS`, works as with Compose.
 
+Flock can also show the NCHC credit wallet, read from the credit dashboard, in place of its own GPU budget:
+
+| Variable | Meaning |
+|---|---|
+| `FLOCK_CREDITS_URL` | The credit dashboard (`cerulean-works/dashboard`), as the `ui` service reaches it. Set, Home and the organization's runs show its wallet in place of Flock's GPU budget. On the same Dokploy server, use its internal address on `dokploy-network`, such as `http://<its app name>:3000`, which skips Cloudflare Access. `FLOCK_CREDITS_PROJECT` picks an iService workspace other than its default, and `FLOCK_CREDITS_TOKEN` is its `BURN_API_TOKEN`, when it sets one. |
+
 ### Add the domains
 
 Under the service's **Domains** tab, add one domain per service. Dokploy adds their Traefik routes to the stack file when it deploys:

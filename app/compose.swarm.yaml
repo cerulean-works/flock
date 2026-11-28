@@ -30,6 +30,10 @@ services:
     environment:
       FLOCK_API_URL: ${FLOCK_API_URL:-http://flock-api:8080}
       FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
+      # The credit dashboard's wallet, in place of Flock's budget while its URL is set.
+      FLOCK_CREDITS_URL: ${FLOCK_CREDITS_URL:-}
+      FLOCK_CREDITS_PROJECT: ${FLOCK_CREDITS_PROJECT:-}
+      FLOCK_CREDITS_TOKEN: ${FLOCK_CREDITS_TOKEN:-}
     networks:
       - dokploy-network
       - internal
