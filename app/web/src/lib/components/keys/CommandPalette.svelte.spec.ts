@@ -71,7 +71,7 @@ describe('the command menu', () => {
 		await expect.element(screen.getByText('bert ›')).toBeVisible();
 		await expect.element(screen.getByRole('option', { name: /Seeds/ })).toBeVisible();
 		await expect.element(screen.getByRole('option', { name: /lr-sweep-2/ })).toBeVisible();
-		await expect.element(screen.getByText(/go · .* open · .* up/)).toBeVisible();
+		await expect.element(screen.getByText('Back')).toBeVisible();
 
 		await userEvent.keyboard('{Backspace}');
 		await expect.element(screen.getByText('bert ›')).not.toBeInTheDocument();

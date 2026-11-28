@@ -19,6 +19,11 @@
 	import type { ComponentProps, Snippet } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import { runValues } from '#lib/data/run-values.svelte.ts';
+	import type { GroupList } from '#lib/groups.ts';
+	import { openNewGroup } from '#lib/workspace/new-group.svelte.ts';
+	import { runActions } from '#lib/workspace/run-actions.ts';
+	import { addToGroup, changeTags, deleteTag } from '#lib/workspace/run-edits.ts';
 	import type { ResolvedPathname } from '$app/types';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
@@ -338,24 +343,130 @@
 		} else if (fullscreen != null && e.key === 'ArrowRight' && neighbours.next != null) {
 			openPanel(neighbours.next);
 		} else if (fullscreen == null && KEYS[e.key]) {
-			setView(KEYS[e.key]);
+			// V on Visualize flips it between side by side and stacked, as a second click does.
+			if (KEYS[e.key] === 'visualize' && view === 'visualize') flipStacked();
+			else setView(KEYS[e.key]);
 		} else if (fullscreen == null && e.key === 'f' && filterControl) {
+			// The palette, inside Filter (Harry); the filter menu where there's no palette.
 			e.preventDefault();
-			filterControl.pick();
+			if (keyboard.palette) keyboard.palette('filter');
+			else filterControl.pick();
+		} else if (
+			fullscreen == null &&
+			e.key.toLowerCase() === 's' &&
+			e.shiftKey &&
+			keyboard.palette &&
+			keyboard.sort
+		) {
+			e.preventDefault();
+			keyboard.palette('sort');
 		}
 	}
 
 	// What this page offers the palette (Cmd+K): its views, its filter and its runs.
 	$effect(() => {
 		keyboard.views = [
-			{ label: 'Table', key: 't', set: () => setView('table') },
-			{ label: 'Visualize', key: 'v', set: () => setView('visualize') },
-			{ label: 'Charts', key: 'c', set: () => setView('charts') }
+			{ label: 'Table', key: 't', set: () => setView('table'), on: view === 'table' },
+			{
+				label: 'Visualize',
+				key: 'v',
+				set: () => setView('visualize'),
+				on: view === 'visualize',
+				// Its two layouts, as a second click on its tab flips them.
+				layouts: [false, true].map((stack) => ({
+					label: stack ? 'stacked' : 'side by side',
+					on: view === 'visualize' && stacked === stack,
+					set: () => {
+						setView('visualize');
+						if (stacked !== stack) flipStacked();
+					}
+				}))
+			},
+			{ label: 'Charts', key: 'c', set: () => setView('charts'), on: view === 'charts' }
 		];
 		keyboard.filter = () => filterControl?.pick();
 		return () => {
 			keyboard.views = [];
 			keyboard.filter = null;
+		};
+	});
+	// The selection, for the palette: tag it, add it to a group, compare two eval runs.
+	$effect(() => {
+		const ids = [...ws.selected];
+		if (!ids.length) {
+			keyboard.selection = null;
+			return;
+		}
+		const rows = ws.rowsOf(ids);
+		const { entity, project } = ws.meta;
+		const what = ids.length === 1 ? ws.nameOf(rows[0]) : `${ids.length} runs`;
+		keyboard.selection = {
+			count: ids.length,
+			tags: () => {
+				const on: Record<string, number> = {};
+				for (const r of ws.rowsOf(ids)) {
+					const list = ws.cell(r, 'tags');
+					if (Array.isArray(list)) for (const t of list) on[t] = (on[t] ?? 0) + 1;
+				}
+				const known = runValues(entity, project, ['tags'], ws.group).tags ?? [];
+				const all = new Set([...known.map((v) => String(v.value)), ...Object.keys(on)]);
+				return [...all].sort().map((tag) => ({
+					tag,
+					on: on[tag] ?? 0,
+					runs: known.find((v) => String(v.value) === tag)?.runs ?? on[tag] ?? 0
+				}));
+			},
+			tag: (tag, on) => void changeTags(ids, on ? { add: tag } : { remove: tag }),
+			deleteTag: (tag) => void deleteTag(entity, project, tag),
+			groups: () =>
+				(page.data.groups as GroupList | null | undefined)?.groups?.map((g) => ({
+					id: g.id,
+					name: g.name,
+					color: g.color
+				})) ?? null,
+			addToGroup: (id) => {
+				const g = (page.data.groups as GroupList | null | undefined)?.groups?.find(
+					(x) => x.id === id
+				);
+				if (g) void addToGroup(entity, project, ids, g, what);
+			},
+			newGroup: (name) => openNewGroup(ws, rows, null, name),
+			pair: runActions(ws, rows, true).some((a) => a.key === 'compare')
+				? {
+						a: { id: ws.page.runs[rows[0]].id, label: ws.nameOf(rows[0]) },
+						b: { id: ws.page.runs[rows[1]].id, label: ws.nameOf(rows[1]) }
+					}
+				: null
+		};
+		return () => {
+			keyboard.selection = null;
+		};
+	});
+	// The page's runs, to tick in the palette (Tag runs…, Add runs to group…): the table's selection.
+	$effect(() => {
+		keyboard.pick = {
+			runs: () =>
+				ws.page.runs.map((r, i) => ({
+					id: r.id,
+					label: ws.nameOf(i),
+					state: String(ws.cell(i, 'state') ?? ''),
+					on: ws.selected.has(r.id)
+				})),
+			toggle: (id) => {
+				if (ws.selected.has(id)) ws.selected.delete(id);
+				else ws.selected.add(id);
+			}
+		};
+		return () => {
+			keyboard.pick = null;
+		};
+	});
+	// Eval runs here: the palette offers to compare two (choosing A, B and the benchmark).
+	$effect(() => {
+		const evals = ws.page.runs.some((_, i) => ws.cell(i, 'job_type') === 'eval');
+		keyboard.compare = evals ? { entity: ws.meta.entity, project: ws.meta.project } : null;
+		return () => {
+			keyboard.compare = null;
 		};
 	});
 	$effect(() => {

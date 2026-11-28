@@ -1,5 +1,6 @@
 import type { ColumnKind, Owner } from '#lib/types.ts';
 import { duration, formatNumber } from '#lib/utils.ts';
+import { compact, parseSearch, spaces } from '#lib/search.ts';
 
 // Run filters: what the workspace's Filter popover edits, how they travel in its URL
 // (`?filters=[["state","eq","running"],{"any":[["config.lr","lt",0.01],["config.opt","eq","adam"]]}]`)
@@ -556,12 +557,23 @@ function flockPart(f: RunFilter): object | null {
 
 /**
  * Flock's filter for a search and some filters, or null for every run. The search matches a
- * run's display name or id, in any case.
+ * run's display name or id, in any case (see search.ts).
  */
 export function flockFilter(search: string, filters: readonly RunFilter[]): object | null {
 	const all = filters.map(flockPart).filter((p) => p != null);
-	const q = search.trim();
-	if (q) all.unshift({ $or: [{ display_name: containing(q) }, { name: containing(q) }] });
+	// Each word on its own and in any order, separators ignored ("eval bank" and "bankeval"
+	// find "bank-eval"); a quoted phrase whole.
+	const { phrases, words } = parseSearch(search);
+	const name = (regex: string) => ({
+		$or: [{ display_name: { $regex: regex } }, { name: { $regex: regex } }]
+	});
+	all.unshift(
+		...phrases.map((p) => name(`(?i)${spaces(p).split(' ').map(literal).join('[-_./\\s]+')}`)),
+		...words.map((w) => name(`(?i)${looseWord(w)}`))
+	);
 	if (!all.length) return null;
 	return all.length === 1 ? all[0] : { $and: all };
 }
+
+/** A word as a regular expression that allows a `-`, `_`, `.`, `/` or space between its letters. */
+const looseWord = (word: string) => [...(compact(word) || word)].map(literal).join('[-_./\\s]?');

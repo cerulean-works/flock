@@ -170,7 +170,7 @@
 			e.preventDefault();
 			if (mode === 'runs' && runs?.[active]) pick(runs[active]);
 			else if (mode === 'projects' && shownProjects[active]) toRuns(shownProjects[active]);
-		} else if (e.key === 'Backspace' && !query && mode === 'runs') {
+		} else if (e.key === 'Backspace' && !e.repeat && !query && mode === 'runs') {
 			e.preventDefault();
 			toProjects();
 		}

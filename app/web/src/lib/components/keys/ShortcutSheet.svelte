@@ -42,7 +42,12 @@
 			'Runs',
 			[
 				['T  V  C', 'Table, Visualize, Charts'],
-				['F', 'Filter runs']
+				['V', 'On Visualize: stacked or side by side'],
+				['↑  ↓', 'Pick a run'],
+				['Enter', 'Tick the run'],
+				['→  O', 'Open the run'],
+				['F', 'Filter runs'],
+				['⇧ S', 'Sort runs']
 			]
 		]
 	]);

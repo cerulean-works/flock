@@ -1,18 +1,11 @@
 <script lang="ts">
 	import PlusIcon from '@lucide/svelte/icons/plus';
-	import { toast } from 'svelte-sonner';
-	import { goto, invalidate } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import {
-		GROUPS,
-		GroupsError,
-		groupsApi,
-		groupsCall,
-		type Group,
-		type GroupList
-	} from '#lib/groups.ts';
+	import type { Group, GroupList } from '#lib/groups.ts';
 	import { openNewGroup } from '#lib/workspace/new-group.svelte.ts';
+	import { addToGroup } from '#lib/workspace/run-edits.ts';
 	import { menuRows, runActions } from '#lib/workspace/run-actions.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { openMenuTrigger } from './AnchoredForm.svelte';
@@ -36,21 +29,12 @@
 		const q = query.trim().toLowerCase();
 		return (groups ?? []).filter((g) => !q || g.name.toLowerCase().includes(q));
 	});
+	const typed = $derived(query.trim());
+	const exact = $derived((groups ?? []).some((g) => g.name.toLowerCase() === typed.toLowerCase()));
 	const runsText = (n: number) => (n === 1 ? ws.nameOf(rows[0]) : `${n} runs`);
 
-	async function addTo(group: Group) {
-		const n = ids.length;
-		try {
-			await groupsCall(groupsApi(ws.meta.entity, ws.meta.project, String(group.id)), {
-				method: 'PATCH',
-				body: { add: ids }
-			});
-			await invalidate(GROUPS);
-			toast.success(`Added ${runsText(n)} to ${group.name}`);
-		} catch (e) {
-			toast.error(e instanceof GroupsError ? e.message : 'Couldn’t add to the group');
-		}
-	}
+	const addTo = (group: Group) =>
+		addToGroup(ws.meta.entity, ws.meta.project, ids, group, runsText(ids.length));
 </script>
 
 {#if rows.length > 1}
@@ -74,7 +58,21 @@
 			<DropdownMenu.SubTrigger><a.icon /> {a.label}</DropdownMenu.SubTrigger>
 			<DropdownMenu.SubContent class="w-60 p-0" sideOffset={6}>
 				{#if groups?.length}
-					<MenuSearch placeholder="Search groups…" label="Search groups" bind:value={query} menu />
+					<!-- Enter takes the first row: the best match, or Create when nothing matches. -->
+					<MenuSearch
+						placeholder="Search or create…"
+						label="Search groups"
+						bind:value={query}
+						menu
+						onkeydown={(e) => {
+							if (e.key !== 'Enter' || !query.trim()) return;
+							e.preventDefault();
+							e.currentTarget
+								.closest('[role=menu]')
+								?.querySelector<HTMLElement>('[role=menuitem]')
+								?.click();
+						}}
+					/>
 					<div class="max-h-64 overflow-y-auto p-1">
 						{#each matches as g (g.id)}
 							<DropdownMenu.Item onSelect={() => void addTo(g)}>
@@ -85,11 +83,14 @@
 								></span>
 								<span class="truncate">{g.name}</span>
 							</DropdownMenu.Item>
-						{:else}
-							{#if query}
-								<p class="px-2 py-1.5 text-xs text-muted-foreground">No groups match</p>
-							{/if}
 						{/each}
+						{#if typed && !exact}
+							<!-- Nothing named so: make it (the form starts with the name). -->
+							<DropdownMenu.Item onSelect={() => openNewGroup(ws, rows, openMenuTrigger(), typed)}>
+								<PlusIcon />
+								<span class="truncate">Create “{typed}”…</span>
+							</DropdownMenu.Item>
+						{/if}
 					</div>
 					<DropdownMenu.Separator class="my-0" />
 				{/if}

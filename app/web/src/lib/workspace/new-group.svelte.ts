@@ -15,7 +15,13 @@ export const newGroup = $state<{
 }>({ open: false, anchor: null, ids: [], name: '' });
 
 /** Opens the form for some page rows, from the menu open now. */
-export function openNewGroup(ws: Workspace, rows: readonly number[], anchor: HTMLElement | null) {
+export function openNewGroup(
+	ws: Workspace,
+	rows: readonly number[],
+	anchor: HTMLElement | null,
+	/** A name typed into a search that found no group: the form starts with it. */
+	typed?: string
+) {
 	// The runs' config cells, as the group editor reads runs.
 	const keys = ws.meta.columns.map((c) => c.key).filter((k) => k.startsWith('config.'));
 	const configs = rows.map((r) => Object.fromEntries(keys.map((k) => [k, ws.cell(r, k)])));
@@ -23,7 +29,7 @@ export function openNewGroup(ws: Workspace, rows: readonly number[], anchor: HTM
 	// What varies, when that makes a name ("lr × steps"); runs apart in many ways, or alike
 	// (named by their count, which the button already says), get none.
 	const name = groupName(configs, []);
-	newGroup.name = / more$|created_at|command|^\d+ runs?$/.test(name) ? '' : name;
+	newGroup.name = typed?.trim() || (/ more$|created_at|command|^\d+ runs?$/.test(name) ? '' : name);
 	newGroup.anchor = anchor;
 	newGroup.open = true;
 }

@@ -254,12 +254,35 @@ describe('flockFilter', () => {
 	});
 
 	it('searches names and ids literally, in any case', () => {
-		expect(flockFilter('lr=3e-4 (a)', [])).toEqual({
+		expect(flockFilter('lr=3e-4(a)', [])).toEqual({
 			$or: [
-				{ display_name: { $regex: '(?i)lr=3e-4 \\(a\\)' } },
-				{ name: { $regex: '(?i)lr=3e-4 \\(a\\)' } }
+				{
+					display_name: {
+						$regex:
+							'(?i)l[-_./\\s]?r[-_./\\s]?=[-_./\\s]?3[-_./\\s]?e[-_./\\s]?4[-_./\\s]?\\([-_./\\s]?a[-_./\\s]?\\)'
+					}
+				},
+				{
+					name: {
+						$regex:
+							'(?i)l[-_./\\s]?r[-_./\\s]?=[-_./\\s]?3[-_./\\s]?e[-_./\\s]?4[-_./\\s]?\\([-_./\\s]?a[-_./\\s]?\\)'
+					}
+				}
 			]
 		});
+	});
+
+	it('matches each word in any order, separators ignored, a quoted phrase whole', () => {
+		const f = flockFilter('bank "Web v1" Ev', []) as {
+			$and: { $or: { name: { $regex: string } }[] }[];
+		};
+		const regexes = f.$and.map((p) => new RegExp(p.$or[1].name.$regex.replace('(?i)', ''), 'i'));
+		const finds = (name: string) => regexes.every((r) => r.test(name));
+		expect(finds('ev-bank web v1')).toBe(true);
+		expect(finds('bank_e.v web v1')).toBe(true);
+		expect(finds('bank web-v1 ev')).toBe(true);
+		expect(finds('bank v1 web ev')).toBe(false);
+		expect(finds('bank ev')).toBe(false);
 	});
 
 	it('combines filters with $and', () => {
@@ -308,7 +331,12 @@ describe('flockFilter', () => {
 			])
 		).toEqual({
 			$and: [
-				{ $or: [{ display_name: { $regex: '(?i)abc' } }, { name: { $regex: '(?i)abc' } }] },
+				{
+					$or: [
+						{ display_name: { $regex: '(?i)a[-_./\\s]?b[-_./\\s]?c' } },
+						{ name: { $regex: '(?i)a[-_./\\s]?b[-_./\\s]?c' } }
+					]
+				},
 				{ $or: [{ a: { $eq: 1 } }, { $and: [{ b: { $exists: true } }, { c: { $ne: 'x' } }] }] }
 			]
 		});

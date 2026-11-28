@@ -2,11 +2,9 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { untrack } from 'svelte';
-	import { deserialize } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
-	import { toast } from 'svelte-sonner';
-	import { clearRunPages } from '#lib/data/cache.ts';
-	import { forgetRunValues, runValues } from '#lib/data/run-values.svelte.ts';
+	import { runValues } from '#lib/data/run-values.svelte.ts';
+	import { changeTags } from '#lib/workspace/run-edits.ts';
+	import { typeInto } from '#lib/keys.svelte.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 
 	// Runs' tags as Notion's multi-select: chips in a field, the project's tags under it, each
@@ -49,37 +47,7 @@
 		return out;
 	});
 
-	/**
-	 * Sends one change to the page's `tag` action, then reloads the page's data. Posted by hand
-	 * rather than through `enhance`, whose `applyAction` moves focus to the page and so would
-	 * close a menu the editor is in.
-	 */
-	async function send(change: { add?: string; remove?: string }) {
-		const body = new FormData();
-		for (const id of ids) body.append('run', id);
-		body.append('add', change.add ?? '');
-		if (change.remove) body.append('remove', change.remove);
-		forgetRunValues();
-		try {
-			const res = await fetch(`${location.pathname}?/tag`, {
-				method: 'POST',
-				body,
-				headers: { 'x-sveltekit-action': 'true' }
-			});
-			const result = deserialize(await res.text());
-			if (result.type === 'failure' || result.type === 'error') {
-				const message =
-					result.type === 'failure'
-						? String(result.data?.error ?? 'Couldn’t change the tags')
-						: 'Couldn’t change the tags';
-				toast.error(message.charAt(0).toUpperCase() + message.slice(1));
-			}
-		} catch {
-			toast.error('Couldn’t change the tags');
-		}
-		clearRunPages();
-		await invalidateAll();
-	}
+	const send = (change: { add?: string; remove?: string }) => changeTags(ids, change);
 
 	function addTag(tag: string) {
 		const has = tags.find(([t]) => t === tag);
@@ -107,7 +75,13 @@
 			e.preventDefault();
 			const pick = options[active] ?? (query.trim() ? { tag: query.trim() } : null);
 			if (pick) addTag(pick.tag);
-		} else if (e.key === 'Backspace' && !query && tags.length) {
+		} else if (
+			tags.length &&
+			// A fresh press only: Backspace held to clear the text stops there (Harry). ⌃X, the
+			// palette's remove, does the same.
+			((e.key === 'Backspace' && !e.repeat && !query) ||
+				(e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'x'))
+		) {
 			e.preventDefault();
 			removeTag(tags[tags.length - 1][0]);
 		}
@@ -162,6 +136,7 @@
 		<input
 			bind:this={field}
 			bind:value={query}
+			{@attach typeInto}
 			class="h-6 min-w-16 flex-1 bg-transparent px-1 outline-none placeholder:text-faint"
 			placeholder={tags.length ? '' : 'Add a tag…'}
 			aria-label="Add a tag"
